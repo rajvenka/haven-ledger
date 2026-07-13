@@ -219,7 +219,7 @@ export default function App() {
     setIsModalOpen(true);
   };
 
-  const handleSavePayment = (paymentData: Omit<RecurringPayment, 'id'> & { id?: string }) => {
+  const handleSavePayment = async (paymentData: Omit<RecurringPayment, 'id'> & { id?: string }) => {
     if (paymentData.id) {
       updatePayment(paymentData as RecurringPayment);
     } else {
@@ -317,7 +317,7 @@ export default function App() {
               </div>
               <div className="text-left">
                 <h1 className="text-sm font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
-                  Haven Ledger
+                  Haven Vault
                 </h1>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className="inline-block w-1.5 h-1.5 bg-indigo-600 dark:bg-indigo-400 rounded-full animate-pulse" />
@@ -622,7 +622,7 @@ export default function App() {
                     </div>
                     <div className="text-left">
                       <h1 className="text-sm font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
-                        Haven Ledger
+                        Haven Vault
                       </h1>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span className="inline-block w-1.5 h-1.5 bg-indigo-600 dark:bg-indigo-400 rounded-full animate-pulse" />
@@ -945,7 +945,7 @@ export default function App() {
               </button>
               <div>
                 <h1 className="text-base font-black tracking-tight text-slate-950 dark:text-white flex items-center gap-1.5 text-left animate-none">
-                  <span>Haven Ledger</span>
+                  <span>Haven Vault</span>
                   <span className="w-1.5 h-1.5 bg-indigo-600 dark:bg-indigo-500 rounded-full animate-ping" />
                 </h1>
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5 text-left">Sleek Family Payment Ledger</p>

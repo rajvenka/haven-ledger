@@ -78,7 +78,7 @@ export default function AiInsights({
 
     if (totalCount === 0) {
       return {
-        summary: "You don't have any bill or payment records added to Haven Ledger yet.",
+        summary: "You don't have any bill or payment records added to Haven Vault yet.",
         healthScore: 100,
         insights: [
           {
@@ -199,17 +199,17 @@ export default function AiInsights({
   return (
     <div className="space-y-6 h-full overflow-y-auto pb-24 px-1 md:px-3 text-left">
       {/* Header Block */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 p-5 rounded-2xl text-white shadow-md shadow-indigo-950/20 relative overflow-hidden">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-2xl text-white shadow-sm border border-slate-200/10 relative overflow-hidden">
         <div className="absolute right-0 top-0 translate-x-12 -translate-y-6 w-48 h-48 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
-        <div className="absolute left-1/3 bottom-0 w-32 h-32 rounded-full bg-purple-500/10 blur-2xl pointer-events-none" />
+        <div className="absolute left-1/3 bottom-0 w-32 h-32 rounded-full bg-indigo-500/10 blur-2xl pointer-events-none" />
         
         <div className="space-y-1.5 max-w-xl">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-indigo-400 animate-pulse shrink-0" />
-            <span className="text-[10px] font-black tracking-widest text-indigo-300 uppercase">Haven AI Intelligence</span>
+            <Sparkles className="w-4 h-4 text-indigo-400 animate-pulse shrink-0" />
+            <span className="text-[10px] font-bold tracking-widest text-indigo-300 uppercase">Haven AI Intelligence</span>
           </div>
-          <h2 className="text-lg md:text-xl font-black tracking-tight leading-tight">Smart Bill & Payment Insights</h2>
-          <p className="text-xs text-slate-300 leading-relaxed font-medium">
+          <h2 className="text-base md:text-lg font-semibold tracking-tight leading-snug">Smart Bill & Payment Insights</h2>
+          <p className="text-xs text-slate-300 leading-relaxed">
             Run complete financial audits, detect redundant accounts, optimize direct debit, and forecast next month's recurring bills.
           </p>
         </div>
@@ -217,12 +217,12 @@ export default function AiInsights({
         <button
           onClick={runAiAudit}
           disabled={loading || payments.length === 0}
-          className="px-4 py-2.5 bg-gradient-to-r from-indigo-550 to-violet-550 hover:from-indigo-600 hover:to-violet-600 disabled:opacity-50 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-md shadow-indigo-500/20 cursor-pointer shrink-0 self-start md:self-center"
+          className="apple-btn-primary py-2.5 px-5 shadow-none text-xs rounded-full cursor-pointer flex items-center justify-center gap-2 shrink-0 self-start md:self-center"
         >
           {loading ? (
-            <RefreshCw className="w-4 h-4 animate-spin" />
+            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
           ) : (
-            <BrainCircuit className="w-4 h-4 shrink-0" />
+            <BrainCircuit className="w-3.5 h-3.5 shrink-0" />
           )}
           <span>{loading ? 'Auditing ledger...' : 'Run Gemini AI Audit'}</span>
         </button>
@@ -230,9 +230,9 @@ export default function AiInsights({
 
       {/* Warning status if using fallback */}
       {error && (
-        <div className="p-3 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100/30 dark:border-indigo-900/30 rounded-xl text-left flex items-start gap-2.5">
-          <Lightbulb className="w-4.5 h-4.5 text-indigo-500 shrink-0 mt-0.5" />
-          <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold leading-normal">
+        <div className="p-3 bg-amber-50/50 dark:bg-amber-950/10 border border-amber-200/20 dark:border-amber-900/20 rounded-xl text-left flex items-start gap-2.5">
+          <Lightbulb className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold leading-normal">
             {error}
           </p>
         </div>
@@ -241,29 +241,28 @@ export default function AiInsights({
       {/* Main Grid: Health Score & Forecast */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Score Card */}
-        <div className="lg:col-span-1 bg-white dark:bg-slate-950 rounded-2xl p-5 border border-slate-200/50 dark:border-slate-850/60 shadow-sm flex flex-col justify-between items-center text-center space-y-4">
+        <div className="lg:col-span-1 apple-card flex flex-col justify-between items-center text-center space-y-4">
           <div className="w-full text-left">
-            <h4 className="text-xs font-black text-slate-450 dark:text-slate-500 uppercase tracking-wider">Health Score</h4>
-            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-0.5">Audit based on overhead & methods</p>
+            <h4 className="apple-section-label">Health Score</h4>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold leading-normal">Audit based on overhead & methods</p>
           </div>
 
           <div className="relative flex items-center justify-center w-28 h-28">
-            {/* SVG Circle indicator */}
             <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
               <circle
                 cx="50"
                 cy="50"
                 r="40"
                 className="stroke-slate-100 dark:stroke-slate-900"
-                strokeWidth="8"
+                strokeWidth="7"
                 fill="transparent"
               />
               <motion.circle
                 cx="50"
                 cy="50"
                 r="40"
-                className={`stroke-indigo-600 dark:stroke-indigo-500`}
-                strokeWidth="8"
+                className="stroke-indigo-500 dark:stroke-indigo-400"
+                strokeWidth="7"
                 fill="transparent"
                 strokeDasharray="251.2"
                 initial={{ strokeDashoffset: 251.2 }}
@@ -272,16 +271,16 @@ export default function AiInsights({
               />
             </svg>
             <div className="absolute flex flex-col items-center">
-              <span className="text-2xl font-black text-slate-900 dark:text-white leading-none">{currentData.healthScore}</span>
-              <span className="text-[9px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">
+              <span className="text-2xl font-semibold text-slate-900 dark:text-white leading-none">{currentData.healthScore}</span>
+              <span className="text-[8px] font-bold text-slate-450 dark:text-slate-500 uppercase tracking-widest mt-1">
                 {currentData.healthScore >= 90 ? 'Excellent' : currentData.healthScore >= 75 ? 'Optimal' : 'Needs Review'}
               </span>
             </div>
           </div>
 
-          <div className="w-full bg-slate-50 dark:bg-slate-900/40 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/60 flex items-center gap-2">
+          <div className="w-full bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/40 dark:border-slate-800/80 flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold leading-normal text-left">
+            <p className="text-[10px] text-slate-500 dark:text-slate-450 font-semibold leading-normal text-left">
               {currentData.healthScore >= 85 
                 ? 'Your ledger is streamlined. Your payment categories match optimal sharing limits.'
                 : 'Consider configuring direct debits and bundling entertainment overlap costs.'
@@ -291,27 +290,27 @@ export default function AiInsights({
         </div>
 
         {/* AI Summary and Future Forecast Card */}
-        <div className="lg:col-span-2 bg-white dark:bg-slate-950 rounded-2xl p-5 border border-slate-200/50 dark:border-slate-850/60 shadow-sm flex flex-col justify-between space-y-4">
+        <div className="lg:col-span-2 apple-card flex flex-col justify-between space-y-4">
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-xs font-black text-slate-450 dark:text-slate-500 uppercase tracking-wider">Financial Overview</h4>
-                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-0.5">Instant ledger synthesis</p>
+                <h4 className="apple-section-label">Financial Overview</h4>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold leading-normal">Instant ledger synthesis</p>
               </div>
-              <div className="px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 text-[9px] font-black uppercase tracking-wider">
+              <span className="apple-badge-indigo">
                 Audited State
-              </div>
+              </span>
             </div>
 
-            <p className="text-xs text-slate-700 dark:text-slate-300 font-medium leading-relaxed">
+            <p className="text-xs text-slate-750 dark:text-slate-300 font-medium leading-relaxed">
               {currentData.summary}
             </p>
           </div>
 
-          <div className="p-4 bg-slate-50 dark:bg-slate-900/35 rounded-xl border border-slate-100/80 dark:border-slate-850/60 text-left space-y-1.5">
+          <div className="p-4 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200/40 dark:border-slate-800/80 text-left space-y-1.5">
             <div className="flex items-center gap-1.5">
-              <TrendingUp className="w-4 h-4 text-indigo-500" />
-              <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Next 3 Months Forecast</span>
+              <TrendingUp className="w-3.5 h-3.5 text-indigo-500" />
+              <span className="text-[9px] font-bold text-slate-900 dark:text-white uppercase tracking-wider">Next 3 Months Forecast</span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
               {currentData.forecast}
@@ -321,29 +320,23 @@ export default function AiInsights({
       </div>
 
       {/* Tabs and Details */}
-      <div className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200/50 dark:border-slate-850/60 shadow-sm overflow-hidden">
+      <div className="apple-card p-0 overflow-hidden space-y-0">
         {/* Tab Headers */}
-        <div className="flex border-b border-slate-100 dark:border-slate-900">
-          <button
-            onClick={() => setActiveTab('insights')}
-            className={`flex-1 py-3.5 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
-              activeTab === 'insights'
-                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 dark:border-indigo-500'
-                : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-            }`}
-          >
-            Smart Audit Items ({currentData.insights.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('recommendations')}
-            className={`flex-1 py-3.5 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
-              activeTab === 'recommendations'
-                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 dark:border-indigo-500'
-                : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-            }`}
-          >
-            Saving Recommendations ({currentData.recommendations.length})
-          </button>
+        <div className="p-1 bg-slate-50 dark:bg-slate-950 border-b border-slate-100 dark:border-slate-900">
+          <div className="apple-segmented-control border-none shadow-none">
+            <button
+              onClick={() => setActiveTab('insights')}
+              className={activeTab === 'insights' ? 'apple-segmented-btn-active' : 'apple-segmented-btn'}
+            >
+              Smart Audit Items ({currentData.insights.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('recommendations')}
+              className={activeTab === 'recommendations' ? 'apple-segmented-btn-active' : 'apple-segmented-btn'}
+            >
+              Saving Recommendations ({currentData.recommendations.length})
+            </button>
+          </div>
         </div>
 
         {/* Tab Content */}
@@ -360,14 +353,14 @@ export default function AiInsights({
                 {currentData.insights.map((insight, idx) => (
                   <div 
                     key={idx}
-                    className={`p-3 rounded-xl border flex items-start gap-3 transition-colors ${
+                    className={`p-3.5 rounded-xl border flex items-start gap-3 transition-colors ${
                       insight.type === 'warning'
-                        ? 'bg-rose-50/20 dark:bg-rose-950/10 border-rose-100 dark:border-rose-900/30'
+                        ? 'bg-rose-50/20 dark:bg-rose-950/10 border-rose-100/30 dark:border-rose-900/30'
                         : insight.type === 'saving'
-                        ? 'bg-emerald-50/20 dark:bg-emerald-950/10 border-emerald-100 dark:border-emerald-900/30'
+                        ? 'bg-emerald-50/20 dark:bg-emerald-950/10 border-emerald-100/30 dark:border-emerald-900/30'
                         : insight.type === 'tip'
-                        ? 'bg-indigo-50/20 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30'
-                        : 'bg-slate-50/40 dark:bg-slate-900/20 border-slate-100 dark:border-slate-800'
+                        ? 'bg-indigo-50/20 dark:bg-indigo-950/10 border-indigo-100/30 dark:border-indigo-900/30'
+                        : 'bg-slate-50/40 dark:bg-slate-900/20 border-slate-150 dark:border-slate-800/80'
                     }`}
                   >
                     <div className={`p-1.5 rounded-lg shrink-0 ${
@@ -379,14 +372,14 @@ export default function AiInsights({
                         ? 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400'
                         : 'bg-slate-100 dark:bg-slate-850 text-slate-600 dark:text-slate-400'
                     }`}>
-                      {insight.type === 'warning' && <AlertCircle className="w-4 h-4" />}
-                      {insight.type === 'saving' && <Zap className="w-4 h-4" />}
-                      {insight.type === 'tip' && <Lightbulb className="w-4 h-4" />}
-                      {insight.type === 'info' && <HelpCircle className="w-4 h-4" />}
+                      {insight.type === 'warning' && <AlertCircle className="w-3.5 h-3.5" />}
+                      {insight.type === 'saving' && <Zap className="w-3.5 h-3.5" />}
+                      {insight.type === 'tip' && <Lightbulb className="w-3.5 h-3.5" />}
+                      {insight.type === 'info' && <HelpCircle className="w-3.5 h-3.5" />}
                     </div>
                     <div className="space-y-0.5 text-left min-w-0">
-                      <h5 className="text-xs font-black text-slate-900 dark:text-white">{insight.title}</h5>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-450 leading-relaxed font-medium">
+                      <h5 className="text-xs font-semibold text-slate-900 dark:text-white">{insight.title}</h5>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-450 leading-relaxed font-semibold">
                         {insight.description}
                       </p>
                     </div>
@@ -404,10 +397,10 @@ export default function AiInsights({
                 {currentData.recommendations.map((rec, idx) => (
                   <div 
                     key={idx}
-                    className="p-3 bg-slate-50/50 dark:bg-slate-900/20 border border-slate-100 dark:border-slate-850/60 rounded-xl flex items-start gap-2.5"
+                    className="p-3.5 bg-slate-50/50 dark:bg-slate-900/20 border border-slate-150 dark:border-slate-850/60 rounded-xl flex items-start gap-2.5"
                   >
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                    <p className="text-xs text-slate-650 dark:text-slate-300 font-medium leading-relaxed">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                    <p className="text-xs text-slate-650 dark:text-slate-350 font-semibold leading-relaxed">
                       {rec}
                     </p>
                   </div>
@@ -419,21 +412,22 @@ export default function AiInsights({
       </div>
 
       {/* Link to Agent Section (Interlocking workflow) */}
-      <div className="bg-gradient-to-tr from-indigo-500/5 via-violet-500/5 to-purple-500/5 dark:from-indigo-950/10 dark:via-violet-950/10 dark:to-purple-950/10 rounded-2xl p-5 border border-indigo-100/10 dark:border-indigo-950/20 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-5 text-left relative overflow-hidden">
+      <div className="apple-card p-6 flex flex-col md:flex-row md:items-center justify-between gap-5 text-left relative overflow-hidden">
+        <div className="absolute right-0 top-0 translate-x-12 -translate-y-6 w-48 h-48 rounded-full bg-indigo-500/[0.03] blur-3xl pointer-events-none" />
         <div className="space-y-1.5 max-w-xl">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Haven Ledger Assistant</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[9px] font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-widest">Haven Vault Assistant</span>
           </div>
-          <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wide">Looking for Custom Inquiries?</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-450 leading-relaxed font-medium">
+          <h3 className="apple-title-main">Looking for Custom Inquiries?</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-450 leading-relaxed font-semibold">
             Interact with our voice-enabled conversational AI agent. You can type commands in real-time to instantly add bills, mark bills as paid, or ask custom questions about your history.
           </p>
         </div>
 
         <button
           onClick={() => onOpenAgent(true)}
-          className="px-4 py-2.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-indigo-100/50 dark:border-indigo-950 text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer shrink-0 self-start md:self-center"
+          className="apple-btn-secondary py-2 px-4 shadow-none text-xs rounded-full cursor-pointer flex items-center justify-center gap-1.5"
         >
           <span>Launch Chat Agent</span>
           <ArrowRight className="w-3.5 h-3.5" />

@@ -143,7 +143,11 @@ export function getNextPaymentDate(
         return nextDueDate;
       }
 
-      const sortedHistory = [...paymentHistory].sort((a, b) => b.paidDate.localeCompare(a.paidDate));
+      const sortedHistory = [...paymentHistory].sort((a, b) => {
+        const dateA = a.paidDate || '';
+        const dateB = b.paidDate || '';
+        return dateB.localeCompare(dateA);
+      });
       const latestPayment = sortedHistory[0];
       const latestDate = parseLocalDate(latestPayment.paidDate);
 
@@ -166,7 +170,11 @@ export function getNextPaymentDate(
         return nextDate;
       }
 
-      const sortedHistory = [...paymentHistory].sort((a, b) => b.paidDate.localeCompare(a.paidDate));
+      const sortedHistory = [...paymentHistory].sort((a, b) => {
+        const dateA = a.paidDate || '';
+        const dateB = b.paidDate || '';
+        return dateB.localeCompare(dateA);
+      });
       const latestPayment = sortedHistory[0];
       const latestDate = parseLocalDate(latestPayment.paidDate);
 
@@ -205,7 +213,11 @@ export function getNextPaymentDate(
   }
 
   // Sort history to find the latest payment date
-  const sortedHistory = [...paymentHistory].sort((a, b) => b.paidDate.localeCompare(a.paidDate));
+  const sortedHistory = [...paymentHistory].sort((a, b) => {
+    const dateA = a.paidDate || '';
+    const dateB = b.paidDate || '';
+    return dateB.localeCompare(dateA);
+  });
   const latestPayment = sortedHistory[0];
   const latestDate = parseLocalDate(latestPayment.paidDate); // YYYY-MM-DD
 
@@ -474,7 +486,11 @@ export function getScheduledInstancesForRange(
 
     const paymentHistory = history
       .filter(h => h.paymentId === p.id)
-      .sort((a, b) => a.paidDate.localeCompare(b.paidDate));
+      .sort((a, b) => {
+        const dateA = a.paidDate || '';
+        const dateB = b.paidDate || '';
+        return dateA.localeCompare(dateB);
+      });
 
     const matchedHistoryIds = new Set<string>();
 
@@ -545,7 +561,11 @@ export function getScheduledInstancesForRange(
     });
   });
 
-  return instances.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  return instances.sort((a, b) => {
+    const dateA = a.dueDate || '';
+    const dateB = b.dueDate || '';
+    return dateA.localeCompare(dateB);
+  });
 }
 
 /**

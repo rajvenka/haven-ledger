@@ -98,7 +98,13 @@ export default function AgentAssistant({
     setErrorMessage(null);
 
     try {
-      // Send command and current database state to the backend Agent endpoint
+      // Build full chat history including the latest message
+      const chatHistory = [...messages, newUserMessage].map(m => ({
+        sender: m.sender,
+        text: m.text
+      }));
+
+      // Send command, history, and current database state to the backend Agent endpoint
       const response = await fetch('/api/agent', {
         method: 'POST',
         headers: {
@@ -108,7 +114,8 @@ export default function AgentAssistant({
           prompt: command,
           payments,
           history,
-          userProfile
+          userProfile,
+          chatHistory
         })
       });
 
@@ -136,7 +143,7 @@ export default function AgentAssistant({
         const finalCategory = data.category || 'Bills';
         const finalDay = data.dayOfMonth || new Date().getDate();
         
-        await onAddPayment({
+        const addedPayment = await onAddPayment({
           name: data.name || 'Unnamed Bill',
           amount: data.amount || 0,
           currency: finalCurrency,
@@ -148,6 +155,33 @@ export default function AgentAssistant({
           reminderDaysBefore: 3,
           paymentType: data.paymentType || 'fixed'
         });
+
+        if (addedPayment && data.isPaid) {
+          await onRecordPayment(addedPayment.id, addedPayment.amount, 'paid', addedPayment.taggedFor || 'Self');
+        }
+      } else if (result.intent === 'add_bulk_expenses' && Array.isArray(result.addBulkExpenseData)) {
+        for (const data of result.addBulkExpenseData) {
+          const finalCurrency = data.currency || summaryCurrency || 'AUD';
+          const finalCategory = data.category || 'Bills';
+          const finalDay = data.dayOfMonth || new Date().getDate();
+          
+          const addedPayment = await onAddPayment({
+            name: data.name || 'Unnamed Bill',
+            amount: data.amount || 0,
+            currency: finalCurrency,
+            category: finalCategory,
+            dayOfMonth: finalDay,
+            billingCycle: data.billingCycle || 'monthly',
+            paymentMethod: data.paymentMethod || 'manual',
+            active: true,
+            reminderDaysBefore: 3,
+            paymentType: data.paymentType || 'fixed'
+          });
+
+          if (addedPayment && data.isPaid) {
+            await onRecordPayment(addedPayment.id, addedPayment.amount, 'paid', addedPayment.taggedFor || 'Self');
+          }
+        }
       } else if (result.intent === 'mark_paid' && result.markPaidData) {
         const data = result.markPaidData;
         
@@ -224,7 +258,7 @@ export default function AgentAssistant({
               animate={{ opacity: 0.4 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsOpen(false)}
-              className="absolute inset-0 bg-black/50 z-40 rounded-3xl"
+              className="fixed md:absolute inset-0 bg-black/50 z-40 rounded-none md:rounded-3xl"
             />
 
             {/* Slide-up Container Panel */}
@@ -233,7 +267,7 @@ export default function AgentAssistant({
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-              className="absolute bottom-0 left-0 right-0 h-[85%] bg-white dark:bg-slate-950 rounded-t-3xl border-t border-slate-100 dark:border-slate-900 shadow-2xl z-50 flex flex-col overflow-hidden"
+              className="fixed md:absolute bottom-0 left-0 right-0 h-[85%] bg-white dark:bg-slate-950 rounded-t-3xl border-t border-slate-100 dark:border-slate-900 shadow-2xl z-50 flex flex-col overflow-hidden"
               id="haven-agent-drawer"
             >
               {/* Drawer handle notch */}

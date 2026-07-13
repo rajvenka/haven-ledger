@@ -78,7 +78,7 @@ export default function AuthView({ onSignIn, onSignUp, onResetPassword, onSignIn
           <Smartphone className="w-6 h-6 text-white" />
         </div>
         <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center justify-center gap-1.5">
-          Haven Ledger
+          Haven Vault
           <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-pulse" />
         </h2>
         <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">

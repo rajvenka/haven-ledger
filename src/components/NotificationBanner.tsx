@@ -12,9 +12,9 @@ interface NotificationBannerProps {
 export default function NotificationBanner({ notifications, onDismiss, onNavigateToSecurity }: NotificationBannerProps) {
   const [showBanner, setShowBanner] = useState(false);
 
-  // If there are unread notifications, show exactly one simplified banner
+  // If there are unread notifications (alerts or warnings), show exactly one simplified banner
   useEffect(() => {
-    const unread = notifications.filter(n => !n.read);
+    const unread = notifications.filter(n => !n.read && (n.type === 'alert' || n.type === 'warning'));
     if (unread.length > 0) {
       setShowBanner(true);
     } else {

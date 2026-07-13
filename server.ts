@@ -23,7 +23,7 @@ async function startServer() {
   // Agent Assistant Endpoint
   const handleAgentRequest = async (req: any, res: any) => {
     try {
-      const { prompt, payments, history, userProfile } = req.body;
+      const { prompt, payments, history, userProfile, chatHistory } = req.body;
       
       if (!prompt) {
         return res.status(400).json({ error: "Missing prompt" });
@@ -33,24 +33,52 @@ async function startServer() {
         model: "gemini-3.5-flash",
         contents: `
           You are the Haven Agent, an AI-powered financial assistant for a Bill and Expense Manager app called "Haven Ledger".
-          Your task is to interpret the user's comments or instructions: "${prompt}"
+          Your task is to interpret the user's comments or instructions.
           
           Context:
           - Current date/time: ${new Date().toISOString()}
           - Current configured payments: ${JSON.stringify(payments)}
           - User Profile: ${JSON.stringify(userProfile)}
-                    Interpret what they want to do. You can:
-          1. Add a recurring payment / bill / EMI / land tax (e.g. "add netflix expense of 15 dollars on day 10", "add EB bill variable subscription on day 20", "add gym membership for 45 per month")
-             - If they specify that the amount varies, is variable, or they mention a variable bill like EB, electricity, or Gas bill with no fixed amount, choose paymentType: "flexi". Otherwise choose paymentType: "fixed".
-          2. Mark a payment as paid or log a transaction (e.g. "mark spotify as paid", "log transaction for disney plus", "EB bill paid for $40", "gym membership paid for Father")
-             - Try to match the payment name they mention with the configured payments in the context list.
-             - Extract the custom amount if they specify it (e.g. "spent 40 on EB bill", extract 40 as the amount).
-             - Extract the beneficiary/tag (e.g. "paid rent for Father", extract "Father" as taggedFor).
-          3. Answer general questions about their expenses, budget, or how to use the app, OR ask a clarifying question if the intent was to add/pay but crucial information (like payment name) is missing.
+          - Recent Conversation History:
+          ${chatHistory && Array.isArray(chatHistory) ? chatHistory.map((m: any) => `${m.sender === 'user' ? 'User' : 'Assistant'}: ${m.text}`).join('\n') : '(None)'}
+          - New User Input: "${prompt}"
+
+          *** IMPORTANT: DATA COLLECTION FIRST POLICY ***
+          When a user wants to perform an action (like adding a recurring bill/payment, or logging a transaction/marking a bill as paid) but some of the crucial information is missing, you MUST NOT execute the action with default or placeholder values!
+          Instead, you MUST set the intent to "chat_clarify" and ask the user a polite, focused question to collect the missing data.
           
+          Guidelines for Data Collection:
+          1. Adding a new recurring bill/payment (intent: "add_expense"):
+             To perform this action, you need:
+             - Name of the bill (e.g., "Gas Bill", "Rent")
+             - Amount/Cost (e.g., 50)
+             - Due Day/Date (day of month, 1-28)
+             - Billing Cycle (monthly, yearly, weekly)
+             - Paid or not (whether the current cycle is already paid or not)
+             If any of these key details are missing in the user's request and conversation history, set intent to "chat_clarify" and ask for the missing details.
+             For example: "I can help you add your Gas Bill, but how much is it usually, what day of the month is it due, and is the current cycle already paid?"
+             Only when you have gathered all these details through conversation should you set intent to "add_expense" and provide the "addExpenseData". Set "isPaid" to true if they confirm the current cycle/month is already paid.
+
+          2. Adding multiple/bulk bills (intent: "add_bulk_expenses"):
+             If the user wants to add multiple bills in bulk (e.g. "add Gas bill, Water bill and Rent" or "add these bills in bulk: Netflix 15 AUD, Rent 2400 AUD"):
+             To perform this action, you need:
+             - For EACH bill: Name, Amount, Due Day/Date, Billing Cycle, and Paid status.
+             If details are missing for any of the bills, set intent to "chat_clarify" and ask a consolidated, clear question to collect the missing details for each bill.
+             Only when you have gathered ALL necessary details for ALL the bills should you set intent to "add_bulk_expenses" and provide "addBulkExpenseData".
+
+          3. Logging/Marking a bill as paid (intent: "mark_paid"):
+             To perform this action, you need:
+             - Name of the bill/payment (must correspond to an existing payment in the list, or be clarified)
+             - Amount paid (how much)
+             - Beneficiary/Person (e.g., "Self", "Father", "Mother", etc. - who paid or who it is for)
+             If details are ambiguous or missing, set intent to "chat_clarify" and ask for clarification first.
+             Only when you have confirmed these details should you set intent to "mark_paid".
+
+          If the user's input is a general question, or doesn't request adding/paying a bill, or if you're clarifying information, set intent to "chat_clarify" and write a friendly reply.
+
           Return a structured JSON with these exact fields:
           {
-            "intent": "add_expense" | "mark_paid" | "chat_clarify",
+            "intent": "add_expense" | "add_bulk_expenses" | "mark_paid" | "chat_clarify",
             "addExpenseData": {
               "name": string (e.g., "Netflix"),
               "amount": number (e.g., 14.99),
@@ -59,8 +87,22 @@ async function startServer() {
               "dayOfMonth": number (1-28),
               "billingCycle": "monthly" | "yearly" | "weekly" | "quarterly",
               "paymentMethod": "manual" | "direct_debit",
-              "paymentType": "fixed" | "flexi" (default to "fixed", use "flexi" if variable amount / varying bill is mentioned or implied like Gas/EB bill)
+              "paymentType": "fixed" | "flexi",
+              "isPaid": boolean
             },
+            "addBulkExpenseData": [
+              {
+                "name": string,
+                "amount": number,
+                "currency": string,
+                "category": string,
+                "dayOfMonth": number,
+                "billingCycle": "monthly" | "yearly" | "weekly" | "quarterly",
+                "paymentMethod": "manual" | "direct_debit",
+                "paymentType": "fixed" | "flexi",
+                "isPaid": boolean
+              }
+            ],
             "markPaidData": {
               "paymentId": string (The ID of the matching recurring payment from the context list. Try to match by name.),
               "paymentName": string (The name of the matched payment.),
@@ -78,7 +120,7 @@ async function startServer() {
             properties: {
               intent: {
                 type: Type.STRING,
-                description: "One of: 'add_expense', 'mark_paid', 'chat_clarify'",
+                description: "One of: 'add_expense', 'add_bulk_expenses', 'mark_paid', 'chat_clarify'",
               },
               addExpenseData: {
                 type: Type.OBJECT,
@@ -91,7 +133,27 @@ async function startServer() {
                   dayOfMonth: { type: Type.INTEGER },
                   billingCycle: { type: Type.STRING },
                   paymentMethod: { type: Type.STRING },
-                  paymentType: { type: Type.STRING, description: "'fixed' or 'flexi'" }
+                  paymentType: { type: Type.STRING, description: "'fixed' or 'flexi'" },
+                  isPaid: { type: Type.BOOLEAN, description: "Whether the current cycle/month is already paid" }
+                }
+              },
+              addBulkExpenseData: {
+                type: Type.ARRAY,
+                description: "Extracted data if adding multiple/bulk recurring payments/bills",
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING },
+                    amount: { type: Type.NUMBER },
+                    currency: { type: Type.STRING },
+                    category: { type: Type.STRING },
+                    dayOfMonth: { type: Type.INTEGER },
+                    billingCycle: { type: Type.STRING },
+                    paymentMethod: { type: Type.STRING },
+                    paymentType: { type: Type.STRING, description: "'fixed' or 'flexi'" },
+                    isPaid: { type: Type.BOOLEAN, description: "Whether the current cycle/month is already paid" }
+                  },
+                  required: ["name", "amount", "dayOfMonth"]
                 }
               },
               markPaidData: {

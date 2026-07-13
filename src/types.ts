@@ -42,6 +42,7 @@ export interface RecurringPayment {
   paymentType?: 'fixed' | 'flexi';
   paymentMethod?: 'manual' | 'direct_debit';
   billingCycle?: BillingCycle;
+  frequency?: string; // Schema-required field matching firebase-blueprint.json
   startDate?: string; // Optional: YYYY-MM-DD
   taggedFor?: string; // e.g. "Bank", "Father", "Mother", "Home", "Self"
   autoRenew?: boolean; // Optional: Auto-generate next month's record on payment
@@ -53,8 +54,10 @@ export interface PaymentHistory {
   paymentId: string;
   paymentName: string;
   amount: number;
+  amountPaid?: number; // Schema-required field matching firebase-blueprint.json
   currency: Currency;
   paidDate: string; // YYYY-MM-DD
+  datePaid?: string;   // Schema-required field matching firebase-blueprint.json
   userId?: string;
   familyGroupId?: string;
   taggedFor?: string; // Tagged for whom (Bank, Father, Mother, etc.)
@@ -68,10 +71,21 @@ export interface UserProfile {
   familyGroupId: string;
   appNotificationsEnabled?: boolean;
   mobileNotificationsEnabled?: boolean;
+  ownNotificationsEnabled?: boolean;
+  familyNotificationsEnabled?: boolean;
   role?: 'view' | 'modify'; // Access level
   isFamilyHost?: boolean; // If this user is the host/owner of the current family group code
   Connected_To_Host_UUID?: string;
   inviteCode?: string;
+}
+
+export interface BillAccess {
+  id: string;          // paymentId_memberUid
+  paymentId: string;   // reference to payment
+  memberUid: string;   // user getting access
+  ownerUid: string;    // creator of the payment
+  accessLevel: 'view' | 'modify';
+  sharedAt: string;
 }
 
 export interface FamilyInvitation {

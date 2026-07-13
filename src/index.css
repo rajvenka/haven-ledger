@@ -1,3 +1,125 @@
 @import "tailwindcss";
 
 @variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "SF Pro Display", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "SF Mono", "Fira Code", monospace;
+}
+
+/* Custom premium design classes & style sheets following Apple guidelines */
+
+/* Card Styles */
+@utility apple-card {
+  @apply bg-white dark:bg-[#1c1c1e] border border-[#e5e5ea]/80 dark:border-[#2c2c2e]/90 rounded-2xl p-5 shadow-[0_4px_24px_rgba(0,0,0,0.015)] transition-all duration-300;
+}
+
+@utility apple-card-interactive {
+  @apply apple-card hover:shadow-[0_12px_28px_rgba(0,0,0,0.03)] hover:border-[#d1d1d6] dark:hover:border-[#3a3a3c] hover:-translate-y-0.5 active:scale-99 cursor-pointer;
+}
+
+/* Badge Styles */
+@utility apple-badge-indigo {
+  @apply inline-flex items-center gap-1.5 text-[10px] font-semibold bg-[#f2f2f7] dark:bg-[#1c1c1e] text-[#5856d6] dark:text-[#5e5ce6] px-2.5 py-1 rounded-full border border-[#e5e5ea] dark:border-[#2c2c2e];
+}
+
+@utility apple-badge-emerald {
+  @apply inline-flex items-center gap-1.5 text-[10px] font-semibold bg-[#e8f5e9] dark:bg-[#1b5e20]/15 text-[#34c759] dark:text-[#30d158] px-2.5 py-1 rounded-full border border-[#c8e6c9]/30 dark:border-[#1b5e20]/35;
+}
+
+@utility apple-badge-rose {
+  @apply inline-flex items-center gap-1.5 text-[10px] font-semibold bg-[#ffebee] dark:bg-[#b71c1c]/15 text-[#ff3b30] dark:text-[#ff453a] px-2.5 py-1 rounded-full border border-[#ffcdd2]/30 dark:border-[#b71c1c]/35;
+}
+
+@utility apple-badge-amber {
+  @apply inline-flex items-center gap-1.5 text-[10px] font-semibold bg-[#fff3e0] dark:bg-[#e65100]/15 text-[#ff9500] dark:text-[#ff9f0a] px-2.5 py-1 rounded-full border border-[#ffe0b2]/30 dark:border-[#e65100]/35;
+}
+
+@utility apple-badge-slate {
+  @apply inline-flex items-center gap-1.5 text-[10px] font-semibold bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#8e8e93] dark:text-[#aeaeb2] px-2.5 py-1 rounded-full border border-[#e5e5ea] dark:border-[#3a3a3c];
+}
+
+/* Input Fields */
+@utility apple-input {
+  @apply w-full px-4 py-2.5 bg-[#f5f5f7] dark:bg-[#2c2c2e]/60 border border-transparent focus:border-[#d1d1d6] dark:focus:border-[#48484a] focus:bg-white dark:focus:bg-[#1c1c1e] rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-[#007aff]/10 transition-all duration-200;
+}
+
+@utility apple-select {
+  @apply w-full px-3.5 py-2.5 bg-[#f5f5f7] dark:bg-[#2c2c2e]/60 border border-transparent focus:border-[#d1d1d6] dark:focus:border-[#48484a] focus:bg-white dark:focus:bg-[#1c1c1e] rounded-xl text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-4 focus:ring-[#007aff]/10 transition-all duration-200;
+}
+
+/* Typography styles */
+@utility apple-title-main {
+  @apply text-base font-semibold text-slate-900 dark:text-white tracking-tight;
+}
+
+@utility apple-subtitle-main {
+  @apply text-xs text-slate-500 dark:text-slate-400 font-medium;
+}
+
+@utility apple-section-label {
+  @apply text-[10px] font-bold text-slate-400 dark:text-slate-500 tracking-widest uppercase pl-1 block mb-2;
+}
+
+/* Button styles */
+@utility apple-btn {
+  @apply px-4 py-2.5 text-xs font-semibold rounded-full transition-all duration-200 select-none cursor-pointer flex items-center justify-center gap-2 active:scale-95;
+}
+
+@utility apple-btn-primary {
+  @apply apple-btn bg-[#007aff] hover:bg-[#007aff]/90 dark:bg-[#0a84ff] dark:hover:bg-[#0a84ff]/90 text-white shadow-sm border border-transparent;
+}
+
+@utility apple-btn-secondary {
+  @apply apple-btn bg-[#f2f2f7] hover:bg-[#e5e5ea] dark:bg-[#2c2c2e] dark:hover:bg-[#3a3a3c] text-slate-800 dark:text-slate-200 border border-[#e5e5ea]/40 dark:border-[#2c2c2e]/50;
+}
+
+@utility apple-btn-danger {
+  @apply apple-btn bg-[#ffebee] hover:bg-[#ffcdD2] dark:bg-[#ff453a]/15 dark:hover:bg-[#ff453a]/25 text-[#ff3b30] dark:text-[#ff453a] border border-[#ff3b30]/15 shadow-none;
+}
+
+@utility apple-btn-success {
+  @apply apple-btn bg-[#34c759] hover:bg-[#34c759]/90 dark:bg-[#30d158] dark:hover:bg-[#30d158]/90 text-white shadow-sm border border-transparent;
+}
+
+/* Menu items */
+@utility apple-menu-btn {
+  @apply flex items-center justify-between px-3.5 py-3 rounded-xl text-[13px] font-medium transition-all duration-200 cursor-pointer text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-[#f2f2f7] dark:hover:bg-[#1c1c1e];
+}
+
+@utility apple-menu-btn-active {
+  @apply flex items-center justify-between px-3.5 py-3 rounded-xl text-[13px] font-semibold transition-all duration-200 cursor-pointer bg-white dark:bg-[#1c1c1e] text-[#007aff] dark:text-[#0a84ff] border border-[#e5e5ea] dark:border-[#2c2c2e] shadow-sm;
+}
+
+/* Segmented Control Styles */
+@utility apple-segmented-control {
+  @apply p-1 bg-[#f2f2f7] dark:bg-[#1c1c1e] rounded-full flex gap-1 border border-[#e5e5ea]/50 dark:border-[#2c2c2e]/50 shadow-[inset_0_1px_2px_rgba(0,0,0,0.01)];
+}
+
+@utility apple-segmented-btn {
+  @apply flex-1 py-1.5 px-3.5 text-[11px] font-semibold rounded-full transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer select-none active:scale-98 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white/40 dark:hover:bg-[#2c2c2e]/40;
+}
+
+@utility apple-segmented-btn-active {
+  @apply flex-1 py-1.5 px-3.5 text-[11px] font-semibold rounded-full transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer select-none bg-white dark:bg-[#2c2c2e] text-slate-900 dark:text-white shadow-sm border border-transparent;
+}
+
+/* Quick utility for clean borders and separators */
+@utility apple-divider {
+  @apply border-[#e5e5ea] dark:border-[#2c2c2e];
+}
+
+/* Custom PWA standalone padding adjustments to prevent overlapping with phone status bars */
+@media (display-mode: standalone) {
+  .standalone-safe-header {
+    padding-top: calc(24px + env(safe-area-inset-top, 24px)) !important;
+  }
+  .standalone-safe-drawer {
+    padding-top: calc(32px + env(safe-area-inset-top, 28px)) !important;
+    padding-bottom: calc(32px + env(safe-area-inset-bottom, 28px)) !important;
+  }
+  .standalone-safe-notif-header {
+    padding-top: calc(24px + env(safe-area-inset-top, 24px)) !important;
+  }
+}
+

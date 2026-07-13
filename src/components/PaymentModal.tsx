@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Calendar, DollarSign, Tag, Info, AlertTriangle, Plus } from 'lucide-react';
+import { X, Calendar, DollarSign, Tag, Info, AlertTriangle, Plus, RefreshCw } from 'lucide-react';
 import { RecurringPayment, Currency, CountryConfig, BillingCycle, UserProfile, PaymentHistory } from '../types';
 
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (payment: Omit<RecurringPayment, 'id'> & { id?: string }) => void;
+  onSave: (payment: Omit<RecurringPayment, 'id'> & { id?: string }) => Promise<void>;
   editingPayment: RecurringPayment | null;
   countries: CountryConfig[];
   preselectedCurrency?: string;
@@ -55,7 +55,7 @@ export default function PaymentModal({
   customizedTags = ['Bank', 'Home', 'Father', 'Mother', 'Self']
 }: PaymentModalProps) {
   const [name, setName] = useState('');
-  const [amount, setAmount] = useState<number | ''>('');
+  const [amount, setAmount] = useState<string>('');
   const [currency, setCurrency] = useState<Currency>('AUD');
   const [dayOfMonth, setDayOfMonth] = useState<number>(1);
   const [category, setCategory] = useState<string>('Software');
@@ -68,6 +68,7 @@ export default function PaymentModal({
   const [taggedFor, setTaggedFor] = useState('');
   const [autoRenew, setAutoRenew] = useState(false);
   const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Helper to format today's date as YYYY-MM-DD
   const getTodayDateString = () => {
@@ -152,7 +153,7 @@ export default function PaymentModal({
   useEffect(() => {
     if (editingPayment) {
       setName(editingPayment.name);
-      setAmount(editingPayment.amount);
+      setAmount(String(editingPayment.amount));
       setCurrency(editingPayment.currency);
       setDayOfMonth(editingPayment.dayOfMonth);
       setCategory(editingPayment.category);
@@ -203,7 +204,7 @@ export default function PaymentModal({
     setError('');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       setError('Please enter a billing name.');
@@ -212,12 +213,12 @@ export default function PaymentModal({
     
     let finalAmount = amount === '' ? 0 : Number(amount);
     if (paymentType === 'fixed') {
-      if (amount === '' || isNaN(amount) || amount <= 0) {
+      if (amount === '' || isNaN(Number(amount)) || Number(amount) <= 0) {
         setError('Please enter a valid billing amount.');
         return;
       }
     } else {
-      if (amount !== '' && (isNaN(amount) || amount < 0)) {
+      if (amount !== '' && (isNaN(Number(amount)) || Number(amount) < 0)) {
         setError('Please enter a valid billing amount (0 or positive).');
         return;
       }
@@ -243,24 +244,32 @@ export default function PaymentModal({
       }
     }
 
-    onSave({
-      id: editingPayment?.id,
-      name: name.trim(),
-      amount: finalAmount,
-      currency,
-      dayOfMonth,
-      category,
-      active: editingPayment ? editingPayment.active : true,
-      reminderDaysBefore,
-      notes: notes.trim() || undefined,
-      paymentType,
-      paymentMethod,
-      billingCycle,
-      startDate: billingCycle !== 'monthly' ? (startDate || getTodayDateString()) : undefined,
-      taggedFor: cleanTag || undefined,
-      autoRenew: autoRenew
-    });
-    onClose();
+    setIsSaving(true);
+    try {
+      await onSave({
+        id: editingPayment?.id,
+        name: name.trim(),
+        amount: finalAmount,
+        currency,
+        dayOfMonth,
+        category,
+        active: editingPayment ? editingPayment.active : true,
+        reminderDaysBefore,
+        notes: notes.trim() || undefined,
+        paymentType,
+        paymentMethod,
+        billingCycle,
+        startDate: billingCycle !== 'monthly' ? (startDate || getTodayDateString()) : undefined,
+        taggedFor: cleanTag || undefined,
+        autoRenew: autoRenew
+      });
+      onClose();
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Failed to save payment. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -274,7 +283,7 @@ export default function PaymentModal({
             animate={{ opacity: 0.5 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 cursor-pointer"
+            className="fixed md:absolute inset-0 bg-black/60 backdrop-blur-sm z-40 cursor-pointer"
           />
 
           {/* Modal Container */}
@@ -284,7 +293,7 @@ export default function PaymentModal({
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-            className="absolute bottom-0 left-0 right-0 max-h-[85%] bg-white dark:bg-slate-950 rounded-t-[30px] shadow-[0_-10px_30px_rgba(0,0,0,0.3)] z-50 flex flex-col overflow-hidden"
+            className="fixed md:absolute bottom-0 left-0 right-0 max-h-[85%] bg-white dark:bg-slate-950 rounded-t-[30px] shadow-[0_-10px_30px_rgba(0,0,0,0.3)] z-50 flex flex-col overflow-hidden"
           >
             {/* Header notch handle */}
             <div className="w-12 h-1 bg-slate-300 dark:bg-slate-800 rounded-full mx-auto mt-3 shrink-0" />
@@ -344,7 +353,7 @@ export default function PaymentModal({
                       type="number"
                       step="any"
                       value={amount}
-                      onChange={(e) => setAmount(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                      onChange={(e) => setAmount(e.target.value)}
                       placeholder={paymentType === 'flexi' ? 'Optional (e.g. 0.00)' : '0.00'}
                       className="w-full pl-6 pr-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
                       required={paymentType === 'fixed'}
@@ -675,6 +684,17 @@ export default function PaymentModal({
                 />
               </div>
 
+              {/* Error near Save Button */}
+              {error && (
+                <div id="modal-submit-error" className="bg-rose-50 dark:bg-rose-950/20 border border-rose-100/60 dark:border-rose-900/40 text-rose-600 dark:text-rose-400 p-2.5 rounded-xl flex items-center gap-2.5 text-xs font-semibold mt-2 shrink-0">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500" />
+                  <div className="flex-1 text-left leading-snug">
+                    <span className="font-extrabold uppercase tracking-wider block text-[9px] text-rose-500 mb-0.5">Save Error</span>
+                    <span>{error}</span>
+                  </div>
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div className="pt-3 flex gap-2 pb-6 shrink-0">
                 <button
@@ -688,9 +708,17 @@ export default function PaymentModal({
                 <button
                   id="btn-modal-submit"
                   type="submit"
-                  className="flex-1 py-2 bg-indigo-600 text-white font-bold text-xs rounded-lg shadow hover:bg-indigo-700 transition-all cursor-pointer"
+                  disabled={isSaving}
+                  className="flex-1 py-2 bg-indigo-600 disabled:bg-indigo-400 text-white font-bold text-xs rounded-lg shadow hover:bg-indigo-700 transition-all cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  {editingPayment ? 'Save Changes' : 'Save Payment'}
+                  {isSaving ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    editingPayment ? 'Save Changes' : 'Save Payment'
+                  )}
                 </button>
               </div>
             </form>

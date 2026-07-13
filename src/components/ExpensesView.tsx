@@ -206,10 +206,10 @@ export default function ExpensesView({
               setActiveTabCountryId('ALL');
               setIsManagingCountries(false);
             }}
-            className={`px-3.5 py-2.5 rounded-xl border flex items-center gap-1.5 shrink-0 transition-all ${
+            className={`px-3.5 py-2.5 rounded-xl border flex items-center gap-1.5 shrink-0 transition-all cursor-pointer ${
               isAllSelected
-                ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm font-bold' 
-                : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-850 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
+                ? 'bg-indigo-600 dark:bg-indigo-500 border-indigo-600 dark:border-indigo-500 text-white shadow-sm font-bold' 
+                : 'bg-white dark:bg-slate-900 border-slate-200/50 dark:border-slate-800/80 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-950'
             }`}
           >
             <span className="text-base leading-none">🌍</span>
@@ -232,10 +232,10 @@ export default function ExpensesView({
                   setActiveTabCountryId(c.id);
                   setIsManagingCountries(false);
                 }}
-                className={`px-3.5 py-2.5 rounded-xl border flex items-center gap-1.5 shrink-0 transition-all ${
+                className={`px-3.5 py-2.5 rounded-xl border flex items-center gap-1.5 shrink-0 transition-all cursor-pointer ${
                   isSelected 
-                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm font-bold' 
-                    : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-850 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
+                    ? 'bg-indigo-600 dark:bg-indigo-500 border-indigo-600 dark:border-indigo-500 text-white shadow-sm font-bold' 
+                    : 'bg-white dark:bg-slate-900 border-slate-200/50 dark:border-slate-800/80 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
                 }`}
               >
                 <span className="text-base leading-none">{c.flag}</span>
@@ -255,7 +255,7 @@ export default function ExpensesView({
 
       {/* Slide down form for Managing/Adding Countries */}
       {isManagingCountries && (
-        <div className="bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 animate-fadeIn">
+        <div className="apple-card space-y-4 animate-fadeIn">
           <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-900">
             <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Configure Countries</h4>
             <button onClick={() => setIsManagingCountries(false)}>
@@ -267,7 +267,7 @@ export default function ExpensesView({
           <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Exchange Rates (Relative to 1 AUD)</p>
             {countries.map((c) => (
-              <div key={c.id} className="flex items-center justify-between p-2 rounded bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-850/50">
+              <div key={c.id} className="flex items-center justify-between p-2 rounded bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-850/50">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="text-sm">{c.flag}</span>
                   <div className="min-w-0">
@@ -285,12 +285,12 @@ export default function ExpensesView({
                         value={editingRate}
                         onChange={(e) => setEditingRate(e.target.value)}
                         placeholder="Rate"
-                        className="w-16 px-1.5 py-0.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-xs text-right text-slate-900 dark:text-white"
+                        className="w-16 px-1.5 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-xs text-right text-slate-900 dark:text-white"
                         required
                       />
                       <button 
                         onClick={() => handleUpdateRate(c)}
-                        className="p-1 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                        className="p-1 bg-indigo-650 dark:bg-indigo-500 text-white rounded hover:bg-indigo-700"
                         title="Save rate"
                       >
                         <Check className="w-3.5 h-3.5" />
@@ -311,7 +311,7 @@ export default function ExpensesView({
                               setEditingCountryId(c.id);
                               setEditingRate(String(c.rateToAUD));
                             }}
-                            className="p-1 text-slate-500 hover:text-indigo-600 rounded"
+                            className="p-1 text-slate-500 hover:text-indigo-605 rounded"
                             title="Edit exchange rate"
                           >
                             <Edit className="w-3.5 h-3.5" />
@@ -339,9 +339,9 @@ export default function ExpensesView({
 
           {/* Add custom Country Form */}
           {!isReadOnly && (
-            <form onSubmit={handleCreateCountrySubmit} className="space-y-2.5 pt-3 border-t border-slate-100 dark:border-slate-900">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Add Custom Country</span>
-              <div className="grid grid-cols-2 gap-2">
+            <form onSubmit={handleCreateCountrySubmit} className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-850/80">
+              <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Add Custom Country</span>
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
                   <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Country Name</label>
                   <input
@@ -349,7 +349,7 @@ export default function ExpensesView({
                     placeholder="Singapore"
                     value={newCountryName}
                     onChange={(e) => setNewCountryName(e.target.value)}
-                    className="w-full px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="apple-input"
                     required
                   />
                 </div>
@@ -361,7 +361,7 @@ export default function ExpensesView({
                     maxLength={3}
                     value={newCountryCurrency}
                     onChange={(e) => setNewCountryCurrency(e.target.value)}
-                    className="w-full px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="apple-input"
                     required
                   />
                 </div>
@@ -372,7 +372,7 @@ export default function ExpensesView({
                     placeholder="S$"
                     value={newCountrySymbol}
                     onChange={(e) => setNewCountrySymbol(e.target.value)}
-                    className="w-full px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="apple-input"
                     required
                   />
                 </div>
@@ -383,7 +383,7 @@ export default function ExpensesView({
                     placeholder="🇸🇬"
                     value={newCountryFlag}
                     onChange={(e) => setNewCountryFlag(e.target.value)}
-                    className="w-full px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="apple-input"
                   />
                 </div>
               </div>
@@ -395,14 +395,14 @@ export default function ExpensesView({
                   placeholder="0.91"
                   value={newCountryRate}
                   onChange={(e) => setNewCountryRate(parseFloat(e.target.value))}
-                  className="w-full px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="apple-input"
                   required
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm flex items-center justify-center gap-1.5 transition-all"
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 dark:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" /> Save Country Tab
               </button>
@@ -414,11 +414,11 @@ export default function ExpensesView({
       {shouldRenderContent && (
         <>
           {/* HIGH DENSITY HERO METRIC CARD GRID */}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-3">
             
             {/* Metric 1: Paid So Far */}
-            <div className="bg-white dark:bg-slate-950 p-2.5 rounded-xl border border-slate-200 dark:border-slate-850 shadow-sm flex flex-col justify-between text-left">
-              <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1">
+            <div className="apple-card p-3 flex flex-col justify-between text-left">
+              <span className="text-[9px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Paid (Month)
               </span>
               <p className="text-sm font-black text-slate-900 dark:text-white mt-1.5 tracking-tight truncate">
@@ -427,8 +427,8 @@ export default function ExpensesView({
             </div>
 
             {/* Metric 2: Upcoming next week */}
-            <div className="bg-white dark:bg-slate-950 p-2.5 rounded-xl border border-slate-200 dark:border-slate-850 shadow-sm flex flex-col justify-between text-left">
-              <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1">
+            <div className="apple-card p-3 flex flex-col justify-between text-left">
+              <span className="text-[9px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" /> Next Week
               </span>
               <p className="text-sm font-black text-slate-900 dark:text-white mt-1.5 tracking-tight truncate">
@@ -437,8 +437,8 @@ export default function ExpensesView({
             </div>
 
             {/* Metric 3: Remaining this month */}
-            <div className="bg-white dark:bg-slate-950 p-2.5 rounded-xl border border-slate-200 dark:border-slate-850 shadow-sm flex flex-col justify-between text-left">
-              <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1">
+            <div className="apple-card p-3 flex flex-col justify-between text-left">
+              <span className="text-[9px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Remaining
               </span>
               <p className="text-sm font-black text-slate-900 dark:text-white mt-1.5 tracking-tight truncate">
@@ -449,8 +449,8 @@ export default function ExpensesView({
           </div>
 
           {/* ACTIVE EXPENSE TRACKER LIST FOR SELECTED COUNTRY */}
-          <div className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-850 shadow-sm p-4 flex-1 flex flex-col min-h-[300px]">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-900">
+          <div className="apple-card flex-1 flex flex-col min-h-[300px]">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-850/60">
               <div className="flex items-center gap-2">
                 <CreditCard className="w-4 h-4 text-indigo-500" />
                 <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
@@ -465,7 +465,7 @@ export default function ExpensesView({
               {!isReadOnly && (
                 <button
                   onClick={() => onAddExpenseClick(isAllSelected ? (defaultCurrency || 'AUD') : activeCurrency)}
-                  className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 text-indigo-600 dark:text-indigo-400 text-[10px] font-black rounded-lg transition-colors flex items-center gap-1"
+                  className="px-2.5 py-1.5 bg-indigo-50 dark:bg-indigo-950/30 hover:bg-indigo-100/60 border border-indigo-100/10 text-indigo-650 dark:text-indigo-400 text-[10px] font-black rounded-lg transition-all flex items-center gap-1 cursor-pointer"
                 >
                   <Plus className="w-3 h-3" /> Add {isAllSelected ? (defaultCurrency || 'AUD') : activeCurrency} Expense
                 </button>
@@ -533,16 +533,16 @@ export default function ExpensesView({
                           </span>
                         ) : (
                           <button
-                            disabled={isReadOnly}
+                            disabled={isPaymentReadOnly(p)}
                             onClick={() => onRecordPayment(p)}
                             className={`px-2 py-1 text-[10px] font-bold rounded-md transition-colors ${
-                              isReadOnly
+                              isPaymentReadOnly(p)
                                 ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-700/50'
                                 : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 cursor-pointer'
                             }`}
-                            title={isReadOnly ? 'Disabled in View-Only' : 'Record payment into history'}
+                            title={isPaymentReadOnly(p) ? 'Disabled in View-Only' : 'Record payment into history'}
                           >
-                            {isReadOnly ? 'View Only' : 'To Be Paid'}
+                            {isPaymentReadOnly(p) ? 'View Only' : 'To Be Paid'}
                           </button>
                         )}
                       </div>

@@ -8,8 +8,15 @@ interface IPhoneFrameProps {
 export default function IPhoneFrame({ children }: IPhoneFrameProps) {
   const [currentTime, setCurrentTime] = useState('');
   const [isLaptopMode, setIsLaptopMode] = useState(false);
+  const [isMobileScreen, setIsMobileScreen] = useState(false);
 
   useEffect(() => {
+    const checkMobile = () => {
+      setIsMobileScreen(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+
     // Auto-detect based on screen width on mount or fetch saved preference
     const saved = localStorage.getItem('pm_use_laptop_mode');
     if (saved !== null) {
@@ -30,8 +37,20 @@ export default function IPhoneFrame({ children }: IPhoneFrameProps) {
 
     updateTime();
     const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
+    return () => {
+      window.removeEventListener('resize', checkMobile);
+      clearInterval(interval);
+    };
   }, []);
+
+  // On real mobile device screens, render the viewport contents directly with no nested wrappers to ensure native safe areas are active
+  if (isMobileScreen) {
+    return (
+      <div className="min-h-screen w-full bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 flex flex-col">
+        {children}
+      </div>
+    );
+  }
 
   const toggleMode = () => {
     const nextVal = !isLaptopMode;

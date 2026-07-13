@@ -248,7 +248,7 @@ export default function AccountInfo({
       <div className="flex justify-between items-center px-1 shrink-0">
         <div className="flex items-center gap-2">
           <Sliders className="w-4.5 h-4.5 text-indigo-600" />
-          <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Haven Ledger Config</h3>
+          <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Haven Vault Config</h3>
         </div>
         
         {/* Toggle Button: Show/Hide Instructions */}

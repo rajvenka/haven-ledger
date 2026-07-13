@@ -45,6 +45,7 @@ interface DashboardProps {
   summaryCurrency: Currency;
   onRecordPayment: (payment: RecurringPayment, dueDate?: string) => void;
   isReadOnly?: boolean;
+  currentUserUid?: string;
 }
 
 // Simple initials extraction helper
@@ -64,8 +65,16 @@ export default function Dashboard({
   countries = [],
   summaryCurrency,
   onRecordPayment,
-  isReadOnly = false
+  isReadOnly = false,
+  currentUserUid
 }: DashboardProps) {
+  const isPaymentReadOnly = (payment?: RecurringPayment) => {
+    if (!payment) return true;
+    if (!isReadOnly) return false;
+    if (currentUserUid && payment.userId === currentUserUid) return false;
+    return true;
+  };
+
   const activePayments = payments.filter(p => p.active);
 
   // Generate scheduled instances for the current month and next month
@@ -221,38 +230,50 @@ export default function Dashboard({
       )}
       
       {/* Main Stats Bento Row - Grid of 3 (High Density Theme Layout) */}
-      <div className="grid grid-cols-3 gap-2 shrink-0">
+      <div className="grid grid-cols-3 gap-3 shrink-0">
         {/* Paid So Far Card */}
-        <div className="bg-white dark:bg-slate-950 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+        <div className="apple-card p-4 flex flex-col justify-between">
           <div>
-            <p className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Paid so far</p>
-            <p className="text-sm font-black text-slate-900 dark:text-white truncate">
+            <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">Paid so far</p>
+            <p className="text-base font-bold text-slate-900 dark:text-white tracking-tight truncate">
               {formatCurrencyValue(paidThisMonthConverted, summaryCurrency, countries)}
             </p>
           </div>
-          <p className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold mt-1">↑ 12% vs last month</p>
+          <div className="mt-2.5">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[8.5px] font-bold bg-[#e8f5e9] dark:bg-[#1b5e20]/15 text-[#34c759] dark:text-[#30d158] border border-[#c8e6c9]/15">
+              ↑ 12%
+            </span>
+          </div>
         </div>
 
         {/* Upcoming Next Week Card */}
-        <div className="bg-white dark:bg-slate-950 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+        <div className="apple-card p-4 flex flex-col justify-between">
           <div>
-            <p className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Next Week</p>
-            <p className="text-sm font-black text-indigo-600 dark:text-indigo-400 truncate">
+            <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">Next Week</p>
+            <p className="text-base font-bold text-[#007aff] dark:text-[#0a84ff] tracking-tight truncate">
               {formatCurrencyValue(totalDueNextWeekConverted, summaryCurrency, countries)}
             </p>
           </div>
-          <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-1 font-medium">{dueNextWeek.length} pending</p>
+          <div className="mt-2.5">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[8.5px] font-bold bg-[#f2f2f7] dark:bg-[#1c1c1e] text-slate-500 dark:text-slate-400 border border-[#e5e5ea]/20">
+              {dueNextWeek.length} bills
+            </span>
+          </div>
         </div>
 
         {/* Remaining Bills Card */}
-        <div className="bg-white dark:bg-slate-950 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+        <div className="apple-card p-4 flex flex-col justify-between">
           <div>
-            <p className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Current Month</p>
-            <p className="text-sm font-black text-slate-900 dark:text-white truncate">
+            <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">This Month</p>
+            <p className="text-base font-bold text-slate-900 dark:text-white tracking-tight truncate">
               {formatCurrencyValue(totalDueCurrentMonthConverted, summaryCurrency, countries)}
             </p>
           </div>
-          <p className="text-[9px] text-orange-500 dark:text-orange-400 font-bold mt-1">74% of budget</p>
+          <div className="mt-2.5">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[8.5px] font-bold bg-[#fff3e0] dark:bg-[#e65100]/15 text-[#ff9500] dark:text-[#ff9f0a] border border-[#ffe0b2]/15">
+              74% budget
+            </span>
+          </div>
         </div>
       </div>
 
@@ -263,24 +284,24 @@ export default function Dashboard({
         <div className="space-y-4">
           
           {/* 6-Month Spending Trend Line Chart */}
-          <div className="bg-white dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col overflow-hidden">
+          <div className="apple-card flex flex-col overflow-hidden">
             <button
               onClick={() => {
                 const nextVal = !isTrendExpanded;
                 setIsTrendExpanded(nextVal);
                 localStorage.setItem('pm_is_trend_expanded', String(nextVal));
               }}
-              className={`w-full px-4 py-3 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/40 hover:bg-slate-100/40 dark:hover:bg-slate-900/60 transition-all text-left cursor-pointer outline-none select-none ${
-                isTrendExpanded ? 'border-b border-slate-150 dark:border-slate-900' : ''
+              className={`w-full px-4.5 py-4 flex justify-between items-center bg-[#f5f5f7]/30 dark:bg-[#1c1c1e]/30 hover:bg-[#f5f5f7]/60 dark:hover:bg-[#2c2c2e]/40 transition-all text-left cursor-pointer outline-none select-none ${
+                isTrendExpanded ? 'border-b border-[#e5e5ea] dark:border-[#2c2c2e]' : ''
               }`}
             >
-              <div className="flex items-center gap-1.5">
-                <TrendingUp className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-[#007aff] dark:text-[#0a84ff]" />
                 <div className="text-left">
-                  <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                  <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-widest">
                     Spending Trend
                   </h3>
-                  <p className="text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase mt-0.5">
+                  <p className="text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase mt-0.5 tracking-wider">
                     Actual logged vs expected recurring budget (6-months)
                   </p>
                 </div>
@@ -288,11 +309,11 @@ export default function Dashboard({
               <div className="flex items-center gap-3 shrink-0">
                 {isTrendExpanded && (
                   <div className="hidden sm:flex items-center gap-2.5 text-[9px] font-black uppercase tracking-wider">
-                    <span className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400">
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400" /> Actual
+                    <span className="flex items-center gap-1 text-[#007aff] dark:text-[#0a84ff]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#007aff] dark:bg-[#0a84ff]" /> Actual
                     </span>
-                    <span className="flex items-center gap-1 text-slate-400 dark:text-slate-500">
-                      <span className="w-1.5 h-0.5 bg-slate-300 dark:bg-slate-700" /> Budget
+                    <span className="flex items-center gap-1 text-slate-450 dark:text-slate-500">
+                      <span className="w-1.5 h-0.5 bg-[#e5e5ea] dark:bg-[#2c2c2e]" /> Budget
                     </span>
                   </div>
                 )}
@@ -307,47 +328,47 @@ export default function Dashboard({
             {isTrendExpanded && (
               <div className="p-4 flex flex-col">
                 <div className="flex sm:hidden justify-end gap-2.5 text-[9px] font-black uppercase tracking-wider mb-2">
-                  <span className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400" /> Actual
+                  <span className="flex items-center gap-1 text-[#007aff] dark:text-[#0a84ff]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#007aff] dark:bg-[#0a84ff]" /> Actual
                   </span>
                   <span className="flex items-center gap-1 text-slate-400 dark:text-slate-500">
-                    <span className="w-1.5 h-0.5 bg-slate-300 dark:bg-slate-700" /> Budget
+                    <span className="w-1.5 h-0.5 bg-[#e5e5ea] dark:bg-[#2c2c2e]" /> Budget
                   </span>
                 </div>
                 <div className="h-44 w-full text-[10px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={trendData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-100 dark:text-slate-900" />
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-[#e5e5ea] dark:text-[#2c2c2e]" />
                       <XAxis 
                         dataKey="month" 
                         axisLine={false} 
                         tickLine={false} 
-                        tick={{ fill: '#94a3b8', fontSize: 9, fontWeight: 700 }} 
+                        tick={{ fill: '#8e8e93', fontSize: 9, fontWeight: 700 }} 
                       />
                       <YAxis 
                         axisLine={false} 
                         tickLine={false} 
-                        tick={{ fill: '#94a3b8', fontSize: 9, fontWeight: 700 }}
+                        tick={{ fill: '#8e8e93', fontSize: 9, fontWeight: 700 }}
                         tickFormatter={(val) => {
                           const symbol = countries.find(c => c.currency === summaryCurrency)?.symbol || '$';
                           return `${symbol}${val}`;
                         }}
                       />
-                      <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(99, 102, 241, 0.1)', strokeWidth: 1 }} />
+                      <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(0, 122, 255, 0.1)', strokeWidth: 1 }} />
                       <Line 
                         type="monotone" 
                         dataKey="Actual" 
                         name="Actual Spent"
-                        stroke="#4f46e5" 
+                        stroke="#007aff" 
                         strokeWidth={2.5} 
-                        dot={{ r: 3, strokeWidth: 1, fill: '#4f46e5' }} 
+                        dot={{ r: 3, strokeWidth: 1, fill: '#007aff' }} 
                         activeDot={{ r: 5 }} 
                       />
                       <Line 
                         type="monotone" 
                         dataKey="Budget" 
                         name="Expected Budget"
-                        stroke="#94a3b8" 
+                        stroke="#8e8e93" 
                         strokeWidth={1.5} 
                         strokeDasharray="4 4"
                         dot={false} 
@@ -360,16 +381,16 @@ export default function Dashboard({
           </div>
 
           {/* "For Whom" (Beneficiary Tag) Spend Distribution Report */}
-          <div className="bg-white dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
+          <div className="apple-card p-4 flex flex-col">
             <div className="text-left mb-3">
-              <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                <User className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> Spend by Beneficiary
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
+                <User className="w-4 h-4 text-[#007aff] dark:text-[#0a84ff]" /> Spend by Beneficiary
               </h3>
-              <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-0.5 font-bold uppercase">Breakdown of recorded payments logged by beneficiary</p>
+              <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-0.5 font-bold uppercase tracking-wider">Breakdown of recorded payments logged by beneficiary</p>
             </div>
 
             {history.filter(h => h.taggedFor).length === 0 ? (
-              <div className="text-center py-4 bg-slate-50 dark:bg-slate-900/40 rounded-lg border border-dashed border-slate-200 dark:border-slate-800">
+              <div className="text-center py-4 bg-slate-50/50 dark:bg-slate-900/40 rounded-lg border border-dashed border-slate-200 dark:border-slate-800">
                 <p className="text-[10px] text-slate-400 font-bold">No tagged transactions recorded yet.</p>
                 <p className="text-[9px] text-slate-400 mt-0.5">Use the "For Whom" field when recording paid bills to populate this report.</p>
               </div>
@@ -389,7 +410,7 @@ export default function Dashboard({
                     const pct = maxAmount > 0 ? (amount / maxAmount) * 100 : 0;
                     
                     const borderColors = [
-                      'bg-indigo-600',
+                      'bg-[#007aff]',
                       'bg-emerald-500',
                       'bg-amber-500',
                       'bg-rose-500',
@@ -428,17 +449,17 @@ export default function Dashboard({
         <div className="space-y-4">
           
           {/* Section 1: Upcoming next week in unified card */}
-          <div className="bg-white dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col overflow-hidden">
+          <div className="apple-card flex flex-col overflow-hidden">
             <div 
               onClick={() => {
                 const nextVal = !isDueNextWeekExpanded;
                 setIsDueNextWeekExpanded(nextVal);
                 localStorage.setItem('pm_is_due_next_week_expanded', String(nextVal));
               }}
-              className="px-4 py-3 border-b border-slate-150 dark:border-slate-900 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/40 cursor-pointer select-none"
+              className="px-4.5 py-3.5 border-b border-slate-100 dark:border-slate-900 flex justify-between items-center bg-slate-50/20 dark:bg-slate-950/20 cursor-pointer select-none"
             >
-              <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-indigo-600" /> Due Next Week
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-[#007aff] dark:text-[#0a84ff]" /> Due Next Week
               </h3>
               <div className="flex items-center gap-2">
                 <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400 text-[10px] font-bold">
@@ -497,15 +518,15 @@ export default function Dashboard({
 
                           {parentPayment && (
                             <button
-                              disabled={isReadOnly}
+                              disabled={isPaymentReadOnly(parentPayment)}
                               onClick={() => onRecordPayment(parentPayment, ins.dueDate)}
                               className={`px-2.5 py-1 text-[10px] font-bold rounded-md shadow-sm transition-all shrink-0 ${
-                                isReadOnly
+                                isPaymentReadOnly(parentPayment)
                                   ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-700/50'
-                                  : 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer'
+                                  : 'bg-[#007aff] hover:bg-[#007aff]/90 dark:bg-[#0a84ff] dark:hover:bg-[#0a84ff]/90 text-white cursor-pointer'
                               }`}
                             >
-                              {isReadOnly ? 'View Only' : 'To Be Paid'}
+                              {isPaymentReadOnly(parentPayment) ? 'View Only' : 'To Be Paid'}
                             </button>
                           )}
                         </div>
@@ -518,7 +539,7 @@ export default function Dashboard({
           </div>
 
           {/* Section 2: This Month's Scheduler */}
-          <div className="bg-white dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col overflow-hidden">
+          <div className="apple-card flex flex-col overflow-hidden">
             <div 
               onClick={(e) => {
                 // If clicked inside the filter-container, don't toggle expand/collapse
@@ -527,30 +548,22 @@ export default function Dashboard({
                 setIsThisMonthExpanded(nextVal);
                 localStorage.setItem('pm_is_this_month_expanded', String(nextVal));
               }}
-              className="px-4 py-3 border-b border-slate-150 dark:border-slate-900 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/40 cursor-pointer select-none"
+              className="px-4.5 py-3.5 border-b border-slate-100 dark:border-slate-900 flex justify-between items-center bg-slate-50/20 dark:bg-slate-950/20 cursor-pointer select-none"
             >
-              <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                <Clock className="w-4 h-4 text-indigo-500" /> This Month's Scheduler
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
+                <Clock className="w-4 h-4 text-[#007aff] dark:text-[#0a84ff]" /> This Month's Scheduler
               </h3>
               <div className="flex items-center gap-3">
-                <div className="filter-container flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg shrink-0">
+                <div className="filter-container apple-segmented-control shrink-0">
                   <button
                     onClick={() => setCurrentMonthFilter('outstanding')}
-                    className={`px-2 py-0.5 text-[9px] font-bold rounded-md transition-all cursor-pointer ${
-                      currentMonthFilter === 'outstanding'
-                        ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                        : 'text-slate-500 hover:text-slate-800'
-                    }`}
+                    className={currentMonthFilter === 'outstanding' ? 'apple-segmented-btn-active' : 'apple-segmented-btn'}
                   >
                     Outstanding
                   </button>
                   <button
                     onClick={() => setCurrentMonthFilter('all')}
-                    className={`px-2 py-0.5 text-[9px] font-bold rounded-md transition-all cursor-pointer ${
-                      currentMonthFilter === 'all'
-                        ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                        : 'text-slate-500 hover:text-slate-800'
-                    }`}
+                    className={currentMonthFilter === 'all' ? 'apple-segmented-btn-active' : 'apple-segmented-btn'}
                   >
                     All Bills
                   </button>
@@ -625,15 +638,15 @@ export default function Dashboard({
 
                             {ins.status !== 'paid' && parentPayment ? (
                               <button
-                                disabled={isReadOnly}
+                                disabled={isPaymentReadOnly(parentPayment)}
                                 onClick={() => onRecordPayment(parentPayment, ins.dueDate)}
                                 className={`px-2.5 py-1 text-[10px] font-bold rounded-md shadow-sm transition-all shrink-0 ${
-                                  isReadOnly
+                                  isPaymentReadOnly(parentPayment)
                                     ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-700/50'
-                                    : 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer'
+                                    : 'bg-[#007aff] hover:bg-[#007aff]/90 dark:bg-[#0a84ff] dark:hover:bg-[#0a84ff]/90 text-white cursor-pointer'
                                 }`}
                               >
-                                {isReadOnly ? 'View Only' : 'To Be Paid'}
+                                {isPaymentReadOnly(parentPayment) ? 'View Only' : 'To Be Paid'}
                               </button>
                             ) : ins.status === 'paid' ? (
                               <div className="w-6 h-6 rounded-full bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
@@ -651,14 +664,14 @@ export default function Dashboard({
           </div>
 
           {/* Next Month Forecast & Planner Collapsible Section */}
-          <div className="bg-white dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col overflow-hidden">
+          <div className="apple-card flex flex-col overflow-hidden">
             <div
               onClick={() => {
                 const nextVal = !isNextMonthExpanded;
                 setIsNextMonthExpanded(nextVal);
                 localStorage.setItem('pm_is_next_month_expanded', String(nextVal));
               }}
-              className="w-full px-4 py-3 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/40 hover:bg-slate-100/45 dark:hover:bg-slate-900/60 transition-all text-left cursor-pointer select-none"
+              className="w-full px-4.5 py-3.5 flex justify-between items-center bg-slate-50/20 dark:bg-slate-950/20 hover:bg-slate-50/50 dark:hover:bg-slate-900/40 transition-all text-left cursor-pointer select-none"
             >
               <div className="flex items-center gap-1.5">
                 <ArrowUpRight className="w-4 h-4 text-purple-500" />
@@ -721,15 +734,15 @@ export default function Dashboard({
 
                           {ins.status !== 'paid' && parentPayment ? (
                             <button
-                              disabled={isReadOnly}
+                              disabled={isPaymentReadOnly(parentPayment)}
                               onClick={() => onRecordPayment(parentPayment, ins.dueDate)}
                               className={`px-2 py-0.5 text-[9px] font-bold rounded shadow-sm transition-all shrink-0 ${
-                                isReadOnly
+                                isPaymentReadOnly(parentPayment)
                                   ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-700/50'
                                   : 'bg-purple-600 hover:bg-purple-700 text-white cursor-pointer'
                               }`}
                             >
-                              {isReadOnly ? 'View' : 'Pay Early'}
+                              {isPaymentReadOnly(parentPayment) ? 'View' : 'Pay Early'}
                             </button>
                           ) : ins.status === 'paid' ? (
                             <div className="w-5 h-5 rounded-full bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
