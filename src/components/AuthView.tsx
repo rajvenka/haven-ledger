@@ -47,6 +47,8 @@ export default function AuthView({ onSignIn, onSignUp, onResetPassword, onSignIn
         if (!name.trim()) throw new Error('Please enter your name.');
         if (password.length < 6) throw new Error('Password must be at least 6 characters.');
         await onSignUp(email.trim(), password, name.trim());
+        setSuccessMessage("Account created! Check your inbox for a confirmation email, then come back and sign in.");
+        setIsSignUp(false);
       } else {
         await onSignIn(email.trim(), password);
       }
