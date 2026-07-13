@@ -56,6 +56,7 @@ export default function App() {
     resetPassword,
     logOut,
     addFamilyMember,
+    createFamily,
     joinFamilyGroup,
     leaveFamilyGroup,
     incomingInvitations,
@@ -448,54 +449,12 @@ export default function App() {
                   >
                     <div className="flex items-center gap-2">
                       <Users className="w-4 h-4 shrink-0 opacity-80" />
-                      <span>My Members</span>
+                      <span>Family Sharing</span>
                     </div>
                     {activeTab === 'account' && settingsSubTab === 'members' && (
                       <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                     )}
                   </button>
-
-                  <button
-                    onClick={() => {
-                      setActiveTab('account');
-                      setSettingsSubTab('groups');
-                    }}
-                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
-                      activeTab === 'account' && settingsSubTab === 'groups'
-                        ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
-                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Layers className="w-4 h-4 shrink-0 opacity-80" />
-                      <span>My Groups</span>
-                    </div>
-                    {activeTab === 'account' && settingsSubTab === 'groups' && (
-                      <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
-                    )}
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setActiveTab('account');
-                      setSettingsSubTab('chat');
-                    }}
-                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
-                      activeTab === 'account' && settingsSubTab === 'chat'
-                        ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
-                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4 shrink-0 opacity-80" />
-                      <span>MESSAGING</span>
-                    </div>
-                    {activeTab === 'account' && settingsSubTab === 'chat' && (
-                      <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
-                    )}
-                  </button>
-
-
                 </nav>
               </div>
 
@@ -776,56 +735,12 @@ export default function App() {
                       >
                         <div className="flex items-center gap-2.5">
                           <Users className="w-4.5 h-4.5 shrink-0 opacity-80" />
-                          <span>My Members</span>
+                          <span>Family Sharing</span>
                         </div>
                         {activeTab === 'account' && settingsSubTab === 'members' && (
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                         )}
                       </button>
-
-                      <button
-                        onClick={() => {
-                          setActiveTab('account');
-                          setSettingsSubTab('groups');
-                          setIsMobileMenuOpen(false);
-                        }}
-                        className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
-                          activeTab === 'account' && settingsSubTab === 'groups'
-                            ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
-                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <Layers className="w-4.5 h-4.5 shrink-0 opacity-80" />
-                          <span>My Groups</span>
-                        </div>
-                        {activeTab === 'account' && settingsSubTab === 'groups' && (
-                          <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
-                        )}
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          setActiveTab('account');
-                          setSettingsSubTab('chat');
-                          setIsMobileMenuOpen(false);
-                        }}
-                        className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
-                          activeTab === 'account' && settingsSubTab === 'chat'
-                            ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
-                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <MessageSquare className="w-4.5 h-4.5 shrink-0 opacity-80" />
-                          <span>MESSAGING</span>
-                        </div>
-                        {activeTab === 'account' && settingsSubTab === 'chat' && (
-                          <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
-                        )}
-                      </button>
-
-
                     </nav>
                   </div>
 
@@ -1055,6 +970,7 @@ export default function App() {
                 familyRole={familyRole}
                 isReadOnly={isReadOnly}
                 onAddFamilyMember={addFamilyMember}
+                onCreateFamily={createFamily}
                 onJoinFamilyGroup={joinFamilyGroup}
                 onLeaveFamilyGroup={leaveFamilyGroup}
                 incomingInvitations={incomingInvitations}

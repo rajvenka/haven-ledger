@@ -203,6 +203,15 @@ export function usePaymentState() {
     return { id: data.id, invite_code: data.invite_code };
   };
 
+  const createFamily = async () => {
+    setIsSyncing(true);
+    try {
+      await ensureFamily();
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const addFamilyMember = async (email: string, role: 'view' | 'modify' = 'modify') => {
     if (!user) throw new Error('Not signed in.');
     if (familyId && familyRole !== 'host') throw new Error('Only the family host can invite members.');
@@ -442,7 +451,7 @@ export function usePaymentState() {
   return {
     user, userProfile, familyMembers, viewMode, setViewMode,
     signUp, signIn, signInWithGoogle, resetPassword, logOut,
-    addFamilyMember, joinFamilyGroup, leaveFamilyGroup,
+    addFamilyMember, joinFamilyGroup, leaveFamilyGroup, createFamily,
     incomingInvitations, approveInvitation, declineInvitation, updateMemberRole, removeFamilyMember,
     isAuthLoading, familyRole, isReadOnly, inviteCode, regenerateInviteCode,
     payments, allPayments, history, allHistory, countries, rate, summaryCurrency, notifications, isLoaded, isSyncing,

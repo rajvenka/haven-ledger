@@ -37,6 +37,7 @@ interface AccountInfoProps {
   familyRole?: 'host' | 'modify' | 'view' | null;
   isReadOnly?: boolean;
   onAddFamilyMember: (email: string, role?: 'view' | 'modify') => Promise<void>;
+  onCreateFamily?: () => Promise<void>;
   onJoinFamilyGroup: (code: string) => Promise<void>;
   onLeaveFamilyGroup?: () => Promise<void>;
   incomingInvitations?: FamilyInvitation[];
@@ -76,6 +77,7 @@ export default function AccountInfo({
   familyRole = null,
   isReadOnly = false,
   onAddFamilyMember,
+  onCreateFamily,
   onJoinFamilyGroup,
   onLeaveFamilyGroup,
   incomingInvitations = [],
@@ -464,12 +466,25 @@ export default function AccountInfo({
             </div>
           )}
 
-          {/* Invite code / share panel — only the host sees the code and can invite */}
-          {familyRole === 'host' && (
+          {/* Invite code / share panel — hosts see it, and solo users can create a family to get one */}
+          {(familyRole === 'host' || !familyRole) && (
             <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
               <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
                 <Users className="w-4 h-4 text-indigo-500" /> Your Family Invite Code
               </h4>
+
+              {!inviteCode ? (
+                <div className="space-y-2">
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">You don't have a family yet. Create one to get a code you can share.</p>
+                  <button
+                    onClick={async () => { setFamilyError(null); try { await onCreateFamily?.(); } catch (e: any) { setFamilyError(e.message); } }}
+                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer"
+                  >
+                    Create My Family
+                  </button>
+                </div>
+              ) : (
+                <>
               <div className="flex items-center gap-2">
                 <div className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 rounded-lg font-mono text-sm font-bold tracking-widest text-center text-indigo-600 dark:text-indigo-400">
                   {inviteCode || '—'}
@@ -515,6 +530,8 @@ export default function AccountInfo({
                   <UserPlus className="w-4 h-4" />
                 </button>
               </form>
+              </>
+              )}
               {familyError && <p className="text-[10px] text-red-500 font-semibold">{familyError}</p>}
               {familySuccess && <p className="text-[10px] text-emerald-500 font-semibold">{familySuccess}</p>}
             </div>
