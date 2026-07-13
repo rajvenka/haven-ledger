@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <!-- Background -->
+  <rect width="512" height="512" rx="128" fill="#0B0F19"/>
+  
+  <!-- Glow Effect -->
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#6366F1" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#0B0F19" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818CF8"/>
+      <stop offset="100%" stop-color="#4F46E5"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34D399"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Glow background -->
+  <circle cx="256" cy="256" r="200" fill="url(#glow)"/>
+  
+  <!-- Shield/Ledger Outline -->
+  <path d="M176,144 C176,144 256,112 256,112 C256,112 336,144 336,144 C336,144 352,288 256,384 C160,288 176,144 176,144 Z" 
+        fill="none" 
+        stroke="url(#shieldGrad)" 
+        stroke-width="16" 
+        stroke-linejoin="round" 
+        stroke-linecap="round"/>
+        
+  <!-- Safe/Ledger Inner Grid Lines (represents recurring transactions / calendars) -->
+  <rect x="208" y="192" width="96" height="12" rx="6" fill="#818CF8" opacity="0.8"/>
+  <rect x="208" y="224" width="96" height="12" rx="6" fill="#818CF8" opacity="0.8"/>
+  <rect x="208" y="256" width="64" height="12" rx="6" fill="#818CF8" opacity="0.8"/>
+  
+  <!-- Floating Glowing Coin/Sync Indicator -->
+  <circle cx="256" cy="310" r="28" fill="#0B0F19" stroke="url(#accentGrad)" stroke-width="8"/>
+  <path d="M256,298 L256,322 M244,310 L268,310" stroke="url(#accentGrad)" stroke-width="6" stroke-linecap="round"/>
+</svg>

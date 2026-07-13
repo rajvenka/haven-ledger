@@ -1,0 +1,6 @@
+{
+  "name": "Haven Vault",
+  "description": "An iOS-styled recurring payment monitor with monthly summary, intelligent Gemini AI insights, real-time agent assistant chat, upcoming payment notifications, and dual currency support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,9 @@
+{
+  "appId": "com.havenvault.app",
+  "appName": "Haven Vault",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}
