@@ -145,7 +145,7 @@ export function usePaymentState() {
   }, []);
 
   useEffect(() => {
-    if (!user) { setUserProfile(null); setIsLoaded(false); return; }
+    if (!user) { setUserProfile(null); setIsLoaded(true); return; }
     (async () => {
       let { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
       if (!profile) {
