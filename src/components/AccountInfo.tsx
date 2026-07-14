@@ -131,8 +131,6 @@ export default function AccountInfo({
   const [currencyError, setCurrencyError] = useState<string | null>(null);
   const [currencyBusy, setCurrencyBusy] = useState(false);
 
-  const isCustomCountry = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id);
-
   const handleAddCurrency = async (e: React.FormEvent) => {
     e.preventDefault();
     setCurrencyError(null);
@@ -724,7 +722,7 @@ export default function AccountInfo({
                   <span>{c.flag}</span>
                   <span>{c.currency} ({c.symbol})</span>
                 </button>
-                {isCustomCountry(c.id) && (
+                {onDeleteCountry && (
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDeleteCurrency(c.id); }}
                     title="Remove currency"
@@ -744,6 +742,8 @@ export default function AccountInfo({
             </button>
           </div>
 
+          {currencyError && <p className="text-[10px] text-red-500 font-semibold mt-1.5">{currencyError}</p>}
+
           {showAddCurrency && (
             <form onSubmit={handleAddCurrency} className="mt-2 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg space-y-2">
               <div className="grid grid-cols-2 gap-1.5">
@@ -752,7 +752,6 @@ export default function AccountInfo({
                 <input type="text" value={newCurrencyName} onChange={(e) => setNewCurrencyName(e.target.value)} placeholder="Name (optional)" className="px-2 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-[11px]" />
                 <input type="number" step="0.01" value={newCurrencyRate} onChange={(e) => setNewCurrencyRate(e.target.value)} placeholder="Rate per 1 AUD" className="px-2 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-[11px]" />
               </div>
-              {currencyError && <p className="text-[10px] text-red-500 font-semibold">{currencyError}</p>}
               <button type="submit" disabled={currencyBusy} className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded disabled:opacity-50 cursor-pointer">
                 {currencyBusy ? 'Adding…' : 'Add Currency'}
               </button>

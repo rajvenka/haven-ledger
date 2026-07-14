@@ -176,7 +176,16 @@ export function usePaymentState() {
     ]);
     setAllPayments((pays ?? []).map(rowToPayment));
     setAllHistory((hist ?? []).map(rowToHistory));
-    if (cts && cts.length > 0) setCountries(cts.map(rowToCountry));
+    if (cts && cts.length > 0) {
+      setCountries(cts.map(rowToCountry));
+    } else if (cts && cts.length === 0) {
+      // First time for this user/family: seed the defaults as real rows so they're manageable (incl. deletable) like any other currency.
+      const seedRows = INITIAL_COUNTRIES.map(c => ({
+        name: c.name, currency: c.currency, symbol: c.symbol, flag: c.flag, rate_to_aud: c.rateToAUD, user_id: user.id, family_id: familyId,
+      }));
+      const { data: seeded } = await supabase.from('countries').insert(seedRows).select();
+      if (seeded && seeded.length > 0) setCountries(seeded.map(rowToCountry));
+    }
     setNotifications((notifs ?? []).map(rowToNotification));
   }, [user, familyId]);
 
@@ -407,7 +416,24 @@ export function usePaymentState() {
     if (error) throw error;
     await reloadData();
   };
-  const deleteCountry = async (id: string) => { await supabase.from('countries').delete().eq('id', id); await reloadData(); };
+  const deleteCountry = async (id: string) => {
+    const target = countries.find(c => c.id === id);
+    if (!target) return;
+    if (countries.length <= 1) {
+      throw new Error("You need at least one currency — add another before removing this one.");
+    }
+    const inUse = allPayments.some(p => p.currency === target.currency);
+    if (inUse) {
+      throw new Error(`"${target.currency}" is still used by one or more payments — reassign or delete those first.`);
+    }
+    const { error } = await supabase.from('countries').delete().eq('id', id);
+    if (error) throw error;
+    if (summaryCurrency.toUpperCase() === target.currency.toUpperCase()) {
+      const fallback = countries.find(c => c.id !== id);
+      if (fallback) saveSummaryCurrency(fallback.currency);
+    }
+    await reloadData();
+  };
 
   const saveRate = async (newRate: number) => { setRate(newRate); localStorage.setItem('pm_exchange_rate', String(newRate)); };
   const saveSummaryCurrency = (currency: Currency) => { setSummaryCurrency(currency); localStorage.setItem('pm_summary_currency', currency); };
