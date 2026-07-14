@@ -26,7 +26,8 @@ import {
   MessageSquare,
   Send,
   Trash2,
-  ShieldCheck
+  ShieldCheck,
+  X
 } from 'lucide-react';
 import { RecurringPayment, Currency, UserProfile, CountryConfig, FamilyInvitation } from '../types';
 
@@ -51,6 +52,8 @@ interface AccountInfoProps {
   theme: 'light' | 'dark';
   onThemeChange: (theme: 'light' | 'dark') => void;
   countries: CountryConfig[];
+  onAddCountry?: (country: Omit<CountryConfig, 'id'>) => Promise<void>;
+  onDeleteCountry?: (id: string) => Promise<void>;
   rate: number;
   onSaveRate: (rate: number) => void;
   summaryCurrency: string;
@@ -91,6 +94,8 @@ export default function AccountInfo({
   theme,
   onThemeChange,
   countries = [],
+  onAddCountry,
+  onDeleteCountry,
   rate,
   onSaveRate,
   summaryCurrency,
@@ -118,6 +123,47 @@ export default function AccountInfo({
   // Rate editor state
   const [isEditingRate, setIsEditingRate] = useState(false);
   const [tempRate, setTempRate] = useState('');
+  const [showAddCurrency, setShowAddCurrency] = useState(false);
+  const [newCurrencyCode, setNewCurrencyCode] = useState('');
+  const [newCurrencySymbol, setNewCurrencySymbol] = useState('');
+  const [newCurrencyName, setNewCurrencyName] = useState('');
+  const [newCurrencyRate, setNewCurrencyRate] = useState('');
+  const [currencyError, setCurrencyError] = useState<string | null>(null);
+  const [currencyBusy, setCurrencyBusy] = useState(false);
+
+  const isCustomCountry = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id);
+
+  const handleAddCurrency = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCurrencyError(null);
+    const code = newCurrencyCode.trim().toUpperCase();
+    const symbol = newCurrencySymbol.trim();
+    const name = newCurrencyName.trim() || code;
+    const rateVal = parseFloat(newCurrencyRate);
+    if (!code || code.length < 2) { setCurrencyError('Enter a currency code, e.g. USD.'); return; }
+    if (!symbol) { setCurrencyError('Enter a symbol, e.g. $'); return; }
+    if (!rateVal || rateVal <= 0) { setCurrencyError('Enter a valid exchange rate to AUD.'); return; }
+    setCurrencyBusy(true);
+    try {
+      await onAddCountry?.({ name, currency: code, symbol, flag: '💱', rateToAUD: rateVal });
+      setNewCurrencyCode(''); setNewCurrencySymbol(''); setNewCurrencyName(''); setNewCurrencyRate('');
+      setShowAddCurrency(false);
+    } catch (err: any) {
+      setCurrencyError(err.message || 'Could not add currency.');
+    } finally {
+      setCurrencyBusy(false);
+    }
+  };
+
+  const handleDeleteCurrency = async (id: string) => {
+    setCurrencyError(null);
+    try {
+      await onDeleteCountry?.(id);
+    } catch (err: any) {
+      setCurrencyError(err.message || 'Could not delete currency.');
+    }
+  };
+
   
   // Family forms state
   const [familyEmail, setFamilyEmail] = useState('');
@@ -666,20 +712,52 @@ export default function AccountInfo({
               }
               return acc;
             }, []).map((c) => (
-              <button
-                key={c.id}
-                onClick={() => onSaveSummaryCurrency(c.currency)}
-                className={`px-3 py-1.5 text-[11px] font-semibold rounded flex items-center gap-1 shrink-0 transition-all cursor-pointer ${
-                  summaryCurrency.toUpperCase() === c.currency.toUpperCase()
-                    ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/50 dark:border-slate-700'
-                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <span>{c.flag}</span>
-                <span>{c.currency} ({c.symbol})</span>
-              </button>
+              <div key={c.id} className="relative group shrink-0">
+                <button
+                  onClick={() => onSaveSummaryCurrency(c.currency)}
+                  className={`px-3 py-1.5 text-[11px] font-semibold rounded flex items-center gap-1 transition-all cursor-pointer ${
+                    summaryCurrency.toUpperCase() === c.currency.toUpperCase()
+                      ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/50 dark:border-slate-700'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <span>{c.flag}</span>
+                  <span>{c.currency} ({c.symbol})</span>
+                </button>
+                {isCustomCountry(c.id) && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteCurrency(c.id); }}
+                    title="Remove currency"
+                    className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                )}
+              </div>
             ))}
+            <button
+              onClick={() => setShowAddCurrency(!showAddCurrency)}
+              title="Add a currency"
+              className="px-2.5 py-1.5 text-[11px] font-bold rounded text-indigo-600 dark:text-indigo-400 hover:bg-white dark:hover:bg-slate-800 transition-all cursor-pointer shrink-0"
+            >
+              + Add
+            </button>
           </div>
+
+          {showAddCurrency && (
+            <form onSubmit={handleAddCurrency} className="mt-2 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg space-y-2">
+              <div className="grid grid-cols-2 gap-1.5">
+                <input type="text" value={newCurrencyCode} onChange={(e) => setNewCurrencyCode(e.target.value)} placeholder="Code, e.g. USD" maxLength={6} className="px-2 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-[11px]" />
+                <input type="text" value={newCurrencySymbol} onChange={(e) => setNewCurrencySymbol(e.target.value)} placeholder="Symbol, e.g. $" maxLength={3} className="px-2 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-[11px]" />
+                <input type="text" value={newCurrencyName} onChange={(e) => setNewCurrencyName(e.target.value)} placeholder="Name (optional)" className="px-2 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-[11px]" />
+                <input type="number" step="0.01" value={newCurrencyRate} onChange={(e) => setNewCurrencyRate(e.target.value)} placeholder="Rate per 1 AUD" className="px-2 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-[11px]" />
+              </div>
+              {currencyError && <p className="text-[10px] text-red-500 font-semibold">{currencyError}</p>}
+              <button type="submit" disabled={currencyBusy} className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded disabled:opacity-50 cursor-pointer">
+                {currencyBusy ? 'Adding…' : 'Add Currency'}
+              </button>
+            </form>
+          )}
         </div>
 
         {/* Exchange Rate Controller */}

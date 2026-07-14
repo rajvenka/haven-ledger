@@ -196,11 +196,11 @@ export function usePaymentState() {
   const ensureFamily = async (): Promise<{ id: string; invite_code: string }> => {
     if (familyId) return { id: familyId, invite_code: inviteCode };
     if (!user) throw new Error('Not signed in.');
-    const code = genInviteCode();
-    const { data, error } = await supabase.from('families').insert({ name: `${userProfile?.displayName || 'My'} Family`, invite_code: code, host_id: user.id }).select().single();
+    const { data, error } = await supabase.rpc('create_my_family', { fam_name: `${userProfile?.displayName || 'My'} Family` });
     if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
     await refreshFamily(user.id);
-    return { id: data.id, invite_code: data.invite_code };
+    return { id: row.id, invite_code: row.invite_code };
   };
 
   const createFamily = async () => {
