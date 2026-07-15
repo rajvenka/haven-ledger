@@ -1,9 +1,5 @@
-import { GoogleGenAI, Type } from "@google/genai";
-
-
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-});
+import { Type } from "@google/genai";
+import { generateContentWithFallback } from "./_gemini";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
@@ -23,8 +19,7 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+    const response = await generateContentWithFallback({
       contents: `
         You are the Haven Agent, an AI-powered financial assistant for a Bill and Expense Manager app called "Haven Vault".
         Your task is to interpret the user's comments or instructions.
@@ -37,42 +32,37 @@ export default async function handler(req: any, res: any) {
         ${chatHistory && Array.isArray(chatHistory) ? chatHistory.map((m: any) => `${m.sender === 'user' ? 'User' : 'Assistant'}: ${m.text}`).join('\n') : '(None)'}
         - New User Input: "${prompt}"
 
-        *** IMPORTANT: DATA COLLECTION FIRST POLICY ***
-        When a user wants to perform an action (like adding a recurring bill/payment, or logging a transaction/marking a bill as paid) but some of the crucial information is missing, you MUST NOT execute the action with default or placeholder values!
-        Instead, you MUST set the intent to "chat_clarify" and ask the user a polite, focused question to collect the missing data.
+        *** CRITICAL: FOLLOW-UP QUESTIONS & DATA COLLECTION RULES ***
+        You MUST gather all essential details before executing any financial action. NEVER use dummy, default, or guessed values for key details.
 
-        Guidelines for Data Collection:
-        1. Adding a new recurring bill/payment (intent: "add_expense"):
-           To perform this action, you need:
-           - Name of the bill (e.g., "Gas Bill", "Rent")
-           - Amount/Cost (e.g., 50)
-           - Due Day/Date (day of month, 1-28)
-           - Billing Cycle (monthly, yearly, weekly)
-           - Paid or not (whether the current cycle is already paid or not)
-           If any of these key details are missing in the user's request and conversation history, set intent to "chat_clarify" and ask for the missing details.
-           For example: "I can help you add your Gas Bill, but how much is it usually, what day of the month is it due, and is the current cycle already paid?"
-           Only when you have gathered all these details through conversation should you set intent to "add_expense" and provide the "addExpenseData". Set "isPaid" to true if they confirm the current cycle/month is already paid.
+        1. Adding a recurring bill or payment (intent: "add_expense"):
+           To execute this action, you STRICTLY need all 4 of these details:
+           - Name of the bill (e.g., "Netflix", "Gas Bill")
+           - Amount/Cost (must be a positive number, e.g., 15)
+           - Due Day/Date (day of month, e.g., 12)
+           - Billing Cycle (e.g., "weekly", "monthly", "yearly", or "once" for one-off transactions)
 
-        2. Adding multiple/bulk bills (intent: "add_bulk_expenses"):
-           If the user wants to add multiple bills in bulk (e.g. "add Gas bill, Water bill and Rent" or "add these bills in bulk: Netflix 15 AUD, Rent 2400 AUD"):
-           To perform this action, you need:
-           - For EACH bill: Name, Amount, Due Day/Date, Billing Cycle, and Paid status.
-           If details are missing for any of the bills, set intent to "chat_clarify" and ask a consolidated, clear question to collect the missing details for each bill.
-           Only when you have gathered ALL necessary details for ALL the bills should you set intent to "add_bulk_expenses" and provide "addBulkExpenseData".
+           If ANY of these 4 details are missing from the user's prompt or the Recent Conversation History, you are STRICTLY FORBIDDEN from choosing "add_expense"!
+           Instead, you MUST set the intent to "chat_clarify" and write a polite, conversational response asking the user specifically for the missing details (e.g., "I can help you add your Netflix bill, but how much is the subscription fee, what day of the month is it due, and what is the billing cycle?").
+           Only choose "add_expense" when ALL 4 details are known or confirmed by the user.
 
-        3. Logging/Marking a bill as paid (intent: "mark_paid"):
-           To perform this action, you need:
-           - Name of the bill/payment (must correspond to an existing payment in the list, or be clarified)
-           - Amount paid (how much)
-           - Beneficiary/Person (e.g., "Self", "Father", "Mother", etc. - who paid or who it is for)
-           If details are ambiguous or missing, set intent to "chat_clarify" and ask for clarification first.
-           Only when you have confirmed these details should you set intent to "mark_paid".
+        2. Bulk bill insertion (intent: "add_bulk_expenses"):
+           - For EACH bill, you need its Name, Amount, and Due Day.
+           - If any of these are missing for any bill in the bulk list, you MUST choose "chat_clarify" and ask a consolidated clarification question.
+
+        3. Logging or marking a bill as paid (intent: "mark_paid"):
+           - You need the specific payment name (corresponding to one of the configured bills in the current list) and the amount.
+           - If the user says "add transaction" or "log transaction" but does not name which bill it is, or if the name doesn't match, you MUST set the intent to "chat_clarify" and ask them to clarify which bill they are paying.
 
         4. Updating an existing bill (intent: "update_expense"):
            If the user wants to change details of an existing configured payment (e.g. "change Netflix to $18", "move rent due date to the 3rd"):
            - Identify the matching payment from the context list by name (fuzzy match ok).
            - Only change the fields the user mentioned; leave others as-is.
            - If you cannot confidently match an existing payment, set intent to "chat_clarify" and ask which bill they mean.
+
+        5. Rule for general "add transaction" / "add payment" requests:
+           - If the user says "add a transaction", "add transaction", "log a payment", or "add payment" without naming a specific bill or specifying details, they may be trying to log a paid payment or create a recurring bill. Treat this as highly ambiguous.
+           - You MUST set intent to "chat_clarify" and ask them: "Would you like to add a new recurring bill/payment, or log a transaction for an existing bill? Please tell me the name of the bill, the amount, and the due day of the month."
 
         If the user's input is a general question, or doesn't request adding/paying/updating a bill, or if you're clarifying information, set intent to "chat_clarify" and write a friendly reply.
 
@@ -186,6 +176,36 @@ export default async function handler(req: any, res: any) {
     });
 
     const result = JSON.parse(response.text || "{}");
+
+    // STRICT SERVER-SIDE INTERCEPT VALIDATION
+    // If the model returned "add_expense" but is missing crucial details, convert it to "chat_clarify".
+    // This is a safety net independent of how well the model follows the prompt.
+    if (result.intent === "add_expense") {
+      const data = result.addExpenseData || {};
+      const missingFields: string[] = [];
+
+      const isGenericName = !data.name || data.name.trim() === "" ||
+        ["transaction", "bill", "payment", "expense"].includes(data.name.toLowerCase().trim());
+
+      if (isGenericName) missingFields.push("name of the bill");
+      if (data.amount === undefined || data.amount === null || data.amount <= 0) missingFields.push("amount");
+      if (!data.dayOfMonth || data.dayOfMonth < 1 || data.dayOfMonth > 31) missingFields.push("due day of the month");
+      if (!data.billingCycle) missingFields.push("billing cycle (weekly, monthly, yearly, once)");
+
+      if (missingFields.length > 0) {
+        result.intent = "chat_clarify";
+        result.replyMessage = `I can help you add your bill, but could you please specify the ${missingFields.join(", ")}?`;
+      }
+    }
+
+    if (result.intent === "mark_paid") {
+      const data = result.markPaidData || {};
+      if (!data.paymentName && !data.paymentId) {
+        result.intent = "chat_clarify";
+        result.replyMessage = "I would love to help you log that transaction as paid! Which configured bill or payment are you paying?";
+      }
+    }
+
     res.status(200).json(result);
   } catch (error: any) {
     console.error("Agent assistant error:", error);

@@ -233,76 +233,140 @@ export default function ConfigurePayments({
     setBulkRows([]);
   };
 
-  // CSV/TSV copy-paste parser
+  // CSV/TSV/JSON copy-paste parser
   const handleParsePaste = () => {
-    if (!pasteText.trim()) return;
+    const trimmedText = pasteText.trim();
+    if (!trimmedText) return;
     
-    // Split by lines
-    const lines = pasteText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    const parsedRows: BulkRow[] = [];
-    
-    lines.forEach(line => {
-      // Split by tab (Excel/Google sheets default paste) or comma
-      let parts = line.split('\t');
-      if (parts.length <= 1) {
-        parts = line.split(',');
-      }
-      
-      parts = parts.map(p => p.trim().replace(/^["']|["']$/g, ''));
-      
-      if (parts.length > 0 && parts[0]) {
-        // Map elements
-        const name = parts[0] || '';
-        const amount = parts[1] ? parts[1].replace(/[^0-9.]/g, '') : '';
-        const rawCurrency = parts[2] ? parts[2].toUpperCase() : 'AUD';
-        const currency = CURRENCIES.includes(rawCurrency) ? rawCurrency : 'AUD';
-        
-        // Find best match category
-        const rawCat = parts[3] || 'Entertainment';
-        const matchedCat = CATEGORIES.find(c => c.toLowerCase() === rawCat.toLowerCase()) || 'Other';
-        
-        const dayOfMonth = parts[4] ? parts[4].replace(/[^0-9]/g, '') : '1';
-        const reminderDaysBefore = parts[5] ? parts[5].replace(/[^0-9]/g, '') : '2';
-        
-        const paymentType = parts[6]?.toLowerCase() === 'flexi' ? 'flexi' : 'fixed';
-        
-        const rawCycle = parts[7] || 'monthly';
-        const billingCycle = (BILLING_CYCLES.includes(rawCycle as any) ? rawCycle : 'monthly') as BillingCycle;
-        
-        // Best match tag
-        const rawTag = parts[8] || 'Self';
-        const taggedFor = customizedTags.find(t => t.toLowerCase() === rawTag.toLowerCase()) || 'Self';
-        
-        const notes = parts[9] || '';
+    let parsedRows: BulkRow[] = [];
+    let isJson = false;
 
-        parsedRows.push({
-          key: Math.random().toString(36).substring(2, 9),
-          name,
-          amount,
-          currency,
-          category: matchedCat,
-          dayOfMonth: Math.min(31, Math.max(1, parseInt(dayOfMonth) || 1)).toString(),
-          reminderDaysBefore: Math.max(0, parseInt(reminderDaysBefore) || 0).toString(),
-          paymentType,
-          billingCycle,
-          taggedFor,
-          notes
-        });
+    // Try parsing as JSON first
+    if (trimmedText.startsWith('[') || trimmedText.startsWith('{')) {
+      try {
+        const jsonObj = JSON.parse(trimmedText);
+        let items: any[] = [];
+        if (Array.isArray(jsonObj)) {
+          items = jsonObj;
+        } else if (jsonObj && typeof jsonObj === 'object') {
+          const possibleArray = Object.values(jsonObj).find(val => Array.isArray(val));
+          if (possibleArray) {
+            items = possibleArray as any[];
+          } else {
+            items = [jsonObj];
+          }
+        }
+
+        if (items.length > 0) {
+          isJson = true;
+          items.forEach(item => {
+            if (item && typeof item === 'object') {
+              const name = item.name || item.billName || item.paymentName || item.taggedFor || '';
+              if (!name) return;
+
+              const amount = item.amount !== undefined ? String(item.amount) : '';
+              const rawCurrency = (item.currency || 'AUD').toUpperCase();
+              const currency = CURRENCIES.includes(rawCurrency) ? rawCurrency : 'AUD';
+              
+              const rawCat = item.category || 'Other';
+              const matchedCat = CATEGORIES.find(c => c.toLowerCase() === rawCat.toLowerCase()) || 'Other';
+              
+              const dayOfMonth = item.dayOfMonth !== undefined ? String(item.dayOfMonth) : '1';
+              const reminderDaysBefore = item.reminderDaysBefore !== undefined ? String(item.reminderDaysBefore) : '2';
+              const paymentType = item.paymentType === 'flexi' ? 'flexi' : 'fixed';
+              
+              const rawCycle = item.billingCycle || item.frequency || 'monthly';
+              const billingCycle = (BILLING_CYCLES.includes(rawCycle as any) ? rawCycle : 'monthly') as BillingCycle;
+              
+              const rawTag = item.taggedFor || 'Self';
+              const taggedFor = customizedTags.find(t => t.toLowerCase() === rawTag.toLowerCase()) || rawTag;
+
+              const notes = item.notes || '';
+
+              parsedRows.push({
+                key: Math.random().toString(36).substring(2, 9),
+                name,
+                amount,
+                currency,
+                category: matchedCat,
+                dayOfMonth: Math.min(31, Math.max(1, parseInt(dayOfMonth) || 1)).toString(),
+                reminderDaysBefore: Math.max(0, parseInt(reminderDaysBefore) || 0).toString(),
+                paymentType,
+                billingCycle,
+                taggedFor,
+                notes
+              });
+            }
+          });
+        }
+      } catch (e) {
+        console.warn('Attempted JSON parse but fell back to CSV:', e);
       }
-    });
+    }
+
+    if (!isJson) {
+      // Split by lines
+      const lines = trimmedText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      
+      lines.forEach(line => {
+        // Split by tab (Excel/Google sheets default paste) or comma
+        let parts = line.split('\t');
+        if (parts.length <= 1) {
+          parts = line.split(',');
+        }
+        
+        parts = parts.map(p => p.trim().replace(/^["']|["']$/g, ''));
+        
+        if (parts.length > 0 && parts[0]) {
+          const name = parts[0] || '';
+          const amount = parts[1] ? parts[1].replace(/[^0-9.]/g, '') : '';
+          const rawCurrency = parts[2] ? parts[2].toUpperCase() : 'AUD';
+          const currency = CURRENCIES.includes(rawCurrency) ? rawCurrency : 'AUD';
+          
+          const rawCat = parts[3] || 'Entertainment';
+          const matchedCat = CATEGORIES.find(c => c.toLowerCase() === rawCat.toLowerCase()) || 'Other';
+          
+          const dayOfMonth = parts[4] ? parts[4].replace(/[^0-9]/g, '') : '1';
+          const reminderDaysBefore = parts[5] ? parts[5].replace(/[^0-9]/g, '') : '2';
+          
+          const paymentType = parts[6]?.toLowerCase() === 'flexi' ? 'flexi' : 'fixed';
+          
+          const rawCycle = parts[7] || 'monthly';
+          const billingCycle = (BILLING_CYCLES.includes(rawCycle as any) ? rawCycle : 'monthly') as BillingCycle;
+          
+          const rawTag = parts[8] || 'Self';
+          const taggedFor = customizedTags.find(t => t.toLowerCase() === rawTag.toLowerCase()) || 'Self';
+          
+          const notes = parts[9] || '';
+
+          parsedRows.push({
+            key: Math.random().toString(36).substring(2, 9),
+            name,
+            amount,
+            currency,
+            category: matchedCat,
+            dayOfMonth: Math.min(31, Math.max(1, parseInt(dayOfMonth) || 1)).toString(),
+            reminderDaysBefore: Math.max(0, parseInt(reminderDaysBefore) || 0).toString(),
+            paymentType,
+            billingCycle,
+            taggedFor,
+            notes
+          });
+        }
+      });
+    }
 
     if (parsedRows.length > 0) {
       setBulkRows(prev => {
-        // If current list is just the default 3 placeholder empty rows and they haven't been edited, replace them!
         const hasEdited = prev.some(r => r.name || r.amount);
         return hasEdited ? [...prev, ...parsedRows] : parsedRows;
       });
       setPasteText('');
       setShowPasteBox(false);
-      setSuccessMessage(`Parsed ${parsedRows.length} bill/payment lines successfully! Review them in the grid below.`);
+      setSuccessMessage(`Parsed ${parsedRows.length} bill/payment lines successfully from ${isJson ? 'JSON' : 'CSV/TSV'}! Review and save them in the grid below.`);
       setErrorMessage(null);
     } else {
-      setErrorMessage('Could not parse any rows. Ensure your pasted content has at least a "Bill Name" or "Payment Name" column.');
+      setErrorMessage('Could not parse any rows. Ensure your pasted content contains a name and valid format.');
     }
   };
 

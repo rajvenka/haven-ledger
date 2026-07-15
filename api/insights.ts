@@ -1,9 +1,5 @@
-import { GoogleGenAI, Type } from "@google/genai";
-
-
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-});
+import { Type } from "@google/genai";
+import { generateContentWithFallback } from "./_gemini";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
@@ -19,8 +15,7 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+    const response = await generateContentWithFallback({
       contents: `
         You are the Haven Auditor, a world-class financial auditor for a Bill and Expense Manager app called "Haven Vault".
         Your task is to analyze the user's recurring payments, bills, and EMIs, historic spending records, and family group structure to generate top-tier, smart financial insights.

@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { usePaymentState } from './hooks/usePaymentState';
 import IPhoneFrame from './components/IPhoneFrame';
-import NotificationBanner from './components/NotificationBanner';
+
 import PaymentModal from './components/PaymentModal';
 import Dashboard from './components/Dashboard';
 import ConfigurePayments from './components/ConfigurePayments';
@@ -294,16 +294,6 @@ export default function App() {
   // 3. Authenticated user main app
   return (
     <IPhoneFrame>
-      {/* iOS sliding notification banner overlay at the top */}
-      <NotificationBanner 
-        notifications={notifications} 
-        onDismiss={handleDismissNotification} 
-        onNavigateToSecurity={() => {
-          setActiveTab('account');
-          setSettingsSubTab('security');
-        }}
-      />
-
       {/* Main Container */}
       <div className="flex-1 flex flex-row h-full bg-slate-50 dark:bg-slate-900 relative overflow-hidden text-left">
         

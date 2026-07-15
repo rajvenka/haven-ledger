@@ -122,7 +122,12 @@ export default function AgentAssistant({
       });
 
       if (!response.ok) {
-        throw new Error('Failed to reach assistant server.');
+        let errMessage = 'Failed to reach assistant server.';
+        try {
+          const errData = await response.json();
+          errMessage = errData.error || errMessage;
+        } catch (_) {}
+        throw new Error(errMessage);
       }
 
       const result = await response.json();
@@ -244,12 +249,15 @@ export default function AgentAssistant({
           ]);
         }
       }
+
+    } catch (err: any) {
+      console.error(err);
       setMessages(prev => [
         ...prev,
         {
           id: Math.random().toString(),
           sender: 'assistant',
-          text: "Sorry, I had trouble processing your request. Please check your network and try again.",
+          text: `Sorry, I had trouble processing your request: ${err.message || 'Please check your network and try again.'}`,
           timestamp: new Date()
         }
       ]);
@@ -267,15 +275,18 @@ export default function AgentAssistant({
   return (
     <>
       {/* Floating Haven Agent Button */}
-      <div className="absolute bottom-20 right-4 z-40">
+      <div className="fixed bottom-6 right-6 z-40">
         <motion.button
-          whileHover={{ scale: 1.05 }}
+          whileHover={{ scale: 1.05, y: -2 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => setIsOpen(true)}
-          className="w-12 h-12 rounded-full bg-gradient-to-tr from-indigo-650 to-violet-650 text-white flex items-center justify-center shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30 transition-all border border-indigo-400/20 cursor-pointer"
+          className="w-13 h-13 rounded-full bg-[#1c1c1e] dark:bg-white text-white dark:text-[#1c1c1e] flex items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.16)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.24)] transition-all border border-slate-800/80 dark:border-slate-200/80 cursor-pointer relative overflow-hidden group"
           id="floating-haven-agent-btn"
         >
-          <Sparkles className="w-5 h-5 animate-pulse" />
+          {/* Subtle glowing Siri/Apple AI color accent background overlay on hover */}
+          <div className="absolute inset-0 bg-gradient-to-tr from-[#5856d6]/20 via-[#007aff]/25 to-[#34c759]/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+          
+          <Sparkles className="w-5 h-5 text-[#0a84ff] dark:text-[#007aff] group-hover:text-pink-500 dark:group-hover:text-pink-500 transition-colors duration-300 animate-pulse relative z-10" />
         </motion.button>
       </div>
 
@@ -286,76 +297,76 @@ export default function AgentAssistant({
             {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
-              animate={{ opacity: 0.4 }}
+              animate={{ opacity: 0.3 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsOpen(false)}
-              className="fixed md:absolute inset-0 bg-black/50 z-40 rounded-none md:rounded-3xl"
+              className="fixed inset-0 bg-black/40 dark:bg-black/60 z-40"
             />
 
             {/* Slide-up Container Panel */}
             <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-              className="fixed md:absolute bottom-0 left-0 right-0 h-[85%] bg-white dark:bg-slate-950 rounded-t-3xl border-t border-slate-100 dark:border-slate-900 shadow-2xl z-50 flex flex-col overflow-hidden"
+              initial={{ y: '100%', opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: '100%', opacity: 0 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 220 }}
+              className="fixed bottom-0 md:bottom-24 left-0 right-0 md:left-auto md:right-6 h-[80%] md:h-[620px] md:w-[400px] bg-white dark:bg-[#1c1c1e] rounded-t-3xl md:rounded-2xl border-t md:border border-[#e5e5ea] dark:border-[#2c2c2e] shadow-2xl z-50 flex flex-col overflow-hidden"
               id="haven-agent-drawer"
             >
               {/* Drawer handle notch */}
               <div className="w-12 h-1 bg-slate-300 dark:bg-slate-800 rounded-full mx-auto mt-3 shrink-0" />
 
               {/* Header section */}
-              <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 dark:border-slate-900 shrink-0">
-                <div className="flex items-center gap-2">
-                  <div className="p-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400">
-                    <Bot className="w-4.5 h-4.5" />
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[#e5e5ea] dark:border-[#2c2c2e] bg-white dark:bg-[#1c1c1e] shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 rounded-xl bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#007aff] dark:text-[#0a84ff]">
+                    <Bot className="w-4 h-4" />
                   </div>
                   <div className="text-left">
-                    <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                      Haven Agent
+                    <h3 className="text-xs font-bold text-slate-900 dark:text-white tracking-tight">
+                      Haven Intelligence Agent
                     </h3>
-                    <p className="text-[9px] text-slate-450 dark:text-slate-500 font-bold">Write comments to quickly log transactions</p>
+                    <p className="text-[9px] text-[#8e8e93] dark:text-[#aeaeb2] font-semibold">Write natural comments to manage bills</p>
                   </div>
                 </div>
 
                 <button
                   onClick={() => setIsOpen(false)}
-                  className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-full text-slate-500 transition-colors cursor-pointer"
+                  className="p-1.5 hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] rounded-full text-slate-500 transition-colors cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               {/* Chat messages Area */}
-              <div className="flex-1 p-4 overflow-y-auto space-y-3.5 no-scrollbar bg-slate-50/50 dark:bg-slate-950/50">
+              <div className="flex-1 p-4 overflow-y-auto space-y-3.5 no-scrollbar bg-[#f5f5f7]/40 dark:bg-[#1c1c1e]/40">
                 {messages.map((msg) => (
                   <div
                     key={msg.id}
                     className={`flex gap-2.5 ${msg.sender === 'user' ? 'justify-end' : 'text-left justify-start'}`}
                   >
                     {msg.sender === 'assistant' && (
-                      <div className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 flex items-center justify-center shrink-0">
-                        <Sparkles className="w-4 h-4" />
+                      <div className="w-7 h-7 rounded-full text-white flex items-center justify-center shrink-0 shadow-sm bg-gradient-to-tr from-[#5856d6] via-[#007aff] to-[#34c759]">
+                        <Sparkles className="w-3.5 h-3.5 text-white" />
                       </div>
                     )}
 
                     <div className="flex flex-col max-w-[75%] gap-1">
                       <div
-                        className={`px-3 py-2.5 rounded-2xl text-xs font-medium leading-relaxed shadow-sm ${
+                        className={`px-3.5 py-2.5 rounded-2xl text-xs font-semibold leading-relaxed shadow-sm ${
                           msg.sender === 'user'
-                            ? 'bg-indigo-600 text-white rounded-tr-none'
-                            : 'bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-900 text-slate-800 dark:text-slate-200 rounded-tl-none'
+                            ? 'bg-[#007aff] dark:bg-[#0a84ff] text-white rounded-tr-sm text-right'
+                            : 'bg-[#f2f2f7] dark:bg-[#2c2c2e] text-slate-900 dark:text-slate-100 rounded-tl-sm text-left'
                         }`}
                       >
                         {msg.text}
                       </div>
-                      <span className="text-[8px] text-slate-400 font-bold px-1 select-none">
+                      <span className="text-[8px] text-slate-400 font-bold px-1 select-none text-left">
                         {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
 
                     {msg.sender === 'user' && (
-                      <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center shrink-0">
+                      <div className="w-7 h-7 rounded-full bg-[#e5e5ea] dark:bg-[#3a3a3c] text-slate-700 dark:text-slate-300 flex items-center justify-center shrink-0">
                         <User className="w-4 h-4" />
                       </div>
                     )}
@@ -363,11 +374,11 @@ export default function AgentAssistant({
                 ))}
                 {isProcessing && (
                   <div className="flex gap-2.5 justify-start text-left">
-                    <div className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 flex items-center justify-center shrink-0">
-                      <Sparkles className="w-4 h-4 animate-spin" />
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-[#5856d6] via-[#007aff] to-[#34c759] text-white flex items-center justify-center shrink-0">
+                      <Sparkles className="w-3.5 h-3.5 animate-spin" />
                     </div>
-                    <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-900 px-3 py-2.5 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-2 text-xs text-slate-500 font-medium">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-500" />
+                    <div className="bg-[#f2f2f7] dark:bg-[#2c2c2e] px-3.5 py-2.5 rounded-2xl rounded-tl-sm shadow-sm flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-[#007aff] dark:text-[#0a84ff]" />
                       <span>Analyzing comment...</span>
                     </div>
                   </div>
@@ -376,14 +387,14 @@ export default function AgentAssistant({
               </div>
 
               {/* Suggested comments prompt row */}
-              <div className="px-4 py-2 border-t border-slate-100 dark:border-slate-900 bg-white dark:bg-slate-950 overflow-x-auto shrink-0 no-scrollbar flex gap-2">
+              <div className="px-4 py-2.5 border-t border-[#e5e5ea] dark:border-[#2c2c2e] bg-white dark:bg-[#1c1c1e] overflow-x-auto shrink-0 no-scrollbar flex gap-2">
                 {suggestions.map((s, idx) => (
                   <button
                     key={idx}
                     onClick={() => handleUserCommand(s.prompt)}
-                    className="px-2.5 py-1.5 rounded-lg border border-slate-250 dark:border-slate-800 text-slate-650 dark:text-slate-350 bg-slate-50/50 dark:bg-slate-900/30 text-[10px] font-bold hover:bg-slate-100 dark:hover:bg-slate-900 flex items-center gap-1 shrink-0 transition-all cursor-pointer text-left"
+                    className="px-3 py-1.5 rounded-full border border-[#e5e5ea] dark:border-[#2c2c2e] text-[#555] dark:text-slate-300 bg-[#f5f5f7] dark:bg-[#2c2c2e]/60 text-[10px] font-bold hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] flex items-center gap-1.5 shrink-0 transition-all cursor-pointer text-left"
                   >
-                    <MessageSquare className="w-3 h-3 text-indigo-500" />
+                    <MessageSquare className="w-3 h-3 text-[#007aff] dark:text-[#0a84ff]" />
                     <span>{s.label}</span>
                   </button>
                 ))}
@@ -398,19 +409,19 @@ export default function AgentAssistant({
               )}
 
               {/* Text comment form */}
-              <div className="p-4 border-t border-slate-100 dark:border-slate-900 bg-white dark:bg-slate-950 shrink-0">
-                <form onSubmit={handleTextSubmit} className="w-full flex gap-2">
+              <div className="p-4 pb-5 border-t border-[#e5e5ea] dark:border-[#2c2c2e] bg-white dark:bg-[#1c1c1e] shrink-0">
+                <form onSubmit={handleTextSubmit} className="w-full flex gap-2.5">
                   <input
                     type="text"
                     value={textInput}
                     onChange={(e) => setTextInput(e.target.value)}
-                    placeholder="Enter your comment, e.g. 'spent 15 dollars on Spotify today'..."
-                    className="flex-1 px-3.5 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-850 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Type a comment to log a bill..."
+                    className="flex-1 px-4 py-2.5 text-xs bg-[#f5f5f7] dark:bg-[#2c2c2e]/60 border border-transparent focus:border-[#d1d1d6] dark:focus:border-[#48484a] focus:bg-white dark:focus:bg-[#1c1c1e] rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-[#007aff]/10 transition-all duration-200"
                   />
                   <button
                     type="submit"
                     disabled={!textInput.trim() || isProcessing}
-                    className="px-3.5 bg-indigo-650 hover:bg-indigo-750 disabled:opacity-40 text-white rounded-xl transition-all flex items-center justify-center cursor-pointer font-bold text-xs"
+                    className="px-4 bg-[#007aff] hover:bg-[#007aff]/90 dark:bg-[#0a84ff] dark:hover:bg-[#0a84ff]/90 disabled:opacity-40 text-white rounded-xl transition-all flex items-center justify-center cursor-pointer font-bold text-xs active:scale-95 shadow-sm shrink-0"
                   >
                     <Send className="w-3.5 h-3.5" />
                   </button>

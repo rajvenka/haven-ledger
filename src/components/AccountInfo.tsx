@@ -33,6 +33,7 @@ import { RecurringPayment, Currency, UserProfile, CountryConfig, FamilyInvitatio
 
 interface AccountInfoProps {
   payments: RecurringPayment[];
+  onAddBulkPayments?: (payments: Omit<RecurringPayment, 'id'>[]) => Promise<void>;
   userProfile: UserProfile | null;
   familyMembers: UserProfile[];
   familyRole?: 'host' | 'modify' | 'view' | null;
@@ -75,6 +76,7 @@ interface AccountInfoProps {
 
 export default function AccountInfo({
   payments,
+  onAddBulkPayments,
   userProfile,
   familyMembers,
   familyRole = null,
@@ -218,19 +220,19 @@ export default function AccountInfo({
   };
 
   // Import recurring payments from text input
-  const handleImportData = () => {
+  const handleImportData = async () => {
     try {
       const parsed = JSON.parse(importText);
       if (!Array.isArray(parsed)) {
         throw new Error('Backup data must be an array of payments.');
       }
-      
+
       // Verify basic fields
-      const isValid = parsed.every(item => 
+      const isValid = parsed.every(item =>
         item &&
         typeof item.name === 'string' &&
         typeof item.amount === 'number' &&
-        ['AUD', 'INR'].includes(item.currency) &&
+        typeof item.currency === 'string' &&
         typeof item.dayOfMonth === 'number'
       );
 
@@ -238,25 +240,26 @@ export default function AccountInfo({
         throw new Error('Invalid payment objects detected in backup.');
       }
 
-      // Add fresh IDs to prevent collisions
-      const processed = parsed.map((p, idx) => ({
-        ...p,
-        id: p.id || 'p_imported_' + Date.now() + '_' + idx,
+      const processed = parsed.map((p) => ({
+        name: p.name,
+        amount: p.amount,
+        currency: p.currency,
+        category: p.category || 'Other',
+        dayOfMonth: p.dayOfMonth,
         active: typeof p.active === 'boolean' ? p.active : true,
         reminderDaysBefore: typeof p.reminderDaysBefore === 'number' ? p.reminderDaysBefore : 3,
-        category: p.category || 'Other'
+        billingCycle: p.billingCycle || 'monthly',
+        paymentMethod: p.paymentMethod || 'manual',
+        paymentType: p.paymentType || 'fixed',
+        notes: p.notes,
+        taggedFor: p.taggedFor,
+        autoRenew: p.autoRenew,
       }));
 
-      // Overwrite localStorage
-      localStorage.setItem('pm_recurring_payments', JSON.stringify(processed));
-      setImportStatus({ type: 'success', message: 'Import successful! Please refresh the page.' });
+      if (!onAddBulkPayments) throw new Error('Import is unavailable right now.');
+      await onAddBulkPayments(processed);
+      setImportStatus({ type: 'success', message: `Imported ${processed.length} payment(s) successfully!` });
       setImportText('');
-      
-      // Reload page to reinitialize state after a slight delay
-      setTimeout(() => {
-        window.location.reload();
-      }, 1500);
-
     } catch (err: any) {
       setImportStatus({ type: 'error', message: err?.message || 'Failed to parse JSON. Please check formatting.' });
     }
