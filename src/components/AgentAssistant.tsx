@@ -20,6 +20,7 @@ interface AgentAssistantProps {
   userProfile: UserProfile | null;
   summaryCurrency: string;
   onAddPayment: (payment: Omit<RecurringPayment, 'id'>) => Promise<any>;
+  onUpdatePayment?: (payment: RecurringPayment) => Promise<any>;
   onRecordPayment: (paymentId: string, amount?: number, status?: 'paid' | 'delayed' | 'carry', taggedFor?: string) => Promise<any>;
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -38,6 +39,7 @@ export default function AgentAssistant({
   userProfile,
   summaryCurrency,
   onAddPayment,
+  onUpdatePayment,
   onRecordPayment,
   isOpen: externalIsOpen,
   onOpenChange
@@ -209,10 +211,39 @@ export default function AgentAssistant({
             }
           ]);
         }
-      }
+      } else if (result.intent === 'update_expense' && result.updateExpenseData) {
+        const data = result.updateExpenseData;
 
-    } catch (err: any) {
-      console.error(err);
+        let matched = payments.find(p => p.id === data.paymentId);
+        if (!matched && data.paymentName) {
+          matched = payments.find(p => p.name.toLowerCase().includes(data.paymentName.toLowerCase()) || data.paymentName.toLowerCase().includes(p.name.toLowerCase()));
+        }
+
+        if (matched && onUpdatePayment) {
+          await onUpdatePayment({
+            ...matched,
+            name: data.name ?? matched.name,
+            amount: data.amount ?? matched.amount,
+            currency: data.currency ?? matched.currency,
+            category: data.category ?? matched.category,
+            dayOfMonth: data.dayOfMonth ?? matched.dayOfMonth,
+            billingCycle: data.billingCycle ?? matched.billingCycle,
+            paymentMethod: data.paymentMethod ?? matched.paymentMethod,
+            paymentType: data.paymentType ?? matched.paymentType,
+            active: data.active ?? matched.active,
+          });
+        } else if (!matched) {
+          setMessages(prev => [
+            ...prev,
+            {
+              id: Math.random().toString(),
+              sender: 'assistant',
+              text: `I wanted to update "${data.paymentName || 'that bill'}", but I couldn't find a matching payment in your list. Could you tell me exactly which bill you mean?`,
+              timestamp: new Date()
+            }
+          ]);
+        }
+      }
       setMessages(prev => [
         ...prev,
         {

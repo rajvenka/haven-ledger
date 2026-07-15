@@ -1484,6 +1484,7 @@ export default function App() {
             userProfile={userProfile}
             summaryCurrency={summaryCurrency}
             onAddPayment={addPayment}
+            onUpdatePayment={updatePayment}
             onRecordPayment={async (paymentId, amount, status, taggedFor) => {
               await recordPayment(paymentId, amount, status, taggedFor);
             }}
