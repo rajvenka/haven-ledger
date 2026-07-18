@@ -24,6 +24,7 @@ interface AgentAssistantProps {
   onRecordPayment: (paymentId: string, amount?: number, status?: 'paid' | 'delayed' | 'carry', taggedFor?: string) => Promise<any>;
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
+  hideFab?: boolean;
 }
 
 interface Message {
@@ -42,7 +43,8 @@ export default function AgentAssistant({
   onUpdatePayment,
   onRecordPayment,
   isOpen: externalIsOpen,
-  onOpenChange
+  onOpenChange,
+  hideFab
 }: AgentAssistantProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isOpen = externalIsOpen !== undefined ? externalIsOpen : internalIsOpen;
@@ -275,6 +277,7 @@ export default function AgentAssistant({
   return (
     <>
       {/* Floating Haven Agent Button */}
+      {!hideFab && (
       <div className="fixed bottom-6 right-6 z-40">
         <motion.button
           whileHover={{ scale: 1.05, y: -2 }}
@@ -289,6 +292,7 @@ export default function AgentAssistant({
           <Sparkles className="w-5 h-5 text-[#0a84ff] dark:text-[#007aff] group-hover:text-pink-500 dark:group-hover:text-pink-500 transition-colors duration-300 animate-pulse relative z-10" />
         </motion.button>
       </div>
+      )}
 
       {/* Slide-up Agent assistant drawer */}
       <AnimatePresence>

@@ -41,6 +41,7 @@ import AuthView from './components/AuthView';
 import AiInsights from './components/AiInsights';
 import { RecurringPayment } from './types';
 import AgentAssistant from './components/AgentAssistant';
+import FamilyChatAssistant from './components/FamilyChatAssistant';
 import ProfileScopeModal from './components/ProfileScopeModal';
 
 export default function App() {
@@ -78,6 +79,8 @@ export default function App() {
     rate,
     summaryCurrency,
     notifications,
+    familyMessages,
+    sendFamilyMessage,
     isLoaded,
     isSyncing,
     addPayment,
@@ -109,6 +112,17 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'configure' | 'account' | 'history' | 'ai'>('summary');
   const [settingsSubTab, setSettingsSubTab] = useState<'preferences' | 'team'>('preferences');
   const [isAgentOpen, setIsAgentOpen] = useState(false);
+  const [isFamilyChatOpen, setIsFamilyChatOpen] = useState(false);
+
+  const toggleAgent = () => {
+    setIsAgentOpen(prev => !prev);
+    setIsFamilyChatOpen(false);
+  };
+
+  const toggleFamilyChat = () => {
+    setIsFamilyChatOpen(prev => !prev);
+    setIsAgentOpen(false);
+  };
   const [isProfileScopeModalOpen, setIsProfileScopeModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -1480,7 +1494,57 @@ export default function App() {
             }}
             isOpen={isAgentOpen}
             onOpenChange={setIsAgentOpen}
+            hideFab
           />
+        )}
+
+        {user && (
+          <FamilyChatAssistant
+            currentUserUid={user.id}
+            userProfile={userProfile}
+            familyMembers={familyMembers}
+            messages={familyMessages}
+            onSendMessage={sendFamilyMessage}
+            isOpen={isFamilyChatOpen}
+            onClose={() => setIsFamilyChatOpen(false)}
+          />
+        )}
+
+        {/* Consolidated Agent + Family Chat floating capsule */}
+        {user && (
+          <div className="fixed bottom-24 right-6 md:bottom-8 md:right-8 z-40 flex items-center gap-1.5 p-1 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border border-slate-200/80 dark:border-slate-900/80 rounded-full shadow-lg">
+            <button
+              onClick={toggleAgent}
+              className={`p-2.5 rounded-full transition-all duration-200 cursor-pointer flex items-center justify-center relative ${
+                isAgentOpen
+                  ? 'bg-gradient-to-tr from-[#5856d6] via-[#007aff] to-[#34c759] text-white shadow-md'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+              }`}
+              title="Haven AI Agent"
+            >
+              <Sparkles className="w-4 h-4" />
+              {!isAgentOpen && !isFamilyChatOpen && (
+                <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-[#007aff] animate-pulse" />
+              )}
+            </button>
+
+            <div className="w-px h-4 bg-slate-200 dark:bg-slate-800" />
+
+            <button
+              onClick={toggleFamilyChat}
+              className={`p-2.5 rounded-full transition-all duration-200 cursor-pointer flex items-center justify-center relative ${
+                isFamilyChatOpen
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+              }`}
+              title="Family Chat"
+            >
+              <MessageSquare className="w-4 h-4" />
+              {familyMembers.length > 1 && (
+                <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-emerald-500" />
+              )}
+            </button>
+          </div>
         )}
 
         {user && (

@@ -58,6 +58,7 @@ export function usePaymentState() {
   const [rate, setRate] = useState<number>(55.0);
   const [summaryCurrency, setSummaryCurrency] = useState<Currency>('AUD');
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [familyMessages, setFamilyMessages] = useState<any[]>([]);
   const [appNotificationsEnabled, setAppNotificationsEnabled] = useState(true);
   const [mobileNotificationsEnabled, setMobileNotificationsEnabled] = useState(true);
 
@@ -159,6 +160,10 @@ export function usePaymentState() {
         });
         setAppNotificationsEnabled(profile.app_notifications_enabled ?? true);
         setMobileNotificationsEnabled(profile.mobile_notifications_enabled ?? true);
+        if (profile.default_currency) {
+          setSummaryCurrency(profile.default_currency);
+          localStorage.setItem('pm_summary_currency', profile.default_currency);
+        }
       }
       await refreshFamily(user.id);
       setIsLoaded(true);
@@ -191,6 +196,35 @@ export function usePaymentState() {
 
   useEffect(() => { if (isLoaded) reloadData(); }, [isLoaded, familyId, reloadData]);
 
+  const loadFamilyMessages = useCallback(async () => {
+    if (!familyId) { setFamilyMessages([]); return; }
+    const { data } = await supabase
+      .from('family_messages')
+      .select('id, content, created_at, sender_id, profiles(display_name, email)')
+      .eq('family_id', familyId)
+      .order('created_at', { ascending: true })
+      .limit(200);
+    setFamilyMessages((data ?? []).map((m: any) => ({
+      id: m.id,
+      content: m.content,
+      createdAt: m.created_at,
+      senderId: m.sender_id,
+      senderName: m.profiles?.display_name || m.profiles?.email?.split('@')[0] || 'Member',
+    })));
+  }, [familyId]);
+
+  useEffect(() => { loadFamilyMessages(); }, [loadFamilyMessages]);
+
+  const sendFamilyMessage = async (content: string) => {
+    if (!user) throw new Error('Not signed in.');
+    if (!familyId) throw new Error('Create or join a family first to use family chat.');
+    const trimmed = content.trim();
+    if (!trimmed) return;
+    const { error } = await supabase.from('family_messages').insert({ family_id: familyId, sender_id: user.id, content: trimmed });
+    if (error) throw error;
+    await loadFamilyMessages();
+  };
+
   useEffect(() => {
     if (!user) return;
     const channel = supabase
@@ -198,9 +232,10 @@ export function usePaymentState() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'recurring_payments' }, () => reloadData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_history' }, () => reloadData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'family_members' }, () => user && refreshFamily(user.id))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'family_messages' }, () => loadFamilyMessages())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user, reloadData, refreshFamily]);
+  }, [user, reloadData, refreshFamily, loadFamilyMessages]);
 
   const ensureFamily = async (): Promise<{ id: string; invite_code: string }> => {
     if (familyId) return { id: familyId, invite_code: inviteCode };
@@ -436,7 +471,17 @@ export function usePaymentState() {
   };
 
   const saveRate = async (newRate: number) => { setRate(newRate); localStorage.setItem('pm_exchange_rate', String(newRate)); };
-  const saveSummaryCurrency = (currency: Currency) => { setSummaryCurrency(currency); localStorage.setItem('pm_summary_currency', currency); };
+  const saveSummaryCurrency = async (currency: Currency) => {
+    setSummaryCurrency(currency);
+    localStorage.setItem('pm_summary_currency', currency);
+    if (user) {
+      try {
+        await supabase.from('profiles').update({ default_currency: currency }).eq('id', user.id);
+      } catch (err) {
+        console.warn('Failed to persist default currency to profile:', err);
+      }
+    }
+  };
 
   const dismissNotification = (id: string) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
   const markAllNotificationsRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
@@ -481,6 +526,7 @@ export function usePaymentState() {
     incomingInvitations, approveInvitation, declineInvitation, updateMemberRole, removeFamilyMember,
     isAuthLoading, familyRole, isReadOnly, inviteCode, regenerateInviteCode,
     payments, allPayments, history, allHistory, countries, rate, summaryCurrency, notifications, isLoaded, isSyncing,
+    familyMessages, sendFamilyMessage,
     addPayment, addBulkPayments, updatePayment, deletePayment, updatePaymentsOrder, recordPayment,
     deleteHistoryEntry, updateHistoryStatus, clearHistory, saveRate, saveSummaryCurrency,
     addCountry, updateCountry, deleteCountry,
