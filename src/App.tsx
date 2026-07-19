@@ -4,6 +4,7 @@ import {
   LayoutDashboard, 
   Settings, 
   History, 
+  Award,
   Bell, 
   X, 
   Check, 
@@ -43,6 +44,9 @@ import { RecurringPayment } from './types';
 import AgentAssistant from './components/AgentAssistant';
 import FamilyChatAssistant from './components/FamilyChatAssistant';
 import ProfileScopeModal from './components/ProfileScopeModal';
+import OnboardingView from './components/OnboardingView';
+import WorkspaceSwitcher from './components/WorkspaceSwitcher';
+import RewardsTracker from './components/RewardsTracker';
 
 export default function App() {
   const {
@@ -56,8 +60,13 @@ export default function App() {
     signInWithGoogle,
     resetPassword,
     logOut,
+    workspaces,
+    activeWorkspaceId,
+    activeWorkspace,
+    switchWorkspace,
+    createWorkspace,
+    setWorkspaceMode,
     addFamilyMember,
-    createFamily,
     joinFamilyGroup,
     leaveFamilyGroup,
     incomingInvitations,
@@ -81,6 +90,10 @@ export default function App() {
     notifications,
     familyMessages,
     sendFamilyMessage,
+    rewardsPerks,
+    addReward,
+    updateReward,
+    deleteReward,
     isLoaded,
     isSyncing,
     addPayment,
@@ -305,6 +318,15 @@ export default function App() {
     );
   }
 
+  // 2.5 Onboarding: user is authenticated but has no workspace yet
+  if (user && workspaces.length === 0) {
+    return (
+      <IPhoneFrame>
+        <OnboardingView onSelectMode={setWorkspaceMode} isSyncing={isSyncing} />
+      </IPhoneFrame>
+    );
+  }
+
   // 3. Authenticated user main app
   return (
     <IPhoneFrame>
@@ -326,10 +348,17 @@ export default function App() {
                 </h1>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className="inline-block w-1.5 h-1.5 bg-indigo-600 dark:bg-indigo-400 rounded-full animate-pulse" />
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Family Payment Ledger</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">{activeWorkspace?.type === 'business' ? 'Business Ledger' : 'Family Payment Ledger'}</span>
                 </div>
               </div>
             </div>
+
+            <WorkspaceSwitcher
+              workspaces={workspaces}
+              activeWorkspace={activeWorkspace}
+              onSwitch={switchWorkspace}
+              onCreateNew={createWorkspace}
+            />
 
             {/* Menu Sections */}
             <div className="space-y-5">
@@ -349,7 +378,7 @@ export default function App() {
                   >
                     <div className="flex items-center gap-2.5">
                       <LayoutDashboard className="w-4 h-4 shrink-0 opacity-80" />
-                      <span>Dashboard</span>
+                      <span>{activeWorkspace?.type === 'business' ? 'Overview' : 'Dashboard'}</span>
                     </div>
                     {activeTab === 'summary' && (
                       <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
@@ -366,7 +395,7 @@ export default function App() {
                   >
                     <div className="flex items-center gap-2.5">
                       <Globe className="w-4 h-4 shrink-0 opacity-80" />
-                      <span>Expenses</span>
+                      <span>{activeWorkspace?.type === 'business' ? 'Operating Costs' : 'Expenses'}</span>
                     </div>
                     {activeTab === 'expenses' && (
                       <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
@@ -408,7 +437,7 @@ export default function App() {
                   >
                     <div className="flex items-center gap-2.5">
                       <Settings className="w-4 h-4 shrink-0 opacity-80" />
-                      <span>Manage Bills</span>
+                      <span>{activeWorkspace?.type === 'business' ? 'Bills & Subscriptions' : 'Manage Bills'}</span>
                     </div>
                     {activeTab === 'configure' && (
                       <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
@@ -425,12 +454,31 @@ export default function App() {
                   >
                     <div className="flex items-center gap-2.5">
                       <History className="w-4 h-4 shrink-0 opacity-80" />
-                      <span>Payment History</span>
+                      <span>{activeWorkspace?.type === 'business' ? 'Transactions' : 'Payment History'}</span>
                     </div>
                     {activeTab === 'history' && (
                       <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                     )}
                   </button>
+
+                  {activeWorkspace?.type !== 'business' && (
+                    <button
+                      onClick={() => setActiveTab('rewards')}
+                      className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                        activeTab === 'rewards'
+                          ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
+                          : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Award className="w-4 h-4 shrink-0 opacity-80" />
+                        <span>Rewards & Perks</span>
+                      </div>
+                      {activeTab === 'rewards' && (
+                        <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
+                      )}
+                    </button>
+                  )}
                 </nav>
               </div>
 
@@ -453,7 +501,7 @@ export default function App() {
                   >
                     <div className="flex items-center gap-2">
                       <Users className="w-4 h-4 shrink-0 opacity-80" />
-                      <span>Family Sharing</span>
+                      <span>{activeWorkspace?.type === 'business' ? 'Team' : 'Family Sharing'}</span>
                     </div>
                     {activeTab === 'account' && settingsSubTab === 'members' && (
                       <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
@@ -589,7 +637,7 @@ export default function App() {
                       </h1>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span className="inline-block w-1.5 h-1.5 bg-indigo-600 dark:bg-indigo-400 rounded-full animate-pulse" />
-                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Family Payment Ledger</span>
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">{activeWorkspace?.type === 'business' ? 'Business Ledger' : 'Family Payment Ledger'}</span>
                       </div>
                     </div>
                   </div>
@@ -600,6 +648,13 @@ export default function App() {
                     <X className="w-5.5 h-5.5" />
                   </button>
                 </div>
+
+                <WorkspaceSwitcher
+                  workspaces={workspaces}
+                  activeWorkspace={activeWorkspace}
+                  onSwitch={switchWorkspace}
+                  onCreateNew={createWorkspace}
+                />
 
                 {/* Menu Sections */}
                 <div className="space-y-6">
@@ -622,7 +677,7 @@ export default function App() {
                       >
                         <div className="flex items-center gap-2.5">
                           <LayoutDashboard className="w-4.5 h-4.5 shrink-0 opacity-80" />
-                          <span>Dashboard</span>
+                          <span>{activeWorkspace?.type === 'business' ? 'Overview' : 'Dashboard'}</span>
                         </div>
                         {activeTab === 'summary' && (
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
@@ -642,7 +697,7 @@ export default function App() {
                       >
                         <div className="flex items-center gap-2.5">
                           <Globe className="w-4.5 h-4.5 shrink-0 opacity-80" />
-                          <span>Expenses</span>
+                          <span>{activeWorkspace?.type === 'business' ? 'Operating Costs' : 'Expenses'}</span>
                         </div>
                         {activeTab === 'expenses' && (
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
@@ -690,7 +745,7 @@ export default function App() {
                       >
                         <div className="flex items-center gap-2.5">
                           <Settings className="w-4.5 h-4.5 shrink-0 opacity-80" />
-                          <span>Manage Bills</span>
+                          <span>{activeWorkspace?.type === 'business' ? 'Bills & Subscriptions' : 'Manage Bills'}</span>
                         </div>
                         {activeTab === 'configure' && (
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
@@ -710,12 +765,31 @@ export default function App() {
                       >
                         <div className="flex items-center gap-2.5">
                           <History className="w-4.5 h-4.5 shrink-0 opacity-80" />
-                          <span>Payment History</span>
+                          <span>{activeWorkspace?.type === 'business' ? 'Transactions' : 'Payment History'}</span>
                         </div>
                         {activeTab === 'history' && (
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                         )}
                       </button>
+
+                      {activeWorkspace?.type !== 'business' && (
+                        <button
+                          onClick={() => { setActiveTab('rewards'); setIsMobileMenuOpen(false); }}
+                          className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                            activeTab === 'rewards'
+                              ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
+                              : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <Award className="w-4.5 h-4.5 shrink-0 opacity-80" />
+                            <span>Rewards & Perks</span>
+                          </div>
+                          {activeTab === 'rewards' && (
+                            <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
+                          )}
+                        </button>
+                      )}
                     </nav>
                   </div>
 
@@ -739,7 +813,7 @@ export default function App() {
                       >
                         <div className="flex items-center gap-2.5">
                           <Users className="w-4.5 h-4.5 shrink-0 opacity-80" />
-                          <span>Family Sharing</span>
+                          <span>{activeWorkspace?.type === 'business' ? 'Team' : 'Family Sharing'}</span>
                         </div>
                         {activeTab === 'account' && settingsSubTab === 'members' && (
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
@@ -974,7 +1048,7 @@ export default function App() {
                 familyRole={familyRole}
                 isReadOnly={isReadOnly}
                 onAddFamilyMember={addFamilyMember}
-                onCreateFamily={createFamily}
+                onCreateFamily={async () => { await createWorkspace(activeWorkspace?.type === 'business' ? 'My Business' : 'My Family', activeWorkspace?.type || 'family'); }}
                 onJoinFamilyGroup={joinFamilyGroup}
                 onLeaveFamilyGroup={leaveFamilyGroup}
                 incomingInvitations={incomingInvitations}
@@ -1013,6 +1087,14 @@ export default function App() {
                 userProfile={userProfile}
                 onOpenAgent={setIsAgentOpen}
                 summaryCurrency={summaryCurrency}
+              />
+            ) : activeTab === 'rewards' ? (
+              <RewardsTracker
+                rewardsPerks={rewardsPerks}
+                onAddReward={addReward}
+                onUpdateReward={updateReward}
+                onDeleteReward={deleteReward}
+                isReadOnly={isReadOnly}
               />
             ) : (
               <PaymentHistoryView 
@@ -1552,7 +1634,7 @@ export default function App() {
             isOpen={isProfileScopeModalOpen}
             onClose={() => setIsProfileScopeModalOpen(false)}
             user={user}
-            userProfile={userProfile}
+            userProfile={userProfile ? { ...userProfile, inviteCode, familyGroupId: activeWorkspaceId || '' } : userProfile}
             familyMembers={familyMembers}
             allPayments={allPayments}
             viewMode={viewMode}

@@ -64,6 +64,52 @@ export interface PaymentHistory {
   status?: 'paid' | 'delayed' | 'carry'; // 'paid', 'delayed', 'carry' (carry to next month)
 }
 
+export interface Workspace {
+  id: string;
+  name: string;
+  type: 'family' | 'business';
+  inviteCode: string;
+  role: 'host' | 'modify' | 'view';
+  isOwner: boolean;
+}
+
+export interface RewardPerk {
+  id: string;
+  providerName: string;
+  category: 'Credit Card' | 'Refinance' | 'Electricity' | 'Gas' | 'Health' | 'Other';
+  applicationDate: string;
+  closingDate?: string;
+  exclusionPeriodMonths: number;
+  bonusValue?: string;
+  notes?: string;
+  applicantName?: string;
+  annualFee: number;
+  pointsEarned?: number;
+  pointsProgram?: 'Qantas' | 'Velocity' | 'Flybuys' | 'None' | 'Other';
+  cashValue: number;
+  userId?: string;
+  familyGroupId?: string;
+}
+
+export function getCategoryLabel(category: string, mode: 'family' | 'business' = 'family'): string {
+  if (mode === 'family') return category;
+  const businessLabels: Record<string, string> = {
+    Entertainment: 'Client & Team Relations',
+    Utilities: 'Office Utilities',
+    Rent: 'Lease & Commercial Rent',
+    Insurance: 'Commercial Insurance',
+    Software: 'SaaS & Infrastructure',
+    Lifestyle: 'Travel & Business Meals',
+    EMI: 'Business Debt & Loans',
+    Education: 'Marketing & Training',
+    Investment: 'Capital & Growth',
+    Health: 'Team Health Benefit',
+    Groceries: 'Pantry & Office Supplies',
+    Other: 'Operating OPEX / Other',
+  };
+  return businessLabels[category] || category;
+}
+
 export interface UserProfile {
   uid: string;
   email: string;

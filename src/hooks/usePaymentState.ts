@@ -1,41 +1,47 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { RecurringPayment, PaymentHistory, AppNotification, Currency, UserProfile, CountryConfig, FamilyInvitation } from '../types';
+import { RecurringPayment, PaymentHistory, AppNotification, Currency, UserProfile, CountryConfig, FamilyInvitation, RewardPerk, Workspace } from '../types';
 import { INITIAL_COUNTRIES } from '../utils/paymentUtils';
 
 function rowToPayment(r: any): RecurringPayment {
   return {
     id: r.id, name: r.name, amount: Number(r.amount), currency: r.currency,
     dayOfMonth: r.day_of_month, category: r.category, active: r.active, notes: r.notes ?? undefined,
-    reminderDaysBefore: r.reminder_days_before, userId: r.user_id, familyGroupId: r.family_id ?? undefined,
+    reminderDaysBefore: r.reminder_days_before, userId: r.user_id, familyGroupId: r.workspace_id ?? undefined,
     paymentType: r.payment_type, paymentMethod: r.payment_method, billingCycle: r.billing_cycle,
     startDate: r.start_date ?? undefined, taggedFor: r.tagged_for ?? undefined, autoRenew: r.auto_renew, order: r.sort_order ?? undefined,
   };
 }
-function paymentToRow(p: Partial<RecurringPayment>, userId: string, familyId: string | null) {
+function paymentToRow(p: Partial<RecurringPayment>, userId: string, workspaceId: string | null) {
   return {
     name: p.name, amount: p.amount, currency: p.currency, day_of_month: p.dayOfMonth, category: p.category,
     active: p.active, notes: p.notes ?? null, reminder_days_before: p.reminderDaysBefore,
     payment_type: p.paymentType ?? 'fixed', payment_method: p.paymentMethod ?? 'manual', billing_cycle: p.billingCycle ?? 'monthly',
     start_date: p.startDate ?? null, tagged_for: p.taggedFor ?? null, auto_renew: p.autoRenew ?? false,
-    sort_order: p.order ?? null, user_id: userId, family_id: familyId,
+    sort_order: p.order ?? null, user_id: userId, workspace_id: workspaceId,
   };
 }
 function rowToHistory(r: any): PaymentHistory {
   return {
     id: r.id, paymentId: r.payment_id, paymentName: r.payment_name, amount: Number(r.amount), currency: r.currency,
-    paidDate: r.paid_date, userId: r.user_id, familyGroupId: r.family_id ?? undefined, taggedFor: r.tagged_for ?? undefined, status: r.status,
+    paidDate: r.paid_date, userId: r.user_id, familyGroupId: r.workspace_id ?? undefined, taggedFor: r.tagged_for ?? undefined, status: r.status,
   };
 }
 function rowToCountry(r: any): CountryConfig {
-  return { id: r.id, name: r.name, currency: r.currency, symbol: r.symbol, flag: r.flag, rateToAUD: Number(r.rate_to_aud), userId: r.user_id ?? undefined, familyGroupId: r.family_id ?? undefined };
+  return { id: r.id, name: r.name, currency: r.currency, symbol: r.symbol, flag: r.flag, rateToAUD: Number(r.rate_to_aud), userId: r.user_id ?? undefined, familyGroupId: r.workspace_id ?? undefined };
 }
 function rowToNotification(r: any): AppNotification {
   return { id: r.id, title: r.title, message: r.message, date: r.date, read: r.read, type: r.type };
 }
-function genInviteCode() {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
+function rowToReward(r: any): RewardPerk {
+  return {
+    id: r.id, providerName: r.provider_name, category: r.category, applicationDate: r.application_date,
+    closingDate: r.closing_date ?? undefined, exclusionPeriodMonths: r.exclusion_period_months, bonusValue: r.bonus_value ?? undefined,
+    notes: r.notes ?? undefined, applicantName: r.applicant_name ?? undefined, annualFee: Number(r.annual_fee ?? 0),
+    pointsEarned: r.points_earned != null ? Number(r.points_earned) : undefined, pointsProgram: r.points_program ?? undefined,
+    cashValue: Number(r.cash_value ?? 0), userId: r.user_id, familyGroupId: r.workspace_id ?? undefined,
+  };
 }
 
 export function usePaymentState() {
@@ -45,9 +51,12 @@ export function usePaymentState() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const [familyId, setFamilyId] = useState<string | null>(null);
-  const [familyRole, setFamilyRole] = useState<'host' | 'modify' | 'view' | null>(null);
-  const [inviteCode, setInviteCode] = useState<string>('');
+  // ---------- Multi-workspace state ----------
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  const activeWorkspace = useMemo(() => workspaces.find(w => w.id === activeWorkspaceId) || null, [workspaces, activeWorkspaceId]);
+  const familyRole = activeWorkspace?.role ?? null; // kept name for backward compat across components
+  const inviteCode = activeWorkspace?.inviteCode ?? '';
   const [familyMembers, setFamilyMembers] = useState<UserProfile[]>([]);
   const [incomingInvitations, setIncomingInvitations] = useState<FamilyInvitation[]>([]);
   const [viewMode, setViewMode] = useState<'personal' | 'family-combined' | 'family-only'>('personal');
@@ -59,6 +68,7 @@ export function usePaymentState() {
   const [summaryCurrency, setSummaryCurrency] = useState<Currency>('AUD');
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [familyMessages, setFamilyMessages] = useState<any[]>([]);
+  const [rewardsPerks, setRewardsPerks] = useState<RewardPerk[]>([]);
   const [appNotificationsEnabled, setAppNotificationsEnabled] = useState(true);
   const [mobileNotificationsEnabled, setMobileNotificationsEnabled] = useState(true);
 
@@ -71,7 +81,7 @@ export function usePaymentState() {
 
   const checkReadOnly = () => {
     if (isReadOnly) {
-      triggerNotification('View Only 🔒', "You have view-only access to this family. Ask the host to grant modify access.", 'warning');
+      triggerNotification('View Only 🔒', "You have view-only access to this workspace. Ask the owner to grant edit access.", 'warning');
       return true;
     }
     return false;
@@ -107,42 +117,50 @@ export function usePaymentState() {
   };
   const logOut = async () => { await supabase.auth.signOut(); };
 
-  const refreshFamily = useCallback(async (uid: string) => {
-    const { data: membership } = await supabase
-      .from('family_members')
-      .select('family_id, role, families(id, name, invite_code, host_id)')
-      .eq('user_id', uid)
-      .limit(1)
-      .maybeSingle();
+  // Load every workspace this user belongs to (not just one)
+  const refreshWorkspaces = useCallback(async (uid: string, preferredActiveId?: string | null) => {
+    const { data: memberships } = await supabase
+      .from('workspace_members')
+      .select('workspace_id, role, workspaces(id, name, type, invite_code, owner_id)')
+      .eq('user_id', uid);
 
-    if (membership) {
-      const fam: any = membership.families;
-      setFamilyId(membership.family_id);
-      setFamilyRole(membership.role);
-      setInviteCode(fam?.invite_code ?? '');
+    const list: Workspace[] = (memberships ?? []).map((m: any) => ({
+      id: m.workspace_id,
+      name: m.workspaces?.name ?? 'Workspace',
+      type: (m.workspaces?.type ?? 'family') as 'family' | 'business',
+      inviteCode: m.workspaces?.invite_code ?? '',
+      role: m.role,
+      isOwner: m.workspaces?.owner_id === uid,
+    }));
+    setWorkspaces(list);
 
+    const nextActive = list.find(w => w.id === preferredActiveId) || list[0] || null;
+    setActiveWorkspaceId(nextActive?.id ?? null);
+
+    if (nextActive) {
       const { data: members } = await supabase
-        .from('family_members')
+        .from('workspace_members')
         .select('role, profiles(id, email, display_name)')
-        .eq('family_id', membership.family_id);
-
+        .eq('workspace_id', nextActive.id);
       setFamilyMembers((members ?? []).map((m: any) => ({
         uid: m.profiles.id, email: m.profiles.email, displayName: m.profiles.display_name,
-        familyGroupId: membership.family_id, role: m.role === 'view' ? 'view' : 'modify', isFamilyHost: m.role === 'host',
+        familyGroupId: nextActive.id, role: m.role === 'view' ? 'view' : 'modify', isFamilyHost: m.role === 'host',
       })));
     } else {
-      setFamilyId(null); setFamilyRole(null); setInviteCode(''); setFamilyMembers([]);
+      setFamilyMembers([]);
     }
 
     const { data: invites } = await supabase
-      .from('family_invitations')
-      .select('id, family_id, from_user_id, to_email, proposed_role, status, created_at, families(name, invite_code), profiles!family_invitations_from_user_id_fkey(email, display_name)')
+      .from('workspace_invitations')
+      .select('id, workspace_id, from_user_id, to_email, proposed_role, status, created_at, workspaces(name, invite_code), profiles!workspace_invitations_from_user_id_fkey(email, display_name)')
       .eq('status', 'pending');
 
     setIncomingInvitations((invites ?? []).map((i: any) => ({
-      id: i.id, fromUid: i.from_user_id, fromEmail: i.profiles?.email ?? '', fromName: i.profiles?.display_name ?? i.profiles?.email ?? 'Family host',
-      toEmail: i.to_email, proposedRole: i.proposed_role, status: i.status, createdAt: i.created_at, inviteCode: i.families?.invite_code,
+      id: i.id, fromUid: i.from_user_id, fromEmail: i.profiles?.email ?? '', fromName: i.profiles?.display_name ?? i.profiles?.email ?? 'Workspace owner',
+      toEmail: i.to_email, proposedRole: i.proposed_role, status: i.status, createdAt: i.created_at, inviteCode: i.workspaces?.invite_code,
     })));
+
+    return nextActive;
   }, []);
 
   useEffect(() => {
@@ -165,43 +183,45 @@ export function usePaymentState() {
           localStorage.setItem('pm_summary_currency', profile.default_currency);
         }
       }
-      await refreshFamily(user.id);
+      await refreshWorkspaces(user.id, profile?.active_workspace_id ?? null);
       setIsLoaded(true);
     })();
-  }, [user, refreshFamily]);
+  }, [user, refreshWorkspaces]);
 
   const reloadData = useCallback(async () => {
     if (!user) return;
-    const familyFilter = familyId ? `user_id.eq.${user.id},family_id.eq.${familyId}` : `user_id.eq.${user.id}`;
-    const [{ data: pays }, { data: hist }, { data: cts }, { data: notifs }] = await Promise.all([
-      supabase.from('recurring_payments').select('*').or(familyFilter).order('sort_order', { ascending: true, nullsFirst: false }),
-      supabase.from('payment_history').select('*').or(familyFilter).order('paid_date', { ascending: false }),
-      supabase.from('countries').select('*').or(familyFilter),
+    const wsFilter = activeWorkspaceId ? `user_id.eq.${user.id},workspace_id.eq.${activeWorkspaceId}` : `user_id.eq.${user.id}`;
+    const [{ data: pays }, { data: hist }, { data: cts }, { data: notifs }, { data: rewards }] = await Promise.all([
+      supabase.from('recurring_payments').select('*').or(wsFilter).order('sort_order', { ascending: true, nullsFirst: false }),
+      supabase.from('payment_history').select('*').or(wsFilter).order('paid_date', { ascending: false }),
+      supabase.from('countries').select('*').or(wsFilter),
       supabase.from('app_notifications').select('*').eq('user_id', user.id).order('date', { ascending: false }).limit(50),
+      supabase.from('reward_perks').select('*').or(wsFilter).order('application_date', { ascending: false }),
     ]);
     setAllPayments((pays ?? []).map(rowToPayment));
     setAllHistory((hist ?? []).map(rowToHistory));
     if (cts && cts.length > 0) {
       setCountries(cts.map(rowToCountry));
     } else if (cts && cts.length === 0) {
-      // First time for this user/family: seed the defaults as real rows so they're manageable (incl. deletable) like any other currency.
+      // First time for this user/workspace: seed the defaults as real rows so they're manageable (incl. deletable) like any other currency.
       const seedRows = INITIAL_COUNTRIES.map(c => ({
-        name: c.name, currency: c.currency, symbol: c.symbol, flag: c.flag, rate_to_aud: c.rateToAUD, user_id: user.id, family_id: familyId,
+        name: c.name, currency: c.currency, symbol: c.symbol, flag: c.flag, rate_to_aud: c.rateToAUD, user_id: user.id, workspace_id: activeWorkspaceId,
       }));
       const { data: seeded } = await supabase.from('countries').insert(seedRows).select();
       if (seeded && seeded.length > 0) setCountries(seeded.map(rowToCountry));
     }
     setNotifications((notifs ?? []).map(rowToNotification));
-  }, [user, familyId]);
+    setRewardsPerks((rewards ?? []).map(rowToReward));
+  }, [user, activeWorkspaceId]);
 
-  useEffect(() => { if (isLoaded) reloadData(); }, [isLoaded, familyId, reloadData]);
+  useEffect(() => { if (isLoaded) reloadData(); }, [isLoaded, activeWorkspaceId, reloadData]);
 
   const loadFamilyMessages = useCallback(async () => {
-    if (!familyId) { setFamilyMessages([]); return; }
+    if (!activeWorkspaceId) { setFamilyMessages([]); return; }
     const { data } = await supabase
-      .from('family_messages')
+      .from('workspace_messages')
       .select('id, content, created_at, sender_id, profiles(display_name, email)')
-      .eq('family_id', familyId)
+      .eq('workspace_id', activeWorkspaceId)
       .order('created_at', { ascending: true })
       .limit(200);
     setFamilyMessages((data ?? []).map((m: any) => ({
@@ -211,16 +231,16 @@ export function usePaymentState() {
       senderId: m.sender_id,
       senderName: m.profiles?.display_name || m.profiles?.email?.split('@')[0] || 'Member',
     })));
-  }, [familyId]);
+  }, [activeWorkspaceId]);
 
   useEffect(() => { loadFamilyMessages(); }, [loadFamilyMessages]);
 
   const sendFamilyMessage = async (content: string) => {
     if (!user) throw new Error('Not signed in.');
-    if (!familyId) throw new Error('Create or join a family first to use family chat.');
+    if (!activeWorkspaceId) throw new Error('Create or join a workspace first to use chat.');
     const trimmed = content.trim();
     if (!trimmed) return;
-    const { error } = await supabase.from('family_messages').insert({ family_id: familyId, sender_id: user.id, content: trimmed });
+    const { error } = await supabase.from('workspace_messages').insert({ workspace_id: activeWorkspaceId, sender_id: user.id, content: trimmed });
     if (error) throw error;
     await loadFamilyMessages();
   };
@@ -231,40 +251,56 @@ export function usePaymentState() {
       .channel('haven-ledger-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'recurring_payments' }, () => reloadData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_history' }, () => reloadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'family_members' }, () => user && refreshFamily(user.id))
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'family_messages' }, () => loadFamilyMessages())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reward_perks' }, () => reloadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'workspace_members' }, () => user && refreshWorkspaces(user.id, activeWorkspaceId))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'workspace_messages' }, () => loadFamilyMessages())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user, reloadData, refreshFamily, loadFamilyMessages]);
+  }, [user, reloadData, refreshWorkspaces, loadFamilyMessages, activeWorkspaceId]);
 
-  const ensureFamily = async (): Promise<{ id: string; invite_code: string }> => {
-    if (familyId) return { id: familyId, invite_code: inviteCode };
-    if (!user) throw new Error('Not signed in.');
-    const { data, error } = await supabase.rpc('create_my_family', { fam_name: `${userProfile?.displayName || 'My'} Family` });
-    if (error) throw error;
-    const row = Array.isArray(data) ? data[0] : data;
-    await refreshFamily(user.id);
-    return { id: row.id, invite_code: row.invite_code };
-  };
+  // ---------- Workspace management ----------
 
-  const createFamily = async () => {
+  const switchWorkspace = async (workspaceId: string) => {
+    if (!user) return;
     setIsSyncing(true);
     try {
-      await ensureFamily();
+      setActiveWorkspaceId(workspaceId);
+      await supabase.from('profiles').update({ active_workspace_id: workspaceId }).eq('id', user.id);
+      await refreshWorkspaces(user.id, workspaceId);
     } finally {
       setIsSyncing(false);
     }
   };
 
-  const addFamilyMember = async (email: string, role: 'view' | 'modify' = 'modify') => {
+  const createWorkspace = async (name: string, type: 'family' | 'business' = 'family') => {
     if (!user) throw new Error('Not signed in.');
-    if (familyId && familyRole !== 'host') throw new Error('Only the family host can invite members.');
     setIsSyncing(true);
     try {
-      const fam = await ensureFamily();
-      const { error } = await supabase.from('family_invitations').insert({ family_id: fam.id, from_user_id: user.id, to_email: email.trim().toLowerCase(), proposed_role: role });
+      const { data, error } = await supabase.rpc('create_my_workspace', { ws_name: name, ws_type: type });
       if (error) throw error;
-      triggerNotification('Invitation Sent 👥', `Invited "${email}". Share your code: ${fam.invite_code}`, 'info');
+      const row = Array.isArray(data) ? data[0] : data;
+      await refreshWorkspaces(user.id, row.id);
+      return { id: row.id, invite_code: row.invite_code };
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Onboarding entry point: create the user's first workspace of the chosen type
+  const setWorkspaceMode = async (mode: 'family' | 'business') => {
+    if (!user) throw new Error('Not signed in.');
+    await createWorkspace(mode === 'business' ? 'My Business' : 'My Family', mode);
+  };
+
+  const addFamilyMember = async (email: string, role: 'view' | 'modify' = 'modify') => {
+    if (!user) throw new Error('Not signed in.');
+    if (!activeWorkspace) throw new Error('Create a workspace first.');
+    if (activeWorkspace.role !== 'host') throw new Error('Only the workspace owner can invite members.');
+    setIsSyncing(true);
+    try {
+      const { error } = await supabase.from('workspace_invitations').insert({ workspace_id: activeWorkspace.id, from_user_id: user.id, to_email: email.trim().toLowerCase(), proposed_role: role });
+      if (error) throw error;
+      triggerNotification('Invitation Sent 👥', `Invited "${email}". Share your code: ${activeWorkspace.inviteCode}`, 'info');
     } finally { setIsSyncing(false); }
   };
 
@@ -273,10 +309,10 @@ export function usePaymentState() {
     setIsSyncing(true);
     try {
       const clean = code.trim().toUpperCase();
-      const { error } = await supabase.rpc('join_family_by_code', { code: clean, requested_role: 'modify' });
+      const { data: newWsId, error } = await supabase.rpc('join_workspace_by_code', { code: clean, requested_role: 'modify' });
       if (error) throw new Error(error.message || 'Invalid invite code.');
-      await refreshFamily(user.id);
-      triggerNotification('Joined Family 👥', 'You are now part of the family group.', 'info');
+      await refreshWorkspaces(user.id, newWsId);
+      triggerNotification('Joined Workspace 👥', 'You are now part of the workspace.', 'info');
     } finally { setIsSyncing(false); }
   };
 
@@ -286,64 +322,65 @@ export function usePaymentState() {
     try {
       const invite = incomingInvitations.find(i => i.id === invitationId);
       if (!invite) throw new Error('Invitation not found.');
-      const { error: rpcErr } = await supabase.rpc('join_family_by_code', { code: invite.inviteCode, requested_role: role });
+      const { error: rpcErr } = await supabase.rpc('join_workspace_by_code', { code: invite.inviteCode, requested_role: role });
       if (rpcErr) throw rpcErr;
-      await supabase.from('family_invitations').update({ status: 'approved' }).eq('id', invitationId);
-      await refreshFamily(user.id);
-      triggerNotification('Invitation Accepted 👥', `You joined ${invite.fromName}'s family.`, 'info');
+      await supabase.from('workspace_invitations').update({ status: 'approved' }).eq('id', invitationId);
+      await refreshWorkspaces(user.id, activeWorkspaceId);
+      triggerNotification('Invitation Accepted 👥', `You joined ${invite.fromName}'s workspace.`, 'info');
     } finally { setIsSyncing(false); }
   };
 
   const declineInvitation = async (invitationId: string) => {
-    await supabase.from('family_invitations').update({ status: 'declined' }).eq('id', invitationId);
+    await supabase.from('workspace_invitations').update({ status: 'declined' }).eq('id', invitationId);
     setIncomingInvitations(prev => prev.filter(i => i.id !== invitationId));
   };
 
   const updateMemberRole = async (memberUid: string, role: 'view' | 'modify') => {
-    if (!familyId || familyRole !== 'host') throw new Error('Only the host can change member roles.');
+    if (!activeWorkspace || activeWorkspace.role !== 'host') throw new Error('Only the owner can change member roles.');
     setIsSyncing(true);
     try {
-      const { error } = await supabase.from('family_members').update({ role }).eq('family_id', familyId).eq('user_id', memberUid);
+      const { error } = await supabase.from('workspace_members').update({ role }).eq('workspace_id', activeWorkspace.id).eq('user_id', memberUid);
       if (error) throw error;
-      await refreshFamily(user!.id);
+      await refreshWorkspaces(user!.id, activeWorkspaceId);
     } finally { setIsSyncing(false); }
   };
 
   const removeFamilyMember = async (memberUid: string) => {
-    if (!familyId || familyRole !== 'host') throw new Error('Only the host can remove members.');
+    if (!activeWorkspace || activeWorkspace.role !== 'host') throw new Error('Only the owner can remove members.');
     setIsSyncing(true);
     try {
-      await supabase.from('family_members').delete().eq('family_id', familyId).eq('user_id', memberUid);
-      await refreshFamily(user!.id);
-      triggerNotification('Member Removed 👥', 'They no longer have access to the family data.', 'info');
+      await supabase.from('workspace_members').delete().eq('workspace_id', activeWorkspace.id).eq('user_id', memberUid);
+      await refreshWorkspaces(user!.id, activeWorkspaceId);
+      triggerNotification('Member Removed 👥', 'They no longer have access to this workspace.', 'info');
     } finally { setIsSyncing(false); }
   };
 
   const leaveFamilyGroup = async () => {
-    if (!user || !familyId) return;
+    if (!user || !activeWorkspace) return;
     setIsSyncing(true);
     try {
-      if (familyRole === 'host') throw new Error('As the host, remove members first or transfer the family before leaving.');
-      await supabase.from('family_members').delete().eq('family_id', familyId).eq('user_id', user.id);
-      await refreshFamily(user.id);
-      triggerNotification('Left Family 👋', 'You are back to your personal workspace.', 'info');
+      if (activeWorkspace.role === 'host') throw new Error('As the owner, remove members first or transfer the workspace before leaving.');
+      await supabase.from('workspace_members').delete().eq('workspace_id', activeWorkspace.id).eq('user_id', user.id);
+      await refreshWorkspaces(user.id, null);
+      triggerNotification('Left Workspace 👋', 'You are back to your other workspace(s).', 'info');
     } finally { setIsSyncing(false); }
   };
 
   const regenerateInviteCode = async () => {
-    if (!familyId || familyRole !== 'host') throw new Error('Only the host can regenerate the invite code.');
-    const code = genInviteCode();
-    const { error } = await supabase.from('families').update({ invite_code: code }).eq('id', familyId);
+    if (!activeWorkspace || activeWorkspace.role !== 'host') throw new Error('Only the owner can regenerate the invite code.');
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const { error } = await supabase.from('workspaces').update({ invite_code: code }).eq('id', activeWorkspace.id);
     if (error) throw error;
-    setInviteCode(code);
+    await refreshWorkspaces(user!.id, activeWorkspaceId);
   };
 
+  // ---------- Payments ----------
   const addPayment = async (payment: Omit<RecurringPayment, 'id'>) => {
     if (!user) return;
     if (checkReadOnly()) return;
     setIsSyncing(true);
     try {
-      const { error } = await supabase.from('recurring_payments').insert(paymentToRow(payment, user.id, familyId));
+      const { error } = await supabase.from('recurring_payments').insert(paymentToRow(payment, user.id, activeWorkspaceId));
       if (error) throw error;
       await reloadData();
       triggerNotification('Payment Added 💳', `"${payment.name}" configured for the ${payment.dayOfMonth}th of every month.`, 'info');
@@ -355,7 +392,7 @@ export function usePaymentState() {
     if (checkReadOnly()) return;
     setIsSyncing(true);
     try {
-      const rows = newPayments.map(p => paymentToRow(p, user.id, familyId));
+      const rows = newPayments.map(p => paymentToRow(p, user.id, activeWorkspaceId));
       const { error } = await supabase.from('recurring_payments').insert(rows);
       if (error) throw error;
       await reloadData();
@@ -369,7 +406,7 @@ export function usePaymentState() {
     setIsSyncing(true);
     try {
       const existing = allPayments.find(p => p.id === updatedPayment.id);
-      const row = paymentToRow(updatedPayment, existing?.userId || user.id, existing?.familyGroupId ?? familyId);
+      const row = paymentToRow(updatedPayment, existing?.userId || user.id, existing?.familyGroupId ?? activeWorkspaceId);
       const { error } = await supabase.from('recurring_payments').update(row).eq('id', updatedPayment.id);
       if (error) throw error;
       await reloadData();
@@ -414,7 +451,7 @@ export function usePaymentState() {
       const paidDate = transactionDate || new Date().toISOString().slice(0, 10);
       const { error } = await supabase.from('payment_history').insert({
         payment_id: paymentId, payment_name: payment.name, amount: amount ?? payment.amount, currency: payment.currency,
-        paid_date: paidDate, tagged_for: taggedFor ?? payment.taggedFor ?? null, status, user_id: payment.userId || user.id, family_id: payment.familyGroupId ?? null,
+        paid_date: paidDate, tagged_for: taggedFor ?? payment.taggedFor ?? null, status, user_id: payment.userId || user.id, workspace_id: payment.familyGroupId ?? null,
       });
       if (error) throw error;
       await reloadData();
@@ -440,9 +477,10 @@ export function usePaymentState() {
     await reloadData();
   };
 
+  // ---------- Countries ----------
   const addCountry = async (country: Omit<CountryConfig, 'id'>) => {
     if (!user) return;
-    const { error } = await supabase.from('countries').insert({ name: country.name, currency: country.currency, symbol: country.symbol, flag: country.flag, rate_to_aud: country.rateToAUD, user_id: user.id, family_id: familyId });
+    const { error } = await supabase.from('countries').insert({ name: country.name, currency: country.currency, symbol: country.symbol, flag: country.flag, rate_to_aud: country.rateToAUD, user_id: user.id, workspace_id: activeWorkspaceId });
     if (error) throw error;
     await reloadData();
   };
@@ -483,6 +521,46 @@ export function usePaymentState() {
     }
   };
 
+  // ---------- Rewards & Perks (personal/family only — gated in UI for business workspaces) ----------
+  const addReward = async (perk: Omit<RewardPerk, 'id' | 'userId' | 'familyGroupId' | 'workspaceMode'>) => {
+    if (!user) return;
+    const { error } = await supabase.from('reward_perks').insert({
+      provider_name: perk.providerName, category: perk.category, application_date: perk.applicationDate,
+      closing_date: perk.closingDate ?? null, exclusion_period_months: perk.exclusionPeriodMonths, bonus_value: perk.bonusValue ?? null,
+      notes: perk.notes ?? null, applicant_name: perk.applicantName ?? null, annual_fee: perk.annualFee ?? 0,
+      points_earned: perk.pointsEarned ?? null, points_program: perk.pointsProgram ?? null, cash_value: perk.cashValue ?? 0,
+      user_id: user.id, workspace_id: activeWorkspaceId,
+    });
+    if (error) throw error;
+    await reloadData();
+  };
+
+  const updateReward = async (id: string, updates: Partial<Omit<RewardPerk, 'id' | 'userId'>>) => {
+    const row: any = {};
+    if (updates.providerName !== undefined) row.provider_name = updates.providerName;
+    if (updates.category !== undefined) row.category = updates.category;
+    if (updates.applicationDate !== undefined) row.application_date = updates.applicationDate;
+    if (updates.closingDate !== undefined) row.closing_date = updates.closingDate;
+    if (updates.exclusionPeriodMonths !== undefined) row.exclusion_period_months = updates.exclusionPeriodMonths;
+    if (updates.bonusValue !== undefined) row.bonus_value = updates.bonusValue;
+    if (updates.notes !== undefined) row.notes = updates.notes;
+    if (updates.applicantName !== undefined) row.applicant_name = updates.applicantName;
+    if (updates.annualFee !== undefined) row.annual_fee = updates.annualFee;
+    if (updates.pointsEarned !== undefined) row.points_earned = updates.pointsEarned;
+    if (updates.pointsProgram !== undefined) row.points_program = updates.pointsProgram;
+    if (updates.cashValue !== undefined) row.cash_value = updates.cashValue;
+    const { error } = await supabase.from('reward_perks').update(row).eq('id', id);
+    if (error) throw error;
+    await reloadData();
+  };
+
+  const deleteReward = async (id: string) => {
+    const { error } = await supabase.from('reward_perks').delete().eq('id', id);
+    if (error) throw error;
+    await reloadData();
+  };
+
+  // ---------- Notifications ----------
   const dismissNotification = (id: string) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
   const markAllNotificationsRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   const clearNotifications = () => setNotifications([]);
@@ -505,6 +583,44 @@ export function usePaymentState() {
     } finally { setIsSyncing(false); }
   };
 
+  // Smart reward reminders: exclusion period ending (can reapply) / annual fee renewal approaching
+  useEffect(() => {
+    if (!rewardsPerks.length) return;
+    const now = new Date();
+    const seenKey = 'rewards_reminders_seen';
+    const seen: string[] = JSON.parse(localStorage.getItem(seenKey) || '[]');
+    const freshlySeen: string[] = [...seen];
+
+    rewardsPerks.forEach(perk => {
+      const appDate = new Date(perk.applicationDate);
+      const exclusionEnd = new Date(appDate);
+      exclusionEnd.setMonth(exclusionEnd.getMonth() + (perk.exclusionPeriodMonths || 12));
+      const daysToExclusionEnd = Math.ceil((exclusionEnd.getTime() - now.getTime()) / 86400000);
+
+      const exclusionKey = `excl_${perk.id}`;
+      if (daysToExclusionEnd > 0 && daysToExclusionEnd <= 30 && !seen.includes(exclusionKey)) {
+        triggerNotification('Bonus Eligible Soon 🎁', `${perk.providerName}'s exclusion period ends in ${daysToExclusionEnd} days — you can reapply for a new sign-up bonus.`, 'info');
+        freshlySeen.push(exclusionKey);
+      }
+
+      if (perk.annualFee > 0) {
+        const renewalDate = new Date(appDate);
+        renewalDate.setFullYear(now.getFullYear() >= appDate.getFullYear() ? now.getFullYear() : appDate.getFullYear());
+        if (renewalDate < now) renewalDate.setFullYear(renewalDate.getFullYear() + 1);
+        const daysToRenewal = Math.ceil((renewalDate.getTime() - now.getTime()) / 86400000);
+        const renewalKey = `renew_${perk.id}_${renewalDate.getFullYear()}`;
+        if (daysToRenewal > 0 && daysToRenewal <= 21 && !seen.includes(renewalKey)) {
+          triggerNotification('Annual Fee Renewing 💳', `${perk.providerName}'s annual fee (${perk.annualFee}) renews in ${daysToRenewal} days — decide whether to keep or cancel.`, 'warning');
+          freshlySeen.push(renewalKey);
+        }
+      }
+    });
+
+    if (freshlySeen.length !== seen.length) {
+      localStorage.setItem(seenKey, JSON.stringify(freshlySeen));
+    }
+  }, [rewardsPerks, triggerNotification]);
+
   const payments = useMemo(() => {
     if (!user) return [];
     if (viewMode === 'personal') return allPayments.filter(p => p.userId === user.id);
@@ -522,11 +638,14 @@ export function usePaymentState() {
   return {
     user, userProfile, familyMembers, viewMode, setViewMode,
     signUp, signIn, signInWithGoogle, resetPassword, logOut,
-    addFamilyMember, joinFamilyGroup, leaveFamilyGroup, createFamily,
+    // Workspace model
+    workspaces, activeWorkspaceId, activeWorkspace, switchWorkspace, createWorkspace, setWorkspaceMode,
+    addFamilyMember, joinFamilyGroup, leaveFamilyGroup,
     incomingInvitations, approveInvitation, declineInvitation, updateMemberRole, removeFamilyMember,
     isAuthLoading, familyRole, isReadOnly, inviteCode, regenerateInviteCode,
     payments, allPayments, history, allHistory, countries, rate, summaryCurrency, notifications, isLoaded, isSyncing,
     familyMessages, sendFamilyMessage,
+    rewardsPerks, addReward, updateReward, deleteReward,
     addPayment, addBulkPayments, updatePayment, deletePayment, updatePaymentsOrder, recordPayment,
     deleteHistoryEntry, updateHistoryStatus, clearHistory, saveRate, saveSummaryCurrency,
     addCountry, updateCountry, deleteCountry,
