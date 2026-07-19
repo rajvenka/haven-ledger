@@ -5,6 +5,7 @@ import {
   Settings, 
   History, 
   Award,
+  Wallet,
   Bell, 
   X, 
   Check, 
@@ -47,6 +48,7 @@ import ProfileScopeModal from './components/ProfileScopeModal';
 import OnboardingView from './components/OnboardingView';
 import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import RewardsTracker from './components/RewardsTracker';
+import IncomeView from './components/IncomeView';
 
 export default function App() {
   const {
@@ -94,6 +96,18 @@ export default function App() {
     addReward,
     updateReward,
     deleteReward,
+    incomeSources,
+    addIncomeSource,
+    deleteIncomeSource,
+    incomeMode,
+    updateIncomeMode,
+    monthlyIncome,
+    updateMonthlyIncome,
+    renameWorkspace,
+    deleteWorkspace,
+    workspaceBackups,
+    createBackupNow,
+    restoreFromBackup,
     isLoaded,
     isSyncing,
     addPayment,
@@ -358,6 +372,8 @@ export default function App() {
               activeWorkspace={activeWorkspace}
               onSwitch={switchWorkspace}
               onCreateNew={createWorkspace}
+              onRename={renameWorkspace}
+              onDelete={deleteWorkspace}
             />
 
             {/* Menu Sections */}
@@ -457,6 +473,23 @@ export default function App() {
                       <span>{activeWorkspace?.type === 'business' ? 'Transactions' : 'Payment History'}</span>
                     </div>
                     {activeTab === 'history' && (
+                      <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab('income')}
+                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                      activeTab === 'income'
+                        ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Wallet className="w-4 h-4 shrink-0 opacity-80" />
+                      <span>Income</span>
+                    </div>
+                    {activeTab === 'income' && (
                       <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                     )}
                   </button>
@@ -654,6 +687,8 @@ export default function App() {
                   activeWorkspace={activeWorkspace}
                   onSwitch={switchWorkspace}
                   onCreateNew={createWorkspace}
+              onRename={renameWorkspace}
+              onDelete={deleteWorkspace}
                 />
 
                 {/* Menu Sections */}
@@ -768,6 +803,23 @@ export default function App() {
                           <span>{activeWorkspace?.type === 'business' ? 'Transactions' : 'Payment History'}</span>
                         </div>
                         {activeTab === 'history' && (
+                          <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() => { setActiveTab('income'); setIsMobileMenuOpen(false); }}
+                        className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                          activeTab === 'income'
+                            ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Wallet className="w-4.5 h-4.5 shrink-0 opacity-80" />
+                          <span>Income</span>
+                        </div>
+                        {activeTab === 'income' && (
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                         )}
                       </button>
@@ -1011,6 +1063,11 @@ export default function App() {
                 summaryCurrency={summaryCurrency}
                 onRecordPayment={handleRecordPayment}
                 isReadOnly={userProfile?.role === 'view'}
+                monthlyIncomeEstimate={
+                  incomeMode === 'simple'
+                    ? (parseFloat(monthlyIncome) || 0)
+                    : incomeSources.reduce((sum, s) => sum + (s.frequency === 'weekly' ? s.amount * 4.33 : s.frequency === 'fortnightly' ? s.amount * 2.17 : s.frequency === 'monthly' ? s.amount : 0), 0)
+                }
               />
             ) : activeTab === 'expenses' ? (
               <ExpensesView
@@ -1048,6 +1105,9 @@ export default function App() {
                 familyRole={familyRole}
                 isReadOnly={isReadOnly}
                 onAddFamilyMember={addFamilyMember}
+                onAddBulkPayments={addBulkPayments}
+                workspaceBackups={workspaceBackups}
+                onRestoreFromBackup={restoreFromBackup}
                 onCreateFamily={async () => { await createWorkspace(activeWorkspace?.type === 'business' ? 'My Business' : 'My Family', activeWorkspace?.type || 'family'); }}
                 onJoinFamilyGroup={joinFamilyGroup}
                 onLeaveFamilyGroup={leaveFamilyGroup}
@@ -1094,6 +1154,19 @@ export default function App() {
                 onAddReward={addReward}
                 onUpdateReward={updateReward}
                 onDeleteReward={deleteReward}
+                isReadOnly={isReadOnly}
+              />
+            ) : activeTab === 'income' ? (
+              <IncomeView
+                incomeSources={incomeSources}
+                incomeMode={incomeMode}
+                monthlyIncome={monthlyIncome}
+                summaryCurrency={summaryCurrency}
+                countries={countries}
+                addIncomeSource={addIncomeSource}
+                deleteIncomeSource={deleteIncomeSource}
+                updateIncomeMode={updateIncomeMode}
+                updateMonthlyIncome={updateMonthlyIncome}
                 isReadOnly={isReadOnly}
               />
             ) : (

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { RecurringPayment, PaymentHistory, AppNotification, Currency, UserProfile, CountryConfig, FamilyInvitation, RewardPerk, Workspace } from '../types';
+import { RecurringPayment, PaymentHistory, AppNotification, Currency, UserProfile, CountryConfig, FamilyInvitation, RewardPerk, Workspace, IncomeSource } from '../types';
 import { INITIAL_COUNTRIES } from '../utils/paymentUtils';
 
 function rowToPayment(r: any): RecurringPayment {
@@ -121,7 +121,7 @@ export function usePaymentState() {
   const refreshWorkspaces = useCallback(async (uid: string, preferredActiveId?: string | null) => {
     const { data: memberships } = await supabase
       .from('workspace_members')
-      .select('workspace_id, role, workspaces(id, name, type, invite_code, owner_id)')
+      .select('workspace_id, role, workspaces(id, name, type, invite_code, owner_id, income_mode, monthly_income)')
       .eq('user_id', uid);
 
     const list: Workspace[] = (memberships ?? []).map((m: any) => ({
@@ -131,6 +131,8 @@ export function usePaymentState() {
       inviteCode: m.workspaces?.invite_code ?? '',
       role: m.role,
       isOwner: m.workspaces?.owner_id === uid,
+      incomeMode: (m.workspaces?.income_mode ?? 'simple') as 'simple' | 'detailed',
+      monthlyIncome: m.workspaces?.monthly_income ?? '',
     }));
     setWorkspaces(list);
 
@@ -372,6 +374,126 @@ export function usePaymentState() {
     const { error } = await supabase.from('workspaces').update({ invite_code: code }).eq('id', activeWorkspace.id);
     if (error) throw error;
     await refreshWorkspaces(user!.id, activeWorkspaceId);
+  };
+
+  const renameWorkspace = async (workspaceId: string, name: string) => {
+    const ws = workspaces.find(w => w.id === workspaceId);
+    if (!ws || ws.role !== 'host') throw new Error('Only the owner can rename this workspace.');
+    if (!name.trim()) throw new Error('Name cannot be empty.');
+    const { error } = await supabase.from('workspaces').update({ name: name.trim() }).eq('id', workspaceId);
+    if (error) throw error;
+    await refreshWorkspaces(user!.id, activeWorkspaceId);
+  };
+
+  const deleteWorkspace = async (workspaceId: string) => {
+    const ws = workspaces.find(w => w.id === workspaceId);
+    if (!ws || ws.role !== 'host') throw new Error('Only the owner can delete this workspace.');
+    if (workspaces.length <= 1) throw new Error('You need at least one workspace — create another before deleting this one.');
+    setIsSyncing(true);
+    try {
+      const { error } = await supabase.from('workspaces').delete().eq('id', workspaceId);
+      if (error) throw error;
+      const fallback = workspaces.find(w => w.id !== workspaceId);
+      await refreshWorkspaces(user!.id, fallback?.id ?? null);
+      triggerNotification('Workspace Deleted 🗑️', `"${ws.name}" and all of its data have been removed.`, 'info');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // ---------- Income ----------
+  const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
+  const [incomeMode, setIncomeModeState] = useState<'simple' | 'detailed'>('simple');
+  const [monthlyIncome, setMonthlyIncomeState] = useState<string>('');
+
+  const loadIncome = useCallback(async () => {
+    if (!user) return;
+    const wsFilter = activeWorkspaceId ? `user_id.eq.${user.id},workspace_id.eq.${activeWorkspaceId}` : `user_id.eq.${user.id}`;
+    const { data } = await supabase.from('income_sources').select('*').or(wsFilter).order('created_at', { ascending: false });
+    setIncomeSources((data ?? []).map((r: any) => ({
+      id: r.id, name: r.name, amount: Number(r.amount), frequency: r.frequency, category: r.category, isRecurring: r.is_recurring,
+    })));
+    if (activeWorkspace) {
+      setIncomeModeState(activeWorkspace.incomeMode || 'simple');
+      setMonthlyIncomeState(activeWorkspace.monthlyIncome || '');
+    }
+  }, [user, activeWorkspaceId, activeWorkspace]);
+
+  useEffect(() => { loadIncome(); }, [loadIncome]);
+
+  const addIncomeSource = async (src: Omit<IncomeSource, 'id'>) => {
+    if (!user) return;
+    const { error } = await supabase.from('income_sources').insert({
+      name: src.name, amount: src.amount, frequency: src.frequency, category: src.category, is_recurring: src.isRecurring,
+      user_id: user.id, workspace_id: activeWorkspaceId,
+    });
+    if (error) throw error;
+    await loadIncome();
+  };
+
+  const deleteIncomeSource = async (id: string) => {
+    const { error } = await supabase.from('income_sources').delete().eq('id', id);
+    if (error) throw error;
+    await loadIncome();
+  };
+
+  const updateIncomeMode = async (mode: 'simple' | 'detailed') => {
+    setIncomeModeState(mode);
+    if (activeWorkspaceId) await supabase.from('workspaces').update({ income_mode: mode }).eq('id', activeWorkspaceId);
+  };
+
+  const updateMonthlyIncome = async (val: string) => {
+    setMonthlyIncomeState(val);
+    if (activeWorkspaceId) await supabase.from('workspaces').update({ monthly_income: val }).eq('id', activeWorkspaceId);
+  };
+
+  // ---------- Backups (on-demand snapshot + auto once-per-day-on-load) ----------
+  const [workspaceBackups, setWorkspaceBackups] = useState<any[]>([]);
+
+  const loadBackups = useCallback(async () => {
+    if (!user) return;
+    const wsFilter = activeWorkspaceId ? `user_id.eq.${user.id},workspace_id.eq.${activeWorkspaceId}` : `user_id.eq.${user.id}`;
+    const { data } = await supabase.from('workspace_backups').select('id, created_at, snapshot').or(wsFilter).order('created_at', { ascending: false }).limit(14);
+    setWorkspaceBackups(data ?? []);
+  }, [user, activeWorkspaceId]);
+
+  useEffect(() => { loadBackups(); }, [loadBackups]);
+
+  const createBackupNow = useCallback(async () => {
+    if (!user) return;
+    const snapshot = { payments: allPayments, history: allHistory, income: incomeSources, countries };
+    const { error } = await supabase.from('workspace_backups').insert({ workspace_id: activeWorkspaceId, user_id: user.id, snapshot });
+    if (error) throw error;
+    await loadBackups();
+  }, [user, activeWorkspaceId, allPayments, allHistory, incomeSources, countries, loadBackups]);
+
+  // Auto-snapshot once per calendar day when the app loads, best-effort
+  useEffect(() => {
+    if (!isLoaded || !user || !activeWorkspaceId) return;
+    const key = `haven_last_backup_${activeWorkspaceId}`;
+    const today = new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem(key) !== today) {
+      createBackupNow().then(() => localStorage.setItem(key, today)).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, user, activeWorkspaceId]);
+
+  const restoreFromBackup = async (backupId: string) => {
+    const backup = workspaceBackups.find(b => b.id === backupId);
+    if (!backup) throw new Error('Backup not found.');
+    setIsSyncing(true);
+    try {
+      const snap = backup.snapshot;
+      if (snap.payments?.length) {
+        await addBulkPayments(snap.payments.map((p: RecurringPayment) => {
+          const { id, ...rest } = p;
+          return rest;
+        }));
+      }
+      triggerNotification('Backup Restored ♻️', `Restored ${snap.payments?.length || 0} payments from ${new Date(backup.created_at).toLocaleDateString()}.`, 'info');
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   // ---------- Payments ----------
@@ -640,6 +762,9 @@ export function usePaymentState() {
     signUp, signIn, signInWithGoogle, resetPassword, logOut,
     // Workspace model
     workspaces, activeWorkspaceId, activeWorkspace, switchWorkspace, createWorkspace, setWorkspaceMode,
+    renameWorkspace, deleteWorkspace,
+    incomeSources, addIncomeSource, deleteIncomeSource, incomeMode, updateIncomeMode, monthlyIncome, updateMonthlyIncome,
+    workspaceBackups, createBackupNow, restoreFromBackup,
     addFamilyMember, joinFamilyGroup, leaveFamilyGroup,
     incomingInvitations, approveInvitation, declineInvitation, updateMemberRole, removeFamilyMember,
     isAuthLoading, familyRole, isReadOnly, inviteCode, regenerateInviteCode,

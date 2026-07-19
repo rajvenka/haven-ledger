@@ -46,6 +46,7 @@ interface DashboardProps {
   onRecordPayment: (payment: RecurringPayment, dueDate?: string) => void;
   isReadOnly?: boolean;
   currentUserUid?: string;
+  monthlyIncomeEstimate?: number;
 }
 
 // Simple initials extraction helper
@@ -66,7 +67,8 @@ export default function Dashboard({
   summaryCurrency,
   onRecordPayment,
   isReadOnly = false,
-  currentUserUid
+  currentUserUid,
+  monthlyIncomeEstimate = 0
 }: DashboardProps) {
   const isPaymentReadOnly = (payment?: RecurringPayment) => {
     if (!payment) return true;
@@ -276,6 +278,21 @@ export default function Dashboard({
           </div>
         </div>
       </div>
+
+      {/* Net Surplus — income vs this month's bills, one honest number */}
+      {monthlyIncomeEstimate > 0 && (
+        <div className="apple-card p-4 flex items-center justify-between shrink-0">
+          <div>
+            <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">Remaining Surplus</p>
+            <p className={`text-lg font-black tracking-tight ${(monthlyIncomeEstimate - totalDueCurrentMonthConverted) >= 0 ? 'text-[#34c759] dark:text-[#30d158]' : 'text-rose-500'}`}>
+              {formatCurrencyValue(monthlyIncomeEstimate - totalDueCurrentMonthConverted, summaryCurrency, countries)}
+            </p>
+          </div>
+          <p className="text-[10px] text-slate-400 text-right max-w-[140px]">
+            {formatCurrencyValue(monthlyIncomeEstimate, summaryCurrency, countries)} income − {formatCurrencyValue(totalDueCurrentMonthConverted, summaryCurrency, countries)} this month
+          </p>
+        </div>
+      )}
 
       {/* Alternative High Density Desktop Grid Layout (Responsive split: One column setting) */}
       <div className="grid grid-cols-1 gap-4 items-start pb-6">

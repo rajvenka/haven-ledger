@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, Home, Briefcase, Plus, Check } from 'lucide-react';
+import { ChevronDown, Home, Briefcase, Plus, Check, Pencil, Trash2 } from 'lucide-react';
 import { Workspace } from '../types';
 
 interface WorkspaceSwitcherProps {
@@ -7,11 +7,15 @@ interface WorkspaceSwitcherProps {
   activeWorkspace: Workspace | null;
   onSwitch: (id: string) => Promise<void>;
   onCreateNew: (name: string, type: 'family' | 'business') => Promise<any>;
+  onRename?: (id: string, name: string) => Promise<void>;
+  onDelete?: (id: string) => Promise<void>;
 }
 
-export default function WorkspaceSwitcher({ workspaces, activeWorkspace, onSwitch, onCreateNew }: WorkspaceSwitcherProps) {
+export default function WorkspaceSwitcher({ workspaces, activeWorkspace, onSwitch, onCreateNew, onRename, onDelete }: WorkspaceSwitcherProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState<'family' | 'business'>('family');
   const [busy, setBusy] = useState(false);
@@ -50,20 +54,59 @@ export default function WorkspaceSwitcher({ workspaces, activeWorkspace, onSwitc
           <div className="fixed inset-0 z-40" onClick={() => { setIsOpen(false); setIsCreating(false); }} />
           <div className="absolute top-full left-0 mt-1.5 w-64 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 p-1.5 text-left">
             {workspaces.map(ws => (
-              <button
-                key={ws.id}
-                onClick={async () => { await onSwitch(ws.id); setIsOpen(false); }}
-                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900 transition-all cursor-pointer"
-              >
-                <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${ws.type === 'business' ? 'bg-[#34c759]' : 'bg-[#007aff]'}`}>
-                  {ws.type === 'business' ? <Briefcase className="w-3.5 h-3.5 text-white" /> : <Home className="w-3.5 h-3.5 text-white" />}
+              renamingId === ws.id ? (
+                <form
+                  key={ws.id}
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!renameValue.trim()) return;
+                    setBusy(true);
+                    try { await onRename?.(ws.id, renameValue.trim()); setRenamingId(null); } finally { setBusy(false); }
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5"
+                >
+                  <input
+                    autoFocus
+                    type="text"
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    className="flex-1 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-md text-xs"
+                  />
+                  <button type="submit" disabled={busy} className="p-1.5 bg-indigo-600 text-white rounded-md cursor-pointer"><Check className="w-3 h-3" /></button>
+                </form>
+              ) : (
+                <div key={ws.id} className="group flex items-center gap-1 px-1">
+                  <button
+                    onClick={async () => { await onSwitch(ws.id); setIsOpen(false); }}
+                    className="flex-1 flex items-center gap-2.5 px-1.5 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900 transition-all cursor-pointer min-w-0"
+                  >
+                    <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${ws.type === 'business' ? 'bg-[#34c759]' : 'bg-[#007aff]'}`}>
+                      {ws.type === 'business' ? <Briefcase className="w-3.5 h-3.5 text-white" /> : <Home className="w-3.5 h-3.5 text-white" />}
+                    </div>
+                    <div className="flex-1 min-w-0 text-left">
+                      <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{ws.name}</p>
+                      <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wide">{ws.type} · {ws.isOwner ? 'Owner' : ws.role}</p>
+                    </div>
+                    {ws.id === activeWorkspace?.id && <Check className="w-3.5 h-3.5 text-indigo-500 shrink-0" />}
+                  </button>
+                  {ws.isOwner && (
+                    <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+                      <button onClick={() => { setRenamingId(ws.id); setRenameValue(ws.name); }} className="p-1.5 text-slate-400 hover:text-indigo-500 cursor-pointer" title="Rename">
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                      {workspaces.length > 1 && (
+                        <button
+                          onClick={async () => { if (confirm(`Delete "${ws.name}" and all of its data? This can't be undone.`)) { await onDelete?.(ws.id); } }}
+                          className="p-1.5 text-slate-400 hover:text-red-500 cursor-pointer"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="flex-1 min-w-0 text-left">
-                  <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{ws.name}</p>
-                  <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wide">{ws.type} · {ws.isOwner ? 'Owner' : ws.role}</p>
-                </div>
-                {ws.id === activeWorkspace?.id && <Check className="w-3.5 h-3.5 text-indigo-500 shrink-0" />}
-              </button>
+              )
             ))}
 
             <div className="h-px bg-slate-100 dark:bg-slate-800 my-1.5" />

@@ -64,6 +64,15 @@ export interface PaymentHistory {
   status?: 'paid' | 'delayed' | 'carry'; // 'paid', 'delayed', 'carry' (carry to next month)
 }
 
+export interface IncomeSource {
+  id: string;
+  name: string;
+  amount: number;
+  frequency: 'weekly' | 'fortnightly' | 'monthly' | 'adhoc' | 'one-time';
+  category: 'salary' | 'cashback' | 'borrowing' | 'investment' | 'refund' | 'other';
+  isRecurring: boolean;
+}
+
 export interface Workspace {
   id: string;
   name: string;
@@ -71,6 +80,8 @@ export interface Workspace {
   inviteCode: string;
   role: 'host' | 'modify' | 'view';
   isOwner: boolean;
+  incomeMode?: 'simple' | 'detailed';
+  monthlyIncome?: string;
 }
 
 export interface RewardPerk {

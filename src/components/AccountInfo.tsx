@@ -34,6 +34,8 @@ import { RecurringPayment, Currency, UserProfile, CountryConfig, FamilyInvitatio
 interface AccountInfoProps {
   payments: RecurringPayment[];
   onAddBulkPayments?: (payments: Omit<RecurringPayment, 'id'>[]) => Promise<void>;
+  workspaceBackups?: { id: string; created_at: string; snapshot: any }[];
+  onRestoreFromBackup?: (backupId: string) => Promise<void>;
   userProfile: UserProfile | null;
   familyMembers: UserProfile[];
   familyRole?: 'host' | 'modify' | 'view' | null;
@@ -77,6 +79,8 @@ interface AccountInfoProps {
 export default function AccountInfo({
   payments,
   onAddBulkPayments,
+  workspaceBackups = [],
+  onRestoreFromBackup,
   userProfile,
   familyMembers,
   familyRole = null,
@@ -1066,6 +1070,26 @@ export default function AccountInfo({
         <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
           <ShieldAlert className="w-4 h-4 text-indigo-500" /> Backup, Sync & Danger Zone
         </h4>
+
+        {workspaceBackups.length > 0 && (
+          <div className="py-2 border-b border-slate-100 dark:border-slate-900/60 space-y-1.5">
+            <span className="text-xs font-bold text-slate-900 dark:text-white block">Automatic Snapshots</span>
+            <span className="text-[9px] text-slate-450 dark:text-slate-500 block font-bold mb-1.5">A snapshot is taken automatically once a day — restore any of the last {workspaceBackups.length}.</span>
+            <div className="space-y-1 max-h-32 overflow-y-auto">
+              {workspaceBackups.map((b) => (
+                <div key={b.id} className="flex items-center justify-between px-2 py-1.5 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                  <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-300">{new Date(b.created_at).toLocaleString()}</span>
+                  <button
+                    onClick={() => onRestoreFromBackup?.(b.id)}
+                    className="text-[9px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                  >
+                    Restore
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Option 1: Export Data */}
         <div className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-900/60">
