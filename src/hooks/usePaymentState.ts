@@ -402,20 +402,34 @@ export function usePaymentState() {
   };
 
   // ---------- Income ----------
+  // Single source of truth: income_sources. "Simple" mode is just a simplified view/edit
+  // of that same list (a single flagged entry), never a separate stored number — so the
+  // two views can never disagree.
   const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
   const [incomeMode, setIncomeModeState] = useState<'simple' | 'detailed'>('simple');
-  const [monthlyIncome, setMonthlyIncomeState] = useState<string>('');
+
+  const monthlyIncome = useMemo(() => {
+    if (incomeSources.length === 1 && (incomeSources[0] as any).isSimpleTotal) {
+      return String(incomeSources[0].amount);
+    }
+    const total = incomeSources.reduce((sum, s) => {
+      if (s.frequency === 'weekly') return sum + s.amount * 4.33;
+      if (s.frequency === 'fortnightly') return sum + s.amount * 2.17;
+      if (s.frequency === 'monthly') return sum + s.amount;
+      return sum;
+    }, 0);
+    return total ? String(Math.round(total)) : '';
+  }, [incomeSources]);
 
   const loadIncome = useCallback(async () => {
     if (!user) return;
     const wsFilter = activeWorkspaceId ? `user_id.eq.${user.id},workspace_id.eq.${activeWorkspaceId}` : `user_id.eq.${user.id}`;
     const { data } = await supabase.from('income_sources').select('*').or(wsFilter).order('created_at', { ascending: false });
     setIncomeSources((data ?? []).map((r: any) => ({
-      id: r.id, name: r.name, amount: Number(r.amount), frequency: r.frequency, category: r.category, isRecurring: r.is_recurring,
+      id: r.id, name: r.name, amount: Number(r.amount), frequency: r.frequency, category: r.category, isRecurring: r.is_recurring, isSimpleTotal: r.is_simple_total,
     })));
     if (activeWorkspace) {
       setIncomeModeState(activeWorkspace.incomeMode || 'simple');
-      setMonthlyIncomeState(activeWorkspace.monthlyIncome || '');
     }
   }, [user, activeWorkspaceId, activeWorkspace]);
 
@@ -442,9 +456,29 @@ export function usePaymentState() {
     if (activeWorkspaceId) await supabase.from('workspaces').update({ income_mode: mode }).eq('id', activeWorkspaceId);
   };
 
+  // Editing the "Simple" number just upserts the single flagged income source —
+  // switching to Detailed will show this exact same entry, editable/splittable there.
   const updateMonthlyIncome = async (val: string) => {
-    setMonthlyIncomeState(val);
-    if (activeWorkspaceId) await supabase.from('workspaces').update({ monthly_income: val }).eq('id', activeWorkspaceId);
+    if (!user) return;
+    const amt = parseFloat(val) || 0;
+    const existingSimple = incomeSources.find(s => (s as any).isSimpleTotal);
+
+    if (incomeSources.length > 1 || (incomeSources.length === 1 && !existingSimple)) {
+      // There's already a real breakdown — don't clobber it with a single number.
+      throw new Error('You have multiple income sources — edit them in Detailed mode instead.');
+    }
+
+    if (existingSimple) {
+      const { error } = await supabase.from('income_sources').update({ amount: amt }).eq('id', existingSimple.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('income_sources').insert({
+        name: 'Total Income', amount: amt, frequency: 'monthly', category: 'other', is_recurring: true, is_simple_total: true,
+        user_id: user.id, workspace_id: activeWorkspaceId,
+      });
+      if (error) throw error;
+    }
+    await loadIncome();
   };
 
   // ---------- Backups (on-demand snapshot + auto once-per-day-on-load) ----------

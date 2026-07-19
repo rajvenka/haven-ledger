@@ -1063,11 +1063,7 @@ export default function App() {
                 summaryCurrency={summaryCurrency}
                 onRecordPayment={handleRecordPayment}
                 isReadOnly={userProfile?.role === 'view'}
-                monthlyIncomeEstimate={
-                  incomeMode === 'simple'
-                    ? (parseFloat(monthlyIncome) || 0)
-                    : incomeSources.reduce((sum, s) => sum + (s.frequency === 'weekly' ? s.amount * 4.33 : s.frequency === 'fortnightly' ? s.amount * 2.17 : s.frequency === 'monthly' ? s.amount : 0), 0)
-                }
+                monthlyIncomeEstimate={parseFloat(monthlyIncome) || 0}
               />
             ) : activeTab === 'expenses' ? (
               <ExpensesView

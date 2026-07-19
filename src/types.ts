@@ -71,6 +71,7 @@ export interface IncomeSource {
   frequency: 'weekly' | 'fortnightly' | 'monthly' | 'adhoc' | 'one-time';
   category: 'salary' | 'cashback' | 'borrowing' | 'investment' | 'refund' | 'other';
   isRecurring: boolean;
+  isSimpleTotal?: boolean;
 }
 
 export interface Workspace {

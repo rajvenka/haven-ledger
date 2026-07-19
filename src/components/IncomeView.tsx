@@ -56,6 +56,7 @@ export default function IncomeView({
   const [isAdding, setIsAdding] = useState(false);
   const [tempMonthly, setTempMonthly] = useState(monthlyIncome);
   const [isEditingSimple, setIsEditingSimple] = useState(false);
+  const [simpleError, setSimpleError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [frequency, setFrequency] = useState<IncomeSource['frequency']>('monthly');
@@ -64,11 +65,16 @@ export default function IncomeView({
   const symbol = countries.find(c => c.currency === summaryCurrency)?.symbol || '$';
 
   const totalMonthly = useMemo(() => incomeSources.reduce((sum, s) => sum + toMonthly(s), 0), [incomeSources]);
-  const effectiveMonthly = incomeMode === 'simple' ? (parseFloat(monthlyIncome) || 0) : totalMonthly;
+  const canEditAsSingleFigure = incomeSources.length === 0 || (incomeSources.length === 1 && incomeSources[0].isSimpleTotal);
 
-  const handleSaveSimple = () => {
-    updateMonthlyIncome(tempMonthly);
-    setIsEditingSimple(false);
+  const handleSaveSimple = async () => {
+    setSimpleError(null);
+    try {
+      await updateMonthlyIncome(tempMonthly);
+      setIsEditingSimple(false);
+    } catch (err: any) {
+      setSimpleError(err.message || 'Could not save.');
+    }
   };
 
   const handleAdd = (e: React.FormEvent) => {
@@ -106,10 +112,10 @@ export default function IncomeView({
         )}
       </div>
 
-      {/* Headline number — one big honest figure, no clutter */}
+      {/* Headline number — one big honest figure, always the same total in both modes */}
       <div className="apple-card p-6">
         <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Monthly Income</span>
-        {incomeMode === 'simple' ? (
+        {incomeMode === 'simple' && canEditAsSingleFigure ? (
           isEditingSimple ? (
             <div className="flex items-center gap-2 mt-2">
               <span className="text-2xl font-black text-slate-400">{symbol}</span>
@@ -142,8 +148,13 @@ export default function IncomeView({
             {symbol}{totalMonthly.toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>
         )}
+        {simpleError && <p className="text-[10px] text-red-500 font-semibold mt-2">{simpleError}</p>}
         <p className="text-[10px] text-slate-400 mt-2">
-          {incomeMode === 'simple' ? 'One number, kept simple — switch to Detailed to break it down by source.' : `Estimated from ${incomeSources.filter(s => s.isRecurring).length} recurring source(s).`}
+          {incomeMode === 'simple'
+            ? (canEditAsSingleFigure
+                ? 'One number, kept simple — switch to Detailed to break it down by source.'
+                : `Made up of ${incomeSources.length} sources — switch to Detailed to edit them individually.`)
+            : `Same total as Simple mode — ${incomeSources.filter(s => s.isRecurring).length} recurring source(s).`}
         </p>
       </div>
 
