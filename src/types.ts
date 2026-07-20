@@ -72,6 +72,7 @@ export interface IncomeSource {
   category: 'salary' | 'cashback' | 'borrowing' | 'investment' | 'refund' | 'other';
   isRecurring: boolean;
   isSimpleTotal?: boolean;
+  payDate?: string;
 }
 
 export interface Workspace {

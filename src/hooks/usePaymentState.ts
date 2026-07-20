@@ -426,7 +426,7 @@ export function usePaymentState() {
     const wsFilter = activeWorkspaceId ? `user_id.eq.${user.id},workspace_id.eq.${activeWorkspaceId}` : `user_id.eq.${user.id}`;
     const { data } = await supabase.from('income_sources').select('*').or(wsFilter).order('created_at', { ascending: false });
     setIncomeSources((data ?? []).map((r: any) => ({
-      id: r.id, name: r.name, amount: Number(r.amount), frequency: r.frequency, category: r.category, isRecurring: r.is_recurring, isSimpleTotal: r.is_simple_total,
+      id: r.id, name: r.name, amount: Number(r.amount), frequency: r.frequency, category: r.category, isRecurring: r.is_recurring, isSimpleTotal: r.is_simple_total, payDate: r.pay_date ?? undefined,
     })));
     if (activeWorkspace) {
       setIncomeModeState(activeWorkspace.incomeMode || 'simple');
@@ -438,7 +438,7 @@ export function usePaymentState() {
   const addIncomeSource = async (src: Omit<IncomeSource, 'id'>) => {
     if (!user) return;
     const { error } = await supabase.from('income_sources').insert({
-      name: src.name, amount: src.amount, frequency: src.frequency, category: src.category, is_recurring: src.isRecurring,
+      name: src.name, amount: src.amount, frequency: src.frequency, category: src.category, is_recurring: src.isRecurring, pay_date: src.payDate ?? null,
       user_id: user.id, workspace_id: activeWorkspaceId,
     });
     if (error) throw error;
