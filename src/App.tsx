@@ -1159,6 +1159,7 @@ export default function App() {
                 monthlyIncome={monthlyIncome}
                 summaryCurrency={summaryCurrency}
                 countries={countries}
+                payments={payments}
                 addIncomeSource={addIncomeSource}
                 deleteIncomeSource={deleteIncomeSource}
                 updateIncomeMode={updateIncomeMode}

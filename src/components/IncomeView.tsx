@@ -3,8 +3,8 @@ import {
   Briefcase, CreditCard, ArrowDownLeft, TrendingUp, RefreshCw, Coins,
   Plus, Trash2, Check, ChevronDown
 } from 'lucide-react';
-import { IncomeSource, Currency, CountryConfig } from '../types';
-import { formatCurrencyValue } from '../utils/paymentUtils';
+import { IncomeSource, Currency, CountryConfig, RecurringPayment } from '../types';
+import { formatCurrencyValue, convertCurrency } from '../utils/paymentUtils';
 
 interface IncomeViewProps {
   incomeSources: IncomeSource[];
@@ -12,6 +12,7 @@ interface IncomeViewProps {
   monthlyIncome: string;
   summaryCurrency: Currency;
   countries: CountryConfig[];
+  payments: RecurringPayment[];
   addIncomeSource: (src: Omit<IncomeSource, 'id'>) => void | Promise<void>;
   deleteIncomeSource: (id: string) => void | Promise<void>;
   updateIncomeMode: (mode: 'simple' | 'detailed') => void | Promise<void>;
@@ -41,12 +42,29 @@ function toMonthly(source: IncomeSource): number {
   }
 }
 
+function paymentToMonthly(p: RecurringPayment): number {
+  switch (p.billingCycle) {
+    case 'weekly': return p.amount * 4.33;
+    case 'monthly': return p.amount;
+    case '2-months': return p.amount / 2;
+    case '3-months': return p.amount / 3;
+    case '4-months': return p.amount / 4;
+    case '6-months': return p.amount / 6;
+    case 'yearly': return p.amount / 12;
+    case 'once': return 0;
+    default: return p.amount;
+  }
+}
+
+const CATEGORY_COLORS = ['#007aff', '#34c759', '#ff9500', '#af52de', '#ff2d55', '#5ac8fa', '#ffcc00', '#8e8e93'];
+
 export default function IncomeView({
   incomeSources,
   incomeMode,
   monthlyIncome,
   summaryCurrency,
   countries,
+  payments,
   addIncomeSource,
   deleteIncomeSource,
   updateIncomeMode,
@@ -66,6 +84,21 @@ export default function IncomeView({
 
   const totalMonthly = useMemo(() => incomeSources.reduce((sum, s) => sum + toMonthly(s), 0), [incomeSources]);
   const canEditAsSingleFigure = incomeSources.length === 0 || (incomeSources.length === 1 && incomeSources[0].isSimpleTotal);
+  const incomeValue = parseFloat(monthlyIncome) || 0;
+
+  const categoryBreakdown = useMemo(() => {
+    const byCategory: Record<string, number> = {};
+    payments.filter(p => p.active).forEach(p => {
+      const monthlyAmt = convertCurrency(paymentToMonthly(p), p.currency, summaryCurrency, countries);
+      byCategory[p.category] = (byCategory[p.category] || 0) + monthlyAmt;
+    });
+    return Object.entries(byCategory)
+      .map(([category, amount]) => ({ category, amount, pct: incomeValue > 0 ? (amount / incomeValue) * 100 : 0 }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [payments, summaryCurrency, countries, incomeValue]);
+
+  const totalAllocated = categoryBreakdown.reduce((sum, c) => sum + c.amount, 0);
+  const unallocated = incomeValue - totalAllocated;
 
   const handleSaveSimple = async () => {
     setSimpleError(null);
@@ -157,6 +190,45 @@ export default function IncomeView({
             : `Same total as Simple mode — ${incomeSources.filter(s => s.isRecurring).length} recurring source(s).`}
         </p>
       </div>
+
+      {/* Where the income goes — allocation by expense category */}
+      {incomeValue > 0 && categoryBreakdown.length > 0 && (
+        <div className="apple-card p-5 space-y-3.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Where It Goes</span>
+            <span className="text-[10px] font-bold text-slate-400">
+              {symbol}{totalAllocated.toLocaleString(undefined, { maximumFractionDigits: 0 })} allocated
+            </span>
+          </div>
+
+          {/* Stacked bar */}
+          <div className="flex h-2.5 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+            {categoryBreakdown.map((c, idx) => (
+              <div
+                key={c.category}
+                style={{ width: `${Math.min(c.pct, 100)}%`, backgroundColor: CATEGORY_COLORS[idx % CATEGORY_COLORS.length] }}
+                title={`${c.category}: ${c.pct.toFixed(1)}%`}
+              />
+            ))}
+          </div>
+
+          <div className="space-y-2">
+            {categoryBreakdown.map((c, idx) => (
+              <div key={c.category} className="flex items-center gap-2.5">
+                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: CATEGORY_COLORS[idx % CATEGORY_COLORS.length] }} />
+                <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 flex-1 truncate">{c.category}</span>
+                <span className="text-[11px] font-bold text-slate-900 dark:text-white">{symbol}{c.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                <span className="text-[9px] font-bold text-slate-400 w-10 text-right">{c.pct.toFixed(0)}%</span>
+              </div>
+            ))}
+          </div>
+
+          <div className={`flex items-center justify-between pt-2.5 border-t border-slate-100 dark:border-slate-800 text-[11px] font-black ${unallocated >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+            <span>{unallocated >= 0 ? 'Unallocated' : 'Over budget'}</span>
+            <span>{symbol}{Math.abs(unallocated).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+          </div>
+        </div>
+      )}
 
       {/* Detailed: list of sources */}
       {incomeMode === 'detailed' && (
