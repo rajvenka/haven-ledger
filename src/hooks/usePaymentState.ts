@@ -536,10 +536,11 @@ export function usePaymentState() {
     if (checkReadOnly()) return;
     setIsSyncing(true);
     try {
-      const { error } = await supabase.from('recurring_payments').insert(paymentToRow(payment, user.id, activeWorkspaceId));
+      const { data, error } = await supabase.from('recurring_payments').insert(paymentToRow(payment, user.id, activeWorkspaceId)).select().single();
       if (error) throw error;
       await reloadData();
       triggerNotification('Payment Added 💳', `"${payment.name}" configured for the ${payment.dayOfMonth}th of every month.`, 'info');
+      return rowToPayment(data);
     } finally { setIsSyncing(false); }
   };
 

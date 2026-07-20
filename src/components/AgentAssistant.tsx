@@ -14,6 +14,13 @@ import {
 } from 'lucide-react';
 import { RecurringPayment, PaymentHistory, UserProfile } from '../types';
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} took too long — please try again.`)), ms)),
+  ]);
+}
+
 interface AgentAssistantProps {
   payments: RecurringPayment[];
   history: PaymentHistory[];
@@ -109,19 +116,27 @@ export default function AgentAssistant({
       }));
 
       // Send command, history, and current database state to the backend Agent endpoint
-      const response = await fetch('/api/agent', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt: command,
-          payments,
-          history,
-          userProfile,
-          chatHistory
-        })
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
+      let response: Response;
+      try {
+        response = await fetch('/api/agent', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            prompt: command,
+            payments,
+            history,
+            userProfile,
+            chatHistory
+          }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!response.ok) {
         let errMessage = 'Failed to reach assistant server.';
@@ -152,7 +167,7 @@ export default function AgentAssistant({
         const finalCategory = data.category || 'Bills';
         const finalDay = data.dayOfMonth || new Date().getDate();
         
-        const addedPayment = await onAddPayment({
+        const addedPayment = await withTimeout(onAddPayment({
           name: data.name || 'Unnamed Bill',
           amount: data.amount || 0,
           currency: finalCurrency,
@@ -163,10 +178,10 @@ export default function AgentAssistant({
           active: true,
           reminderDaysBefore: 3,
           paymentType: data.paymentType || 'fixed'
-        });
+        }), 15000, 'Saving the payment');
 
         if (addedPayment && data.isPaid) {
-          await onRecordPayment(addedPayment.id, addedPayment.amount, 'paid', addedPayment.taggedFor || 'Self');
+          await withTimeout(onRecordPayment(addedPayment.id, addedPayment.amount, 'paid', addedPayment.taggedFor || 'Self'), 15000, 'Recording the payment');
         }
       } else if (result.intent === 'add_bulk_expenses' && Array.isArray(result.addBulkExpenseData)) {
         for (const data of result.addBulkExpenseData) {
