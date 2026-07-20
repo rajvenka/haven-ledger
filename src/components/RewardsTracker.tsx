@@ -5,6 +5,7 @@ import {
   Plus, 
   Trash2, 
   Edit2, 
+  Copy,
   Search, 
   Filter, 
   Sparkles, 
@@ -167,6 +168,25 @@ export default function RewardsTracker({
     setCategory(perk.category);
     setApplicationDate(perk.applicationDate);
     setClosingDate(perk.closingDate || '');
+    setExclusionPeriodMonths(perk.exclusionPeriodMonths);
+    setBonusValue(perk.bonusValue);
+    setNotes(perk.notes || '');
+    setApplicantName(perk.applicantName || '');
+    setAnnualFee(perk.annualFee || 0);
+    setPointsEarned(perk.pointsEarned || 0);
+    setPointsProgram(perk.pointsProgram || 'None');
+    setCashValue(perk.cashValue || 0);
+    setErrorMsg('');
+    setIsModalOpen(true);
+  };
+
+  // Clone: same form, pre-filled, but treated as a brand new entry (no editingPerk set)
+  const handleClone = (perk: RewardPerk) => {
+    setEditingPerk(null);
+    setProviderName(`${perk.providerName} (Copy)`);
+    setCategory(perk.category);
+    setApplicationDate(new Date().toISOString().slice(0, 10));
+    setClosingDate('');
     setExclusionPeriodMonths(perk.exclusionPeriodMonths);
     setBonusValue(perk.bonusValue);
     setNotes(perk.notes || '');
@@ -762,6 +782,13 @@ export default function RewardsTracker({
                               title="Edit"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleClone(perk)}
+                              className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-400 rounded-lg transition-all"
+                              title="Clone"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => {

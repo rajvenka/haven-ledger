@@ -32,6 +32,12 @@ export default async function handler(req: any, res: any) {
         ${chatHistory && Array.isArray(chatHistory) ? chatHistory.map((m: any) => `${m.sender === 'user' ? 'User' : 'Assistant'}: ${m.text}`).join('\n') : '(None)'}
         - New User Input: "${prompt}"
 
+        *** CRITICAL: FIELD VALUES MUST BE FINAL, CLEAN DATA — NEVER YOUR REASONING ***
+        Every field in your JSON output (name, taggedFor, notes, category, etc.) must contain ONLY the final, clean value — a short name, a number, or null/omitted.
+        NEVER write out your thought process, uncertainty, or deliberation as the content of a field (e.g. never write something like "or we can omit it but let's just..." as a field's value).
+        If you are unsure whether a field applies, the correct action is to OMIT that field entirely or set it to null — not to describe your uncertainty inside the field itself.
+        Every field value must be short (under 40 characters for names/tags) and read like real data a human typed, never like a sentence explaining a decision.
+
         *** CRITICAL: FOLLOW-UP QUESTIONS & DATA COLLECTION RULES ***
         You MUST gather all essential details before executing any financial action. NEVER use dummy, default, or guessed values for key details.
 
@@ -176,6 +182,30 @@ export default async function handler(req: any, res: any) {
     });
 
     const result = JSON.parse(response.text || "{}");
+
+    // SAFETY NET: strip any field value that looks like leaked model reasoning
+    // (long, sentence-like, full of hedging words) rather than real data.
+    const REASONING_MARKERS = /\b(let'?s|we can|actually|or omit|or null|wait|as applicable|not required|to be safe)\b/i;
+    function isSuspiciousText(val: any): boolean {
+      if (typeof val !== "string") return false;
+      if (val.length > 60) return true;
+      if (REASONING_MARKERS.test(val)) return true;
+      if ((val.match(/-/g) || []).length > 5) return true; // reasoning often chains words-with-hyphens
+      return false;
+    }
+    function sanitizeObject(obj: any) {
+      if (!obj || typeof obj !== "object") return;
+      for (const key of Object.keys(obj)) {
+        if (isSuspiciousText(obj[key])) {
+          console.warn(`[Agent] Stripped suspicious field "${key}":`, String(obj[key]).slice(0, 80));
+          delete obj[key];
+        }
+      }
+    }
+    sanitizeObject(result.addExpenseData);
+    sanitizeObject(result.markPaidData);
+    sanitizeObject(result.updateExpenseData);
+    if (Array.isArray(result.addBulkExpenseData)) result.addBulkExpenseData.forEach(sanitizeObject);
 
     // STRICT SERVER-SIDE INTERCEPT VALIDATION
     // If the model returned "add_expense" but is missing crucial details, convert it to "chat_clarify".

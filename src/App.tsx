@@ -261,6 +261,12 @@ export default function App() {
     setIsModalOpen(true);
   };
 
+  const handleCloneClick = (payment: RecurringPayment) => {
+    setPreselectedCurrency(payment.currency);
+    setEditingPayment({ ...payment, id: '', name: `${payment.name} (Copy)` });
+    setIsModalOpen(true);
+  };
+
   const handleSavePayment = async (paymentData: Omit<RecurringPayment, 'id'> & { id?: string }) => {
     if (paymentData.id) {
       updatePayment(paymentData as RecurringPayment);
@@ -1086,6 +1092,7 @@ export default function App() {
                 showFrequencyPatterns={showFrequencyPatterns}
                 onAddClick={handleOpenAddModal}
                 onEditClick={handleOpenEditModal}
+                onCloneClick={handleCloneClick}
                 onDeleteClick={deletePayment}
                 onUpdatePayment={updatePayment}
                 onAddBulkPayments={addBulkPayments}

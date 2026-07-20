@@ -19,7 +19,8 @@ import {
   History,
   LayoutList,
   LayoutGrid,
-  Sliders
+  Sliders,
+  Copy
 } from 'lucide-react';
 import { RecurringPayment, getCategoryColor, BillingCycle, PaymentCategory, PaymentHistory } from '../types';
 import { formatCurrencyValue } from '../utils/paymentUtils';
@@ -30,6 +31,7 @@ interface ConfigurePaymentsProps {
   showFrequencyPatterns?: boolean;
   onAddClick: () => void;
   onEditClick: (payment: RecurringPayment) => void;
+  onCloneClick?: (payment: RecurringPayment) => void;
   onDeleteClick: (id: string) => void;
   onUpdatePayment: (payment: RecurringPayment) => void;
   customizedTags?: string[];
@@ -72,6 +74,7 @@ export default function ConfigurePayments({
   showFrequencyPatterns = true,
   onAddClick,
   onEditClick,
+  onCloneClick,
   onDeleteClick,
   onUpdatePayment,
   customizedTags = ['Bank', 'Home', 'Father', 'Mother', 'Self'],
@@ -557,6 +560,16 @@ export default function ConfigurePayments({
               >
                 <Edit2 className="w-3 h-3" />
               </button>
+              {/* Clone */}
+              {onCloneClick && (
+                <button
+                  onClick={() => onCloneClick(payment)}
+                  className="p-1 rounded transition-colors hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer"
+                  title="Clone"
+                >
+                  <Copy className="w-3 h-3" />
+                </button>
+              )}
               {/* Trash */}
               <button
                 disabled={isPaymentReadOnly(payment)}
@@ -761,6 +774,15 @@ export default function ConfigurePayments({
               >
                 <Edit2 className="w-3.5 h-3.5" />
               </button>
+              {onCloneClick && (
+                <button
+                  onClick={() => onCloneClick(payment)}
+                  className="p-1.5 rounded-md transition-colors hover:bg-white dark:hover:bg-slate-850 text-slate-600 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer"
+                  title="Clone"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+              )}
               <button
                 disabled={isPaymentReadOnly(payment)}
                 onClick={() => onDeleteClick(payment.id)}
@@ -950,6 +972,16 @@ export default function ConfigurePayments({
             >
               <Edit2 className="w-3.5 h-3.5" />
             </button>
+            {/* Clone button */}
+            {onCloneClick && (
+              <button
+                onClick={() => onCloneClick(payment)}
+                className="p-1.5 rounded transition-colors hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer"
+                title="Clone"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </button>
+            )}
             {/* Delete button */}
             <button
               disabled={isPaymentReadOnly(payment)}
