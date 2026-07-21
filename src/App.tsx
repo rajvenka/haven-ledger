@@ -1719,6 +1719,10 @@ export default function App() {
             setViewMode={setViewMode}
             onLogOut={logOut}
             summaryCurrency={summaryCurrency}
+            workspaces={workspaces}
+            activeWorkspace={activeWorkspace}
+            onSwitchWorkspace={switchWorkspace}
+            onCreateWorkspace={createWorkspace}
           />
         )}
 

@@ -9,7 +9,7 @@ import {
   Check, 
   LogOut
 } from 'lucide-react';
-import { RecurringPayment, UserProfile } from '../types';
+import { RecurringPayment, UserProfile, Workspace } from '../types';
 import { BUILD_TIME } from '../buildTime';
 
 interface ProfileScopeModalProps {
@@ -25,6 +25,10 @@ interface ProfileScopeModalProps {
   summaryCurrency?: string;
   connections?: any[];
   referencedUserProfiles?: UserProfile[];
+  workspaces?: Workspace[];
+  activeWorkspace?: Workspace | null;
+  onSwitchWorkspace?: (id: string) => Promise<void>;
+  onCreateWorkspace?: (name: string, type: 'family' | 'business') => Promise<any>;
 }
 
 export default function ProfileScopeModal({
@@ -37,9 +41,14 @@ export default function ProfileScopeModal({
   setViewMode,
   onLogOut,
   connections = [],
-  referencedUserProfiles = []
+  referencedUserProfiles = [],
+  workspaces = [],
+  activeWorkspace = null,
+  onSwitchWorkspace,
+  onCreateWorkspace
 }: ProfileScopeModalProps) {
   const [copied, setCopied] = useState(false);
+  const [switchingId, setSwitchingId] = useState<string | null>(null);
 
   // Safely find the host group's customized names/references
   const hostUids = connections
@@ -131,6 +140,45 @@ export default function ProfileScopeModal({
                   </p>
                 </div>
               </div>
+
+              {/* Switch Account (workspace switcher) */}
+              {workspaces.length > 0 && (
+                <div className="space-y-2 text-left">
+                  <span className="text-[10px] font-black text-slate-450 dark:text-slate-500 uppercase tracking-widest block pl-1">
+                    Switch Account
+                  </span>
+                  <div className="space-y-1.5">
+                    {workspaces.map(ws => (
+                      <button
+                        key={ws.id}
+                        onClick={async () => {
+                          if (ws.id === activeWorkspace?.id) return;
+                          setSwitchingId(ws.id);
+                          try { await onSwitchWorkspace?.(ws.id); } finally { setSwitchingId(null); }
+                        }}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all cursor-pointer ${
+                          ws.id === activeWorkspace?.id
+                            ? 'border-indigo-200 dark:border-indigo-900 bg-indigo-50/60 dark:bg-indigo-950/20'
+                            : 'border-slate-150 dark:border-slate-850 hover:bg-slate-50 dark:hover:bg-slate-900'
+                        }`}
+                      >
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-white font-black text-[10px] uppercase ${ws.type === 'business' ? 'bg-[#34c759]' : 'bg-[#007aff]'}`}>
+                          {ws.type === 'business' ? 'B' : 'F'}
+                        </div>
+                        <div className="flex-1 min-w-0 text-left">
+                          <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{ws.name}</p>
+                          <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wide">{ws.type} · {ws.isOwner ? 'Owner' : ws.role}</p>
+                        </div>
+                        {switchingId === ws.id ? (
+                          <div className="w-3.5 h-3.5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                        ) : ws.id === activeWorkspace?.id ? (
+                          <Check className="w-4 h-4 text-indigo-500 shrink-0" />
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Display Scope Selector */}
               {viewMode && setViewMode && (
