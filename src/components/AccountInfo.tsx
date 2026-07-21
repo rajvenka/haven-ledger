@@ -36,6 +36,7 @@ interface AccountInfoProps {
   onAddBulkPayments?: (payments: Omit<RecurringPayment, 'id'>[]) => Promise<void>;
   onStartWhatsAppVerification?: (phone: string) => Promise<string>;
   onDisconnectWhatsApp?: () => Promise<void>;
+  accessPlans?: { id: string; name: string; description?: string; features: string[]; isSystem: boolean }[];
   workspaceBackups?: { id: string; created_at: string; snapshot: any }[];
   onRestoreFromBackup?: (backupId: string) => Promise<void>;
   userProfile: UserProfile | null;
@@ -83,6 +84,7 @@ export default function AccountInfo({
   onAddBulkPayments,
   onStartWhatsAppVerification,
   onDisconnectWhatsApp,
+  accessPlans = [],
   workspaceBackups = [],
   onRestoreFromBackup,
   userProfile,
@@ -617,6 +619,21 @@ export default function AccountInfo({
                     <button type="button" onClick={() => setFamilyFeatures([])} className="text-[9px] font-bold text-indigo-500 cursor-pointer">Light (Bills Only)</button>
                   </div>
                 </div>
+                {accessPlans.length > 0 && (
+                  <div className="flex gap-1.5 flex-wrap">
+                    {accessPlans.map(plan => (
+                      <button
+                        key={plan.id}
+                        type="button"
+                        onClick={() => setFamilyFeatures(plan.features)}
+                        title={plan.description}
+                        className="px-2.5 py-1 bg-slate-50 dark:bg-slate-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-800 rounded-full text-[9px] font-black uppercase tracking-wide text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer transition-all"
+                      >
+                        {plan.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-1.5">
                   {ALL_FEATURES.map(f => (
                     <button

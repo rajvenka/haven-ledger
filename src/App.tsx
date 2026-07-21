@@ -139,6 +139,10 @@ export default function App() {
     inviteNewUser,
     startWhatsAppVerification,
     disconnectWhatsApp,
+    accessPlans,
+    createAccessPlan,
+    updateAccessPlan,
+    deleteAccessPlan,
     appNotificationsEnabled,
     mobileNotificationsEnabled,
     saveNotificationSettings,
@@ -1241,6 +1245,7 @@ export default function App() {
                 workspaceBackups={workspaceBackups}
                 onRestoreFromBackup={restoreFromBackup}
                 onStartWhatsAppVerification={startWhatsAppVerification}
+                accessPlans={accessPlans}
                 onDisconnectWhatsApp={disconnectWhatsApp}
                 onCreateFamily={async () => { await createWorkspace(activeWorkspace?.type === 'business' ? 'My Business' : 'My Family', activeWorkspace?.type || 'family'); }}
                 onJoinFamilyGroup={joinFamilyGroup}
@@ -1306,7 +1311,14 @@ export default function App() {
                 isReadOnly={isReadOnly}
               />
             ) : activeTab === 'admin_users' && userProfile?.isSuperAdmin ? (
-              <AdminUsersView fetchAllUsersForAdmin={fetchAllUsersForAdmin} inviteNewUser={inviteNewUser} />
+              <AdminUsersView
+                fetchAllUsersForAdmin={fetchAllUsersForAdmin}
+                inviteNewUser={inviteNewUser}
+                accessPlans={accessPlans}
+                onCreatePlan={createAccessPlan}
+                onUpdatePlan={updateAccessPlan}
+                onDeletePlan={deleteAccessPlan}
+              />
             ) : (
               <PaymentHistoryView 
                 history={history}
