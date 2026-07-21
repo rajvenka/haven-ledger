@@ -42,7 +42,7 @@ interface AccountInfoProps {
   familyMembers: UserProfile[];
   familyRole?: 'host' | 'modify' | 'view' | null;
   isReadOnly?: boolean;
-  onAddFamilyMember: (email: string, role?: 'view' | 'modify') => Promise<void>;
+  onAddFamilyMember: (email: string, role?: 'view' | 'modify', accessLevel?: 'full' | 'limited') => Promise<void>;
   onCreateFamily?: () => Promise<void>;
   onJoinFamilyGroup: (code: string) => Promise<void>;
   onLeaveFamilyGroup?: () => Promise<void>;
@@ -194,6 +194,7 @@ export default function AccountInfo({
   // Family forms state
   const [familyEmail, setFamilyEmail] = useState('');
   const [familyEmailRole, setFamilyEmailRole] = useState<'view' | 'modify'>('modify');
+  const [familyAccessLevel, setFamilyAccessLevel] = useState<'full' | 'limited'>('full');
   const [joinGroupId, setJoinGroupId] = useState('');
   const [copied, setCopied] = useState(false);
   const [familyError, setFamilyError] = useState<string | null>(null);
@@ -218,7 +219,7 @@ export default function AccountInfo({
     setFamilySuccess(null);
     setFamilyLoading(true);
     try {
-      await onAddFamilyMember(familyEmail, familyEmailRole);
+      await onAddFamilyMember(familyEmail, familyEmailRole, familyAccessLevel);
       setFamilySuccess(`Successfully sent family invitation to "${familyEmail}"!`);
       setFamilyEmail('');
     } catch (err: any) {
@@ -579,30 +580,50 @@ export default function AccountInfo({
               <p className="text-[10px] text-slate-500 dark:text-slate-400">Share this code with family members so they can join with either view-only or full edit access.</p>
 
               {/* Invite by email (logs a pending invitation they'll see when signed in) */}
-              <form onSubmit={handleInviteMember} className="flex gap-2 pt-1">
-                <input
-                  type="email"
-                  value={familyEmail}
-                  onChange={(e) => setFamilyEmail(e.target.value)}
-                  placeholder="family@email.com"
-                  className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
-                />
-                <select
-                  value={familyEmailRole}
-                  onChange={(e) => setFamilyEmailRole(e.target.value as 'view' | 'modify')}
-                  className="px-2 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-semibold"
-                >
-                  <option value="modify">Can Edit</option>
-                  <option value="view">View Only</option>
-                </select>
-                <button
-                  type="submit"
-                  disabled={familyLoading}
-                  className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <UserPlus className="w-4 h-4" />
-                </button>
-              </form>
+              <form onSubmit={handleInviteMember} className="space-y-1.5 pt-1">
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={familyEmail}
+                    onChange={(e) => setFamilyEmail(e.target.value)}
+                    placeholder="family@email.com"
+                    className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+                  />
+                  <select
+                    value={familyEmailRole}
+                    onChange={(e) => setFamilyEmailRole(e.target.value as 'view' | 'modify')}
+                    className="px-2 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-semibold"
+                  >
+                    <option value="modify">Can Edit</option>
+                    <option value="view">View Only</option>
+                  </select>
+                  <button
+                    type="submit"
+                    disabled={familyLoading}
+                    className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setFamilyAccessLevel('full')}
+                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer transition-all ${familyAccessLevel === 'full' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+                  >
+                    Full App Access
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFamilyAccessLevel('limited')}
+                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer transition-all ${familyAccessLevel === 'limited' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+                  >
+                    Limited (Bills Only)
+                  </button>
+                </div>
+                {familyAccessLevel === 'limited' && (
+                  <p className="text-[9px] text-slate-400">They'll only see Dashboard, Expenses, Manage Bills, and Payment History — no Income, Rewards, AI, or Team settings.</p>
+                )}              </form>
               </>
               )}
               {familyError && <p className="text-[10px] text-red-500 font-semibold">{familyError}</p>}

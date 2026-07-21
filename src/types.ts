@@ -84,6 +84,7 @@ export interface Workspace {
   isOwner: boolean;
   incomeMode?: 'simple' | 'detailed';
   monthlyIncome?: string;
+  accessLevel?: 'full' | 'limited';
 }
 
 export interface RewardPerk {
@@ -157,6 +158,7 @@ export interface FamilyInvitation {
   toEmail: string;
   toUid?: string;
   proposedRole: 'view' | 'modify';
+  proposedAccessLevel?: 'full' | 'limited';
   status: 'pending' | 'approved' | 'declined';
   createdAt: string;
   inviteCode?: string;
