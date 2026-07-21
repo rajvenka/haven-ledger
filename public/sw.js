@@ -1,4 +1,4 @@
-const CACHE_NAME = 'haven-ledger-cache-v1';
+const CACHE_NAME = 'haven-ledger-cache-v2-20260722';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
