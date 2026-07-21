@@ -769,7 +769,8 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 30 }}
               transition={{ duration: 0.25, ease: 'easeInOut' }}
-              className="md:hidden absolute inset-0 bg-white dark:bg-slate-950 z-50 flex flex-col select-none p-6 justify-between overflow-y-auto"
+              className="md:hidden fixed inset-0 bg-white dark:bg-slate-950 z-50 flex flex-col select-none p-6 justify-between overflow-y-auto"
+              style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.5rem)' }}
             >
               {/* Inside Menu Drawer */}
               <div className="space-y-6">
@@ -1440,7 +1441,7 @@ export default function App() {
                 animate={{ opacity: 0.4 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setIsNotifDrawerOpen(false)}
-                className="absolute inset-0 bg-black z-30"
+                className="fixed inset-0 bg-black z-30"
               />
 
               {/* Drawer Sheet */}
@@ -1449,10 +1450,10 @@ export default function App() {
                 animate={{ x: 0 }}
                 exit={{ x: '100%' }}
                 transition={{ type: 'spring', damping: 24, stiffness: 220 }}
-                className="absolute top-0 bottom-0 right-0 w-[82%] bg-slate-900 text-white z-40 shadow-2xl flex flex-col overflow-hidden text-left"
+                className="fixed top-0 bottom-0 right-0 w-[82%] bg-slate-900 text-white z-40 shadow-2xl flex flex-col overflow-hidden text-left"
               >
                 {/* Header */}
-                <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between shrink-0">
+                <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between shrink-0" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1rem)' }}>
                   <h4 className="text-xs font-black uppercase tracking-widest text-slate-300 flex items-center gap-1.5">
                     <Bell className="w-4 h-4 text-indigo-400" /> Notifications
                   </h4>
@@ -1535,7 +1536,7 @@ export default function App() {
                   setRecordingTransactionPayment(null);
                   setTransactionSuccessMessage(null);
                 }}
-                className="absolute inset-0 bg-black z-40"
+                className="fixed inset-0 bg-black z-40"
               />
 
               {/* Bottom Sheet Modal */}
@@ -1544,7 +1545,8 @@ export default function App() {
                 animate={{ y: 0 }}
                 exit={{ y: '100%' }}
                 transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-                className="absolute bottom-0 left-0 right-0 max-h-[85%] bg-white dark:bg-slate-950 rounded-t-[30px] shadow-[0_-10px_30px_rgba(0,0,0,0.3)] z-50 flex flex-col overflow-hidden text-left"
+                className="fixed bottom-0 left-0 right-0 max-h-[85%] bg-white dark:bg-slate-950 rounded-t-[30px] shadow-[0_-10px_30px_rgba(0,0,0,0.3)] z-50 flex flex-col overflow-hidden text-left"
+                style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
               >
                 {/* Drag Notch handle */}
                 <div className="w-12 h-1 bg-slate-300 dark:bg-slate-800 rounded-full mx-auto mt-3 shrink-0" />
