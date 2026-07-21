@@ -174,10 +174,10 @@ export function usePaymentState() {
   useEffect(() => {
     if (!user) { setUserProfile(null); setIsLoaded(true); return; }
     (async () => {
-      let { data: profile } = await supabase.from('profiles').select('*, access_plans(id, name, features)').eq('id', user.id).maybeSingle();
+      let { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
       if (!profile) {
         await new Promise(r => setTimeout(r, 600));
-        ({ data: profile } = await supabase.from('profiles').select('*, access_plans(id, name, features)').eq('id', user.id).maybeSingle());
+        ({ data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle());
       }
       if (profile) {
         setUserProfile({
@@ -185,8 +185,6 @@ export function usePaymentState() {
           isSuperAdmin: profile.is_super_admin ?? false,
           whatsappPhone: profile.whatsapp_phone ?? undefined,
           licensePlanId: profile.license_plan_id ?? undefined,
-          licensePlanName: (profile as any).access_plans?.name ?? 'Light',
-          licensePlanFeatures: (profile as any).access_plans?.features ?? [],
           appNotificationsEnabled: profile.app_notifications_enabled, mobileNotificationsEnabled: profile.mobile_notifications_enabled,
         });
         setAppNotificationsEnabled(profile.app_notifications_enabled ?? true);
@@ -194,6 +192,18 @@ export function usePaymentState() {
         if (profile.default_currency) {
           setSummaryCurrency(profile.default_currency);
           localStorage.setItem('pm_summary_currency', profile.default_currency);
+        }
+        // Plan name/features are a nice-to-have display detail - fetched separately so any
+        // issue here can never block core profile fields like isSuperAdmin from loading.
+        if (profile.license_plan_id) {
+          (async () => {
+            try {
+              const { data: plan } = await supabase.from('access_plans').select('name, features').eq('id', profile.license_plan_id).maybeSingle();
+              if (plan) setUserProfile(prev => prev ? { ...prev, licensePlanName: plan.name, licensePlanFeatures: plan.features ?? [] } : prev);
+            } catch (err) {
+              console.warn('Failed to load license plan details:', err);
+            }
+          })();
         }
       }
       await refreshWorkspaces(user.id, profile?.active_workspace_id ?? null);
