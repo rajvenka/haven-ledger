@@ -37,6 +37,8 @@ interface AccountInfoProps {
   onStartWhatsAppVerification?: (phone: string) => Promise<string>;
   onDisconnectWhatsApp?: () => Promise<void>;
   accessPlans?: { id: string; name: string; description?: string; features: string[]; isSystem: boolean }[];
+  myUpgradeRequest?: { id: string; planName: string; status: string } | null;
+  onRequestUpgrade?: (planId: string) => Promise<void>;
   workspaceBackups?: { id: string; created_at: string; snapshot: any }[];
   onRestoreFromBackup?: (backupId: string) => Promise<void>;
   userProfile: UserProfile | null;
@@ -85,6 +87,8 @@ export default function AccountInfo({
   onStartWhatsAppVerification,
   onDisconnectWhatsApp,
   accessPlans = [],
+  myUpgradeRequest,
+  onRequestUpgrade,
   workspaceBackups = [],
   onRestoreFromBackup,
   userProfile,
@@ -956,6 +960,34 @@ export default function AccountInfo({
 
       {currentSubTab === 'preferences' && (
         <>
+          {/* My Plan */}
+          <div className="bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 shrink-0">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">My Plan</span>
+                <p className="text-sm font-black text-slate-900 dark:text-white">{userProfile?.licensePlanName || 'Light'}</p>
+              </div>
+              <ShieldCheck className="w-5 h-5 text-indigo-500" />
+            </div>
+            {myUpgradeRequest ? (
+              <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/20 rounded-lg text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                Request for {myUpgradeRequest.planName} is pending review.
+              </div>
+            ) : (
+              <div className="flex gap-1.5 flex-wrap">
+                {accessPlans.filter(p => p.name !== userProfile?.licensePlanName).map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => onRequestUpgrade?.(p.id)}
+                    className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/30 hover:bg-indigo-100 dark:hover:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer"
+                  >
+                    Request {p.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* APP DISPLAY SETTINGS (Premium Bento card styling) */}
           <div className="bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 shrink-0">
         <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-900 pb-2.5">

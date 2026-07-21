@@ -7,7 +7,19 @@ interface AdminUser {
   displayName?: string;
   createdAt: string;
   isSuperAdmin: boolean;
+  licensePlanId?: string;
+  licensePlanName?: string;
   workspaces: { id: string; name: string; type: 'family' | 'business'; role: string }[];
+}
+
+interface UpgradeRequest {
+  id: string;
+  userId: string;
+  userEmail?: string;
+  userName?: string;
+  requestedPlanId: string;
+  requestedPlanName: string;
+  createdAt: string;
 }
 
 interface AccessPlan {
@@ -25,12 +37,15 @@ interface AdminUsersViewProps {
   onCreatePlan?: (name: string, features: string[], description?: string) => Promise<void>;
   onUpdatePlan?: (id: string, updates: { name?: string; description?: string; features?: string[] }) => Promise<void>;
   onDeletePlan?: (id: string) => Promise<void>;
+  fetchPendingUpgradeRequests?: () => Promise<UpgradeRequest[]>;
+  onResolveUpgradeRequest?: (requestId: string, userId: string, planId: string, approve: boolean) => Promise<void>;
+  onSetUserPlan?: (userId: string, planId: string) => Promise<void>;
 }
 
 const ALL_PLAN_FEATURES = ['income', 'rewards', 'ai', 'team', 'chat', 'agent'];
 const PLAN_FEATURE_LABELS: Record<string, string> = { income: 'Income', rewards: 'Rewards', ai: 'AI Insights', team: 'Team', chat: 'Chat', agent: 'AI Agent' };
 
-export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, accessPlans = [], onCreatePlan, onUpdatePlan, onDeletePlan }: AdminUsersViewProps) {
+export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, accessPlans = [], onCreatePlan, onUpdatePlan, onDeletePlan, fetchPendingUpgradeRequests, onResolveUpgradeRequest, onSetUserPlan }: AdminUsersViewProps) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,16 +78,44 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
     }
   };
 
+  const [pendingRequests, setPendingRequests] = useState<UpgradeRequest[]>([]);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [changingPlanFor, setChangingPlanFor] = useState<string | null>(null);
+
   const load = async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchAllUsersForAdmin();
-      setUsers(data);
+      const [userData, requestData] = await Promise.all([
+        fetchAllUsersForAdmin(),
+        fetchPendingUpgradeRequests ? fetchPendingUpgradeRequests() : Promise.resolve([]),
+      ]);
+      setUsers(userData);
+      setPendingRequests(requestData);
     } catch (err: any) {
       setError(err.message || 'Failed to load users.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResolve = async (req: UpgradeRequest, approve: boolean) => {
+    setResolvingId(req.id);
+    try {
+      await onResolveUpgradeRequest?.(req.id, req.userId, req.requestedPlanId, approve);
+      await load();
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
+  const handleSetPlan = async (userId: string, planId: string) => {
+    setChangingPlanFor(userId);
+    try {
+      await onSetUserPlan?.(userId, planId);
+      await load();
+    } finally {
+      setChangingPlanFor(null);
     }
   };
 
@@ -101,7 +144,7 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-indigo-500" /> User Management
+            <ShieldCheck className="w-5 h-5 text-indigo-500" /> App & License Management
           </h2>
           <p className="text-[11px] text-slate-400 dark:text-slate-500 font-semibold mt-0.5">
             {users.length} registered user{users.length !== 1 ? 's' : ''} across the platform · Super Admin only
@@ -220,6 +263,36 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
         <div className="apple-card p-4 text-rose-500 text-xs font-semibold">{error}</div>
       )}
 
+      {pendingRequests.length > 0 && (
+        <div className="apple-card p-4 space-y-2.5">
+          <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Pending Upgrade Requests ({pendingRequests.length})</span>
+          {pendingRequests.map(req => (
+            <div key={req.id} className="flex items-center justify-between p-2.5 bg-amber-50 dark:bg-amber-950/20 rounded-lg">
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{req.userName || req.userEmail}</p>
+                <p className="text-[10px] text-slate-500">Requesting <span className="font-bold">{req.requestedPlanName}</span></p>
+              </div>
+              <div className="flex gap-1.5 shrink-0">
+                <button
+                  onClick={() => handleResolve(req, true)}
+                  disabled={resolvingId === req.id}
+                  className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-[10px] font-black rounded-lg cursor-pointer"
+                >
+                  Approve
+                </button>
+                <button
+                  onClick={() => handleResolve(req, false)}
+                  disabled={resolvingId === req.id}
+                  className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 disabled:opacity-50 text-[10px] font-black rounded-lg cursor-pointer"
+                >
+                  Deny
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {loading ? (
         <div className="apple-card p-10 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
@@ -242,6 +315,18 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
                 <p className="text-[9px] text-slate-350 dark:text-slate-600 font-semibold mt-0.5">
                   Joined {new Date(u.createdAt).toLocaleDateString()}
                 </p>
+                <div className="mt-1.5">
+                  <select
+                    value={u.licensePlanId || ''}
+                    onChange={(e) => handleSetPlan(u.id, e.target.value)}
+                    disabled={changingPlanFor === u.id}
+                    className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer disabled:opacity-50"
+                  >
+                    {accessPlans.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div className="flex flex-col items-end gap-1 shrink-0">
                 {u.workspaces.length === 0 ? (

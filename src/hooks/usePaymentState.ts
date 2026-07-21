@@ -174,16 +174,19 @@ export function usePaymentState() {
   useEffect(() => {
     if (!user) { setUserProfile(null); setIsLoaded(true); return; }
     (async () => {
-      let { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+      let { data: profile } = await supabase.from('profiles').select('*, access_plans(id, name, features)').eq('id', user.id).maybeSingle();
       if (!profile) {
         await new Promise(r => setTimeout(r, 600));
-        ({ data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle());
+        ({ data: profile } = await supabase.from('profiles').select('*, access_plans(id, name, features)').eq('id', user.id).maybeSingle());
       }
       if (profile) {
         setUserProfile({
           uid: profile.id, email: profile.email, displayName: profile.display_name, familyGroupId: '',
           isSuperAdmin: profile.is_super_admin ?? false,
           whatsappPhone: profile.whatsapp_phone ?? undefined,
+          licensePlanId: profile.license_plan_id ?? undefined,
+          licensePlanName: (profile as any).access_plans?.name ?? 'Light',
+          licensePlanFeatures: (profile as any).access_plans?.features ?? [],
           appNotificationsEnabled: profile.app_notifications_enabled, mobileNotificationsEnabled: profile.mobile_notifications_enabled,
         });
         setAppNotificationsEnabled(profile.app_notifications_enabled ?? true);
@@ -784,12 +787,74 @@ export function usePaymentState() {
     await loadAccessPlans();
   };
 
+  // ---------- Self-service upgrade requests ----------
+  const [myUpgradeRequest, setMyUpgradeRequest] = useState<{ id: string; planName: string; status: string } | null>(null);
+
+  const loadMyUpgradeRequest = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('upgrade_requests')
+      .select('id, status, access_plans(name)')
+      .eq('user_id', user.id)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setMyUpgradeRequest(data ? { id: data.id, planName: (data as any).access_plans?.name ?? 'a new plan', status: data.status } : null);
+  }, [user]);
+
+  useEffect(() => { loadMyUpgradeRequest(); }, [loadMyUpgradeRequest]);
+
+  const requestUpgrade = async (planId: string) => {
+    if (!user) throw new Error('Not signed in.');
+    const { error } = await supabase.from('upgrade_requests').insert({ user_id: user.id, requested_plan_id: planId });
+    if (error) throw error;
+    await loadMyUpgradeRequest();
+    triggerNotification('Upgrade Requested 🚀', "We'll let you know once it's reviewed.", 'info');
+  };
+
+  // ---------- Super-admin: license management ----------
+  const fetchPendingUpgradeRequests = async () => {
+    const { data, error } = await supabase
+      .from('upgrade_requests')
+      .select('id, user_id, status, created_at, access_plans(id, name), profiles!upgrade_requests_user_id_fkey(email, display_name)')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map((r: any) => ({
+      id: r.id, userId: r.user_id, userEmail: r.profiles?.email, userName: r.profiles?.display_name,
+      requestedPlanId: r.access_plans?.id, requestedPlanName: r.access_plans?.name, createdAt: r.created_at,
+    }));
+  };
+
+  // Cascades a plan change to a user's global license AND every workspace they're currently in.
+  const adminSetUserPlan = async (userId: string, planId: string) => {
+    const plan = accessPlans.find(p => p.id === planId);
+    if (!plan) throw new Error('Plan not found.');
+
+    const { error: profileErr } = await supabase.from('profiles').update({ license_plan_id: planId }).eq('id', userId);
+    if (profileErr) throw profileErr;
+
+    const { error: membersErr } = await supabase.from('workspace_members').update({ enabled_features: plan.features }).eq('user_id', userId);
+    if (membersErr) throw membersErr;
+
+    if (userId === user?.id) await refreshWorkspaces(user!.id, activeWorkspaceId);
+  };
+
+  const resolveUpgradeRequest = async (requestId: string, userId: string, planId: string, approve: boolean) => {
+    if (approve) {
+      await adminSetUserPlan(userId, planId);
+    }
+    const { error } = await supabase.from('upgrade_requests').update({ status: approve ? 'approved' : 'denied', resolved_at: new Date().toISOString() }).eq('id', requestId);
+    if (error) throw error;
+  };
+
   // Super-admin only: fetch every registered user + a per-user workspace summary.
   // Relies entirely on the DB-side is_super_admin() check via RLS — returns empty for anyone else.
   const fetchAllUsersForAdmin = async () => {
     const { data: profiles, error } = await supabase
       .from('profiles')
-      .select('id, email, display_name, created_at, is_super_admin')
+      .select('id, email, display_name, created_at, is_super_admin, license_plan_id, access_plans(id, name)')
       .order('created_at', { ascending: false });
     if (error) throw error;
 
@@ -803,6 +868,8 @@ export function usePaymentState() {
       displayName: p.display_name,
       createdAt: p.created_at,
       isSuperAdmin: p.is_super_admin,
+      licensePlanId: p.access_plans?.id,
+      licensePlanName: p.access_plans?.name ?? 'Light',
       workspaces: (memberships ?? [])
         .filter((m: any) => m.user_id === p.id)
         .map((m: any) => ({ id: m.workspaces?.id, name: m.workspaces?.name, type: m.workspaces?.type, role: m.role })),
@@ -919,6 +986,7 @@ export function usePaymentState() {
     checkPaymentReminders, requestNotificationPermission, resetToDefaults, fetchAllUsersForAdmin, inviteNewUser,
     startWhatsAppVerification, disconnectWhatsApp,
     accessPlans, createAccessPlan, updateAccessPlan, deleteAccessPlan,
+    myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan,
     appNotificationsEnabled, mobileNotificationsEnabled, saveNotificationSettings,
   };
 }

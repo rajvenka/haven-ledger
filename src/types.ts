@@ -132,6 +132,9 @@ export interface UserProfile {
   familyGroupId: string;
   isSuperAdmin?: boolean;
   whatsappPhone?: string;
+  licensePlanId?: string;
+  licensePlanName?: string;
+  licensePlanFeatures?: string[];
   appNotificationsEnabled?: boolean;
   mobileNotificationsEnabled?: boolean;
   ownNotificationsEnabled?: boolean;

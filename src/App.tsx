@@ -143,6 +143,11 @@ export default function App() {
     createAccessPlan,
     updateAccessPlan,
     deleteAccessPlan,
+    myUpgradeRequest,
+    requestUpgrade,
+    fetchPendingUpgradeRequests,
+    resolveUpgradeRequest,
+    adminSetUserPlan,
     appNotificationsEnabled,
     mobileNotificationsEnabled,
     saveNotificationSettings,
@@ -614,7 +619,7 @@ export default function App() {
                     >
                       <div className="flex items-center gap-2.5">
                         <ShieldCheck className="w-4 h-4 shrink-0 opacity-80" />
-                        <span>User Management</span>
+                        <span>App & License</span>
                       </div>
                       {activeTab === 'admin_users' && (
                         <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
@@ -969,7 +974,7 @@ export default function App() {
                         >
                           <div className="flex items-center gap-2.5">
                             <ShieldCheck className="w-4.5 h-4.5 shrink-0 opacity-80" />
-                            <span>User Management</span>
+                            <span>App & License</span>
                           </div>
                           {activeTab === 'admin_users' && (
                             <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
@@ -1246,6 +1251,8 @@ export default function App() {
                 onRestoreFromBackup={restoreFromBackup}
                 onStartWhatsAppVerification={startWhatsAppVerification}
                 accessPlans={accessPlans}
+                myUpgradeRequest={myUpgradeRequest}
+                onRequestUpgrade={requestUpgrade}
                 onDisconnectWhatsApp={disconnectWhatsApp}
                 onCreateFamily={async () => { await createWorkspace(activeWorkspace?.type === 'business' ? 'My Business' : 'My Family', activeWorkspace?.type || 'family'); }}
                 onJoinFamilyGroup={joinFamilyGroup}
@@ -1318,6 +1325,9 @@ export default function App() {
                 onCreatePlan={createAccessPlan}
                 onUpdatePlan={updateAccessPlan}
                 onDeletePlan={deleteAccessPlan}
+                fetchPendingUpgradeRequests={fetchPendingUpgradeRequests}
+                onResolveUpgradeRequest={resolveUpgradeRequest}
+                onSetUserPlan={adminSetUserPlan}
               />
             ) : (
               <PaymentHistoryView 
