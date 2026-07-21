@@ -115,6 +115,10 @@ export function usePaymentState() {
     const { error } = await supabase.auth.resetPasswordForEmail(email);
     if (error) throw error;
   };
+  const updatePassword = async (password: string) => {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+  };
   const logOut = async () => { await supabase.auth.signOut(); };
 
   // Load every workspace this user belongs to (not just one)
@@ -830,7 +834,7 @@ export function usePaymentState() {
 
   return {
     user, userProfile, familyMembers, viewMode, setViewMode,
-    signUp, signIn, signInWithGoogle, resetPassword, logOut,
+    signUp, signIn, signInWithGoogle, resetPassword, updatePassword, logOut,
     // Workspace model
     workspaces, activeWorkspaceId, activeWorkspace, switchWorkspace, createWorkspace, setWorkspaceMode,
     renameWorkspace, deleteWorkspace,

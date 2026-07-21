@@ -41,6 +41,7 @@ import AccountInfo from './components/AccountInfo';
 import PaymentHistoryView from './components/PaymentHistoryView';
 import ExpensesView from './components/ExpensesView';
 import AuthView from './components/AuthView';
+import SetPasswordView from './components/SetPasswordView';
 import AiInsights from './components/AiInsights';
 import { RecurringPayment } from './types';
 import AgentAssistant from './components/AgentAssistant';
@@ -63,6 +64,7 @@ export default function App() {
     signIn,
     signInWithGoogle,
     resetPassword,
+    updatePassword,
     logOut,
     workspaces,
     activeWorkspaceId,
@@ -139,6 +141,13 @@ export default function App() {
     mobileNotificationsEnabled,
     saveNotificationSettings,
   } = usePaymentState();
+
+  // Detect an invite or password-recovery magic link (Supabase logs the user in immediately
+  // via the link, but never asks for a password — we have to catch that moment ourselves).
+  const [needsPasswordSetup, setNeedsPasswordSetup] = useState(() => {
+    const hash = window.location.hash;
+    return hash.includes('type=invite') || hash.includes('type=recovery');
+  });
 
   const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'configure' | 'account' | 'history' | 'ai'>('summary');
   const [settingsSubTab, setSettingsSubTab] = useState<'preferences' | 'team'>('preferences');
@@ -337,6 +346,21 @@ export default function App() {
           onSignUp={signUp} 
           onResetPassword={resetPassword} 
           onSignInWithGoogle={signInWithGoogle} 
+        />
+      </IPhoneFrame>
+    );
+  }
+
+  // 2.2 Invite/recovery link just logged them in, but they never set a real password yet
+  if (user && needsPasswordSetup) {
+    return (
+      <IPhoneFrame>
+        <SetPasswordView
+          onSetPassword={async (password) => {
+            await updatePassword(password);
+            setNeedsPasswordSetup(false);
+            window.history.replaceState(null, '', window.location.pathname);
+          }}
         />
       </IPhoneFrame>
     );
