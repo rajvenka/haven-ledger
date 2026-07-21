@@ -7,7 +7,8 @@ import {
   Layers, 
   Copy, 
   Check, 
-  LogOut
+  LogOut,
+  Plus
 } from 'lucide-react';
 import { RecurringPayment, UserProfile, Workspace } from '../types';
 import { BUILD_TIME } from '../buildTime';
@@ -49,6 +50,10 @@ export default function ProfileScopeModal({
 }: ProfileScopeModalProps) {
   const [copied, setCopied] = useState(false);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
+  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
+  const [newWorkspaceName, setNewWorkspaceName] = useState('');
+  const [newWorkspaceType, setNewWorkspaceType] = useState<'family' | 'business'>('business');
+  const [isCreatingBusy, setIsCreatingBusy] = useState(false);
 
   // Safely find the host group's customized names/references
   const hostUids = connections
@@ -176,6 +181,51 @@ export default function ProfileScopeModal({
                         ) : null}
                       </button>
                     ))}
+
+                    {!isCreatingWorkspace ? (
+                      <button
+                        onClick={() => setIsCreatingWorkspace(true)}
+                        className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-800 text-slate-400 hover:text-indigo-500 text-xs font-bold transition-all cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        {workspaces.some(w => w.type === 'business') ? 'New Workspace' : 'Add a Business Workspace'}
+                      </button>
+                    ) : (
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          if (!newWorkspaceName.trim()) return;
+                          setIsCreatingBusy(true);
+                          try {
+                            await onCreateWorkspace?.(newWorkspaceName.trim(), newWorkspaceType);
+                            setIsCreatingWorkspace(false);
+                            setNewWorkspaceName('');
+                          } finally {
+                            setIsCreatingBusy(false);
+                          }
+                        }}
+                        className="p-3 border border-slate-150 dark:border-slate-850 rounded-xl space-y-2"
+                      >
+                        <input
+                          autoFocus
+                          type="text"
+                          value={newWorkspaceName}
+                          onChange={(e) => setNewWorkspaceName(e.target.value)}
+                          placeholder="Workspace name, e.g. Acme Pty Ltd"
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+                        />
+                        <div className="flex gap-1.5">
+                          <button type="button" onClick={() => setNewWorkspaceType('family')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${newWorkspaceType === 'family' ? 'bg-[#007aff] text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Family</button>
+                          <button type="button" onClick={() => setNewWorkspaceType('business')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${newWorkspaceType === 'business' ? 'bg-[#34c759] text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Business</button>
+                        </div>
+                        <div className="flex gap-1.5">
+                          <button type="button" onClick={() => setIsCreatingWorkspace(false)} className="flex-1 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer">Cancel</button>
+                          <button type="submit" disabled={isCreatingBusy || !newWorkspaceName.trim()} className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer">
+                            {isCreatingBusy ? 'Creating…' : 'Create'}
+                          </button>
+                        </div>
+                      </form>
+                    )}
                   </div>
                 </div>
               )}
