@@ -125,7 +125,7 @@ export function usePaymentState() {
   const refreshWorkspaces = useCallback(async (uid: string, preferredActiveId?: string | null) => {
     const { data: memberships } = await supabase
       .from('workspace_members')
-      .select('workspace_id, role, access_level, workspaces(id, name, type, invite_code, owner_id, income_mode, monthly_income)')
+      .select('workspace_id, role, access_level, enabled_features, workspaces(id, name, type, invite_code, owner_id, income_mode, monthly_income)')
       .eq('user_id', uid);
 
     const list: Workspace[] = (memberships ?? []).map((m: any) => ({
@@ -138,6 +138,7 @@ export function usePaymentState() {
       incomeMode: (m.workspaces?.income_mode ?? 'simple') as 'simple' | 'detailed',
       monthlyIncome: m.workspaces?.monthly_income ?? '',
       accessLevel: (m.access_level ?? 'full') as 'full' | 'limited',
+      enabledFeatures: m.workspaces?.owner_id === uid ? ['income', 'rewards', 'ai', 'team', 'chat', 'agent'] : (m.enabled_features ?? ['income', 'rewards', 'ai', 'team', 'chat', 'agent']),
     }));
     setWorkspaces(list);
 
@@ -159,12 +160,12 @@ export function usePaymentState() {
 
     const { data: invites } = await supabase
       .from('workspace_invitations')
-      .select('id, workspace_id, from_user_id, to_email, proposed_role, proposed_access_level, status, created_at, workspaces(name, invite_code), profiles!workspace_invitations_from_user_id_fkey(email, display_name)')
+      .select('id, workspace_id, from_user_id, to_email, proposed_role, proposed_access_level, proposed_features, status, created_at, workspaces(name, invite_code), profiles!workspace_invitations_from_user_id_fkey(email, display_name)')
       .eq('status', 'pending');
 
     setIncomingInvitations((invites ?? []).map((i: any) => ({
       id: i.id, fromUid: i.from_user_id, fromEmail: i.profiles?.email ?? '', fromName: i.profiles?.display_name ?? i.profiles?.email ?? 'Workspace owner',
-      toEmail: i.to_email, proposedRole: i.proposed_role, proposedAccessLevel: i.proposed_access_level ?? 'full', status: i.status, createdAt: i.created_at, inviteCode: i.workspaces?.invite_code,
+      toEmail: i.to_email, proposedRole: i.proposed_role, proposedAccessLevel: i.proposed_access_level ?? 'full', proposedFeatures: i.proposed_features ?? [], status: i.status, createdAt: i.created_at, inviteCode: i.workspaces?.invite_code,
     })));
 
     return nextActive;
@@ -301,14 +302,14 @@ export function usePaymentState() {
     await createWorkspace(mode === 'business' ? 'My Business' : 'My Family', mode);
   };
 
-  const addFamilyMember = async (email: string, role: 'view' | 'modify' = 'modify', accessLevel: 'full' | 'limited' = 'full') => {
+  const addFamilyMember = async (email: string, role: 'view' | 'modify' = 'modify', accessLevel: 'full' | 'limited' = 'full', features: string[] = ['income', 'rewards', 'ai', 'team', 'chat', 'agent']) => {
     if (!user) throw new Error('Not signed in.');
     if (!activeWorkspace) throw new Error('Create a workspace first.');
     if (activeWorkspace.role !== 'host') throw new Error('Only the workspace owner can invite members.');
     setIsSyncing(true);
     try {
       const cleanEmail = email.trim().toLowerCase();
-      const { error } = await supabase.from('workspace_invitations').insert({ workspace_id: activeWorkspace.id, from_user_id: user.id, to_email: cleanEmail, proposed_role: role, proposed_access_level: accessLevel });
+      const { error } = await supabase.from('workspace_invitations').insert({ workspace_id: activeWorkspace.id, from_user_id: user.id, to_email: cleanEmail, proposed_role: role, proposed_access_level: accessLevel, proposed_features: features });
       if (error) throw error;
 
       const { data: emailResult, error: emailError } = await supabase.functions.invoke('invite-workspace-member', {
@@ -344,7 +345,7 @@ export function usePaymentState() {
     try {
       const invite = incomingInvitations.find(i => i.id === invitationId);
       if (!invite) throw new Error('Invitation not found.');
-      const { error: rpcErr } = await supabase.rpc('join_workspace_by_code', { code: invite.inviteCode, requested_role: role, requested_access_level: invite.proposedAccessLevel || 'full' });
+      const { error: rpcErr } = await supabase.rpc('join_workspace_by_code', { code: invite.inviteCode, requested_role: role, requested_access_level: invite.proposedAccessLevel || 'full', requested_features: invite.proposedFeatures || ['income', 'rewards', 'ai', 'team', 'chat', 'agent'] });
       if (rpcErr) throw rpcErr;
       await supabase.from('workspace_invitations').update({ status: 'approved' }).eq('id', invitationId);
       await refreshWorkspaces(user.id, activeWorkspaceId);

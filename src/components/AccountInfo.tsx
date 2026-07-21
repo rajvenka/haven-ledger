@@ -42,7 +42,7 @@ interface AccountInfoProps {
   familyMembers: UserProfile[];
   familyRole?: 'host' | 'modify' | 'view' | null;
   isReadOnly?: boolean;
-  onAddFamilyMember: (email: string, role?: 'view' | 'modify', accessLevel?: 'full' | 'limited') => Promise<void>;
+  onAddFamilyMember: (email: string, role?: 'view' | 'modify', accessLevel?: 'full' | 'limited', features?: string[]) => Promise<void>;
   onCreateFamily?: () => Promise<void>;
   onJoinFamilyGroup: (code: string) => Promise<void>;
   onLeaveFamilyGroup?: () => Promise<void>;
@@ -194,7 +194,10 @@ export default function AccountInfo({
   // Family forms state
   const [familyEmail, setFamilyEmail] = useState('');
   const [familyEmailRole, setFamilyEmailRole] = useState<'view' | 'modify'>('modify');
-  const [familyAccessLevel, setFamilyAccessLevel] = useState<'full' | 'limited'>('full');
+  const ALL_FEATURES = ['income', 'rewards', 'ai', 'team', 'chat', 'agent'];
+  const [familyFeatures, setFamilyFeatures] = useState<string[]>(ALL_FEATURES);
+  const toggleFeature = (f: string) => setFamilyFeatures(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
+  const FEATURE_META: Record<string, string> = { income: 'Income', rewards: 'Rewards & Perks', ai: 'AI Insights', team: 'Family Sharing / Team', chat: 'Family Chat', agent: 'AI Agent' };
   const [joinGroupId, setJoinGroupId] = useState('');
   const [copied, setCopied] = useState(false);
   const [familyError, setFamilyError] = useState<string | null>(null);
@@ -219,7 +222,8 @@ export default function AccountInfo({
     setFamilySuccess(null);
     setFamilyLoading(true);
     try {
-      await onAddFamilyMember(familyEmail, familyEmailRole, familyAccessLevel);
+      const accessLevel = familyFeatures.length >= ALL_FEATURES.length ? 'full' : 'limited';
+      await onAddFamilyMember(familyEmail, familyEmailRole, accessLevel, familyFeatures);
       setFamilySuccess(`Successfully sent family invitation to "${familyEmail}"!`);
       setFamilyEmail('');
     } catch (err: any) {
@@ -605,25 +609,29 @@ export default function AccountInfo({
                     <UserPlus className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="flex gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setFamilyAccessLevel('full')}
-                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer transition-all ${familyAccessLevel === 'full' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
-                  >
-                    Full App Access
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFamilyAccessLevel('limited')}
-                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer transition-all ${familyAccessLevel === 'limited' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
-                  >
-                    Limited (Bills Only)
-                  </button>
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">App Access</span>
+                  <div className="flex gap-1">
+                    <button type="button" onClick={() => setFamilyFeatures(ALL_FEATURES)} className="text-[9px] font-bold text-indigo-500 cursor-pointer">Full</button>
+                    <span className="text-[9px] text-slate-300">·</span>
+                    <button type="button" onClick={() => setFamilyFeatures([])} className="text-[9px] font-bold text-indigo-500 cursor-pointer">Light (Bills Only)</button>
+                  </div>
                 </div>
-                {familyAccessLevel === 'limited' && (
-                  <p className="text-[9px] text-slate-400">They'll only see Dashboard, Expenses, Manage Bills, and Payment History — no Income, Rewards, AI, or Team settings.</p>
-                )}              </form>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {ALL_FEATURES.map(f => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => toggleFeature(f)}
+                      className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer transition-all text-left ${familyFeatures.includes(f) ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900' : 'bg-slate-50 dark:bg-slate-900 text-slate-400 border border-slate-100 dark:border-slate-800'}`}
+                    >
+                      {familyFeatures.includes(f) ? <Check className="w-3 h-3 shrink-0" /> : <span className="w-3 h-3 shrink-0" />}
+                      {FEATURE_META[f]}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[9px] text-slate-400">Dashboard, Expenses, Manage Bills, and Payment History are always included. Pick which extras this person can see.</p>
+              </form>
               </>
               )}
               {familyError && <p className="text-[10px] text-red-500 font-semibold">{familyError}</p>}

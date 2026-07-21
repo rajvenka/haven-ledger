@@ -156,19 +156,19 @@ export default function App() {
   const [isAgentOpen, setIsAgentOpen] = useState(false);
   const [isFamilyChatOpen, setIsFamilyChatOpen] = useState(false);
 
-  // Limited-access members only see the essentials: Dashboard, Expenses, Manage Bills, Payment History.
+  // Limited-access members only see the essentials; hasFeature checks each optional tab individually.
   const isLimitedAccess = activeWorkspace?.accessLevel === 'limited';
+  const hasFeature = (feature: string) => !activeWorkspace?.enabledFeatures || activeWorkspace.enabledFeatures.includes(feature);
 
   // Hard enforcement: even if activeTab somehow points at a gated tab (stale state, direct
   // manipulation), bounce back to the dashboard rather than just hiding the nav link.
   React.useEffect(() => {
-    if (isLimitedAccess && ['income', 'rewards', 'ai', 'admin_users'].includes(activeTab)) {
-      setActiveTab('summary');
-    }
-    if (isLimitedAccess && activeTab === 'account' && settingsSubTab === 'members') {
-      setSettingsSubTab('preferences');
-    }
-  }, [isLimitedAccess, activeTab, settingsSubTab]);
+    if (!hasFeature('income') && activeTab === 'income') setActiveTab('summary');
+    if (!hasFeature('rewards') && activeTab === 'rewards') setActiveTab('summary');
+    if (!hasFeature('ai') && activeTab === 'ai') setActiveTab('summary');
+    if (isLimitedAccess && activeTab === 'admin_users') setActiveTab('summary');
+    if (!hasFeature('team') && activeTab === 'account' && settingsSubTab === 'members') setSettingsSubTab('preferences');
+  }, [activeWorkspace, activeTab, settingsSubTab]);
 
   const toggleAgent = () => {
     setIsAgentOpen(prev => !prev);
@@ -500,7 +500,7 @@ export default function App() {
                     )}
                   </button>
 
-                  {!isLimitedAccess && (
+                  {hasFeature('ai') && (
                   <button
                     onClick={() => setActiveTab('ai')}
                     className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
@@ -561,7 +561,7 @@ export default function App() {
                     )}
                   </button>
 
-                  {!isLimitedAccess && (
+                  {hasFeature('income') && (
                   <button
                     onClick={() => setActiveTab('income')}
                     className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
@@ -580,7 +580,7 @@ export default function App() {
                   </button>
                   )}
 
-                  {activeWorkspace?.type !== 'business' && !isLimitedAccess && (
+                  {activeWorkspace?.type !== 'business' && hasFeature('rewards') && (
                     <button
                       onClick={() => setActiveTab('rewards')}
                       className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
@@ -621,7 +621,7 @@ export default function App() {
               </div>
 
               {/* SECTION: NETWORK & TEAMS */}
-              {!isLimitedAccess && (
+              {hasFeature('team') && (
               <div className="space-y-1">
                 <span className="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 tracking-wider uppercase block text-left">
                   Network & Teams
@@ -846,7 +846,7 @@ export default function App() {
                         )}
                       </button>
 
-                      {!isLimitedAccess && (
+                      {hasFeature('ai') && (
                       <button
                         onClick={() => {
                           setActiveTab('ai');
@@ -916,7 +916,7 @@ export default function App() {
                         )}
                       </button>
 
-                      {!isLimitedAccess && (
+                      {hasFeature('income') && (
                       <button
                         onClick={() => { setActiveTab('income'); setIsMobileMenuOpen(false); }}
                         className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
@@ -935,7 +935,7 @@ export default function App() {
                       </button>
                       )}
 
-                      {activeWorkspace?.type !== 'business' && !isLimitedAccess && (
+                      {activeWorkspace?.type !== 'business' && hasFeature('rewards') && (
                         <button
                           onClick={() => { setActiveTab('rewards'); setIsMobileMenuOpen(false); }}
                           className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
@@ -976,7 +976,7 @@ export default function App() {
                   </div>
 
                   {/* SECTION: NETWORK & TEAMS */}
-                  {!isLimitedAccess && (
+                  {hasFeature('team') && (
                   <div className="space-y-1">
                     <span className="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 tracking-wider uppercase block text-left">
                       Network & Teams
@@ -1777,7 +1777,7 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        {user && (
+        {user && hasFeature('agent') && (
           <AgentAssistant 
             payments={payments}
             history={history}
@@ -1794,7 +1794,7 @@ export default function App() {
           />
         )}
 
-        {user && (
+        {user && hasFeature('chat') && (
           <FamilyChatAssistant
             currentUserUid={user.id}
             userProfile={userProfile}
@@ -1807,8 +1807,9 @@ export default function App() {
         )}
 
         {/* Consolidated Agent + Family Chat floating capsule */}
-        {user && (
+        {user && (hasFeature('agent') || hasFeature('chat')) && (
           <div className="fixed bottom-24 right-6 md:bottom-8 md:right-8 z-40 flex items-center gap-1.5 p-1 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border border-slate-200/80 dark:border-slate-900/80 rounded-full shadow-lg">
+            {hasFeature('agent') && (
             <button
               onClick={toggleAgent}
               className={`p-2.5 rounded-full transition-all duration-200 cursor-pointer flex items-center justify-center relative ${
@@ -1823,9 +1824,13 @@ export default function App() {
                 <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-[#007aff] animate-pulse" />
               )}
             </button>
+            )}
 
+            {hasFeature('agent') && hasFeature('chat') && (
             <div className="w-px h-4 bg-slate-200 dark:bg-slate-800" />
+            )}
 
+            {hasFeature('chat') && (
             <button
               onClick={toggleFamilyChat}
               className={`p-2.5 rounded-full transition-all duration-200 cursor-pointer flex items-center justify-center relative ${
@@ -1840,6 +1845,7 @@ export default function App() {
                 <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-emerald-500" />
               )}
             </button>
+            )}
           </div>
         )}
 
