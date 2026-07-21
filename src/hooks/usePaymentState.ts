@@ -181,6 +181,7 @@ export function usePaymentState() {
         setUserProfile({
           uid: profile.id, email: profile.email, displayName: profile.display_name, familyGroupId: '',
           isSuperAdmin: profile.is_super_admin ?? false,
+          whatsappPhone: profile.whatsapp_phone ?? undefined,
           appNotificationsEnabled: profile.app_notifications_enabled, mobileNotificationsEnabled: profile.mobile_notifications_enabled,
         });
         setAppNotificationsEnabled(profile.app_notifications_enabled ?? true);
@@ -783,6 +784,23 @@ export function usePaymentState() {
     return data;
   };
 
+  // ---------- WhatsApp linking ----------
+  const startWhatsAppVerification = async (phone: string) => {
+    if (!user) throw new Error('Not signed in.');
+    const cleanPhone = phone.replace(/[^\d]/g, '');
+    if (cleanPhone.length < 8) throw new Error('Enter a valid phone number with country code, e.g. 14155552671.');
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const { error } = await supabase.from('whatsapp_verifications').insert({ user_id: user.id, phone: cleanPhone, code });
+    if (error) throw error;
+    return code;
+  };
+
+  const disconnectWhatsApp = async () => {
+    if (!user) return;
+    await supabase.from('profiles').update({ whatsapp_phone: null }).eq('id', user.id);
+    setUserProfile(prev => prev ? { ...prev, whatsappPhone: undefined } : prev);
+  };
+
   const resetToDefaults = async () => {
     if (!user) return;
     setIsSyncing(true);
@@ -864,6 +882,7 @@ export function usePaymentState() {
     addCountry, updateCountry, deleteCountry,
     triggerNotification, dismissNotification, markAllNotificationsRead, clearNotifications,
     checkPaymentReminders, requestNotificationPermission, resetToDefaults, fetchAllUsersForAdmin, inviteNewUser,
+    startWhatsAppVerification, disconnectWhatsApp,
     appNotificationsEnabled, mobileNotificationsEnabled, saveNotificationSettings,
   };
 }

@@ -137,6 +137,8 @@ export default function App() {
     resetToDefaults,
     fetchAllUsersForAdmin,
     inviteNewUser,
+    startWhatsAppVerification,
+    disconnectWhatsApp,
     appNotificationsEnabled,
     mobileNotificationsEnabled,
     saveNotificationSettings,
@@ -1209,6 +1211,8 @@ export default function App() {
                 onAddBulkPayments={addBulkPayments}
                 workspaceBackups={workspaceBackups}
                 onRestoreFromBackup={restoreFromBackup}
+                onStartWhatsAppVerification={startWhatsAppVerification}
+                onDisconnectWhatsApp={disconnectWhatsApp}
                 onCreateFamily={async () => { await createWorkspace(activeWorkspace?.type === 'business' ? 'My Business' : 'My Family', activeWorkspace?.type || 'family'); }}
                 onJoinFamilyGroup={joinFamilyGroup}
                 onLeaveFamilyGroup={leaveFamilyGroup}

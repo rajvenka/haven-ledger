@@ -34,6 +34,8 @@ import { RecurringPayment, Currency, UserProfile, CountryConfig, FamilyInvitatio
 interface AccountInfoProps {
   payments: RecurringPayment[];
   onAddBulkPayments?: (payments: Omit<RecurringPayment, 'id'>[]) => Promise<void>;
+  onStartWhatsAppVerification?: (phone: string) => Promise<string>;
+  onDisconnectWhatsApp?: () => Promise<void>;
   workspaceBackups?: { id: string; created_at: string; snapshot: any }[];
   onRestoreFromBackup?: (backupId: string) => Promise<void>;
   userProfile: UserProfile | null;
@@ -79,6 +81,8 @@ interface AccountInfoProps {
 export default function AccountInfo({
   payments,
   onAddBulkPayments,
+  onStartWhatsAppVerification,
+  onDisconnectWhatsApp,
   workspaceBackups = [],
   onRestoreFromBackup,
   userProfile,
@@ -136,6 +140,24 @@ export default function AccountInfo({
   const [newCurrencyRate, setNewCurrencyRate] = useState('');
   const [currencyError, setCurrencyError] = useState<string | null>(null);
   const [currencyBusy, setCurrencyBusy] = useState(false);
+  const [waPhone, setWaPhone] = useState('');
+  const [waCode, setWaCode] = useState<string | null>(null);
+  const [waError, setWaError] = useState<string | null>(null);
+  const [waBusy, setWaBusy] = useState(false);
+
+  const handleStartWhatsApp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setWaError(null);
+    setWaBusy(true);
+    try {
+      const code = await onStartWhatsAppVerification?.(waPhone);
+      setWaCode(code || null);
+    } catch (err: any) {
+      setWaError(err.message || 'Could not start verification.');
+    } finally {
+      setWaBusy(false);
+    }
+  };
 
   const handleAddCurrency = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1065,6 +1087,56 @@ export default function AccountInfo({
 
       {currentSubTab === 'security' && (
         <>
+          {/* Connect WhatsApp */}
+          <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 shrink-0">
+            <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+              <MessageSquare className="w-4 h-4 text-emerald-500" /> Connect WhatsApp
+            </h4>
+            {userProfile?.whatsappPhone ? (
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-slate-900 dark:text-white">+{userProfile.whatsappPhone}</p>
+                  <p className="text-[10px] text-emerald-500 font-semibold">Connected</p>
+                </div>
+                <button
+                  onClick={() => onDisconnectWhatsApp?.()}
+                  className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer"
+                >
+                  Disconnect
+                </button>
+              </div>
+            ) : waCode ? (
+              <div className="space-y-2">
+                <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                  Text this code to our WhatsApp number to finish linking:
+                </p>
+                <div className="px-3 py-2 bg-slate-50 dark:bg-slate-900 rounded-lg font-mono text-lg font-bold tracking-widest text-center text-emerald-600 dark:text-emerald-400">
+                  {waCode}
+                </div>
+                <button onClick={() => setWaCode(null)} className="text-[10px] text-slate-400 underline cursor-pointer">Use a different number</button>
+              </div>
+            ) : (
+              <form onSubmit={handleStartWhatsApp} className="flex gap-2">
+                <input
+                  type="tel"
+                  value={waPhone}
+                  onChange={(e) => setWaPhone(e.target.value)}
+                  placeholder="Phone with country code, e.g. 14155552671"
+                  className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+                />
+                <button
+                  type="submit"
+                  disabled={waBusy || !waPhone.trim()}
+                  className="px-3 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-[11px] font-black uppercase tracking-wider rounded-lg cursor-pointer"
+                >
+                  {waBusy ? '...' : 'Link'}
+                </button>
+              </form>
+            )}
+            {waError && <p className="text-[10px] text-red-500 font-semibold">{waError}</p>}
+            <p className="text-[9px] text-slate-400">Once linked, text things like "log gas bill $200" or "what's due today?" and Haven Vault replies right in WhatsApp.</p>
+          </div>
+
           {/* Backup and Restore Utilities Accordion (High Density Styled Cards) */}
           <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 shrink-0">
         <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
