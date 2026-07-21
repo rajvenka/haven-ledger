@@ -134,6 +134,7 @@ export default function App() {
     requestNotificationPermission,
     resetToDefaults,
     fetchAllUsersForAdmin,
+    inviteNewUser,
     appNotificationsEnabled,
     mobileNotificationsEnabled,
     saveNotificationSettings,
@@ -1216,7 +1217,7 @@ export default function App() {
                 isReadOnly={isReadOnly}
               />
             ) : activeTab === 'admin_users' && userProfile?.isSuperAdmin ? (
-              <AdminUsersView fetchAllUsersForAdmin={fetchAllUsersForAdmin} />
+              <AdminUsersView fetchAllUsersForAdmin={fetchAllUsersForAdmin} inviteNewUser={inviteNewUser} />
             ) : (
               <PaymentHistoryView 
                 history={history}

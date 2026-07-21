@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Users, Home, Briefcase, RefreshCw } from 'lucide-react';
+import { ShieldCheck, Users, Home, Briefcase, RefreshCw, UserPlus, Check } from 'lucide-react';
 
 interface AdminUser {
   id: string;
@@ -12,12 +12,17 @@ interface AdminUser {
 
 interface AdminUsersViewProps {
   fetchAllUsersForAdmin: () => Promise<AdminUser[]>;
+  inviteNewUser: (email: string) => Promise<any>;
 }
 
-export default function AdminUsersView({ fetchAllUsersForAdmin }: AdminUsersViewProps) {
+export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser }: AdminUsersViewProps) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -33,6 +38,24 @@ export default function AdminUsersView({ fetchAllUsersForAdmin }: AdminUsersView
   };
 
   useEffect(() => { load(); }, []);
+
+  const handleInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInviteError(null);
+    setInviteSuccess(null);
+    if (!inviteEmail.trim()) return;
+    setInviteBusy(true);
+    try {
+      await inviteNewUser(inviteEmail.trim().toLowerCase());
+      setInviteSuccess(`Invite sent to ${inviteEmail.trim()} — they'll get an email to set their password.`);
+      setInviteEmail('');
+      await load();
+    } catch (err: any) {
+      setInviteError(err.message || 'Failed to send invite.');
+    } finally {
+      setInviteBusy(false);
+    }
+  };
 
   return (
     <div className="space-y-5 text-left animate-in fade-in-50 duration-300">
@@ -53,6 +76,35 @@ export default function AdminUsersView({ fetchAllUsersForAdmin }: AdminUsersView
         >
           <RefreshCw className={`w-4 h-4 text-slate-500 ${loading ? 'animate-spin' : ''}`} />
         </button>
+      </div>
+
+      <div className="apple-card p-4 space-y-2.5">
+        <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+          <UserPlus className="w-3.5 h-3.5" /> Invite New User
+        </span>
+        <form onSubmit={handleInvite} className="flex gap-2">
+          <input
+            type="email"
+            value={inviteEmail}
+            onChange={(e) => setInviteEmail(e.target.value)}
+            placeholder="name@email.com"
+            className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+          />
+          <button
+            type="submit"
+            disabled={inviteBusy || !inviteEmail.trim()}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase tracking-wider rounded-lg cursor-pointer"
+          >
+            {inviteBusy ? 'Sending…' : 'Send Invite'}
+          </button>
+        </form>
+        {inviteError && <p className="text-[10px] text-red-500 font-semibold">{inviteError}</p>}
+        {inviteSuccess && (
+          <p className="text-[10px] text-emerald-500 font-semibold flex items-center gap-1">
+            <Check className="w-3 h-3" /> {inviteSuccess}
+          </p>
+        )}
+        <p className="text-[9px] text-slate-400">Creates the account and emails them a link to set their own password — they won't need a workspace invite code separately unless you want them in a specific workspace.</p>
       </div>
 
       {error && (

@@ -756,6 +756,16 @@ export function usePaymentState() {
     }));
   };
 
+  // Super-admin only: create a new user account and email them an invite to set their password.
+  const inviteNewUser = async (email: string) => {
+    const { data, error } = await supabase.functions.invoke('admin-invite-user', {
+      body: { email, redirectTo: `${window.location.origin}/` },
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    return data;
+  };
+
   const resetToDefaults = async () => {
     if (!user) return;
     setIsSyncing(true);
@@ -836,7 +846,7 @@ export function usePaymentState() {
     deleteHistoryEntry, updateHistoryStatus, clearHistory, saveRate, saveSummaryCurrency,
     addCountry, updateCountry, deleteCountry,
     triggerNotification, dismissNotification, markAllNotificationsRead, clearNotifications,
-    checkPaymentReminders, requestNotificationPermission, resetToDefaults, fetchAllUsersForAdmin,
+    checkPaymentReminders, requestNotificationPermission, resetToDefaults, fetchAllUsersForAdmin, inviteNewUser,
     appNotificationsEnabled, mobileNotificationsEnabled, saveNotificationSettings,
   };
 }
