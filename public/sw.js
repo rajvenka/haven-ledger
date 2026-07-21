@@ -1,10 +1,16 @@
-const CACHE_NAME = 'haven-ledger-cache-v2-20260722';
+const CACHE_NAME = 'haven-ledger-cache-v3-20260722';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
   '/icon.svg'
 ];
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
 
 // Install listener - cache assets
 self.addEventListener('install', (event) => {
