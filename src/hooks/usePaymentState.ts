@@ -176,6 +176,7 @@ export function usePaymentState() {
       if (profile) {
         setUserProfile({
           uid: profile.id, email: profile.email, displayName: profile.display_name, familyGroupId: '',
+          isSuperAdmin: profile.is_super_admin ?? false,
           appNotificationsEnabled: profile.app_notifications_enabled, mobileNotificationsEnabled: profile.mobile_notifications_enabled,
         });
         setAppNotificationsEnabled(profile.app_notifications_enabled ?? true);
@@ -730,6 +731,31 @@ export function usePaymentState() {
     if (user) await supabase.from('profiles').update({ app_notifications_enabled: appVal, mobile_notifications_enabled: mobileVal }).eq('id', user.id);
   };
 
+  // Super-admin only: fetch every registered user + a per-user workspace summary.
+  // Relies entirely on the DB-side is_super_admin() check via RLS — returns empty for anyone else.
+  const fetchAllUsersForAdmin = async () => {
+    const { data: profiles, error } = await supabase
+      .from('profiles')
+      .select('id, email, display_name, created_at, is_super_admin')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+
+    const { data: memberships } = await supabase
+      .from('workspace_members')
+      .select('user_id, role, workspaces(id, name, type)');
+
+    return (profiles ?? []).map((p: any) => ({
+      id: p.id,
+      email: p.email,
+      displayName: p.display_name,
+      createdAt: p.created_at,
+      isSuperAdmin: p.is_super_admin,
+      workspaces: (memberships ?? [])
+        .filter((m: any) => m.user_id === p.id)
+        .map((m: any) => ({ id: m.workspaces?.id, name: m.workspaces?.name, type: m.workspaces?.type, role: m.role })),
+    }));
+  };
+
   const resetToDefaults = async () => {
     if (!user) return;
     setIsSyncing(true);
@@ -810,7 +836,7 @@ export function usePaymentState() {
     deleteHistoryEntry, updateHistoryStatus, clearHistory, saveRate, saveSummaryCurrency,
     addCountry, updateCountry, deleteCountry,
     triggerNotification, dismissNotification, markAllNotificationsRead, clearNotifications,
-    checkPaymentReminders, requestNotificationPermission, resetToDefaults,
+    checkPaymentReminders, requestNotificationPermission, resetToDefaults, fetchAllUsersForAdmin,
     appNotificationsEnabled, mobileNotificationsEnabled, saveNotificationSettings,
   };
 }

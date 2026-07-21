@@ -128,6 +128,7 @@ export interface UserProfile {
   email: string;
   displayName?: string;
   familyGroupId: string;
+  isSuperAdmin?: boolean;
   appNotificationsEnabled?: boolean;
   mobileNotificationsEnabled?: boolean;
   ownNotificationsEnabled?: boolean;
