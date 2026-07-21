@@ -368,6 +368,38 @@ export default function App() {
 
   // 2.5 Onboarding: user is authenticated but has no workspace yet
   if (user && workspaces.length === 0) {
+    // If they were invited to a workspace, show that first - don't force them into
+    // creating their own when they're actually here to join someone else's.
+    if (incomingInvitations.length > 0) {
+      return (
+        <IPhoneFrame>
+          <div className="flex-1 flex flex-col justify-center px-6 py-10 bg-slate-50 dark:bg-slate-900 gap-4">
+            <div className="text-center space-y-1.5 mb-2">
+              <h2 className="text-base font-black text-slate-900 dark:text-white">You've Been Invited</h2>
+              <p className="text-[11px] text-slate-400 font-semibold">Accept to join, or create your own workspace instead.</p>
+            </div>
+            {incomingInvitations.map(inv => (
+              <div key={inv.id} className="bg-white dark:bg-slate-950 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{inv.fromName}</p>
+                  <p className="text-[10px] text-slate-400">Invited you as {inv.proposedRole === 'view' ? 'View Only' : 'Editor'}</p>
+                </div>
+                <div className="flex gap-1.5 shrink-0">
+                  <button onClick={() => approveInvitation(inv.id, inv.proposedRole)} className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black rounded-lg cursor-pointer">Accept</button>
+                  <button onClick={() => declineInvitation(inv.id)} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black rounded-lg cursor-pointer">Decline</button>
+                </div>
+              </div>
+            ))}
+            <details className="text-center">
+              <summary className="text-[10px] text-indigo-500 font-bold cursor-pointer list-none">Prefer to create your own workspace instead?</summary>
+              <div className="mt-3">
+                <OnboardingView onSelectMode={setWorkspaceMode} isSyncing={isSyncing} />
+              </div>
+            </details>
+          </div>
+        </IPhoneFrame>
+      );
+    }
     return (
       <IPhoneFrame>
         <OnboardingView onSelectMode={setWorkspaceMode} isSyncing={isSyncing} />

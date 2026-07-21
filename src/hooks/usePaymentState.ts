@@ -305,9 +305,22 @@ export function usePaymentState() {
     if (activeWorkspace.role !== 'host') throw new Error('Only the workspace owner can invite members.');
     setIsSyncing(true);
     try {
-      const { error } = await supabase.from('workspace_invitations').insert({ workspace_id: activeWorkspace.id, from_user_id: user.id, to_email: email.trim().toLowerCase(), proposed_role: role });
+      const cleanEmail = email.trim().toLowerCase();
+      const { error } = await supabase.from('workspace_invitations').insert({ workspace_id: activeWorkspace.id, from_user_id: user.id, to_email: cleanEmail, proposed_role: role });
       if (error) throw error;
-      triggerNotification('Invitation Sent 👥', `Invited "${email}". Share your code: ${activeWorkspace.inviteCode}`, 'info');
+
+      const { data: emailResult, error: emailError } = await supabase.functions.invoke('invite-workspace-member', {
+        body: { email: cleanEmail, workspaceId: activeWorkspace.id, redirectTo: `${window.location.origin}/` },
+      });
+
+      if (emailError || emailResult?.error) {
+        // The invitation record still exists, so they're not locked out — just flag that the email itself didn't go out.
+        triggerNotification('Invitation Saved, Email Failed ⚠️', `"${cleanEmail}" was added to pending invites, but the notification email couldn't be sent. Share your code manually: ${activeWorkspace.inviteCode}`, 'warning');
+      } else if (emailResult?.alreadyHadAccount) {
+        triggerNotification('Invitation Sent 👥', `"${cleanEmail}" already has an account — they'll see this invitation next time they log in.`, 'info');
+      } else {
+        triggerNotification('Invitation Emailed 📧', `"${cleanEmail}" was emailed a link to create their account and join.`, 'info');
+      }
     } finally { setIsSyncing(false); }
   };
 
