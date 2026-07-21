@@ -37,6 +37,7 @@ export default async function handler(req: any, res: any) {
         NEVER write out your thought process, uncertainty, or deliberation as the content of a field (e.g. never write something like "or we can omit it but let's just..." as a field's value).
         If you are unsure whether a field applies, the correct action is to OMIT that field entirely or set it to null — not to describe your uncertainty inside the field itself.
         Every field value must be short (under 40 characters for names/tags) and read like real data a human typed, never like a sentence explaining a decision.
+        The "amount" field must exactly match the dollar figure the user actually stated in their message (e.g. if they said "$444", amount must be 444 — never a placeholder, a rounded guess, or an unrelated number).
 
         *** CRITICAL: FOLLOW-UP QUESTIONS & DATA COLLECTION RULES ***
         You MUST gather all essential details before executing any financial action. NEVER use dummy, default, or guessed values for key details.

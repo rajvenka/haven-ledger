@@ -23,11 +23,23 @@ export async function generateContentWithFallback(params: { contents: any; confi
   const models = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"];
   let lastError: any = null;
 
+  // Disable extended "thinking" — these are all structured JSON extraction tasks where we
+  // need only the final answer. Thinking budget 0 prevents the model's raw deliberation
+  // from ever leaking into a response field (root cause of garbled field values like
+  // "let's just provide amount and status..." showing up as actual data).
+  const mergedParams = {
+    ...params,
+    config: {
+      ...params.config,
+      thinkingConfig: { thinkingBudget: 0, includeThoughts: false, ...params.config?.thinkingConfig },
+    },
+  };
+
   for (const model of models) {
     const maxRetries = 2;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const response = await getGeminiAI().models.generateContent({ model, ...params });
+        const response = await getGeminiAI().models.generateContent({ model, ...mergedParams });
         return response;
       } catch (error: any) {
         lastError = error;
