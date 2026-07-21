@@ -192,7 +192,7 @@ export function usePaymentState() {
 
   const reloadData = useCallback(async () => {
     if (!user) return;
-    const wsFilter = activeWorkspaceId ? `user_id.eq.${user.id},workspace_id.eq.${activeWorkspaceId}` : `user_id.eq.${user.id}`;
+    const wsFilter = activeWorkspaceId ? `workspace_id.eq.${activeWorkspaceId}` : `user_id.eq.${user.id},workspace_id.is.null`;
     const [{ data: pays }, { data: hist }, { data: cts }, { data: notifs }, { data: rewards }] = await Promise.all([
       supabase.from('recurring_payments').select('*').or(wsFilter).order('sort_order', { ascending: true, nullsFirst: false }),
       supabase.from('payment_history').select('*').or(wsFilter).order('paid_date', { ascending: false }),
@@ -423,7 +423,7 @@ export function usePaymentState() {
 
   const loadIncome = useCallback(async () => {
     if (!user) return;
-    const wsFilter = activeWorkspaceId ? `user_id.eq.${user.id},workspace_id.eq.${activeWorkspaceId}` : `user_id.eq.${user.id}`;
+    const wsFilter = activeWorkspaceId ? `workspace_id.eq.${activeWorkspaceId}` : `user_id.eq.${user.id},workspace_id.is.null`;
     const { data } = await supabase.from('income_sources').select('*').or(wsFilter).order('created_at', { ascending: false });
     setIncomeSources((data ?? []).map((r: any) => ({
       id: r.id, name: r.name, amount: Number(r.amount), frequency: r.frequency, category: r.category, isRecurring: r.is_recurring, isSimpleTotal: r.is_simple_total, payDate: r.pay_date ?? undefined,
@@ -486,7 +486,7 @@ export function usePaymentState() {
 
   const loadBackups = useCallback(async () => {
     if (!user) return;
-    const wsFilter = activeWorkspaceId ? `user_id.eq.${user.id},workspace_id.eq.${activeWorkspaceId}` : `user_id.eq.${user.id}`;
+    const wsFilter = activeWorkspaceId ? `workspace_id.eq.${activeWorkspaceId}` : `user_id.eq.${user.id},workspace_id.is.null`;
     const { data } = await supabase.from('workspace_backups').select('id, created_at, snapshot').or(wsFilter).order('created_at', { ascending: false }).limit(14);
     setWorkspaceBackups(data ?? []);
   }, [user, activeWorkspaceId]);
