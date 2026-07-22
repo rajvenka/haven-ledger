@@ -27,7 +27,8 @@ import {
   Send,
   Trash2,
   ShieldCheck,
-  X
+  X,
+  ChevronDown
 } from 'lucide-react';
 import { RecurringPayment, Currency, UserProfile, CountryConfig, FamilyInvitation } from '../types';
 
@@ -973,19 +974,22 @@ export default function AccountInfo({
       {currentSubTab === 'preferences' && (
         <>
           {/* My Plan */}
-          <div className="bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3.5 shrink-0">
-            <div className="flex items-center justify-between">
+          <details open className="group bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm shrink-0">
+            <summary className="flex items-center justify-between cursor-pointer list-none">
               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" /> Plans that grow with you
               </span>
-              {myUpgradeRequest && (
-                <span className="px-2 py-1 bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase tracking-wide rounded-full">
-                  {myUpgradeRequest.planName} pending
-                </span>
-              )}
-            </div>
+              <div className="flex items-center gap-2">
+                {myUpgradeRequest && (
+                  <span className="px-2 py-1 bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase tracking-wide rounded-full">
+                    {myUpgradeRequest.planName} pending
+                  </span>
+                )}
+                <ChevronDown className="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180" />
+              </div>
+            </summary>
 
-            <div className="space-y-2.5">
+            <div className="space-y-2.5 mt-3.5">
               {accessPlans.map(plan => {
                 const isCurrent = plan.name === userProfile?.licensePlanName;
                 const isRequested = myUpgradeRequest?.planName === plan.name;
@@ -1031,14 +1035,18 @@ export default function AccountInfo({
                 );
               })}
             </div>
-          </div>
+          </details>
 
           {/* APP DISPLAY SETTINGS (Premium Bento card styling) */}
-          <div className="bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 shrink-0">
-        <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-900 pb-2.5">
-          <History className="w-4 h-4 text-indigo-500" />
-          <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Display Preferences</h4>
-        </div>
+          <details open className="group bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm shrink-0">
+        <summary className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-900 pb-2.5 cursor-pointer list-none">
+          <div className="flex items-center gap-2">
+            <History className="w-4 h-4 text-indigo-500" />
+            <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Display Preferences</h4>
+          </div>
+          <ChevronDown className="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="mt-3.5 space-y-4">
         
         {showInstructions && (
           <p className="text-[10px] text-slate-450 dark:text-slate-500 font-bold leading-normal text-left">
@@ -1069,13 +1077,18 @@ export default function AccountInfo({
           </div>
         </div>
       </div>
+      </details>
 
       {/* BENEFICIARY / PERSON TAGS CONFIG (Moved from ConfigurePayments page for visual simplification) */}
-      <div className="bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 shrink-0">
-        <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-900 pb-2.5">
-          <Settings className="w-4 h-4 text-indigo-500" />
-          <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Beneficiary / Person Tags Manager</h4>
-        </div>
+      <details open className="group bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm shrink-0">
+        <summary className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-900 pb-2.5 cursor-pointer list-none">
+          <div className="flex items-center gap-2">
+            <Settings className="w-4 h-4 text-indigo-500" />
+            <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Beneficiary / Person Tags Manager</h4>
+          </div>
+          <ChevronDown className="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="mt-3.5 space-y-3">
         {showInstructions && (
           <p className="text-[10px] text-slate-450 dark:text-slate-450 font-bold leading-normal">
             Customize default tagging labels (e.g. Father, Mother, Self) so each person's transactions are tracked with their customized identity tags.
@@ -1148,12 +1161,17 @@ export default function AccountInfo({
           ))}
         </div>
       </div>
+      </details>
 
       {/* Visual Theme Selection (Premium High Density Cards) */}
-      <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
-        <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-          <Settings className="w-4 h-4 text-indigo-500" /> App Visual Theme
-        </h4>
+      <details open className="group bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <summary className="flex items-center justify-between cursor-pointer list-none">
+          <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+            <Settings className="w-4 h-4 text-indigo-500" /> App Visual Theme
+          </h4>
+          <ChevronDown className="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="mt-3 space-y-3">
         {showInstructions && (
           <p className="text-[10px] text-slate-450 block mb-1 leading-tight text-left font-bold">
             Select your preferred viewing mode for the PayMonitor interface:
@@ -1205,6 +1223,7 @@ export default function AccountInfo({
           </button>
         </div>
       </div>
+      </details>
         </>
       )}
 
