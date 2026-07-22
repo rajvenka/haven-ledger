@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Award, 
+  LayoutList,
+  LayoutGrid,
   Calendar, 
   Plus, 
   Trash2, 
@@ -54,6 +56,13 @@ export default function RewardsTracker({
 }: RewardsTrackerProps) {
   // Main Navigation Tabs inside Tracker
   const [trackerTab, setTrackerTab] = useState<'trackers' | 'analytics' | 'calculator'>('trackers');
+  const [viewStyle, setViewStyle] = useState<'card' | 'compact'>(() => {
+    return (localStorage.getItem('rewards_view_style') as 'card' | 'compact') || 'card';
+  });
+  const setViewStyleAndSave = (style: 'card' | 'compact') => {
+    setViewStyle(style);
+    localStorage.setItem('rewards_view_style', style);
+  };
   const [aiInsights, setAiInsights] = useState<{ summary: string; tips: string[]; watchouts: string[] } | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -659,6 +668,22 @@ export default function RewardsTracker({
                     {stat === 'Cooling' ? 'Exclusion Countdown' : stat}
                   </button>
                 ))}
+                <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg ml-1.5">
+                  <button
+                    onClick={() => setViewStyleAndSave('card')}
+                    title="Card view"
+                    className={`p-1.5 rounded-md transition-all cursor-pointer ${viewStyle === 'card' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-400'}`}
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setViewStyleAndSave('compact')}
+                    title="Compact list view"
+                    className={`p-1.5 rounded-md transition-all cursor-pointer ${viewStyle === 'compact' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-400'}`}
+                  >
+                    <LayoutList className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -669,6 +694,65 @@ export default function RewardsTracker({
               <Award className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-700 mb-3" />
               <p className="text-xs font-bold">No active reward signups match your filter</p>
               <p className="text-[11px] mt-1">Try resetting the filters or register a card reward event above.</p>
+            </div>
+          ) : viewStyle === 'compact' ? (
+            <div className="apple-card divide-y divide-slate-100 dark:divide-slate-900 overflow-hidden">
+              {filteredPerks.map(perk => {
+                const details = getPerkStatusDetails(perk);
+                return (
+                  <div key={perk.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-3.5 py-2.5 text-left hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-all">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="shrink-0 text-slate-400">{getCategoryIcon(perk.category)}</span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">{perk.providerName}</h4>
+                          <span className={`px-1.5 py-0.2 border text-[8px] font-black uppercase tracking-wider rounded-full shrink-0 ${details.badgeClass}`}>
+                            {details.label}
+                          </span>
+                        </div>
+                        <p className="text-[9px] text-slate-400 truncate">
+                          {perk.applicantName || 'Unassigned'} · {perk.bonusValue}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-900">
+                      <div className="text-right">
+                        <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 block">
+                          +${Number(perk.cashValue || 0).toLocaleString()}
+                        </span>
+                        {Number(perk.annualFee || 0) > 0 && (
+                          <span className="text-[9px] font-bold text-rose-500 block">-${Number(perk.annualFee).toLocaleString()} fee</span>
+                        )}
+                      </div>
+
+                      {perk.closingDate && details.remainingText && (
+                        <span className={`text-[9px] font-bold whitespace-nowrap ${details.status === 'eligible' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {details.remainingText}
+                        </span>
+                      )}
+
+                      {!isReadOnly && (
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <button onClick={() => handleOpenEdit(perk)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-400 rounded-md transition-all" title="Edit">
+                            <Edit2 className="w-3 h-3" />
+                          </button>
+                          <button onClick={() => handleClone(perk)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-400 rounded-md transition-all" title="Clone">
+                            <Copy className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => { if (confirm('Are you sure you want to delete this tracked reward?')) onDeleteReward(perk.id); }}
+                            className="p-1 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-500 rounded-md transition-all"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
