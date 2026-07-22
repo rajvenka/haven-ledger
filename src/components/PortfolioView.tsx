@@ -95,6 +95,43 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const activeHoldings = portfolioHoldings.filter(h => h.status === 'active');
   const soldHoldings = portfolioHoldings.filter(h => h.status === 'sold');
 
+  const [refreshingPrices, setRefreshingPrices] = useState(false);
+  const [priceRefreshSummary, setPriceRefreshSummary] = useState<string | null>(null);
+
+  const refreshAllPrices = async () => {
+    setRefreshingPrices(true);
+    setPriceRefreshSummary(null);
+    await runAction(async () => {
+      const symbols = activeHoldings.map(h => ({ symbol: h.symbol, exchange: h.exchange }));
+      const resp = await fetch('/api/portfolio-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbols }),
+      });
+      if (!resp.ok) throw new Error('Price service did not respond. Try again shortly.');
+      const { results } = await resp.json();
+
+      let succeeded = 0;
+      let failed = 0;
+      for (const r of results) {
+        const holding = activeHoldings.find(h => h.symbol === r.symbol && h.exchange === r.exchange);
+        if (!holding) continue;
+        if (r.price != null) {
+          await updatePortfolioHolding(holding.id, { currentPrice: r.price });
+          succeeded++;
+        } else {
+          failed++;
+        }
+      }
+      setPriceRefreshSummary(
+        failed === 0
+          ? `Updated ${succeeded} price${succeeded !== 1 ? 's' : ''} · delayed a few minutes, not real-time`
+          : `Updated ${succeeded}, couldn't find ${failed} (check the symbol matches Yahoo Finance's ticker) · delayed a few minutes, not real-time`
+      );
+    });
+    setRefreshingPrices(false);
+  };
+
   const handleAddHolding = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hSymbol.trim() || !hQty || !hPrice) return;
@@ -300,11 +337,23 @@ export default function PortfolioView(props: PortfolioViewProps) {
       {/* HOLDINGS TAB */}
       {tab === 'holdings' && (
         <div className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            {activeHoldings.length > 0 && (
+              <button
+                onClick={refreshAllPrices}
+                disabled={refreshingPrices}
+                className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${refreshingPrices ? 'animate-spin' : ''}`} /> {refreshingPrices ? 'Refreshing…' : 'Refresh Prices'}
+              </button>
+            )}
             <button onClick={() => setIsAddingHolding(!isAddingHolding)} className="apple-btn-primary px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5">
               <Plus className="w-3.5 h-3.5" /> Add Stock
             </button>
           </div>
+          {priceRefreshSummary && (
+            <p className="text-[10px] text-slate-400 -mt-2">{priceRefreshSummary}</p>
+          )}
 
           {isAddingHolding && (
             <form onSubmit={handleAddHolding} className="apple-card p-4 space-y-2.5">
