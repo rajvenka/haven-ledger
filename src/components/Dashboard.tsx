@@ -13,7 +13,11 @@ import {
   Sparkles,
   User,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  PlusCircle,
+  Wallet,
+  ArrowDown,
+  ArrowUp
 } from 'lucide-react';
 import { RecurringPayment, PaymentHistory, Currency, CountryConfig, CATEGORY_COLORS, getCategoryColor, ScheduledInstance } from '../types';
 import { 
@@ -196,6 +200,12 @@ export default function Dashboard({
 
   const trendData = getTrendData();
 
+  // Real counts for honest context (replacing any fabricated percentages)
+  const paidCountThisMonth = currentMonthInstances.filter(ins => ins.status === 'paid').length;
+  const totalCountThisMonth = currentMonthInstances.length;
+  const hasNoPaymentsConfigured = activePayments.length === 0;
+  const netSurplus = monthlyIncomeEstimate - totalDueCurrentMonthConverted;
+
   // Custom styling for Tooltip component
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -231,70 +241,83 @@ export default function Dashboard({
         </div>
       )}
       
-      {/* Main Stats Bento Row - Grid of 3 (High Density Theme Layout) */}
-      <div className="grid grid-cols-3 gap-3 shrink-0">
-        {/* Paid So Far Card */}
-        <div className="apple-card p-4 flex flex-col justify-between">
+      {hasNoPaymentsConfigured ? (
+        /* Empty state — first thing a brand-new user sees, so make it an invitation, not a wall of zeros */
+        <div className="apple-card p-8 flex flex-col items-center text-center gap-3 shrink-0">
+          <div className="w-14 h-14 rounded-2xl bg-[#007aff]/10 dark:bg-[#0a84ff]/15 flex items-center justify-center">
+            <Wallet className="w-7 h-7 text-[#007aff] dark:text-[#0a84ff]" />
+          </div>
           <div>
-            <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">Paid so far</p>
-            <p className="text-base font-bold text-slate-900 dark:text-white tracking-tight truncate">
-              {formatCurrencyValue(paidThisMonthConverted, summaryCurrency, countries)}
+            <h2 className="text-sm font-black text-slate-900 dark:text-white">Nothing tracked yet</h2>
+            <p className="text-xs text-slate-400 mt-1 max-w-[280px] mx-auto leading-relaxed">
+              Add your first bill or subscription and this becomes your at-a-glance view of what's due, what's paid, and where your money's going.
             </p>
           </div>
-          <div className="mt-2.5">
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[8.5px] font-bold bg-[#e8f5e9] dark:bg-[#1b5e20]/15 text-[#34c759] dark:text-[#30d158] border border-[#c8e6c9]/15">
-              ↑ 12%
-            </span>
+          <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#007aff] dark:text-[#0a84ff]">
+            <PlusCircle className="w-4 h-4" /> Add a bill from Manage Bills
           </div>
         </div>
+      ) : (
+        <>
+          {/* Hero — the single most useful number: your real remaining surplus, or what's due if income isn't set yet */}
+          <div className="apple-card p-5 shrink-0">
+            {monthlyIncomeEstimate > 0 ? (
+              <>
+                <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">
+                  Remaining This Month
+                </p>
+                <div className="flex items-end justify-between gap-3 flex-wrap">
+                  <p className={`text-3xl font-black tracking-tight ${netSurplus >= 0 ? 'text-[#34c759] dark:text-[#30d158]' : 'text-rose-500'}`}>
+                    {formatCurrencyValue(netSurplus, summaryCurrency, countries)}
+                  </p>
+                  <p className="text-[11px] text-slate-400 text-right leading-relaxed">
+                    {formatCurrencyValue(monthlyIncomeEstimate, summaryCurrency, countries)} income
+                    <br />− {formatCurrencyValue(totalDueCurrentMonthConverted, summaryCurrency, countries)} in bills
+                  </p>
+                </div>
+                {netSurplus < 0 && (
+                  <p className="text-[10px] text-rose-500 font-semibold mt-2 flex items-center gap-1">
+                    <ArrowDown className="w-3 h-3" /> Bills exceed income this month
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">
+                  Due This Month
+                </p>
+                <p className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+                  {formatCurrencyValue(totalDueCurrentMonthConverted, summaryCurrency, countries)}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-2">
+                  {paidCountThisMonth} of {totalCountThisMonth} bills paid so far · Set your income on the Income page for a fuller picture
+                </p>
+              </>
+            )}
+          </div>
 
-        {/* Upcoming Next Week Card */}
-        <div className="apple-card p-4 flex flex-col justify-between">
-          <div>
-            <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">Next Week</p>
-            <p className="text-base font-bold text-[#007aff] dark:text-[#0a84ff] tracking-tight truncate">
-              {formatCurrencyValue(totalDueNextWeekConverted, summaryCurrency, countries)}
-            </p>
+          {/* Supporting stats */}
+          <div className="grid grid-cols-2 gap-3 shrink-0">
+            <div className="apple-card p-4">
+              <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">Paid So Far</p>
+              <p className="text-base font-bold text-slate-900 dark:text-white tracking-tight truncate">
+                {formatCurrencyValue(paidThisMonthConverted, summaryCurrency, countries)}
+              </p>
+              <p className="text-[9px] text-slate-400 mt-1.5">{paidCountThisMonth} of {totalCountThisMonth} bills</p>
+            </div>
+            <div className="apple-card p-4">
+              <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">Due Next Week</p>
+              <p className="text-base font-bold text-[#007aff] dark:text-[#0a84ff] tracking-tight truncate">
+                {formatCurrencyValue(totalDueNextWeekConverted, summaryCurrency, countries)}
+              </p>
+              <p className="text-[9px] text-slate-400 mt-1.5">{dueNextWeek.length} bill{dueNextWeek.length !== 1 ? 's' : ''}</p>
+            </div>
           </div>
-          <div className="mt-2.5">
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[8.5px] font-bold bg-[#f2f2f7] dark:bg-[#1c1c1e] text-slate-500 dark:text-slate-400 border border-[#e5e5ea]/20">
-              {dueNextWeek.length} bills
-            </span>
-          </div>
-        </div>
-
-        {/* Remaining Bills Card */}
-        <div className="apple-card p-4 flex flex-col justify-between">
-          <div>
-            <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">This Month</p>
-            <p className="text-base font-bold text-slate-900 dark:text-white tracking-tight truncate">
-              {formatCurrencyValue(totalDueCurrentMonthConverted, summaryCurrency, countries)}
-            </p>
-          </div>
-          <div className="mt-2.5">
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[8.5px] font-bold bg-[#fff3e0] dark:bg-[#e65100]/15 text-[#ff9500] dark:text-[#ff9f0a] border border-[#ffe0b2]/15">
-              74% budget
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Net Surplus — income vs this month's bills, one honest number */}
-      {monthlyIncomeEstimate > 0 && (
-        <div className="apple-card p-4 flex items-center justify-between shrink-0">
-          <div>
-            <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">Remaining Surplus</p>
-            <p className={`text-lg font-black tracking-tight ${(monthlyIncomeEstimate - totalDueCurrentMonthConverted) >= 0 ? 'text-[#34c759] dark:text-[#30d158]' : 'text-rose-500'}`}>
-              {formatCurrencyValue(monthlyIncomeEstimate - totalDueCurrentMonthConverted, summaryCurrency, countries)}
-            </p>
-          </div>
-          <p className="text-[10px] text-slate-400 text-right max-w-[140px]">
-            {formatCurrencyValue(monthlyIncomeEstimate, summaryCurrency, countries)} income − {formatCurrencyValue(totalDueCurrentMonthConverted, summaryCurrency, countries)} this month
-          </p>
-        </div>
+        </>
       )}
 
       {/* Alternative High Density Desktop Grid Layout (Responsive split: One column setting) */}
+      {!hasNoPaymentsConfigured && (
       <div className="grid grid-cols-1 gap-4 items-start pb-6">
         
         {/* Analytics, Charts & Insights */}
@@ -778,6 +801,7 @@ export default function Dashboard({
         </div>
 
       </div>
+      )}
 
     </div>
   );
