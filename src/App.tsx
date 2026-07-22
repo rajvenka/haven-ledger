@@ -152,13 +152,6 @@ export default function App() {
     resolveUpgradeRequest,
     adminSetUserPlan,
     setSuperAdminStatus,
-    portfolios,
-    activePortfolioId,
-    switchPortfolio,
-    createPortfolio,
-    portfolioContributors,
-    addPortfolioContributor,
-    deletePortfolioContributor,
     portfolioSplits,
     addPortfolioSplit,
     deletePortfolioSplit,
@@ -179,7 +172,6 @@ export default function App() {
     addPortfolioRecurringPlan,
     updatePortfolioRecurringPlan,
     deletePortfolioRecurringPlan,
-    findUserByEmail,
     appNotificationsEnabled,
     mobileNotificationsEnabled,
     saveNotificationSettings,
@@ -1401,13 +1393,9 @@ export default function App() {
               />
             ) : activeTab === 'portfolio' ? (
               <PortfolioView
-                portfolios={portfolios}
-                activePortfolioId={activePortfolioId}
-                switchPortfolio={switchPortfolio}
-                createPortfolio={createPortfolio}
-                portfolioContributors={portfolioContributors}
-                addPortfolioContributor={addPortfolioContributor}
-                deletePortfolioContributor={deletePortfolioContributor}
+                workspaceName={activeWorkspace?.name}
+                workspaceMembers={familyMembers}
+                isReadOnly={isReadOnly}
                 portfolioSplits={portfolioSplits}
                 addPortfolioSplit={addPortfolioSplit}
                 deletePortfolioSplit={deletePortfolioSplit}
@@ -1428,7 +1416,6 @@ export default function App() {
                 addPortfolioRecurringPlan={addPortfolioRecurringPlan}
                 updatePortfolioRecurringPlan={updatePortfolioRecurringPlan}
                 deletePortfolioRecurringPlan={deletePortfolioRecurringPlan}
-                findUserByEmail={findUserByEmail}
               />
             ) : activeTab === 'income' ? (
               <IncomeView

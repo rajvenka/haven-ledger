@@ -868,108 +868,48 @@ export function usePaymentState() {
     if (error) throw error;
   };
 
-  // ---------- Portfolio module (stock investment tracking) ----------
-  const [portfolios, setPortfolios] = useState<any[]>([]);
-  const [activePortfolioId, setActivePortfolioId] = useState<string | null>(null);
-  const [portfolioContributors, setPortfolioContributors] = useState<any[]>([]);
-  const [portfolioSplits, setPortfolioSplits] = useState<any[]>([]);
+  // ---------- Portfolio module (workspace-scoped, same pattern as Bills) ----------
   const [portfolioHoldings, setPortfolioHoldings] = useState<any[]>([]);
+  const [portfolioSplits, setPortfolioSplits] = useState<any[]>([]);
   const [portfolioContributions, setPortfolioContributions] = useState<any[]>([]);
   const [portfolioDividends, setPortfolioDividends] = useState<any[]>([]);
   const [portfolioFees, setPortfolioFees] = useState<any[]>([]);
   const [portfolioRecurringPlans, setPortfolioRecurringPlans] = useState<any[]>([]);
 
-  const loadPortfolios = useCallback(async () => {
-    if (!user) return;
-    const { data } = await supabase.from('portfolios').select('*').order('created_at', { ascending: true });
-    setPortfolios(data ?? []);
-    if (data && data.length > 0 && !activePortfolioId) setActivePortfolioId(data[0].id);
-  }, [user, activePortfolioId]);
-
-  useEffect(() => { if (isLoaded) loadPortfolios(); }, [isLoaded, loadPortfolios]);
-
-  const createPortfolio = async (name: string) => {
-    if (!user) throw new Error('Not signed in.');
-    const { data, error } = await supabase.from('portfolios').insert({ name, owner_id: user.id }).select().single();
-    if (error) throw error;
-    await supabase.from('portfolio_contributors').insert({ portfolio_id: data.id, user_id: user.id, display_name: userProfile?.displayName || 'Me' });
-    await loadPortfolios();
-    setActivePortfolioId(data.id);
-    return data;
-  };
-
   const loadPortfolioDetails = useCallback(async () => {
-    if (!activePortfolioId) {
-      setPortfolioContributors([]); setPortfolioSplits([]); setPortfolioHoldings([]);
-      setPortfolioContributions([]); setPortfolioDividends([]); setPortfolioFees([]); setPortfolioRecurringPlans([]);
+    if (!activeWorkspaceId) {
+      setPortfolioHoldings([]); setPortfolioSplits([]); setPortfolioContributions([]);
+      setPortfolioDividends([]); setPortfolioFees([]); setPortfolioRecurringPlans([]);
       return;
     }
-    const [{ data: contributors }, { data: splits }, { data: holdings }, { data: contributions }, { data: dividends }, { data: fees }, { data: plans }] = await Promise.all([
-      supabase.from('portfolio_contributors').select('*').eq('portfolio_id', activePortfolioId).order('created_at'),
-      supabase.from('portfolio_splits').select('*').eq('portfolio_id', activePortfolioId).order('effective_from'),
-      supabase.from('portfolio_holdings').select('*').eq('portfolio_id', activePortfolioId).order('buy_date', { ascending: false }),
-      supabase.from('portfolio_contributions').select('*').eq('portfolio_id', activePortfolioId).order('contribution_date', { ascending: false }),
-      supabase.from('portfolio_dividends').select('*').eq('portfolio_id', activePortfolioId).order('dividend_date', { ascending: false }),
-      supabase.from('portfolio_fees').select('*').eq('portfolio_id', activePortfolioId).order('fee_date', { ascending: false }),
-      supabase.from('portfolio_recurring_plans').select('*').eq('portfolio_id', activePortfolioId).order('created_at'),
+    const [{ data: holdings }, { data: splits }, { data: contributions }, { data: dividends }, { data: fees }, { data: plans }] = await Promise.all([
+      supabase.from('portfolio_holdings').select('*').eq('workspace_id', activeWorkspaceId).order('buy_date', { ascending: false }),
+      supabase.from('portfolio_splits').select('*').eq('workspace_id', activeWorkspaceId).order('effective_from'),
+      supabase.from('portfolio_contributions').select('*').eq('workspace_id', activeWorkspaceId).order('contribution_date', { ascending: false }),
+      supabase.from('portfolio_dividends').select('*').eq('workspace_id', activeWorkspaceId).order('dividend_date', { ascending: false }),
+      supabase.from('portfolio_fees').select('*').eq('workspace_id', activeWorkspaceId).order('fee_date', { ascending: false }),
+      supabase.from('portfolio_recurring_plans').select('*').eq('workspace_id', activeWorkspaceId).order('created_at'),
     ]);
-    setPortfolioContributors(contributors ?? []);
-    setPortfolioSplits(splits ?? []);
     setPortfolioHoldings(holdings ?? []);
+    setPortfolioSplits(splits ?? []);
     setPortfolioContributions(contributions ?? []);
     setPortfolioDividends(dividends ?? []);
     setPortfolioFees(fees ?? []);
     setPortfolioRecurringPlans(plans ?? []);
-  }, [activePortfolioId]);
+  }, [activeWorkspaceId]);
 
-  useEffect(() => { loadPortfolioDetails(); }, [loadPortfolioDetails]);
-
-  const switchPortfolio = (id: string) => setActivePortfolioId(id);
-
-  const addPortfolioContributor = async (displayName: string, linkedUserId?: string) => {
-    if (!activePortfolioId) throw new Error('Select a portfolio first.');
-    const { error } = await supabase.from('portfolio_contributors').insert({ portfolio_id: activePortfolioId, display_name: displayName, user_id: linkedUserId ?? null });
-    if (error) throw error;
-    await loadPortfolioDetails();
-  };
-
-  const findUserByEmail = async (email: string) => {
-    const { data, error } = await supabase.rpc('find_user_by_email', { search_email: email });
-    if (error) throw error;
-    return data && data.length > 0 ? data[0] : null;
-  };
-
-  const deletePortfolioContributor = async (id: string) => {
-    const { error } = await supabase.from('portfolio_contributors').delete().eq('id', id);
-    if (error) throw error;
-    await loadPortfolioDetails();
-  };
-
-  const addPortfolioSplit = async (contributorId: string, splitPercent: number, effectiveFrom: string, effectiveTo?: string) => {
-    if (!activePortfolioId) throw new Error('Select a portfolio first.');
-    const { error } = await supabase.from('portfolio_splits').insert({
-      portfolio_id: activePortfolioId, contributor_id: contributorId, split_percent: splitPercent,
-      effective_from: effectiveFrom, effective_to: effectiveTo || null,
-    });
-    if (error) throw error;
-    await loadPortfolioDetails();
-  };
-
-  const deletePortfolioSplit = async (id: string) => {
-    const { error } = await supabase.from('portfolio_splits').delete().eq('id', id);
-    if (error) throw error;
-    await loadPortfolioDetails();
-  };
+  useEffect(() => { if (isLoaded) loadPortfolioDetails(); }, [isLoaded, loadPortfolioDetails]);
 
   const addPortfolioHolding = async (holding: {
-    broker: string; symbol: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; notes?: string;
+    holdingType?: 'stock' | 'mutual_fund'; broker: string; symbol: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; notes?: string;
     source?: string;
     targetType?: 'price' | 'percent'; targetPrice?: number; targetPercent?: number;
     holdType?: 'days' | 'date'; holdDays?: number; holdUntilDate?: string;
   }) => {
-    if (!activePortfolioId) throw new Error('Select a portfolio first.');
+    if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_holdings').insert({
-      portfolio_id: activePortfolioId, broker: holding.broker, symbol: holding.symbol.toUpperCase(), exchange: holding.exchange,
+      workspace_id: activeWorkspaceId, created_by: user?.id ?? null,
+      holding_type: holding.holdingType ?? 'stock', broker: holding.broker, symbol: holding.symbol.toUpperCase(), exchange: holding.exchange,
       quantity: holding.quantity, buy_price: holding.buyPrice, buy_date: holding.buyDate, notes: holding.notes ?? null,
       source: holding.source ?? null,
       target_type: holding.targetType ?? null, target_price: holding.targetPrice ?? null, target_percent: holding.targetPercent ?? null,
@@ -1000,10 +940,26 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
-  const addPortfolioContribution = async (contributorId: string, amount: number, contributionDate: string, notes?: string) => {
-    if (!activePortfolioId) throw new Error('Select a portfolio first.');
+  const addPortfolioSplit = async (memberUserId: string, splitPercent: number, effectiveFrom: string, effectiveTo?: string) => {
+    if (!activeWorkspaceId) throw new Error('Select a workspace first.');
+    const { error } = await supabase.from('portfolio_splits').insert({
+      workspace_id: activeWorkspaceId, member_user_id: memberUserId, split_percent: splitPercent,
+      effective_from: effectiveFrom, effective_to: effectiveTo || null,
+    });
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
+  const deletePortfolioSplit = async (id: string) => {
+    const { error } = await supabase.from('portfolio_splits').delete().eq('id', id);
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
+  const addPortfolioContribution = async (memberUserId: string, amount: number, contributionDate: string, notes?: string) => {
+    if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_contributions').insert({
-      portfolio_id: activePortfolioId, contributor_id: contributorId, amount, contribution_date: contributionDate, notes: notes ?? null,
+      workspace_id: activeWorkspaceId, member_user_id: memberUserId, amount, contribution_date: contributionDate, notes: notes ?? null,
     });
     if (error) throw error;
     await loadPortfolioDetails();
@@ -1016,9 +972,9 @@ export function usePaymentState() {
   };
 
   const addPortfolioDividend = async (symbol: string, amount: number, dividendDate: string, holdingId?: string, notes?: string) => {
-    if (!activePortfolioId) throw new Error('Select a portfolio first.');
+    if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_dividends').insert({
-      portfolio_id: activePortfolioId, holding_id: holdingId ?? null, symbol: symbol.toUpperCase(), amount, dividend_date: dividendDate, notes: notes ?? null,
+      workspace_id: activeWorkspaceId, holding_id: holdingId ?? null, symbol: symbol.toUpperCase(), amount, dividend_date: dividendDate, notes: notes ?? null,
     });
     if (error) throw error;
     await loadPortfolioDetails();
@@ -1031,9 +987,9 @@ export function usePaymentState() {
   };
 
   const addPortfolioFee = async (broker: string, feeType: string, amount: number, feeDate: string, notes?: string) => {
-    if (!activePortfolioId) throw new Error('Select a portfolio first.');
+    if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_fees').insert({
-      portfolio_id: activePortfolioId, broker, fee_type: feeType, amount, fee_date: feeDate, notes: notes ?? null,
+      workspace_id: activeWorkspaceId, broker, fee_type: feeType, amount, fee_date: feeDate, notes: notes ?? null,
     });
     if (error) throw error;
     await loadPortfolioDetails();
@@ -1045,12 +1001,10 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
-  // Recurring contribution EXPECTATIONS (the "plan") - fully separate from the Bills module,
-  // never touches recurring_payments.
-  const addPortfolioRecurringPlan = async (contributorId: string, expectedAmount: number, frequency: 'monthly' | 'quarterly' | 'yearly', startDate: string, dayOfMonth?: number) => {
-    if (!activePortfolioId) throw new Error('Select a portfolio first.');
+  const addPortfolioRecurringPlan = async (memberUserId: string, expectedAmount: number, frequency: 'monthly' | 'quarterly' | 'yearly', startDate: string, dayOfMonth?: number) => {
+    if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_recurring_plans').insert({
-      portfolio_id: activePortfolioId, contributor_id: contributorId, expected_amount: expectedAmount,
+      workspace_id: activeWorkspaceId, member_user_id: memberUserId, expected_amount: expectedAmount,
       frequency, start_date: startDate, day_of_month: dayOfMonth ?? null,
     });
     if (error) throw error;
@@ -1221,15 +1175,12 @@ export function usePaymentState() {
     startWhatsAppVerification, disconnectWhatsApp,
     accessPlans, createAccessPlan, updateAccessPlan, deleteAccessPlan,
     myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan, setSuperAdminStatus,
-    portfolios, activePortfolioId, switchPortfolio, createPortfolio,
-    portfolioContributors, addPortfolioContributor, deletePortfolioContributor,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
     portfolioHoldings, addPortfolioHolding, updatePortfolioHolding, deletePortfolioHolding,
     portfolioContributions, addPortfolioContribution, deletePortfolioContribution,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
     portfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,
-    findUserByEmail,
     appNotificationsEnabled, mobileNotificationsEnabled, saveNotificationSettings,
   };
 }
