@@ -355,50 +355,54 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
           <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : (
-        <div className="space-y-2.5">
-          {users.map(u => (
-            <div key={u.id} className="apple-card p-4 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black text-xs uppercase shrink-0">
-                {(u.displayName || u.email).charAt(0)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{u.displayName || u.email.split('@')[0]}</p>
+        <div className="apple-card overflow-hidden">
+          {/* Header row */}
+          <div className="hidden md:grid grid-cols-[minmax(0,1.6fr)_minmax(0,1.4fr)_100px_minmax(0,1.4fr)_130px] gap-3 px-4 py-2 bg-slate-50 dark:bg-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
+            <span>User</span>
+            <span>Email</span>
+            <span>Joined</span>
+            <span>Workspace(s)</span>
+            <span>Plan</span>
+          </div>
+          <div className="divide-y divide-slate-100 dark:divide-slate-900">
+            {users.map(u => (
+              <div key={u.id} className="grid grid-cols-1 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1.4fr)_100px_minmax(0,1.4fr)_130px] gap-1.5 md:gap-3 items-center px-4 py-2.5 text-left">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-6 h-6 rounded-full bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black text-[10px] uppercase shrink-0">
+                    {(u.displayName || u.email).charAt(0)}
+                  </div>
+                  <span className="text-xs font-bold text-slate-900 dark:text-white truncate">{u.displayName || u.email.split('@')[0]}</span>
                   {u.isSuperAdmin && (
-                    <span className="px-1.5 py-0.5 bg-indigo-600 text-white text-[8px] font-black uppercase tracking-wider rounded-full">Super Admin</span>
+                    <span className="px-1.5 py-0.5 bg-indigo-600 text-white text-[8px] font-black uppercase tracking-wider rounded-full shrink-0">Admin</span>
                   )}
                 </div>
-                <p className="text-[10px] text-slate-400 truncate">{u.email}</p>
-                <p className="text-[9px] text-slate-350 dark:text-slate-600 font-semibold mt-0.5">
-                  Joined {new Date(u.createdAt).toLocaleDateString()}
-                </p>
-                <div className="mt-1.5">
-                  <select
-                    value={u.licensePlanId || ''}
-                    onChange={(e) => handleSetPlan(u.id, e.target.value)}
-                    disabled={changingPlanFor === u.id}
-                    className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer disabled:opacity-50"
-                  >
-                    {accessPlans.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
+                <span className="text-[10px] text-slate-400 truncate">{u.email}</span>
+                <span className="text-[10px] text-slate-400 md:text-center">{new Date(u.createdAt).toLocaleDateString()}</span>
+                <div className="flex flex-wrap gap-x-2 gap-y-0.5 min-w-0">
+                  {u.workspaces.length === 0 ? (
+                    <span className="text-[10px] text-slate-350 dark:text-slate-600">—</span>
+                  ) : (
+                    u.workspaces.map(ws => (
+                      <span key={ws.id} className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 truncate">
+                        {ws.type === 'business' ? <Briefcase className="w-2.5 h-2.5 shrink-0" /> : <Home className="w-2.5 h-2.5 shrink-0" />}
+                        {ws.name} · {ws.role}
+                      </span>
+                    ))
+                  )}
                 </div>
+                <select
+                  value={u.licensePlanId || ''}
+                  onChange={(e) => handleSetPlan(u.id, e.target.value)}
+                  disabled={changingPlanFor === u.id}
+                  className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer disabled:opacity-50 w-full md:w-auto"
+                >
+                  {accessPlans.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
               </div>
-              <div className="flex flex-col items-end gap-1 shrink-0">
-                {u.workspaces.length === 0 ? (
-                  <span className="text-[9px] text-slate-350 dark:text-slate-600 font-semibold">No workspace</span>
-                ) : (
-                  u.workspaces.map(ws => (
-                    <span key={ws.id} className="flex items-center gap-1 text-[9px] font-bold text-slate-500 dark:text-slate-400">
-                      {ws.type === 'business' ? <Briefcase className="w-2.5 h-2.5" /> : <Home className="w-2.5 h-2.5" />}
-                      {ws.name} · {ws.role}
-                    </span>
-                  ))
-                )}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
     </div>
