@@ -177,7 +177,8 @@ export function usePaymentState() {
     const { data: invites, error: invitesError } = await supabase
       .from('workspace_invitations')
       .select('id, workspace_id, from_user_id, to_email, proposed_role, proposed_access_level, proposed_features, status, created_at, workspaces(name, invite_code), profiles!family_invitations_from_user_id_fkey(email, display_name)')
-      .eq('status', 'pending');
+      .eq('status', 'pending')
+      .neq('from_user_id', uid); // "incoming" means addressed to me, not sent by me - RLS alone permits both directions
     if (invitesError) console.error('Failed to load pending invitations:', invitesError);
 
     setIncomingInvitations((invites ?? []).map((i: any) => ({
