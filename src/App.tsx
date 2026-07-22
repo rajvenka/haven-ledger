@@ -7,6 +7,7 @@ import {
   Award,
   Wallet,
   Briefcase,
+  ClipboardList,
   ShieldCheck,
   Bell, 
   X, 
@@ -52,6 +53,7 @@ import OnboardingView from './components/OnboardingView';
 import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import RewardsTracker from './components/RewardsTracker';
 import PortfolioView from './components/PortfolioView';
+import InvestmentPlanView from './components/InvestmentPlanView';
 import IncomeView from './components/IncomeView';
 import AdminUsersView from './components/AdminUsersView';
 
@@ -156,10 +158,12 @@ export default function App() {
     addPortfolioSplit,
     deletePortfolioSplit,
     portfolioHoldings,
+    portfolioPriceHistory,
     addPortfolioHolding,
     bulkAddPortfolioHoldings,
     updatePortfolioHolding,
     deletePortfolioHolding,
+    bulkTagPortfolioHoldings,
     portfolioContributions,
     addPortfolioContribution,
     deletePortfolioContribution,
@@ -669,6 +673,23 @@ export default function App() {
                       <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                     )}
                   </button>
+
+                  <button
+                    onClick={() => setActiveTab('investment_plan')}
+                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                      activeTab === 'investment_plan'
+                        ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <ClipboardList className="w-4 h-4 shrink-0 opacity-80" />
+                      <span>Investment Plan</span>
+                    </div>
+                    {activeTab === 'investment_plan' && (
+                      <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
+                    )}
+                  </button>
                 </nav>
               </div>
 
@@ -1051,6 +1072,23 @@ export default function App() {
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                         )}
                       </button>
+
+                      <button
+                        onClick={() => { setActiveTab('investment_plan'); setIsMobileMenuOpen(false); }}
+                        className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                          activeTab === 'investment_plan'
+                            ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <ClipboardList className="w-4.5 h-4.5 shrink-0 opacity-80" />
+                          <span>Investment Plan</span>
+                        </div>
+                        {activeTab === 'investment_plan' && (
+                          <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
+                        )}
+                      </button>
                     </nav>
                   </div>
 
@@ -1404,10 +1442,12 @@ export default function App() {
                 addPortfolioSplit={addPortfolioSplit}
                 deletePortfolioSplit={deletePortfolioSplit}
                 portfolioHoldings={portfolioHoldings}
+                portfolioPriceHistory={portfolioPriceHistory}
                 addPortfolioHolding={addPortfolioHolding}
                 bulkAddPortfolioHoldings={bulkAddPortfolioHoldings}
                 updatePortfolioHolding={updatePortfolioHolding}
                 deletePortfolioHolding={deletePortfolioHolding}
+                bulkTagPortfolioHoldings={bulkTagPortfolioHoldings}
                 portfolioContributions={portfolioContributions}
                 addPortfolioContribution={addPortfolioContribution}
                 deletePortfolioContribution={deletePortfolioContribution}
@@ -1420,6 +1460,14 @@ export default function App() {
                 portfolioFees={portfolioFees}
                 addPortfolioFee={addPortfolioFee}
                 deletePortfolioFee={deletePortfolioFee}
+              />
+            ) : activeTab === 'investment_plan' ? (
+              <InvestmentPlanView
+                workspaceName={activeWorkspace?.name}
+                workspaceMembers={familyMembers}
+                isReadOnly={isReadOnly}
+                portfolioContributions={portfolioContributions}
+                addPortfolioContribution={addPortfolioContribution}
                 portfolioRecurringPlans={portfolioRecurringPlans}
                 addPortfolioRecurringPlan={addPortfolioRecurringPlan}
                 updatePortfolioRecurringPlan={updatePortfolioRecurringPlan}

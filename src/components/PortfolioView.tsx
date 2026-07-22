@@ -19,6 +19,7 @@ interface PortfolioViewProps {
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
   deletePortfolioSplit: (id: string) => Promise<void>;
   portfolioHoldings: any[];
+  portfolioPriceHistory: any[];
   addPortfolioHolding: (h: {
     holdingType?: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; notes?: string;
     source?: string;
@@ -30,6 +31,7 @@ interface PortfolioViewProps {
   }[]) => Promise<void>;
   updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
   deletePortfolioHolding: (id: string) => Promise<void>;
+  bulkTagPortfolioHoldings: (holdingIds: string[], source: string) => Promise<void>;
   portfolioContributions: any[];
   addPortfolioContribution: (memberUserId: string, amount: number, date: string, notes?: string, contributionType?: 'one_off' | 'recurring') => Promise<void>;
   deletePortfolioContribution: (id: string) => Promise<void>;
@@ -42,10 +44,6 @@ interface PortfolioViewProps {
   portfolioFees: any[];
   addPortfolioFee: (broker: string, feeType: string, amount: number, date: string, notes?: string) => Promise<void>;
   deletePortfolioFee: (id: string) => Promise<void>;
-  portfolioRecurringPlans: any[];
-  addPortfolioRecurringPlan: (memberUserId: string, amount: number, frequency: 'monthly' | 'quarterly' | 'yearly', startDate: string, dayOfMonth?: number) => Promise<void>;
-  updatePortfolioRecurringPlan: (id: string, updates: { active?: boolean; expectedAmount?: number }) => Promise<void>;
-  deletePortfolioRecurringPlan: (id: string) => Promise<void>;
 }
 
 const fmt = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
@@ -56,15 +54,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, deletePortfolioHolding,
+    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings,
     portfolioContributions, addPortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
-    portfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,
   } = props;
 
-  const [tab, setTab] = useState<'holdings' | 'contributions' | 'plan' | 'statement'>('holdings');
+  const [tab, setTab] = useState<'holdings' | 'contributions' | 'statement'>('holdings');
   const [formError, setFormError] = useState<string | null>(null);
 
   const runAction = async (fn: () => Promise<any>) => {
@@ -98,7 +95,51 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [sellPrice, setSellPrice] = useState('');
   const [sellDate, setSellDate] = useState(todayStr());
 
+  // ---- Bulk tagging existing holdings ----
+  const [isSelectingForTag, setIsSelectingForTag] = useState(false);
+  const [selectedHoldingIds, setSelectedHoldingIds] = useState<Set<string>>(new Set());
+  const [bulkTagValue, setBulkTagValue] = useState('');
+  const [bulkTagSaving, setBulkTagSaving] = useState(false);
+
+  const toggleHoldingSelected = (id: string) => {
+    setSelectedHoldingIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const exitSelectMode = () => {
+    setIsSelectingForTag(false);
+    setSelectedHoldingIds(new Set());
+    setBulkTagValue('');
+  };
+
+  const applyBulkTag = async () => {
+    if (selectedHoldingIds.size === 0 || !bulkTagValue.trim()) return;
+    setBulkTagSaving(true);
+    await runAction(async () => {
+      await bulkTagPortfolioHoldings(Array.from(selectedHoldingIds), bulkTagValue.trim());
+      exitSelectMode();
+    });
+    setBulkTagSaving(false);
+  };
+
+
   const activeHoldings = portfolioHoldings.filter(h => h.status === 'active');
+
+  // Finds the closest recorded price snapshot at least N days old for a holding,
+  // so we can show "vs last week / last month" without needing a live data feed for history.
+  const getPriceNDaysAgo = (holdingId: string, days: number): number | null => {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    const candidates = portfolioPriceHistory
+      .filter(p => p.holding_id === holdingId && p.recorded_date <= cutoffStr)
+      .sort((a, b) => (a.recorded_date < b.recorded_date ? 1 : -1)); // most recent first, among those old enough
+    return candidates.length > 0 ? Number(candidates[0].price) : null;
+  };
+
   const soldHoldings = portfolioHoldings.filter(h => h.status === 'sold');
 
   const [refreshingPrices, setRefreshingPrices] = useState(false);
@@ -272,44 +313,6 @@ export default function PortfolioView(props: PortfolioViewProps) {
     });
   }, [workspaceMembers, portfolioSplits]);
 
-  const getPeriodBounds = (frequency: 'monthly' | 'quarterly' | 'yearly', ref = new Date()) => {
-    if (frequency === 'monthly') {
-      return {
-        start: new Date(ref.getFullYear(), ref.getMonth(), 1),
-        end: new Date(ref.getFullYear(), ref.getMonth() + 1, 0),
-        label: ref.toLocaleString('default', { month: 'long', year: 'numeric' }),
-      };
-    }
-    if (frequency === 'quarterly') {
-      const q = Math.floor(ref.getMonth() / 3);
-      return {
-        start: new Date(ref.getFullYear(), q * 3, 1),
-        end: new Date(ref.getFullYear(), q * 3 + 3, 0),
-        label: `Q${q + 1} ${ref.getFullYear()}`,
-      };
-    }
-    return {
-      start: new Date(ref.getFullYear(), 0, 1),
-      end: new Date(ref.getFullYear(), 11, 31),
-      label: String(ref.getFullYear()),
-    };
-  };
-
-  const markTransferred = async (memberUserId: string, amount: number) => {
-    await runAction(async () => {
-      await addPortfolioContribution(memberUserId, amount, todayStr(), 'Recurring plan transfer', 'recurring');
-    });
-  };
-
-
-  // ---- Investment Plan ----
-  const [isAddingPlan, setIsAddingPlan] = useState(false);
-  const [planMemberId, setPlanMemberId] = useState('');
-  const [planAmount, setPlanAmount] = useState('');
-  const [planFrequency, setPlanFrequency] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
-  const [planStartDate, setPlanStartDate] = useState(todayStr());
-  const [planDayOfMonth, setPlanDayOfMonth] = useState('1');
-
   // ---- Statement calculations ----
   const totalContributed = portfolioContributions.reduce((s, c) => s + Number(c.amount), 0);
   const totalWithdrawn = portfolioWithdrawals.reduce((s, w) => s + Number(w.amount), 0);
@@ -374,13 +377,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
       {/* Tabs */}
       <div className="flex border-b border-slate-150 dark:border-slate-800 gap-1">
-        {(['holdings', 'contributions', 'plan', 'statement'] as const).map(t => (
+        {(['holdings', 'contributions', 'statement'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`px-3.5 py-2 text-xs font-bold capitalize cursor-pointer transition-all whitespace-nowrap ${tab === t ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 dark:border-indigo-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
           >
-            {t === 'contributions' ? 'Contributions & Split' : t === 'plan' ? 'Investment Plan' : t}
+            {t === 'contributions' ? 'Contributions & Split' : t}
           </button>
         ))}
       </div>
@@ -399,6 +402,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <RefreshCw className={`w-3.5 h-3.5 ${refreshingPrices ? 'animate-spin' : ''}`} /> {refreshingPrices ? 'Refreshing…' : 'Refresh Prices'}
               </button>
             )}
+            {activeHoldings.length > 0 && (
+              <button
+                onClick={() => (isSelectingForTag ? exitSelectMode() : setIsSelectingForTag(true))}
+                className={`px-4 py-2 border rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer ${isSelectingForTag ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'}`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" /> {isSelectingForTag ? 'Cancel Selection' : 'Bulk Tag'}
+              </button>
+            )}
             <button
               onClick={() => { setIsImporting(!isImporting); setImportPreview(null); }}
               className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
@@ -409,6 +420,27 @@ export default function PortfolioView(props: PortfolioViewProps) {
               <Plus className="w-3.5 h-3.5" /> Add Holding
             </button>
           </div>
+          )}
+
+          {isSelectingForTag && (
+            <div className="apple-card p-3.5 flex flex-col sm:flex-row sm:items-center gap-2.5 bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-900">
+              <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 shrink-0">{selectedHoldingIds.size} selected</span>
+              <input
+                type="text"
+                list="source-suggestions"
+                value={bulkTagValue}
+                onChange={(e) => setBulkTagValue(e.target.value)}
+                placeholder="Tag as e.g. Rajavel Stock SME"
+                className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+              />
+              <button
+                onClick={applyBulkTag}
+                disabled={bulkTagSaving || selectedHoldingIds.size === 0 || !bulkTagValue.trim()}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer shrink-0"
+              >
+                {bulkTagSaving ? 'Applying…' : 'Apply Tag'}
+              </button>
+            </div>
           )}
           {priceRefreshSummary && (
             <p className="text-[10px] text-slate-400 -mt-2">{priceRefreshSummary}</p>
@@ -553,6 +585,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 const gain = (Number(h.current_price ?? h.buy_price) - Number(h.buy_price)) * Number(h.quantity);
                 const gainPct = ((Number(h.current_price ?? h.buy_price) - Number(h.buy_price)) / Number(h.buy_price)) * 100;
 
+                const priceLastWeek = getPriceNDaysAgo(h.id, 7);
+                const priceLastMonth = getPriceNDaysAgo(h.id, 30);
+                const currentPriceNum = Number(h.current_price ?? h.buy_price);
+                const weekChangePct = priceLastWeek ? ((currentPriceNum - priceLastWeek) / priceLastWeek) * 100 : null;
+                const monthChangePct = priceLastMonth ? ((currentPriceNum - priceLastMonth) / priceLastMonth) * 100 : null;
+
                 const targetPrice = h.target_type === 'price' ? Number(h.target_price)
                   : h.target_type === 'percent' ? Number(h.buy_price) * (1 + Number(h.target_percent) / 100)
                   : null;
@@ -569,6 +607,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
                 return (
                   <div key={h.id} className="p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                    {isSelectingForTag && (
+                      <input
+                        type="checkbox"
+                        checked={selectedHoldingIds.has(h.id)}
+                        onChange={() => toggleHoldingSelected(h.id)}
+                        className="w-4 h-4 shrink-0 cursor-pointer accent-indigo-600"
+                      />
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <h4 className="text-xs font-bold text-slate-900 dark:text-white">{h.symbol}</h4>
@@ -595,6 +641,20 @@ export default function PortfolioView(props: PortfolioViewProps) {
                             <div className="h-full bg-amber-500" style={{ width: `${holdProgressPct}%` }} />
                           </div>
                           <span className="text-[8px] text-slate-400">Hold until {holdUntil.toISOString().slice(0, 10)} · {holdProgressPct!.toFixed(0)}% through</span>
+                        </div>
+                      )}
+                      {(weekChangePct !== null || monthChangePct !== null) && (
+                        <div className="flex items-center gap-2 mt-1">
+                          {weekChangePct !== null && (
+                            <span className={`text-[8px] font-bold ${weekChangePct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                              1wk {weekChangePct >= 0 ? '+' : ''}{weekChangePct.toFixed(1)}%
+                            </span>
+                          )}
+                          {monthChangePct !== null && (
+                            <span className={`text-[8px] font-bold ${monthChangePct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                              1mo {monthChangePct >= 0 ? '+' : ''}{monthChangePct.toFixed(1)}%
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -782,115 +842,6 @@ export default function PortfolioView(props: PortfolioViewProps) {
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-rose-500">-{fmt(Number(w.amount))}</span>
                       {!isReadOnly && <button onClick={() => runAction(() => deletePortfolioWithdrawal(w.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* INVESTMENT PLAN TAB */}
-      {tab === 'plan' && (
-        <div className="space-y-4">
-          {portfolioRecurringPlans.some(p => p.active) && (
-            <div className="apple-card p-4 space-y-3">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Fund Transfer Status</span>
-              <p className="text-[9px] text-slate-400">Who's transferred their share for the current period, and who hasn't yet.</p>
-              <div className="space-y-2">
-                {portfolioRecurringPlans.filter(p => p.active).map(plan => {
-                  const m = workspaceMembers.find(x => x.uid === plan.member_user_id);
-                  const period = getPeriodBounds(plan.frequency);
-                  const transferredThisPeriod = portfolioContributions
-                    .filter(c => c.member_user_id === plan.member_user_id)
-                    .filter(c => { const d = new Date(c.contribution_date); return d >= period.start && d <= period.end; })
-                    .reduce((s, c) => s + Number(c.amount), 0);
-                  const remaining = Math.max(0, Number(plan.expected_amount) - transferredThisPeriod);
-                  const fulfilled = remaining === 0;
-                  return (
-                    <div key={plan.id} className="flex items-center justify-between gap-3 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg">
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-900 dark:text-white">{m ? memberName(m) : 'Former member'}</p>
-                        <p className="text-[10px] text-slate-400">{period.label} · expected {fmt(Number(plan.expected_amount))}{transferredThisPeriod > 0 && !fulfilled ? ` · transferred ${fmt(transferredThisPeriod)} so far` : ''}</p>
-                      </div>
-                      {fulfilled ? (
-                        <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase rounded-full shrink-0">Transferred</span>
-                      ) : !isReadOnly ? (
-                        <button
-                          onClick={() => markTransferred(plan.member_user_id, remaining)}
-                          className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer shrink-0"
-                        >
-                          Mark {fmt(remaining)} Transferred
-                        </button>
-                      ) : (
-                        <span className="px-2.5 py-1 bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase rounded-full shrink-0">Pending</span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          <div className="apple-card p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Recurring Contribution Plan</span>
-              {!isReadOnly && <button onClick={() => setIsAddingPlan(!isAddingPlan)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Add Plan</button>}
-            </div>
-            <p className="text-[10px] text-slate-400">What each person is expected to contribute on a schedule — separate from your Bills, and separate from the actual amounts logged in Contributions.</p>
-
-            {isAddingPlan && (
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!planMemberId || !planAmount) return;
-                  await runAction(async () => {
-                    await addPortfolioRecurringPlan(planMemberId, parseFloat(planAmount), planFrequency, planStartDate, planFrequency === 'monthly' ? parseInt(planDayOfMonth) : undefined);
-                    setPlanAmount(''); setIsAddingPlan(false);
-                  });
-                }}
-                className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-900"
-              >
-                <select value={planMemberId} onChange={(e) => setPlanMemberId(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
-                  <option value="">Who</option>
-                  {workspaceMembers.map(m => <option key={m.uid} value={m.uid}>{memberName(m)}</option>)}
-                </select>
-                <input type="number" value={planAmount} onChange={(e) => setPlanAmount(e.target.value)} placeholder="Amount" className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
-                <select value={planFrequency} onChange={(e) => setPlanFrequency(e.target.value as any)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
-                  <option value="monthly">Monthly</option>
-                  <option value="quarterly">Quarterly</option>
-                  <option value="yearly">Yearly</option>
-                </select>
-                {planFrequency === 'monthly' && (
-                  <input type="number" min="1" max="31" value={planDayOfMonth} onChange={(e) => setPlanDayOfMonth(e.target.value)} placeholder="Day of month" className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
-                )}
-                <input type="date" value={planStartDate} onChange={(e) => setPlanStartDate(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs col-span-2" />
-                <button type="submit" className="col-span-2 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer">Save Plan</button>
-              </form>
-            )}
-
-            <div className="divide-y divide-slate-100 dark:divide-slate-900">
-              {portfolioRecurringPlans.length === 0 ? (
-                <p className="text-center text-xs text-slate-400 py-4">No recurring plan set up yet.</p>
-              ) : portfolioRecurringPlans.map(plan => {
-                const m = workspaceMembers.find(x => x.uid === plan.member_user_id);
-                return (
-                  <div key={plan.id} className="py-2.5 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-900 dark:text-white">{m ? memberName(m) : 'Former member'}</p>
-                      <p className="text-[10px] text-slate-400">{fmt(Number(plan.expected_amount))} · {plan.frequency}{plan.day_of_month ? ` on day ${plan.day_of_month}` : ''} · from {plan.start_date}</p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {!isReadOnly && (
-                        <button
-                          onClick={() => runAction(() => updatePortfolioRecurringPlan(plan.id, { active: !plan.active }))}
-                          className={`px-2 py-1 text-[9px] font-black uppercase rounded-full cursor-pointer ${plan.active ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}
-                        >
-                          {plan.active ? 'Active' : 'Paused'}
-                        </button>
-                      )}
-                      {!isReadOnly && <button onClick={() => runAction(() => deletePortfolioRecurringPlan(plan.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>}
                     </div>
                   </div>
                 );

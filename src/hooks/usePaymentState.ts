@@ -870,6 +870,7 @@ export function usePaymentState() {
 
   // ---------- Portfolio module (workspace-scoped, same pattern as Bills) ----------
   const [portfolioHoldings, setPortfolioHoldings] = useState<any[]>([]);
+  const [portfolioPriceHistory, setPortfolioPriceHistory] = useState<any[]>([]);
   const [portfolioSplits, setPortfolioSplits] = useState<any[]>([]);
   const [portfolioContributions, setPortfolioContributions] = useState<any[]>([]);
   const [portfolioWithdrawals, setPortfolioWithdrawals] = useState<any[]>([]);
@@ -879,12 +880,13 @@ export function usePaymentState() {
 
   const loadPortfolioDetails = useCallback(async () => {
     if (!activeWorkspaceId) {
-      setPortfolioHoldings([]); setPortfolioSplits([]); setPortfolioContributions([]); setPortfolioWithdrawals([]);
+      setPortfolioHoldings([]); setPortfolioPriceHistory([]); setPortfolioSplits([]); setPortfolioContributions([]); setPortfolioWithdrawals([]);
       setPortfolioDividends([]); setPortfolioFees([]); setPortfolioRecurringPlans([]);
       return;
     }
-    const [{ data: holdings }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }] = await Promise.all([
+    const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }] = await Promise.all([
       supabase.from('portfolio_holdings').select('*').eq('workspace_id', activeWorkspaceId).order('buy_date', { ascending: false }),
+      supabase.from('portfolio_price_history').select('*').eq('workspace_id', activeWorkspaceId).order('recorded_date', { ascending: false }),
       supabase.from('portfolio_splits').select('*').eq('workspace_id', activeWorkspaceId).order('effective_from'),
       supabase.from('portfolio_contributions').select('*').eq('workspace_id', activeWorkspaceId).order('contribution_date', { ascending: false }),
       supabase.from('portfolio_withdrawals').select('*').eq('workspace_id', activeWorkspaceId).order('withdrawal_date', { ascending: false }),
@@ -893,6 +895,7 @@ export function usePaymentState() {
       supabase.from('portfolio_recurring_plans').select('*').eq('workspace_id', activeWorkspaceId).order('created_at'),
     ]);
     setPortfolioHoldings(holdings ?? []);
+    setPortfolioPriceHistory(priceHistory ?? []);
     setPortfolioSplits(splits ?? []);
     setPortfolioContributions(contributions ?? []);
     setPortfolioWithdrawals(withdrawals ?? []);
@@ -910,7 +913,7 @@ export function usePaymentState() {
     holdType?: 'days' | 'date'; holdDays?: number; holdUntilDate?: string;
   }) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
-    const { error } = await supabase.from('portfolio_holdings').insert({
+    const { data: inserted, error } = await supabase.from('portfolio_holdings').insert({
       workspace_id: activeWorkspaceId, created_by: user?.id ?? null,
       holding_type: holding.holdingType ?? 'stock', broker: holding.broker, symbol: holding.symbol.toUpperCase(), isin: holding.isin ?? null, exchange: holding.exchange,
       quantity: holding.quantity, buy_price: holding.buyPrice, buy_date: holding.buyDate,
@@ -919,8 +922,11 @@ export function usePaymentState() {
       source: holding.source ?? null,
       target_type: holding.targetType ?? null, target_price: holding.targetPrice ?? null, target_percent: holding.targetPercent ?? null,
       hold_type: holding.holdType ?? null, hold_days: holding.holdDays ?? null, hold_until_date: holding.holdUntilDate ?? null,
-    });
+    }).select('id').single();
     if (error) throw error;
+    if (holding.currentPrice != null && inserted) {
+      await supabase.from('portfolio_price_history').insert({ workspace_id: activeWorkspaceId, holding_id: inserted.id, price: holding.currentPrice });
+    }
     await loadPortfolioDetails();
   };
 
@@ -937,8 +943,10 @@ export function usePaymentState() {
       current_price: h.currentPrice ?? null, current_price_updated_at: h.currentPrice != null ? new Date().toISOString() : null,
       source: h.source ?? null,
     }));
-    const { error } = await supabase.from('portfolio_holdings').insert(rows);
+    const { data: inserted, error } = await supabase.from('portfolio_holdings').insert(rows).select('id, current_price');
     if (error) throw error;
+    const snapshotRows = (inserted ?? []).filter(r => r.current_price != null).map(r => ({ workspace_id: activeWorkspaceId, holding_id: r.id, price: r.current_price }));
+    if (snapshotRows.length > 0) await supabase.from('portfolio_price_history').insert(snapshotRows);
     await loadPortfolioDetails();
   };
 
@@ -954,11 +962,22 @@ export function usePaymentState() {
     if (updates.notes !== undefined) row.notes = updates.notes;
     const { error } = await supabase.from('portfolio_holdings').update(row).eq('id', id);
     if (error) throw error;
+    if (updates.currentPrice !== undefined && activeWorkspaceId) {
+      await supabase.from('portfolio_price_history').insert({ workspace_id: activeWorkspaceId, holding_id: id, price: updates.currentPrice });
+    }
     await loadPortfolioDetails();
   };
 
   const deletePortfolioHolding = async (id: string) => {
     const { error } = await supabase.from('portfolio_holdings').delete().eq('id', id);
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
+  // Bulk-tag existing holdings with a group/source name in one call, instead of editing each one.
+  const bulkTagPortfolioHoldings = async (holdingIds: string[], source: string) => {
+    if (holdingIds.length === 0) return;
+    const { error } = await supabase.from('portfolio_holdings').update({ source }).in('id', holdingIds);
     if (error) throw error;
     await loadPortfolioDetails();
   };
@@ -1214,7 +1233,8 @@ export function usePaymentState() {
     accessPlans, createAccessPlan, updateAccessPlan, deleteAccessPlan,
     myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan, setSuperAdminStatus,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, deletePortfolioHolding,
+    portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings,
+    portfolioPriceHistory,
     portfolioContributions, addPortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
