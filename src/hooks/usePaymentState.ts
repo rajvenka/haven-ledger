@@ -877,6 +877,7 @@ export function usePaymentState() {
   const [portfolioContributions, setPortfolioContributions] = useState<any[]>([]);
   const [portfolioDividends, setPortfolioDividends] = useState<any[]>([]);
   const [portfolioFees, setPortfolioFees] = useState<any[]>([]);
+  const [portfolioRecurringPlans, setPortfolioRecurringPlans] = useState<any[]>([]);
 
   const loadPortfolios = useCallback(async () => {
     if (!user) return;
@@ -900,16 +901,17 @@ export function usePaymentState() {
   const loadPortfolioDetails = useCallback(async () => {
     if (!activePortfolioId) {
       setPortfolioContributors([]); setPortfolioSplits([]); setPortfolioHoldings([]);
-      setPortfolioContributions([]); setPortfolioDividends([]); setPortfolioFees([]);
+      setPortfolioContributions([]); setPortfolioDividends([]); setPortfolioFees([]); setPortfolioRecurringPlans([]);
       return;
     }
-    const [{ data: contributors }, { data: splits }, { data: holdings }, { data: contributions }, { data: dividends }, { data: fees }] = await Promise.all([
+    const [{ data: contributors }, { data: splits }, { data: holdings }, { data: contributions }, { data: dividends }, { data: fees }, { data: plans }] = await Promise.all([
       supabase.from('portfolio_contributors').select('*').eq('portfolio_id', activePortfolioId).order('created_at'),
       supabase.from('portfolio_splits').select('*').eq('portfolio_id', activePortfolioId).order('effective_from'),
       supabase.from('portfolio_holdings').select('*').eq('portfolio_id', activePortfolioId).order('buy_date', { ascending: false }),
       supabase.from('portfolio_contributions').select('*').eq('portfolio_id', activePortfolioId).order('contribution_date', { ascending: false }),
       supabase.from('portfolio_dividends').select('*').eq('portfolio_id', activePortfolioId).order('dividend_date', { ascending: false }),
       supabase.from('portfolio_fees').select('*').eq('portfolio_id', activePortfolioId).order('fee_date', { ascending: false }),
+      supabase.from('portfolio_recurring_plans').select('*').eq('portfolio_id', activePortfolioId).order('created_at'),
     ]);
     setPortfolioContributors(contributors ?? []);
     setPortfolioSplits(splits ?? []);
@@ -917,17 +919,24 @@ export function usePaymentState() {
     setPortfolioContributions(contributions ?? []);
     setPortfolioDividends(dividends ?? []);
     setPortfolioFees(fees ?? []);
+    setPortfolioRecurringPlans(plans ?? []);
   }, [activePortfolioId]);
 
   useEffect(() => { loadPortfolioDetails(); }, [loadPortfolioDetails]);
 
   const switchPortfolio = (id: string) => setActivePortfolioId(id);
 
-  const addPortfolioContributor = async (displayName: string) => {
+  const addPortfolioContributor = async (displayName: string, linkedUserId?: string) => {
     if (!activePortfolioId) throw new Error('Select a portfolio first.');
-    const { error } = await supabase.from('portfolio_contributors').insert({ portfolio_id: activePortfolioId, display_name: displayName });
+    const { error } = await supabase.from('portfolio_contributors').insert({ portfolio_id: activePortfolioId, display_name: displayName, user_id: linkedUserId ?? null });
     if (error) throw error;
     await loadPortfolioDetails();
+  };
+
+  const findUserByEmail = async (email: string) => {
+    const { data, error } = await supabase.rpc('find_user_by_email', { search_email: email });
+    if (error) throw error;
+    return data && data.length > 0 ? data[0] : null;
   };
 
   const deletePortfolioContributor = async (id: string) => {
@@ -1026,6 +1035,33 @@ export function usePaymentState() {
 
   const deletePortfolioFee = async (id: string) => {
     const { error } = await supabase.from('portfolio_fees').delete().eq('id', id);
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
+  // Recurring contribution EXPECTATIONS (the "plan") - fully separate from the Bills module,
+  // never touches recurring_payments.
+  const addPortfolioRecurringPlan = async (contributorId: string, expectedAmount: number, frequency: 'monthly' | 'quarterly' | 'yearly', startDate: string, dayOfMonth?: number) => {
+    if (!activePortfolioId) throw new Error('Select a portfolio first.');
+    const { error } = await supabase.from('portfolio_recurring_plans').insert({
+      portfolio_id: activePortfolioId, contributor_id: contributorId, expected_amount: expectedAmount,
+      frequency, start_date: startDate, day_of_month: dayOfMonth ?? null,
+    });
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
+  const updatePortfolioRecurringPlan = async (id: string, updates: { active?: boolean; expectedAmount?: number }) => {
+    const row: any = {};
+    if (updates.active !== undefined) row.active = updates.active;
+    if (updates.expectedAmount !== undefined) row.expected_amount = updates.expectedAmount;
+    const { error } = await supabase.from('portfolio_recurring_plans').update(row).eq('id', id);
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
+  const deletePortfolioRecurringPlan = async (id: string) => {
+    const { error } = await supabase.from('portfolio_recurring_plans').delete().eq('id', id);
     if (error) throw error;
     await loadPortfolioDetails();
   };
@@ -1186,6 +1222,8 @@ export function usePaymentState() {
     portfolioContributions, addPortfolioContribution, deletePortfolioContribution,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
+    portfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,
+    findUserByEmail,
     appNotificationsEnabled, mobileNotificationsEnabled, saveNotificationSettings,
   };
 }

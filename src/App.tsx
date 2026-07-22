@@ -175,6 +175,11 @@ export default function App() {
     portfolioFees,
     addPortfolioFee,
     deletePortfolioFee,
+    portfolioRecurringPlans,
+    addPortfolioRecurringPlan,
+    updatePortfolioRecurringPlan,
+    deletePortfolioRecurringPlan,
+    findUserByEmail,
     appNotificationsEnabled,
     mobileNotificationsEnabled,
     saveNotificationSettings,
@@ -643,7 +648,15 @@ export default function App() {
                       )}
                     </button>
                   )}
+                </nav>
+              </div>
 
+              {/* SECTION: INVESTMENT */}
+              <div className="space-y-1">
+                <span className="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 tracking-wider uppercase block text-left">
+                  Investment
+                </span>
+                <nav className="flex flex-col gap-1 text-left">
                   <button
                     onClick={() => setActiveTab('portfolio')}
                     className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
@@ -1017,7 +1030,15 @@ export default function App() {
                           )}
                         </button>
                       )}
+                    </nav>
+                  </div>
 
+                  {/* SECTION: INVESTMENT */}
+                  <div className="space-y-1">
+                    <span className="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 tracking-wider uppercase block text-left">
+                      Investment
+                    </span>
+                    <nav className="flex flex-col gap-1 text-left">
                       <button
                         onClick={() => { setActiveTab('portfolio'); setIsMobileMenuOpen(false); }}
                         className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
@@ -1403,6 +1424,11 @@ export default function App() {
                 portfolioFees={portfolioFees}
                 addPortfolioFee={addPortfolioFee}
                 deletePortfolioFee={deletePortfolioFee}
+                portfolioRecurringPlans={portfolioRecurringPlans}
+                addPortfolioRecurringPlan={addPortfolioRecurringPlan}
+                updatePortfolioRecurringPlan={updatePortfolioRecurringPlan}
+                deletePortfolioRecurringPlan={deletePortfolioRecurringPlan}
+                findUserByEmail={findUserByEmail}
               />
             ) : activeTab === 'income' ? (
               <IncomeView

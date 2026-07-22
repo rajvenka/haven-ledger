@@ -10,8 +10,9 @@ interface PortfolioViewProps {
   switchPortfolio: (id: string) => void;
   createPortfolio: (name: string) => Promise<any>;
   portfolioContributors: any[];
-  addPortfolioContributor: (name: string) => Promise<void>;
+  addPortfolioContributor: (name: string, linkedUserId?: string) => Promise<void>;
   deletePortfolioContributor: (id: string) => Promise<void>;
+  findUserByEmail: (email: string) => Promise<{ id: string; email: string; display_name: string } | null>;
   portfolioSplits: any[];
   addPortfolioSplit: (contributorId: string, percent: number, from: string, to?: string) => Promise<void>;
   deletePortfolioSplit: (id: string) => Promise<void>;
@@ -28,6 +29,10 @@ interface PortfolioViewProps {
   portfolioFees: any[];
   addPortfolioFee: (broker: string, feeType: string, amount: number, date: string, notes?: string) => Promise<void>;
   deletePortfolioFee: (id: string) => Promise<void>;
+  portfolioRecurringPlans: any[];
+  addPortfolioRecurringPlan: (contributorId: string, amount: number, frequency: 'monthly' | 'quarterly' | 'yearly', startDate: string, dayOfMonth?: number) => Promise<void>;
+  updatePortfolioRecurringPlan: (id: string, updates: { active?: boolean; expectedAmount?: number }) => Promise<void>;
+  deletePortfolioRecurringPlan: (id: string) => Promise<void>;
 }
 
 const fmt = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
@@ -36,17 +41,31 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 export default function PortfolioView(props: PortfolioViewProps) {
   const {
     portfolios, activePortfolioId, switchPortfolio, createPortfolio,
-    portfolioContributors, addPortfolioContributor, deletePortfolioContributor,
+    portfolioContributors, addPortfolioContributor, deletePortfolioContributor, findUserByEmail,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
     portfolioHoldings, addPortfolioHolding, updatePortfolioHolding, deletePortfolioHolding,
     portfolioContributions, addPortfolioContribution, deletePortfolioContribution,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
+    portfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,
   } = props;
 
-  const [tab, setTab] = useState<'holdings' | 'contributions' | 'statement'>('holdings');
+  const [tab, setTab] = useState<'holdings' | 'contributions' | 'plan' | 'statement'>('holdings');
   const [isCreatingPortfolio, setIsCreatingPortfolio] = useState(portfolios.length === 0);
   const [newPortfolioName, setNewPortfolioName] = useState('');
+  const [creatingBusy, setCreatingBusy] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // Wrap any async action so failures always surface instead of failing silently.
+  const runAction = async (fn: () => Promise<any>) => {
+    setFormError(null);
+    try {
+      await fn();
+    } catch (err: any) {
+      console.error('Portfolio action failed:', err);
+      setFormError(err?.message || 'Something went wrong. Please try again.');
+    }
+  };
 
   // ---- Holdings ----
   const [isAddingHolding, setIsAddingHolding] = useState(false);
@@ -67,21 +86,27 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const handleAddHolding = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hSymbol.trim() || !hQty || !hPrice) return;
-    await addPortfolioHolding({ broker: hBroker, symbol: hSymbol, exchange: hExchange, quantity: parseFloat(hQty), buyPrice: parseFloat(hPrice), buyDate: hDate });
-    setHSymbol(''); setHQty(''); setHPrice(''); setIsAddingHolding(false);
+    await runAction(async () => {
+      await addPortfolioHolding({ broker: hBroker, symbol: hSymbol, exchange: hExchange, quantity: parseFloat(hQty), buyPrice: parseFloat(hPrice), buyDate: hDate });
+      setHSymbol(''); setHQty(''); setHPrice(''); setIsAddingHolding(false);
+    });
   };
 
   const saveCurrentPrice = async (id: string) => {
     const val = parseFloat(priceEdits[id]);
     if (!val) return;
-    await updatePortfolioHolding(id, { currentPrice: val });
-    setPriceEdits(prev => { const next = { ...prev }; delete next[id]; return next; });
+    await runAction(async () => {
+      await updatePortfolioHolding(id, { currentPrice: val });
+      setPriceEdits(prev => { const next = { ...prev }; delete next[id]; return next; });
+    });
   };
 
   const confirmSell = async () => {
     if (!sellingId || !sellPrice) return;
-    await updatePortfolioHolding(sellingId, { status: 'sold', soldPrice: parseFloat(sellPrice), soldDate: sellDate });
-    setSellingId(null); setSellPrice('');
+    await runAction(async () => {
+      await updatePortfolioHolding(sellingId, { status: 'sold', soldPrice: parseFloat(sellPrice), soldDate: sellDate });
+      setSellingId(null); setSellPrice('');
+    });
   };
 
   // ---- Contributions & Split ----
@@ -90,6 +115,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [cAmount, setCAmount] = useState('');
   const [cDate, setCDate] = useState(todayStr());
   const [isAddingContributor, setIsAddingContributor] = useState(false);
+  const [contributorMode, setContributorMode] = useState<'name' | 'existing'>('name');
+  const [lookupEmail, setLookupEmail] = useState('');
+  const [lookupResult, setLookupResult] = useState<{ id: string; email: string; display_name: string } | 'not_found' | null>(null);
+  const [lookupBusy, setLookupBusy] = useState(false);
   const [newContributorName, setNewContributorName] = useState('');
   const [isAddingSplit, setIsAddingSplit] = useState(false);
   const [splitContributorId, setSplitContributorId] = useState('');
@@ -97,11 +126,21 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [splitFrom, setSplitFrom] = useState(todayStr());
   const [splitTo, setSplitTo] = useState('');
 
+  // ---- Investment Plan (recurring expectation, separate from actual contribution log) ----
+  const [isAddingPlan, setIsAddingPlan] = useState(false);
+  const [planContributorId, setPlanContributorId] = useState('');
+  const [planAmount, setPlanAmount] = useState('');
+  const [planFrequency, setPlanFrequency] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
+  const [planStartDate, setPlanStartDate] = useState(todayStr());
+  const [planDayOfMonth, setPlanDayOfMonth] = useState('1');
+
   const handleAddContribution = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!cContributorId || !cAmount) return;
-    await addPortfolioContribution(cContributorId, parseFloat(cAmount), cDate);
-    setCAmount(''); setIsAddingContribution(false);
+    await runAction(async () => {
+      await addPortfolioContribution(cContributorId, parseFloat(cAmount), cDate);
+      setCAmount(''); setIsAddingContribution(false);
+    });
   };
 
   const currentSplits = useMemo(() => {
@@ -130,7 +169,22 @@ export default function PortfolioView(props: PortfolioViewProps) {
           <h2 className="text-sm font-black text-slate-900 dark:text-white">Create Your Portfolio</h2>
           <p className="text-xs text-slate-400">Track stocks, contributions, and gains — split however you and your co-investor agree, and it can change over time.</p>
           <form
-            onSubmit={async (e) => { e.preventDefault(); if (!newPortfolioName.trim()) return; await createPortfolio(newPortfolioName.trim()); setNewPortfolioName(''); setIsCreatingPortfolio(false); }}
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!newPortfolioName.trim()) return;
+              setCreatingBusy(true);
+              setFormError(null);
+              try {
+                await createPortfolio(newPortfolioName.trim());
+                setNewPortfolioName('');
+                setIsCreatingPortfolio(false);
+              } catch (err: any) {
+                console.error('Create portfolio failed:', err);
+                setFormError(err?.message || 'Could not create the portfolio. Please try again.');
+              } finally {
+                setCreatingBusy(false);
+              }
+            }}
             className="w-full space-y-2 mt-2"
           >
             <input
@@ -141,11 +195,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
               placeholder="Portfolio name, e.g. Me & Arjun"
               className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs"
             />
-            <button type="submit" className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-wider rounded-xl cursor-pointer">
-              Create Portfolio
+            {formError && (
+              <p className="text-[11px] text-rose-500 font-semibold bg-rose-50 dark:bg-rose-950/20 px-3 py-2 rounded-lg">{formError}</p>
+            )}
+            <button type="submit" disabled={creatingBusy} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-wider rounded-xl cursor-pointer">
+              {creatingBusy ? 'Creating…' : 'Create Portfolio'}
             </button>
             {portfolios.length > 0 && (
-              <button type="button" onClick={() => setIsCreatingPortfolio(false)} className="w-full text-[10px] text-slate-400 underline cursor-pointer">Cancel</button>
+              <button type="button" onClick={() => { setIsCreatingPortfolio(false); setFormError(null); }} className="w-full text-[10px] text-slate-400 underline cursor-pointer">Cancel</button>
             )}
           </form>
         </div>
@@ -175,6 +232,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
         </button>
       </div>
 
+      {formError && (
+        <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 rounded-xl flex items-center justify-between gap-2">
+          <span className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold">{formError}</span>
+          <button onClick={() => setFormError(null)} className="text-rose-400 hover:text-rose-600 cursor-pointer"><X className="w-3.5 h-3.5" /></button>
+        </div>
+      )}
+
       {/* Headline stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="apple-card p-4">
@@ -200,13 +264,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
       {/* Tabs */}
       <div className="flex border-b border-slate-150 dark:border-slate-800 gap-1">
-        {(['holdings', 'contributions', 'statement'] as const).map(t => (
+        {(['holdings', 'contributions', 'plan', 'statement'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-3.5 py-2 text-xs font-bold capitalize cursor-pointer transition-all ${tab === t ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 dark:border-indigo-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
+            className={`px-3.5 py-2 text-xs font-bold capitalize cursor-pointer transition-all whitespace-nowrap ${tab === t ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 dark:border-indigo-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
           >
-            {t === 'contributions' ? 'Contributions & Split' : t}
+            {t === 'contributions' ? 'Contributions & Split' : t === 'plan' ? 'Investment Plan' : t}
           </button>
         ))}
       </div>
@@ -288,7 +352,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       ) : (
                         <button onClick={() => { setSellingId(h.id); setSellPrice(String(h.current_price ?? h.buy_price)); }} className="px-2 py-1 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 text-[9px] font-black uppercase rounded-md cursor-pointer">Sell</button>
                       )}
-                      <button onClick={() => deletePortfolioHolding(h.id)} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => runAction(() => deletePortfolioHolding(h.id))} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   </div>
                 );
@@ -310,7 +374,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className={`text-[11px] font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)}</span>
-                        <button onClick={() => deletePortfolioHolding(h.id)} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => runAction(() => deletePortfolioHolding(h.id))} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </div>
                   );
@@ -330,10 +394,61 @@ export default function PortfolioView(props: PortfolioViewProps) {
               <button onClick={() => setIsAddingContributor(!isAddingContributor)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Add Person</button>
             </div>
             {isAddingContributor && (
-              <form onSubmit={async (e) => { e.preventDefault(); if (!newContributorName.trim()) return; await addPortfolioContributor(newContributorName.trim()); setNewContributorName(''); setIsAddingContributor(false); }} className="flex gap-2">
-                <input autoFocus type="text" value={newContributorName} onChange={(e) => setNewContributorName(e.target.value)} placeholder="Name" className="flex-1 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
-                <button type="submit" className="px-3 py-1.5 bg-indigo-600 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer">Add</button>
-              </form>
+              <div className="space-y-2">
+                <div className="flex gap-1.5">
+                  <button type="button" onClick={() => { setContributorMode('name'); setLookupResult(null); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${contributorMode === 'name' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Name Only</button>
+                  <button type="button" onClick={() => setContributorMode('existing')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${contributorMode === 'existing' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Existing App User</button>
+                </div>
+
+                {contributorMode === 'name' ? (
+                  <form onSubmit={async (e) => { e.preventDefault(); if (!newContributorName.trim()) return; await runAction(async () => { await addPortfolioContributor(newContributorName.trim()); setNewContributorName(''); setIsAddingContributor(false); }); }} className="flex gap-2">
+                    <input autoFocus type="text" value={newContributorName} onChange={(e) => setNewContributorName(e.target.value)} placeholder="Name (doesn't need an account)" className="flex-1 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                    <button type="submit" className="px-3 py-1.5 bg-indigo-600 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer">Add</button>
+                  </form>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        autoFocus
+                        type="email"
+                        value={lookupEmail}
+                        onChange={(e) => { setLookupEmail(e.target.value); setLookupResult(null); }}
+                        placeholder="Their Haven Vault email"
+                        className="flex-1 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+                      />
+                      <button
+                        type="button"
+                        disabled={lookupBusy || !lookupEmail.trim()}
+                        onClick={async () => {
+                          setLookupBusy(true);
+                          await runAction(async () => {
+                            const found = await findUserByEmail(lookupEmail.trim());
+                            setLookupResult(found || 'not_found');
+                          });
+                          setLookupBusy(false);
+                        }}
+                        className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-black uppercase rounded-lg cursor-pointer disabled:opacity-50"
+                      >
+                        {lookupBusy ? '...' : 'Find'}
+                      </button>
+                    </div>
+                    {lookupResult === 'not_found' && (
+                      <p className="text-[10px] text-amber-600">No Haven Vault account with that email. Use "Name Only" instead, or ask them to sign up first.</p>
+                    )}
+                    {lookupResult && lookupResult !== 'not_found' && (
+                      <div className="flex items-center justify-between p-2 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg">
+                        <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400">{lookupResult.display_name || lookupResult.email}</span>
+                        <button
+                          onClick={async () => { await runAction(async () => { await addPortfolioContributor(lookupResult.display_name || lookupResult.email, lookupResult.id); setLookupEmail(''); setLookupResult(null); setIsAddingContributor(false); }); }}
+                          className="px-2.5 py-1 bg-emerald-600 text-white text-[9px] font-black uppercase rounded-md cursor-pointer"
+                        >
+                          Add as Contributor
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
             <div className="space-y-1.5">
               {currentSplits.map(({ contributor, percent }) => (
@@ -341,7 +456,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   <span className="font-semibold text-slate-700 dark:text-slate-300">{contributor.display_name}</span>
                   <div className="flex items-center gap-2">
                     <span className="font-black text-slate-900 dark:text-white">{percent}%</span>
-                    <button onClick={() => deletePortfolioContributor(contributor.id)} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
+                    <button onClick={() => runAction(() => deletePortfolioContributor(contributor.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
                   </div>
                 </div>
               ))}
@@ -350,7 +465,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <button onClick={() => setIsAddingSplit(!isAddingSplit)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Set Split for a Period</button>
             {isAddingSplit && (
               <form
-                onSubmit={async (e) => { e.preventDefault(); if (!splitContributorId || !splitPercent) return; await addPortfolioSplit(splitContributorId, parseFloat(splitPercent), splitFrom, splitTo || undefined); setSplitPercent(''); setIsAddingSplit(false); }}
+                onSubmit={async (e) => { e.preventDefault(); if (!splitContributorId || !splitPercent) return; await runAction(async () => { await addPortfolioSplit(splitContributorId, parseFloat(splitPercent), splitFrom, splitTo || undefined); setSplitPercent(''); setIsAddingSplit(false); }); }}
                 className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-900"
               >
                 <select value={splitContributorId} onChange={(e) => setSplitContributorId(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
@@ -371,7 +486,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   return (
                     <div key={s.id} className="flex items-center justify-between text-[10px] text-slate-500">
                       <span>{c?.display_name} — {s.split_percent}% ({s.effective_from} → {s.effective_to || 'ongoing'})</span>
-                      <button onClick={() => deletePortfolioSplit(s.id)} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
+                      <button onClick={() => runAction(() => deletePortfolioSplit(s.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
                     </div>
                   );
                 })}
@@ -405,7 +520,75 @@ export default function PortfolioView(props: PortfolioViewProps) {
                     <span className="text-slate-600 dark:text-slate-300">{person?.display_name} · {c.contribution_date}</span>
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-slate-900 dark:text-white">{fmt(Number(c.amount))}</span>
-                      <button onClick={() => deletePortfolioContribution(c.id)} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
+                      <button onClick={() => runAction(() => deletePortfolioContribution(c.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* INVESTMENT PLAN TAB */}
+      {tab === 'plan' && (
+        <div className="space-y-4">
+          <div className="apple-card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Recurring Contribution Plan</span>
+              <button onClick={() => setIsAddingPlan(!isAddingPlan)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Add Plan</button>
+            </div>
+            <p className="text-[10px] text-slate-400">What each person is expected to contribute on a schedule — separate from your Bills, and separate from the actual amounts logged in Contributions.</p>
+
+            {isAddingPlan && (
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!planContributorId || !planAmount) return;
+                  await runAction(async () => {
+                    await addPortfolioRecurringPlan(planContributorId, parseFloat(planAmount), planFrequency, planStartDate, planFrequency === 'monthly' ? parseInt(planDayOfMonth) : undefined);
+                    setPlanAmount(''); setIsAddingPlan(false);
+                  });
+                }}
+                className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-900"
+              >
+                <select value={planContributorId} onChange={(e) => setPlanContributorId(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
+                  <option value="">Who</option>
+                  {portfolioContributors.map(c => <option key={c.id} value={c.id}>{c.display_name}</option>)}
+                </select>
+                <input type="number" value={planAmount} onChange={(e) => setPlanAmount(e.target.value)} placeholder="Amount" className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                <select value={planFrequency} onChange={(e) => setPlanFrequency(e.target.value as any)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
+                  <option value="monthly">Monthly</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="yearly">Yearly</option>
+                </select>
+                {planFrequency === 'monthly' && (
+                  <input type="number" min="1" max="31" value={planDayOfMonth} onChange={(e) => setPlanDayOfMonth(e.target.value)} placeholder="Day of month" className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                )}
+                <input type="date" value={planStartDate} onChange={(e) => setPlanStartDate(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs col-span-2" />
+                <button type="submit" className="col-span-2 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer">Save Plan</button>
+              </form>
+            )}
+
+            <div className="divide-y divide-slate-100 dark:divide-slate-900">
+              {portfolioRecurringPlans.length === 0 ? (
+                <p className="text-center text-xs text-slate-400 py-4">No recurring plan set up yet.</p>
+              ) : portfolioRecurringPlans.map(plan => {
+                const person = portfolioContributors.find(c => c.id === plan.contributor_id);
+                return (
+                  <div key={plan.id} className="py-2.5 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-900 dark:text-white">{person?.display_name}</p>
+                      <p className="text-[10px] text-slate-400">{fmt(Number(plan.expected_amount))} · {plan.frequency}{plan.day_of_month ? ` on day ${plan.day_of_month}` : ''} · from {plan.start_date}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => runAction(() => updatePortfolioRecurringPlan(plan.id, { active: !plan.active }))}
+                        className={`px-2 py-1 text-[9px] font-black uppercase rounded-full cursor-pointer ${plan.active ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}
+                      >
+                        {plan.active ? 'Active' : 'Paused'}
+                      </button>
+                      <button onClick={() => runAction(() => deletePortfolioRecurringPlan(plan.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   </div>
                 );
@@ -455,7 +638,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             {portfolioDividends.length === 0 ? <p className="text-[11px] text-slate-400">None recorded.</p> : portfolioDividends.map(d => (
               <div key={d.id} className="flex items-center justify-between text-xs">
                 <span className="text-slate-600 dark:text-slate-300">{d.symbol} · {d.dividend_date}</span>
-                <div className="flex items-center gap-2"><span className="font-bold text-emerald-600">+{fmt(Number(d.amount))}</span><button onClick={() => deletePortfolioDividend(d.id)} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button></div>
+                <div className="flex items-center gap-2"><span className="font-bold text-emerald-600">+{fmt(Number(d.amount))}</span><button onClick={() => runAction(() => deletePortfolioDividend(d.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button></div>
               </div>
             ))}
           </div>
@@ -468,7 +651,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             {portfolioFees.length === 0 ? <p className="text-[11px] text-slate-400">None recorded.</p> : portfolioFees.map(f => (
               <div key={f.id} className="flex items-center justify-between text-xs">
                 <span className="text-slate-600 dark:text-slate-300">{f.broker} · {f.fee_type} · {f.fee_date}</span>
-                <div className="flex items-center gap-2"><span className="font-bold text-rose-500">-{fmt(Number(f.amount))}</span><button onClick={() => deletePortfolioFee(f.id)} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button></div>
+                <div className="flex items-center gap-2"><span className="font-bold text-rose-500">-{fmt(Number(f.amount))}</span><button onClick={() => runAction(() => deletePortfolioFee(f.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button></div>
               </div>
             ))}
           </div>
@@ -483,14 +666,18 @@ function QuickAddDividend({ onAdd }: { onAdd: (symbol: string, amount: number, d
   const [symbol, setSymbol] = useState('');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(todayStr());
+  const [err, setErr] = useState<string | null>(null);
   if (!open) return <button onClick={() => setOpen(true)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Add</button>;
   return (
-    <form onSubmit={async (e) => { e.preventDefault(); if (!symbol.trim() || !amount) return; await onAdd(symbol.trim(), parseFloat(amount), date); setSymbol(''); setAmount(''); setOpen(false); }} className="flex gap-1.5">
-      <input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="Symbol" className="w-20 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]" />
-      <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amt" className="w-16 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]" />
-      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]" />
-      <button type="submit" className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold cursor-pointer">Save</button>
-    </form>
+    <div>
+      <form onSubmit={async (e) => { e.preventDefault(); if (!symbol.trim() || !amount) return; try { setErr(null); await onAdd(symbol.trim(), parseFloat(amount), date); setSymbol(''); setAmount(''); setOpen(false); } catch (error: any) { setErr(error?.message || 'Failed to save.'); } }} className="flex gap-1.5">
+        <input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="Symbol" className="w-20 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]" />
+        <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amt" className="w-16 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]" />
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]" />
+        <button type="submit" className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold cursor-pointer">Save</button>
+      </form>
+      {err && <p className="text-[9px] text-rose-500 mt-1">{err}</p>}
+    </div>
   );
 }
 
@@ -499,15 +686,19 @@ function QuickAddFee({ onAdd }: { onAdd: (broker: string, feeType: string, amoun
   const [broker, setBroker] = useState('Zerodha');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(todayStr());
+  const [err, setErr] = useState<string | null>(null);
   if (!open) return <button onClick={() => setOpen(true)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Add</button>;
   return (
-    <form onSubmit={async (e) => { e.preventDefault(); if (!amount) return; await onAdd(broker, 'AMC', parseFloat(amount), date); setAmount(''); setOpen(false); }} className="flex gap-1.5">
-      <select value={broker} onChange={(e) => setBroker(e.target.value)} className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]">
-        <option>Zerodha</option><option>Groww</option><option>Other</option>
-      </select>
-      <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amt" className="w-16 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]" />
-      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]" />
-      <button type="submit" className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold cursor-pointer">Save</button>
-    </form>
+    <div>
+      <form onSubmit={async (e) => { e.preventDefault(); if (!amount) return; try { setErr(null); await onAdd(broker, 'AMC', parseFloat(amount), date); setAmount(''); setOpen(false); } catch (error: any) { setErr(error?.message || 'Failed to save.'); } }} className="flex gap-1.5">
+        <select value={broker} onChange={(e) => setBroker(e.target.value)} className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]">
+          <option>Zerodha</option><option>Groww</option><option>Other</option>
+        </select>
+        <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amt" className="w-16 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]" />
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]" />
+        <button type="submit" className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold cursor-pointer">Save</button>
+      </form>
+      {err && <p className="text-[9px] text-rose-500 mt-1">{err}</p>}
+    </div>
   );
 }
