@@ -961,31 +961,64 @@ export default function AccountInfo({
       {currentSubTab === 'preferences' && (
         <>
           {/* My Plan */}
-          <div className="bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 shrink-0">
+          <div className="bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3.5 shrink-0">
             <div className="flex items-center justify-between">
-              <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">My Plan</span>
-                <p className="text-sm font-black text-slate-900 dark:text-white">{userProfile?.licensePlanName || 'Light'}</p>
-              </div>
-              <ShieldCheck className="w-5 h-5 text-indigo-500" />
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" /> Plans that grow with you
+              </span>
+              {myUpgradeRequest && (
+                <span className="px-2 py-1 bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase tracking-wide rounded-full">
+                  {myUpgradeRequest.planName} pending
+                </span>
+              )}
             </div>
-            {myUpgradeRequest ? (
-              <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/20 rounded-lg text-[11px] font-semibold text-amber-600 dark:text-amber-400">
-                Request for {myUpgradeRequest.planName} is pending review.
-              </div>
-            ) : (
-              <div className="flex gap-1.5 flex-wrap">
-                {accessPlans.filter(p => p.name !== userProfile?.licensePlanName).map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => onRequestUpgrade?.(p.id)}
-                    className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/30 hover:bg-indigo-100 dark:hover:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer"
+
+            <div className="space-y-2.5">
+              {accessPlans.map(plan => {
+                const isCurrent = plan.name === userProfile?.licensePlanName;
+                const isRequested = myUpgradeRequest?.planName === plan.name;
+                return (
+                  <div
+                    key={plan.id}
+                    className={`rounded-xl border p-3.5 space-y-2.5 ${isCurrent ? 'border-indigo-300 dark:border-indigo-800 bg-indigo-50/40 dark:bg-indigo-950/20' : 'border-slate-150 dark:border-slate-850'}`}
                   >
-                    Request {p.name}
-                  </button>
-                ))}
-              </div>
-            )}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-black text-slate-900 dark:text-white">{plan.name}</span>
+                          {isCurrent && <span className="px-1.5 py-0.5 bg-indigo-600 text-white text-[8px] font-black uppercase tracking-wide rounded-full">Current Plan</span>}
+                        </div>
+                        {plan.description && <p className="text-[10px] text-slate-400 mt-0.5">{plan.description}</p>}
+                      </div>
+                      {!isCurrent && (
+                        <button
+                          onClick={() => onRequestUpgrade?.(plan.id)}
+                          disabled={isRequested}
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer shrink-0"
+                        >
+                          {isRequested ? 'Requested' : 'Request'}
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                      <div className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                        <Check className="w-3 h-3 text-emerald-500 shrink-0" /> Dashboard, Expenses, Bills, History
+                      </div>
+                      {['income', 'rewards', 'ai', 'team', 'chat', 'agent'].map(f => {
+                        const included = plan.features.includes(f);
+                        const labels: Record<string, string> = { income: 'Income', rewards: 'Rewards & Perks', ai: 'AI Insights', team: 'Family Sharing', chat: 'Family Chat', agent: 'AI Agent' };
+                        return (
+                          <div key={f} className={`flex items-center gap-1.5 text-[10px] ${included ? 'text-slate-600 dark:text-slate-300' : 'text-slate-300 dark:text-slate-700 line-through'}`}>
+                            {included ? <Check className="w-3 h-3 text-emerald-500 shrink-0" /> : <X className="w-3 h-3 text-slate-300 dark:text-slate-700 shrink-0" />}
+                            {labels[f]}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* APP DISPLAY SETTINGS (Premium Bento card styling) */}

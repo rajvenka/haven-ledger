@@ -78,6 +78,28 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
     }
   };
 
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  const [editFeatures, setEditFeatures] = useState<string[]>([]);
+  const [editBusy, setEditBusy] = useState(false);
+
+  const startEditingPlan = (plan: AccessPlan) => {
+    setEditingPlanId(plan.id);
+    setEditFeatures(plan.features);
+  };
+
+  const toggleEditFeature = (f: string) => setEditFeatures(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
+
+  const saveEditedPlan = async () => {
+    if (!editingPlanId) return;
+    setEditBusy(true);
+    try {
+      await onUpdatePlan?.(editingPlanId, { features: editFeatures });
+      setEditingPlanId(null);
+    } finally {
+      setEditBusy(false);
+    }
+  };
+
   const [pendingRequests, setPendingRequests] = useState<UpgradeRequest[]>([]);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [changingPlanFor, setChangingPlanFor] = useState<string | null>(null);
@@ -204,20 +226,47 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
 
         <div className="space-y-2">
           {accessPlans.map(plan => (
-            <div key={plan.id} className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg">
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  {plan.name}
-                  {plan.isSystem && <span className="text-[8px] font-black uppercase text-slate-400">Default</span>}
-                </p>
-                <p className="text-[9px] text-slate-400">
-                  {plan.features.length === 0 ? 'Bills & Expenses only' : plan.features.map(f => PLAN_FEATURE_LABELS[f] || f).join(', ')}
-                </p>
+            <div key={plan.id} className="bg-slate-50 dark:bg-slate-900 rounded-lg overflow-hidden">
+              <div className="flex items-center justify-between p-2.5">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    {plan.name}
+                    {plan.isSystem && <span className="text-[8px] font-black uppercase text-slate-400">Default</span>}
+                  </p>
+                  <p className="text-[9px] text-slate-400">
+                    {plan.features.length === 0 ? 'Bills & Expenses only' : plan.features.map(f => PLAN_FEATURE_LABELS[f] || f).join(', ')}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => (editingPlanId === plan.id ? setEditingPlanId(null) : startEditingPlan(plan))} className="p-1.5 text-slate-400 hover:text-indigo-500 cursor-pointer">
+                    {editingPlanId === plan.id ? <X className="w-3.5 h-3.5" /> : <Package className="w-3.5 h-3.5" />}
+                  </button>
+                  {!plan.isSystem && (
+                    <button onClick={() => onDeletePlan?.(plan.id)} className="p-1.5 text-slate-300 hover:text-red-500 cursor-pointer">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
-              {!plan.isSystem && (
-                <button onClick={() => onDeletePlan?.(plan.id)} className="p-1.5 text-slate-300 hover:text-red-500 cursor-pointer shrink-0">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+              {editingPlanId === plan.id && (
+                <div className="p-2.5 pt-0 space-y-2">
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {ALL_PLAN_FEATURES.map(f => (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() => toggleEditFeature(f)}
+                        className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer text-left ${editFeatures.includes(f) ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900' : 'bg-white dark:bg-slate-950 text-slate-400 border border-slate-200 dark:border-slate-800'}`}
+                      >
+                        {editFeatures.includes(f) ? <Check className="w-3 h-3 shrink-0" /> : <span className="w-3 h-3 shrink-0" />}
+                        {PLAN_FEATURE_LABELS[f]}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={saveEditedPlan} disabled={editBusy} className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer">
+                    {editBusy ? 'Saving…' : 'Save Changes'}
+                  </button>
+                </div>
               )}
             </div>
           ))}
