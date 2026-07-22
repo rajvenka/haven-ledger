@@ -502,13 +502,6 @@ export default function RewardsTracker({
           </p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <button
-            onClick={toggleInstructions}
-            className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold transition-all flex items-center gap-1.5 bg-white hover:bg-slate-50 dark:bg-slate-950 dark:hover:bg-slate-900 text-slate-650 dark:text-slate-400 cursor-pointer"
-          >
-            <HelpCircle className={`w-4 h-4 ${showInstructions ? 'text-indigo-500' : 'text-slate-400'}`} />
-            <span>{showInstructions ? 'Hide Help Tips' : 'Show Help Tips'}</span>
-          </button>
           {!isReadOnly && (
             <button
               onClick={handleOpenAdd}
@@ -517,6 +510,13 @@ export default function RewardsTracker({
               <Plus className="w-4 h-4" /> Log New Reward
             </button>
           )}
+          <button
+            onClick={toggleInstructions}
+            className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold transition-all flex items-center gap-1.5 bg-white hover:bg-slate-50 dark:bg-slate-950 dark:hover:bg-slate-900 text-slate-650 dark:text-slate-400 cursor-pointer"
+          >
+            <HelpCircle className={`w-4 h-4 ${showInstructions ? 'text-indigo-500' : 'text-slate-400'}`} />
+            <span>{showInstructions ? 'Hide Instructions' : 'Show Instructions'}</span>
+          </button>
         </div>
       </div>
 
