@@ -439,8 +439,8 @@ export default function App() {
       <div className="flex-1 flex flex-row h-full bg-slate-50 dark:bg-slate-900 relative overflow-hidden text-left">
         
         {/* Persistent Desktop Sidebar Navigation (Hidden on Mobile) */}
-        <aside className="hidden md:flex flex-col w-64 bg-white dark:bg-slate-950 border-r border-slate-150/80 dark:border-slate-900 shrink-0 z-20 overflow-y-auto select-none p-6 justify-between">
-          <div className="space-y-6">
+        <aside className="hidden md:flex flex-col w-64 bg-white dark:bg-slate-950 border-r border-slate-150/80 dark:border-slate-900 shrink-0 z-20 select-none p-6">
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-6">
             {/* Elegant Header with Logo & Status */}
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white font-black shadow-md shadow-indigo-500/20 dark:shadow-indigo-950/40 relative">
@@ -769,11 +769,11 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 30 }}
               transition={{ duration: 0.25, ease: 'easeInOut' }}
-              className="md:hidden fixed inset-0 bg-white dark:bg-slate-950 z-50 flex flex-col select-none p-6 justify-between overflow-y-auto"
+              className="md:hidden fixed inset-0 bg-white dark:bg-slate-950 z-50 flex flex-col select-none p-6"
               style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.5rem)' }}
             >
-              {/* Inside Menu Drawer */}
-              <div className="space-y-6">
+              {/* Inside Menu Drawer - scrolls independently, footer below stays fixed */}
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-6">
                 {/* Header with Title and Close Button */}
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-3">
