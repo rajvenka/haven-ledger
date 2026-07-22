@@ -144,7 +144,7 @@ export function usePaymentState() {
       incomeMode: (m.workspaces?.income_mode ?? 'simple') as 'simple' | 'detailed',
       monthlyIncome: m.workspaces?.monthly_income ?? '',
       accessLevel: (m.access_level ?? 'full') as 'full' | 'limited',
-      enabledFeatures: m.workspaces?.owner_id === uid ? ['income', 'rewards', 'ai', 'team', 'chat', 'agent'] : (m.enabled_features ?? ['income', 'rewards', 'ai', 'team', 'chat', 'agent']),
+      enabledFeatures: m.enabled_features ?? ['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'whatsapp'],
     }));
     setWorkspaces(list);
 

@@ -169,7 +169,14 @@ export default function App() {
 
   // Limited-access members only see the essentials; hasFeature checks each optional tab individually.
   const isLimitedAccess = activeWorkspace?.accessLevel === 'limited';
-  const hasFeature = (feature: string) => !activeWorkspace?.enabledFeatures || activeWorkspace.enabledFeatures.includes(feature);
+  // A feature is available only if BOTH the workspace grants it AND the user's own
+  // license plan includes it - the plan is always the hard ceiling, regardless of role.
+  const hasFeature = (feature: string) => {
+    if (userProfile?.isSuperAdmin) return true;
+    const workspaceGrants = !activeWorkspace?.enabledFeatures || activeWorkspace.enabledFeatures.includes(feature);
+    const planIncludes = userProfile?.licensePlanFeatures === undefined ? true : userProfile.licensePlanFeatures.includes(feature);
+    return workspaceGrants && planIncludes;
+  };
 
   // Hard enforcement: even if activeTab somehow points at a gated tab (stale state, direct
   // manipulation), bounce back to the dashboard rather than just hiding the nav link.
