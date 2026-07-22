@@ -207,6 +207,8 @@ export default function AccountInfo({
   // Family forms state
   const [familyEmail, setFamilyEmail] = useState('');
   const [familyEmailRole, setFamilyEmailRole] = useState<'view' | 'modify'>('modify');
+  const [invitationError, setInvitationError] = useState<string | null>(null);
+  const [respondingInvId, setRespondingInvId] = useState<string | null>(null);
   const [isRenamingWorkspace, setIsRenamingWorkspace] = useState(false);
   const [workspaceRenameValue, setWorkspaceRenameValue] = useState('');
   const [workspaceActionBusy, setWorkspaceActionBusy] = useState(false);
@@ -795,6 +797,7 @@ export default function AccountInfo({
           {incomingInvitations.length > 0 && (
             <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5">
               <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Pending Invitations</h4>
+              {invitationError && <p className="text-[10px] text-rose-500 font-semibold bg-rose-50 dark:bg-rose-950/20 px-2.5 py-1.5 rounded-lg">{invitationError}</p>}
               {incomingInvitations.map(inv => (
                 <div key={inv.id} className="flex items-center justify-between gap-2 p-2 bg-slate-50 dark:bg-slate-900 rounded-lg">
                   <div>
@@ -802,8 +805,40 @@ export default function AccountInfo({
                     <p className="text-[10px] text-slate-500">Invited you as {inv.proposedRole === 'view' ? 'View Only' : 'Editor'}</p>
                   </div>
                   <div className="flex gap-1.5">
-                    <button onClick={() => onApproveInvitation?.(inv.id, inv.proposedRole)} className="px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black rounded-md cursor-pointer">Accept</button>
-                    <button onClick={() => onDeclineInvitation?.(inv.id)} className="px-2 py-1 bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-black rounded-md cursor-pointer">Decline</button>
+                    <button
+                      onClick={async () => {
+                        setInvitationError(null);
+                        setRespondingInvId(inv.id);
+                        try {
+                          await onApproveInvitation?.(inv.id, inv.proposedRole);
+                        } catch (err: any) {
+                          setInvitationError(err?.message || 'Could not accept that invitation. Please try again.');
+                        } finally {
+                          setRespondingInvId(null);
+                        }
+                      }}
+                      disabled={respondingInvId === inv.id}
+                      className="px-2 py-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-[10px] font-black rounded-md cursor-pointer"
+                    >
+                      {respondingInvId === inv.id ? '...' : 'Accept'}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        setInvitationError(null);
+                        setRespondingInvId(inv.id);
+                        try {
+                          await onDeclineInvitation?.(inv.id);
+                        } catch (err: any) {
+                          setInvitationError(err?.message || 'Could not decline that invitation.');
+                        } finally {
+                          setRespondingInvId(null);
+                        }
+                      }}
+                      disabled={respondingInvId === inv.id}
+                      className="px-2 py-1 bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-50 text-[10px] font-black rounded-md cursor-pointer"
+                    >
+                      Decline
+                    </button>
                   </div>
                 </div>
               ))}

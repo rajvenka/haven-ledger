@@ -369,8 +369,14 @@ export function usePaymentState() {
     try {
       const invite = incomingInvitations.find(i => i.id === invitationId);
       if (!invite) throw new Error('Invitation not found.');
-      const { error: rpcErr } = await supabase.rpc('join_workspace_by_code', { code: invite.inviteCode, requested_role: role, requested_access_level: invite.proposedAccessLevel || 'full', requested_features: invite.proposedFeatures || ['income', 'rewards', 'ai', 'team', 'chat', 'agent'] });
+      const { data: joinedWorkspaceId, error: rpcErr } = await supabase.rpc('join_workspace_by_code', { code: invite.inviteCode, requested_role: role, requested_access_level: invite.proposedAccessLevel || 'full', requested_features: invite.proposedFeatures || ['income', 'rewards', 'ai', 'team', 'chat', 'agent'] });
       if (rpcErr) throw rpcErr;
+      if (!joinedWorkspaceId) throw new Error('Could not join the workspace - the invite code may be invalid.');
+      // Defensive check: confirm membership genuinely exists before marking this approved,
+      // since a silent RPC failure here previously left an invite marked 'approved' with
+      // no actual membership row created.
+      const { data: membershipCheck } = await supabase.from('workspace_members').select('workspace_id').eq('workspace_id', joinedWorkspaceId).eq('user_id', user.id).maybeSingle();
+      if (!membershipCheck) throw new Error('Something went wrong joining the workspace. Please try again.');
       await supabase.from('workspace_invitations').update({ status: 'approved' }).eq('id', invitationId);
       await refreshWorkspaces(user.id, activeWorkspaceId);
       triggerNotification('Invitation Accepted 👥', `You joined ${invite.fromName}'s workspace.`, 'info');
