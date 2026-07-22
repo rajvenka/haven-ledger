@@ -221,7 +221,7 @@ export default function AccountInfo({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userProfile?.licensePlanFeatures?.join(',')]);
   const toggleFeature = (f: string) => setFamilyFeatures(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
-  const FEATURE_META: Record<string, string> = { income: 'Income', rewards: 'Rewards & Perks', ai: 'AI Insights', team: 'Family Sharing / Team', chat: 'Family Chat', agent: 'AI Agent', whatsapp: 'WhatsApp' };
+  const FEATURE_META: Record<string, string> = { income: 'Income', rewards: 'Membership Hub', ai: 'AI Insights', team: 'Family Sharing / Team', chat: 'Family Chat', agent: 'AI Agent', whatsapp: 'WhatsApp' };
   const [joinGroupId, setJoinGroupId] = useState('');
   const [copied, setCopied] = useState(false);
   const [familyError, setFamilyError] = useState<string | null>(null);
@@ -1100,7 +1100,7 @@ export default function AccountInfo({
                       </div>
                       {['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'whatsapp'].map(f => {
                         const included = plan.features.includes(f);
-                        const labels: Record<string, string> = { income: 'Income', rewards: 'Rewards & Perks', ai: 'AI Insights', team: 'Family Sharing', chat: 'Family Chat', agent: 'AI Agent', whatsapp: 'WhatsApp' };
+                        const labels: Record<string, string> = { income: 'Income', rewards: 'Membership Hub', ai: 'AI Insights', team: 'Family Sharing', chat: 'Family Chat', agent: 'AI Agent', whatsapp: 'WhatsApp' };
                         return (
                           <div key={f} className={`flex items-center gap-1.5 text-[10px] ${included ? 'text-slate-600 dark:text-slate-300' : 'text-slate-300 dark:text-slate-700 line-through'}`}>
                             {included ? <Check className="w-3 h-3 text-emerald-500 shrink-0" /> : <X className="w-3 h-3 text-slate-300 dark:text-slate-700 shrink-0" />}
