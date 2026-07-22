@@ -231,7 +231,7 @@ export default function AccountInfo({
   // Toggle state for instructions
   const [showInstructions, setShowInstructions] = useState(() => {
     const val = localStorage.getItem('pm_show_instructions');
-    return val === null ? true : val === 'true';
+    return val === null ? false : val === 'true';
   });
 
   const handleToggleInstructions = (val: boolean) => {
@@ -1052,7 +1052,7 @@ export default function AccountInfo({
       {currentSubTab === 'preferences' && (
         <>
           {/* My Plan */}
-          <details open className="group bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm shrink-0">
+          <details className="group bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm shrink-0">
             <summary className="flex items-center justify-between cursor-pointer list-none">
               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" /> Plans that grow with you
@@ -1116,7 +1116,7 @@ export default function AccountInfo({
           </details>
 
           {/* APP DISPLAY SETTINGS (Premium Bento card styling) */}
-          <details open className="group bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm shrink-0">
+          <details className="group bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm shrink-0">
         <summary className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-900 pb-2.5 cursor-pointer list-none">
           <div className="flex items-center gap-2">
             <History className="w-4 h-4 text-indigo-500" />
@@ -1158,7 +1158,7 @@ export default function AccountInfo({
       </details>
 
       {/* BENEFICIARY / PERSON TAGS CONFIG (Moved from ConfigurePayments page for visual simplification) */}
-      <details open className="group bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm shrink-0">
+      <details className="group bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm shrink-0">
         <summary className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-900 pb-2.5 cursor-pointer list-none">
           <div className="flex items-center gap-2">
             <Settings className="w-4 h-4 text-indigo-500" />
@@ -1242,7 +1242,7 @@ export default function AccountInfo({
       </details>
 
       {/* Visual Theme Selection (Premium High Density Cards) */}
-      <details open className="group bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm">
+      <details className="group bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm">
         <summary className="flex items-center justify-between cursor-pointer list-none">
           <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
             <Settings className="w-4 h-4 text-indigo-500" /> App Visual Theme

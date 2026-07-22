@@ -94,7 +94,7 @@ export default function RewardsTracker({
   // Toggle state to show or hide instruction boxes
   const [showInstructions, setShowInstructions] = useState<boolean>(() => {
     const saved = localStorage.getItem('rewards_show_instructions');
-    return saved !== 'false';
+    return saved === 'true';
   });
 
   const toggleInstructions = () => {

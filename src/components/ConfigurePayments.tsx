@@ -20,7 +20,9 @@ import {
   LayoutList,
   LayoutGrid,
   Sliders,
-  Copy
+  Copy,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { RecurringPayment, getCategoryColor, BillingCycle, PaymentCategory, PaymentHistory } from '../types';
 import { formatCurrencyValue } from '../utils/paymentUtils';
@@ -40,7 +42,6 @@ interface ConfigurePaymentsProps {
   onUpdatePaymentsOrder?: (orderedPayments: RecurringPayment[]) => void;
   isReadOnly?: boolean;
   currentUserUid?: string;
-  showInstructions?: boolean;
 }
 
 interface BulkRow {
@@ -82,9 +83,17 @@ export default function ConfigurePayments({
   onAddBulkPayments,
   onUpdatePaymentsOrder,
   isReadOnly = false,
-  currentUserUid,
-  showInstructions = true
+  currentUserUid
 }: ConfigurePaymentsProps) {
+  const [showInstructions, setShowInstructions] = useState(() => {
+    const saved = localStorage.getItem('bills_show_instructions');
+    return saved === 'true';
+  });
+  const toggleInstructions = () => {
+    const next = !showInstructions;
+    setShowInstructions(next);
+    localStorage.setItem('bills_show_instructions', String(next));
+  };
   const isPaymentReadOnly = (payment: RecurringPayment) => {
     if (!isReadOnly) return false;
     if (currentUserUid && payment.userId === currentUserUid) return false;
@@ -1019,6 +1028,22 @@ export default function ConfigurePayments({
             <Settings className="w-4.5 h-4.5 text-indigo-600" />
             <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Bill & Payment Control</h3>
           </div>
+          <button
+            onClick={toggleInstructions}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm transition-all cursor-pointer hover:shadow"
+          >
+            {showInstructions ? (
+              <>
+                <EyeOff className="w-3.5 h-3.5 text-slate-400" />
+                <span>Hide Instructions</span>
+              </>
+            ) : (
+              <>
+                <Eye className="w-3.5 h-3.5 text-slate-400" />
+                <span>Show Instructions</span>
+              </>
+            )}
+          </button>
         </div>
 
           {/* Segmented Switcher Tabs */}
