@@ -19,7 +19,7 @@ import {
   ArrowDown,
   ArrowUp
 } from 'lucide-react';
-import { RecurringPayment, PaymentHistory, Currency, CountryConfig, CATEGORY_COLORS, getCategoryColor, ScheduledInstance } from '../types';
+import { RecurringPayment, PaymentHistory, Currency, CountryConfig, CATEGORY_COLORS, getCategoryColor, ScheduledInstance, IncomeSource } from '../types';
 import { 
   ResponsiveContainer, 
   LineChart, 
@@ -51,6 +51,7 @@ interface DashboardProps {
   isReadOnly?: boolean;
   currentUserUid?: string;
   monthlyIncomeEstimate?: number;
+  incomeSources?: IncomeSource[];
 }
 
 // Simple initials extraction helper
@@ -72,7 +73,8 @@ export default function Dashboard({
   onRecordPayment,
   isReadOnly = false,
   currentUserUid,
-  monthlyIncomeEstimate = 0
+  monthlyIncomeEstimate = 0,
+  incomeSources = []
 }: DashboardProps) {
   const isPaymentReadOnly = (payment?: RecurringPayment) => {
     if (!payment) return true;
@@ -117,6 +119,10 @@ export default function Dashboard({
   // Redefine dueCurrentMonth as outstanding instances this month
   const dueCurrentMonth = currentMonthInstances.filter(ins => ins.status !== 'paid');
 
+  // What actually makes up "this month's bills" total, biggest first
+  const billsBreakdown = [...dueCurrentMonth]
+    .sort((a, b) => convertCurrency(b.amount, b.currency, summaryCurrency, countries) - convertCurrency(a.amount, a.currency, summaryCurrency, countries));
+
   const totalDueCurrentMonthConverted = dueCurrentMonth.reduce((sum, ins) => {
     const converted = convertCurrency(ins.amount, ins.currency, summaryCurrency, countries);
     return sum + converted;
@@ -138,6 +144,7 @@ export default function Dashboard({
 
   // States
   const [currentMonthFilter, setCurrentMonthFilter] = useState<'outstanding' | 'all'>('outstanding');
+  const [isHeroBreakdownOpen, setIsHeroBreakdownOpen] = useState(false);
   const [isTrendExpanded, setIsTrendExpanded] = useState<boolean>(() => {
     const saved = localStorage.getItem('pm_is_trend_expanded');
     return saved !== 'false'; // default true
@@ -280,6 +287,12 @@ export default function Dashboard({
                     <ArrowDown className="w-3 h-3" /> Bills exceed income this month
                   </p>
                 )}
+                <button
+                  onClick={() => setIsHeroBreakdownOpen(!isHeroBreakdownOpen)}
+                  className="text-[10px] font-bold text-[#007aff] dark:text-[#0a84ff] mt-2.5 cursor-pointer"
+                >
+                  {isHeroBreakdownOpen ? 'Hide breakdown' : "See what's included"}
+                </button>
               </>
             ) : (
               <>
@@ -292,7 +305,52 @@ export default function Dashboard({
                 <p className="text-[10px] text-slate-400 mt-2">
                   {paidCountThisMonth} of {totalCountThisMonth} bills paid so far · Set your income on the Income page for a fuller picture
                 </p>
+                {billsBreakdown.length > 0 && (
+                  <button
+                    onClick={() => setIsHeroBreakdownOpen(!isHeroBreakdownOpen)}
+                    className="text-[10px] font-bold text-[#007aff] dark:text-[#0a84ff] mt-2 cursor-pointer"
+                  >
+                    {isHeroBreakdownOpen ? 'Hide breakdown' : "See what's included"}
+                  </button>
+                )}
               </>
+            )}
+
+            {isHeroBreakdownOpen && (
+              <div className="mt-3.5 pt-3.5 border-t border-slate-100 dark:border-slate-900 space-y-3">
+                {monthlyIncomeEstimate > 0 && (
+                  <div>
+                    <p className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1.5">Income</p>
+                    {incomeSources.length > 0 ? (
+                      <div className="space-y-1">
+                        {incomeSources.map(src => (
+                          <div key={src.id} className="flex items-center justify-between text-[11px]">
+                            <span className="text-slate-600 dark:text-slate-300 truncate">{src.name}</span>
+                            <span className="font-bold text-slate-900 dark:text-white shrink-0">{formatCurrencyValue(src.amount, summaryCurrency, countries)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-slate-400">{formatCurrencyValue(monthlyIncomeEstimate, summaryCurrency, countries)}/month, set on the Income page</p>
+                    )}
+                  </div>
+                )}
+                <div>
+                  <p className="text-[9px] font-black text-rose-500 uppercase tracking-wider mb-1.5">Bills ({billsBreakdown.length})</p>
+                  {billsBreakdown.length === 0 ? (
+                    <p className="text-[10px] text-slate-400">Nothing outstanding this month.</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {billsBreakdown.map(ins => (
+                        <div key={ins.id} className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-600 dark:text-slate-300 truncate">{ins.paymentName}</span>
+                          <span className="font-bold text-slate-900 dark:text-white shrink-0">{formatCurrencyValue(ins.amount, ins.currency, countries)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
 

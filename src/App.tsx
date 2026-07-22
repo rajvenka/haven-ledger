@@ -1221,6 +1221,7 @@ export default function App() {
                 onRecordPayment={handleRecordPayment}
                 isReadOnly={userProfile?.role === 'view'}
                 monthlyIncomeEstimate={parseFloat(monthlyIncome) || 0}
+                incomeSources={incomeSources}
               />
             ) : activeTab === 'expenses' ? (
               <ExpensesView
