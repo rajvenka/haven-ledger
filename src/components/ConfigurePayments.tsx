@@ -159,11 +159,12 @@ export default function ConfigurePayments({
   
   // Reordering & Category Grouping states
   const [groupByCategory, setGroupByCategory] = useState(false);
-  const [cardStyle, setCardStyle] = useState<'modern' | 'compact' | 'bento'>(() => {
-    return (localStorage.getItem('pm_card_style') as 'modern' | 'compact' | 'bento') || 'modern';
+  const [cardStyle, setCardStyle] = useState<'modern' | 'compact'>(() => {
+    const saved = localStorage.getItem('pm_card_style');
+    return saved === 'compact' ? 'compact' : 'modern'; // bento removed - any stale value falls back to modern
   });
 
-  const handleCardStyleChange = (style: 'modern' | 'compact' | 'bento') => {
+  const handleCardStyleChange = (style: 'modern' | 'compact') => {
     setCardStyle(style);
     localStorage.setItem('pm_card_style', style);
   };
@@ -598,218 +599,6 @@ export default function ConfigurePayments({
       );
     }
 
-    if (cardStyle === 'bento') {
-      return (
-        <div 
-          key={payment.id}
-          className={`apple-card p-4.5 transition-all ${
-            payment.active 
-              ? '' 
-              : 'bg-slate-50/55 dark:bg-slate-950/20 opacity-70'
-          } relative overflow-hidden`}
-          style={{ borderLeftWidth: '5px', borderLeftColor: colorConfig.iconBg ? undefined : 'rgb(99, 102, 241)' }}
-        >
-          {/* Custom absolute stripe indicator matching category color */}
-          {colorConfig.iconBg && (
-            <div className={`absolute top-0 left-0 bottom-0 w-1.5 ${colorConfig.iconBg}`} />
-          )}
-
-          {/* Upper row: Category Tag, Name, Status Toggle */}
-          <div className="flex items-center justify-between gap-3 pl-1.5">
-            <div className="flex items-center gap-3 min-w-0 text-left">
-              <span className={`px-2 py-0.5 rounded-full text-[8px] font-black tracking-wider uppercase shrink-0 ${colorConfig.bg}`}>
-                {payment.category}
-              </span>
-              <div className="min-w-0">
-                <h4 className="text-xs font-black text-slate-900 dark:text-white leading-snug truncate">
-                  {payment.name}
-                </h4>
-                <p className="text-[10px] text-slate-450 dark:text-slate-500 mt-0.5 font-bold flex items-center gap-1.5">
-                  <span>Cycle: <strong className="text-indigo-600 dark:text-indigo-400 uppercase">{payment.billingCycle}</strong></span>
-                </p>
-              </div>
-            </div>
-
-            <button
-              disabled={isPaymentReadOnly(payment)}
-              onClick={() => handleToggleActive(payment)}
-              className={`focus:outline-none shrink-0 ${isPaymentReadOnly(payment) ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-              title={isPaymentReadOnly(payment) ? 'Disabled in View-Only' : (payment.active ? 'Pause monitoring' : 'Resume monitoring')}
-            >
-              {payment.active ? (
-                <ToggleRight className="w-8 h-8 text-indigo-600 dark:text-indigo-500" />
-              ) : (
-                <ToggleLeft className="w-8 h-8 text-slate-400" />
-              )}
-            </button>
-          </div>
-
-          {/* Metadata Grid */}
-          <div className="grid grid-cols-2 gap-2 mt-3.5 pl-1.5 text-left bg-slate-50/60 dark:bg-slate-900/20 p-2.5 rounded-xl border border-slate-150 dark:border-slate-850/50">
-            <div>
-              <span className="text-[8px] text-slate-400 font-extrabold uppercase block tracking-wider">Payment Schedule</span>
-              <span className="text-[10px] text-slate-800 dark:text-slate-200 font-black mt-0.5 block">
-                {payment.billingCycle === 'monthly' ? `Day ${payment.dayOfMonth} monthly` : payment.startDate ? `Starts ${payment.startDate}` : `Day ${payment.dayOfMonth}`}
-              </span>
-            </div>
-            <div>
-              <span className="text-[8px] text-slate-400 font-extrabold uppercase block tracking-wider">Alert Config</span>
-              <span className="text-[10px] text-slate-800 dark:text-slate-200 font-black mt-0.5 block">
-                {payment.reminderDaysBefore} days in advance
-              </span>
-            </div>
-            {payment.taggedFor && (
-              <div>
-                <span className="text-[8px] text-slate-400 font-extrabold uppercase block tracking-wider">Assigned Tag</span>
-                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-black mt-0.5 block">
-                  {payment.taggedFor}
-                </span>
-              </div>
-            )}
-            <div>
-              <span className="text-[8px] text-slate-400 font-extrabold uppercase block tracking-wider">Payment Mode</span>
-              <span className="text-[10px] text-slate-800 dark:text-slate-200 font-black mt-0.5 block capitalize">
-                {payment.paymentType === 'flexi' ? 'Variable (Flexi)' : 'Fixed Amount'}
-              </span>
-            </div>
-          </div>
-
-          {/* Notes summary */}
-          {payment.notes && (
-            <div className="mt-3 text-[10px] text-slate-500 dark:text-slate-450 italic bg-slate-50/50 dark:bg-slate-900/30 p-2 rounded-xl border border-slate-150/50 dark:border-slate-850/40 pl-3 leading-relaxed">
-              "{payment.notes}"
-            </div>
-          )}
-
-          {/* Historical frequency stats - bento styled */}
-          {showFrequencyPatterns && (
-            <div className="mt-3.5 pl-1.5">
-              <div className="p-3 bg-white dark:bg-slate-950/80 rounded-xl border border-slate-200/80 dark:border-slate-850 shadow-xs">
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-900 pb-2 mb-2">
-                  <div className="flex items-center gap-1.5">
-                    <History className="w-3.5 h-3.5 text-indigo-500" />
-                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">Billing Log Analytics</span>
-                  </div>
-                  <span className="text-[8px] font-black bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded">
-                    {stats.totalPaidCount} logs total
-                  </span>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="text-[10px] font-bold text-slate-700 dark:text-slate-300">
-                    {stats.lastYearCount > 0 ? (
-                      <>Logs: paid <span className="text-indigo-600 dark:text-indigo-400 font-black">{stats.lastYearCount} time{stats.lastYearCount === 1 ? '' : 's'}</span> over last year</>
-                    ) : (
-                      <span className="text-slate-400">No logs saved in past 12 months</span>
-                    )}
-                  </div>
-                  {stats.lastPaid && (
-                    <div className="text-[9px] text-slate-400 font-medium">
-                      Latest entry: <span className="text-slate-600 dark:text-slate-300 font-bold">{stats.lastPaid.paidDate}</span> ({formatCurrencyValue(stats.lastPaid.amount, stats.lastPaid.currency)})
-                    </div>
-                  )}
-
-                  {/* 6-Month Visual Track with beautifully aligned circles */}
-                  <div className="flex items-center justify-between gap-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-900">
-                    <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">6-Month Visual Track</span>
-                    <div className="flex items-center gap-2">
-                      {stats.last6Months.map((m, mIdx) => (
-                        <div 
-                          key={mIdx}
-                          className="flex flex-col items-center gap-0.5"
-                          title={`${m.monthName}: ${m.paid ? `Paid ${formatCurrencyValue(m.amount || 0, payment.currency)}` : 'No logs'}`}
-                        >
-                          <div 
-                            className={`w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-black transition-all ${
-                              m.paid 
-                                ? 'bg-indigo-600 text-white shadow-xs scale-105' 
-                                : 'bg-slate-100 dark:bg-slate-900 text-slate-400 border border-slate-200 dark:border-slate-800'
-                            }`}
-                          >
-                            {m.paid ? '✓' : '•'}
-                          </div>
-                          <span className="text-[7px] font-extrabold text-slate-400 dark:text-slate-550 uppercase">
-                            {m.monthName}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Footer Controls */}
-          <div className="mt-3.5 pt-3 border-t border-slate-150 dark:border-slate-850/80 flex items-center justify-between pl-1.5">
-            <span className="text-sm font-black text-slate-900 dark:text-white">
-              {formatCurrencyValue(payment.amount, payment.currency)}
-            </span>
-
-            <div className="flex items-center gap-1 bg-slate-100/80 dark:bg-slate-900/80 p-0.5 rounded-lg border border-slate-200/50 dark:border-slate-800">
-              <button
-                onClick={() => movePayment(idx, 'up')}
-                disabled={idx === 0 || isPaymentReadOnly(payment)}
-                className={`p-1.5 rounded-md transition-colors ${
-                  idx === 0 || isPaymentReadOnly(payment)
-                    ? 'text-slate-300 dark:text-slate-800 cursor-not-allowed opacity-50'
-                    : 'text-slate-600 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white dark:hover:bg-slate-850 cursor-pointer'
-                }`}
-                title="Move position Up"
-              >
-                <ChevronUp className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => movePayment(idx, 'down')}
-                disabled={idx === payments.length - 1 || isPaymentReadOnly(payment)}
-                className={`p-1.5 rounded-md transition-colors ${
-                  idx === payments.length - 1 || isPaymentReadOnly(payment)
-                    ? 'text-slate-300 dark:text-slate-800 cursor-not-allowed opacity-50'
-                    : 'text-slate-600 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white dark:hover:bg-slate-850 cursor-pointer'
-                }`}
-                title="Move position Down"
-              >
-                <ChevronDown className="w-3.5 h-3.5" />
-              </button>
-              <button
-                disabled={isPaymentReadOnly(payment)}
-                onClick={() => onEditClick(payment)}
-                className={`p-1.5 rounded-md transition-colors ${
-                  isPaymentReadOnly(payment)
-                    ? 'text-slate-300 dark:text-slate-800 cursor-not-allowed opacity-50'
-                    : 'hover:bg-white dark:hover:bg-slate-850 text-slate-600 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer'
-                }`}
-                title="Edit details"
-              >
-                <Edit2 className="w-3.5 h-3.5" />
-              </button>
-              {onCloneClick && (
-                <button
-                  onClick={() => onCloneClick(payment)}
-                  className="p-1.5 rounded-md transition-colors hover:bg-white dark:hover:bg-slate-850 text-slate-600 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer"
-                  title="Clone"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                </button>
-              )}
-              <button
-                disabled={isPaymentReadOnly(payment)}
-                onClick={() => onDeleteClick(payment.id)}
-                className={`p-1.5 rounded-md transition-colors ${
-                  isPaymentReadOnly(payment)
-                    ? 'text-slate-300 dark:text-slate-800 cursor-not-allowed opacity-50'
-                    : 'hover:bg-white dark:hover:bg-slate-850 text-slate-400 hover:text-rose-500 cursor-pointer'
-                }`}
-                title="Delete bill"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
     // Default 'modern' design (the original design card matching all colors/paddings exactly)
     return (
       <div 
@@ -1142,14 +931,6 @@ export default function ConfigurePayments({
                   >
                     <Sliders className="w-3 h-3" />
                     <span>Compact</span>
-                  </button>
-                  <button
-                    onClick={() => handleCardStyleChange('bento')}
-                    className={cardStyle === 'bento' ? 'apple-segmented-btn-active px-2.5 py-1 flex items-center gap-1' : 'apple-segmented-btn px-2.5 py-1 flex items-center gap-1'}
-                    title="Premium elevated Bento block view"
-                  >
-                    <LayoutGrid className="w-3 h-3" />
-                    <span>Bento</span>
                   </button>
                 </div>
               </div>
