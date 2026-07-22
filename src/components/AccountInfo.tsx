@@ -36,6 +36,7 @@ interface AccountInfoProps {
   payments: RecurringPayment[];
   onAddBulkPayments?: (payments: Omit<RecurringPayment, 'id'>[]) => Promise<void>;
   onStartWhatsAppVerification?: (phone: string) => Promise<string>;
+  onUpdateDisplayName?: (name: string) => Promise<void>;
   onDisconnectWhatsApp?: () => Promise<void>;
   accessPlans?: { id: string; name: string; description?: string; features: string[]; isSystem: boolean }[];
   myUpgradeRequest?: { id: string; planName: string; status: string } | null;
@@ -58,6 +59,8 @@ interface AccountInfoProps {
   onDeclineInvitation?: (invitationId: string) => Promise<void>;
   onUpdateMemberRole?: (memberUid: string, role: 'view' | 'modify') => Promise<void>;
   onRemoveFamilyMember?: (memberUid: string) => Promise<void>;
+  outgoingInvitations?: { id: string; toEmail: string; proposedRole: string; createdAt: string }[];
+  onCancelInvitation?: (invitationId: string) => Promise<void>;
   inviteCode?: string;
   onRegenerateInviteCode?: () => Promise<void>;
   onLogOut: () => Promise<void>;
@@ -89,6 +92,7 @@ export default function AccountInfo({
   payments,
   onAddBulkPayments,
   onStartWhatsAppVerification,
+  onUpdateDisplayName,
   onDisconnectWhatsApp,
   accessPlans = [],
   myUpgradeRequest,
@@ -111,6 +115,8 @@ export default function AccountInfo({
   onDeclineInvitation,
   onUpdateMemberRole,
   onRemoveFamilyMember,
+  outgoingInvitations = [],
+  onCancelInvitation,
   inviteCode = '',
   onRegenerateInviteCode,
   onLogOut,
@@ -208,6 +214,10 @@ export default function AccountInfo({
   const [familyEmail, setFamilyEmail] = useState('');
   const [familyEmailRole, setFamilyEmailRole] = useState<'view' | 'modify'>('modify');
   const [invitationError, setInvitationError] = useState<string | null>(null);
+  const [displayNameInput, setDisplayNameInput] = useState(userProfile?.displayName || '');
+  const [savingDisplayName, setSavingDisplayName] = useState(false);
+  const [displayNameError, setDisplayNameError] = useState<string | null>(null);
+  const [displayNameSaved, setDisplayNameSaved] = useState(false);
   const [respondingInvId, setRespondingInvId] = useState<string | null>(null);
   const [isRenamingWorkspace, setIsRenamingWorkspace] = useState(false);
   const [workspaceRenameValue, setWorkspaceRenameValue] = useState('');
@@ -750,6 +760,30 @@ export default function AccountInfo({
               )}
               {familyError && <p className="text-[10px] text-red-500 font-semibold">{familyError}</p>}
               {familySuccess && <p className="text-[10px] text-emerald-500 font-semibold">{familySuccess}</p>}
+
+              {outgoingInvitations.length > 0 && (
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-900 space-y-1.5">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Invites Sent, Awaiting Response</span>
+                  {outgoingInvitations.map(inv => (
+                    <div key={inv.id} className="flex items-center justify-between px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                      <span className="text-[11px] text-slate-600 dark:text-slate-300">{inv.toEmail} <span className="text-[9px] text-slate-400">· {inv.proposedRole === 'view' ? 'View Only' : 'Editor'}</span></span>
+                      <button
+                        onClick={async () => {
+                          setInvitationError(null);
+                          try {
+                            await onCancelInvitation?.(inv.id);
+                          } catch (err: any) {
+                            setInvitationError(err?.message || 'Could not cancel that invitation.');
+                          }
+                        }}
+                        className="text-[9px] font-black uppercase text-rose-500 hover:text-rose-600 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -1086,6 +1120,47 @@ export default function AccountInfo({
 
       {currentSubTab === 'preferences' && (
         <>
+          {/* Preferred Name */}
+          <div className="bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5 shrink-0">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Preferred Name</span>
+            <p className="text-[10px] text-slate-400">Shown to others in Family Sharing, Portfolio, and anywhere your name appears.</p>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setDisplayNameError(null);
+                setDisplayNameSaved(false);
+                setSavingDisplayName(true);
+                try {
+                  await onUpdateDisplayName?.(displayNameInput);
+                  setDisplayNameSaved(true);
+                  setTimeout(() => setDisplayNameSaved(false), 2500);
+                } catch (err: any) {
+                  setDisplayNameError(err?.message || 'Could not update your name.');
+                } finally {
+                  setSavingDisplayName(false);
+                }
+              }}
+              className="flex gap-2"
+            >
+              <input
+                type="text"
+                value={displayNameInput}
+                onChange={(e) => setDisplayNameInput(e.target.value)}
+                placeholder="Your name"
+                className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+              />
+              <button
+                type="submit"
+                disabled={savingDisplayName || !displayNameInput.trim()}
+                className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase tracking-wider rounded-lg cursor-pointer"
+              >
+                {savingDisplayName ? '...' : 'Save'}
+              </button>
+            </form>
+            {displayNameError && <p className="text-[10px] text-rose-500 font-semibold">{displayNameError}</p>}
+            {displayNameSaved && <p className="text-[10px] text-emerald-500 font-semibold">Saved.</p>}
+          </div>
+
           {/* My Plan */}
           <details className="group bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm shrink-0">
             <summary className="flex items-center justify-between cursor-pointer list-none">

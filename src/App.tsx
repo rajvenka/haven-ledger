@@ -69,6 +69,7 @@ export default function App() {
     signInWithGoogle,
     resetPassword,
     updatePassword,
+    updateDisplayName,
     acceptPrivacyPolicy,
     logOut,
     workspaces,
@@ -85,6 +86,8 @@ export default function App() {
     declineInvitation,
     updateMemberRole,
     removeFamilyMember,
+    outgoingInvitations,
+    cancelInvitation,
     isAuthLoading,
     familyRole,
     isReadOnly,
@@ -167,6 +170,7 @@ export default function App() {
     bulkTagPortfolioHoldings,
     portfolioContributions,
     addPortfolioContribution,
+    updatePortfolioContribution,
     deletePortfolioContribution,
     portfolioWithdrawals,
     addPortfolioWithdrawal,
@@ -653,6 +657,7 @@ export default function App() {
               </div>
 
               {/* SECTION: INVESTMENT */}
+              {hasFeature('portfolio') && (
               <div className="space-y-1">
                 <span className="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 tracking-wider uppercase block text-left">
                   Investment
@@ -693,6 +698,7 @@ export default function App() {
                   </button>
                 </nav>
               </div>
+              )}
 
               {/* SECTION: NETWORK & TEAMS */}
               {hasFeature('team') && (
@@ -1052,6 +1058,7 @@ export default function App() {
                   </div>
 
                   {/* SECTION: INVESTMENT */}
+                  {hasFeature('portfolio') && (
                   <div className="space-y-1">
                     <span className="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 tracking-wider uppercase block text-left">
                       Investment
@@ -1092,6 +1099,7 @@ export default function App() {
                       </button>
                     </nav>
                   </div>
+                  )}
 
                   {/* SECTION: NETWORK & TEAMS */}
                   {hasFeature('team') && (
@@ -1379,6 +1387,7 @@ export default function App() {
                 workspaceBackups={workspaceBackups}
                 onRestoreFromBackup={restoreFromBackup}
                 onStartWhatsAppVerification={startWhatsAppVerification}
+                onUpdateDisplayName={updateDisplayName}
                 accessPlans={accessPlans}
                 myUpgradeRequest={myUpgradeRequest}
                 onRequestUpgrade={requestUpgrade}
@@ -1394,6 +1403,8 @@ export default function App() {
                 onDeclineInvitation={declineInvitation}
                 onUpdateMemberRole={updateMemberRole}
                 onRemoveFamilyMember={removeFamilyMember}
+                outgoingInvitations={outgoingInvitations}
+                onCancelInvitation={cancelInvitation}
                 inviteCode={inviteCode}
                 onRegenerateInviteCode={regenerateInviteCode}
                 onLogOut={logOut}
@@ -1452,6 +1463,7 @@ export default function App() {
                 bulkTagPortfolioHoldings={bulkTagPortfolioHoldings}
                 portfolioContributions={portfolioContributions}
                 addPortfolioContribution={addPortfolioContribution}
+                updatePortfolioContribution={updatePortfolioContribution}
                 deletePortfolioContribution={deletePortfolioContribution}
                 portfolioWithdrawals={portfolioWithdrawals}
                 addPortfolioWithdrawal={addPortfolioWithdrawal}

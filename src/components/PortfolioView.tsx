@@ -2,7 +2,7 @@ import { parseBrokerFile, BrokerTemplate, ParsedHolding } from '../utils/brokerI
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   TrendingUp, TrendingDown, Plus, Trash2, RefreshCw, Users, Wallet,
-  CheckCircle2, X, Briefcase, Gift, Receipt, Upload
+  CheckCircle2, X, Briefcase, Gift, Receipt, Upload, Edit2
 } from 'lucide-react';
 
 interface WorkspaceMemberLite {
@@ -35,6 +35,7 @@ interface PortfolioViewProps {
   bulkTagPortfolioHoldings: (holdingIds: string[], source: string) => Promise<void>;
   portfolioContributions: any[];
   addPortfolioContribution: (memberUserId: string, amount: number, date: string, notes?: string, contributionType?: 'one_off' | 'recurring') => Promise<void>;
+  updatePortfolioContribution: (id: string, updates: { amount?: number; contributionDate?: string }) => Promise<void>;
   deletePortfolioContribution: (id: string) => Promise<void>;
   portfolioWithdrawals: any[];
   addPortfolioWithdrawal: (memberUserId: string, amount: number, date: string, notes?: string) => Promise<void>;
@@ -56,7 +57,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     workspaceName, workspaceMembers, isReadOnly,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
     portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, setPriceReference, deletePortfolioHolding, bulkTagPortfolioHoldings,
-    portfolioContributions, addPortfolioContribution, deletePortfolioContribution,
+    portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
@@ -177,9 +178,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const isDuplicateHolding = (parsed: ParsedHolding) => {
     return portfolioHoldings.some(h => {
       if (h.status !== 'active') return false;
+      if (h.broker !== parsed.broker) return false; // same stock via a different broker is a separate, legitimate holding
       if (parsed.isin && h.isin) return h.isin === parsed.isin;
-      // Fall back to symbol+broker match when ISIN isn't available (e.g. Groww MF export)
-      return h.symbol === parsed.symbol.toUpperCase() && h.broker === parsed.broker && h.holding_type === parsed.holdingType;
+      // Fall back to symbol match when ISIN isn't available (e.g. Groww MF export)
+      return h.symbol === parsed.symbol.toUpperCase() && h.holding_type === parsed.holdingType;
     });
   };
 
@@ -315,6 +317,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [cMemberId, setCMemberId] = useState('');
   const [cAmount, setCAmount] = useState('');
   const [cDate, setCDate] = useState(todayStr());
+  const [editingContributionId, setEditingContributionId] = useState<string | null>(null);
+  const [editContributionAmount, setEditContributionAmount] = useState('');
+  const [editContributionDate, setEditContributionDate] = useState('');
   const [isAddingWithdrawal, setIsAddingWithdrawal] = useState(false);
   const [wMemberId, setWMemberId] = useState('');
   const [wAmount, setWAmount] = useState('');
@@ -859,18 +864,42 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <p className="text-center text-xs text-slate-400 py-4">No contributions logged yet.</p>
               ) : portfolioContributions.map(c => {
                 const m = workspaceMembers.find(x => x.uid === c.member_user_id);
+                const isEditing = editingContributionId === c.id;
                 return (
-                  <div key={c.id} className="py-2 flex items-center justify-between text-xs">
-                    <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
-                      {m ? memberName(m) : 'Former member'} · {c.contribution_date}
-                      {c.contribution_type === 'recurring' && (
-                        <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">Plan</span>
-                      )}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-900 dark:text-white">{fmt(Number(c.amount))}</span>
-                      {!isReadOnly && <button onClick={() => runAction(() => deletePortfolioContribution(c.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>}
-                    </div>
+                  <div key={c.id} className="py-2 flex items-center justify-between text-xs gap-2">
+                    {isEditing ? (
+                      <>
+                        <input type="date" value={editContributionDate} onChange={(e) => setEditContributionDate(e.target.value)} className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px]" />
+                        <input type="number" value={editContributionAmount} onChange={(e) => setEditContributionAmount(e.target.value)} className="w-20 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px]" />
+                        <button
+                          onClick={() => runAction(async () => {
+                            await updatePortfolioContribution(c.id, { amount: parseFloat(editContributionAmount), contributionDate: editContributionDate });
+                            setEditingContributionId(null);
+                          })}
+                          className="p-1 bg-indigo-600 text-white rounded-md cursor-pointer"
+                        ><CheckCircle2 className="w-3 h-3" /></button>
+                        <button onClick={() => setEditingContributionId(null)} className="p-1 text-slate-400 cursor-pointer"><X className="w-3 h-3" /></button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                          {m ? memberName(m) : 'Former member'} · {c.contribution_date}
+                          {c.contribution_type === 'recurring' && (
+                            <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">Plan</span>
+                          )}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900 dark:text-white">{fmt(Number(c.amount))}</span>
+                          {!isReadOnly && (
+                            <button
+                              onClick={() => { setEditingContributionId(c.id); setEditContributionAmount(String(c.amount)); setEditContributionDate(c.contribution_date); }}
+                              className="text-slate-300 hover:text-indigo-500 cursor-pointer"
+                            ><Edit2 className="w-3 h-3" /></button>
+                          )}
+                          {!isReadOnly && <button onClick={() => runAction(() => deletePortfolioContribution(c.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>}
+                        </div>
+                      </>
+                    )}
                   </div>
                 );
               })}

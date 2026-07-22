@@ -115,6 +115,16 @@ export function usePaymentState() {
     const { error } = await supabase.auth.resetPasswordForEmail(email);
     if (error) throw error;
   };
+  const updateDisplayName = async (name: string) => {
+    if (!user) throw new Error('Not signed in.');
+    const trimmed = name.trim();
+    if (!trimmed) throw new Error('Please enter a name.');
+    const { error } = await supabase.from('profiles').update({ display_name: trimmed }).eq('id', user.id);
+    if (error) throw error;
+    setUserProfile(prev => prev ? { ...prev, displayName: trimmed } : prev);
+    await refreshWorkspaces(user.id, activeWorkspaceId);
+  };
+
   const updatePassword = async (password: string) => {
     const { error } = await supabase.auth.updateUser({ password });
     if (error) throw error;
@@ -386,6 +396,31 @@ export function usePaymentState() {
   const declineInvitation = async (invitationId: string) => {
     await supabase.from('workspace_invitations').update({ status: 'declined' }).eq('id', invitationId);
     setIncomingInvitations(prev => prev.filter(i => i.id !== invitationId));
+  };
+
+  // Invites the current user (as host) has SENT for the active workspace, still pending -
+  // lets them see what's outstanding and cancel one if it's no longer needed.
+  const [outgoingInvitations, setOutgoingInvitations] = useState<{ id: string; toEmail: string; proposedRole: string; createdAt: string }[]>([]);
+
+  const loadOutgoingInvitations = useCallback(async () => {
+    if (!user || !activeWorkspaceId) { setOutgoingInvitations([]); return; }
+    const { data } = await supabase
+      .from('workspace_invitations')
+      .select('id, to_email, proposed_role, created_at')
+      .eq('workspace_id', activeWorkspaceId)
+      .eq('from_user_id', user.id)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    setOutgoingInvitations((data ?? []).map((i: any) => ({ id: i.id, toEmail: i.to_email, proposedRole: i.proposed_role, createdAt: i.created_at })));
+  }, [user, activeWorkspaceId]);
+
+  useEffect(() => { if (isLoaded) loadOutgoingInvitations(); }, [isLoaded, loadOutgoingInvitations]);
+
+  const cancelInvitation = async (invitationId: string) => {
+    const { error } = await supabase.from('workspace_invitations').delete().eq('id', invitationId);
+    if (error) throw error;
+    await loadOutgoingInvitations();
+    triggerNotification('Invitation Cancelled', 'They can no longer accept that invite.', 'info');
   };
 
   const updateMemberRole = async (memberUid: string, role: 'view' | 'modify') => {
@@ -1025,6 +1060,15 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
+  const updatePortfolioContribution = async (id: string, updates: { amount?: number; contributionDate?: string }) => {
+    const row: any = {};
+    if (updates.amount !== undefined) row.amount = updates.amount;
+    if (updates.contributionDate !== undefined) row.contribution_date = updates.contributionDate;
+    const { error } = await supabase.from('portfolio_contributions').update(row).eq('id', id);
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
   const deletePortfolioContribution = async (id: string) => {
     const { error } = await supabase.from('portfolio_contributions').delete().eq('id', id);
     if (error) throw error;
@@ -1230,7 +1274,7 @@ export function usePaymentState() {
 
   return {
     user, userProfile, familyMembers, viewMode, setViewMode,
-    signUp, signIn, signInWithGoogle, resetPassword, updatePassword, acceptPrivacyPolicy, logOut,
+    signUp, signIn, signInWithGoogle, resetPassword, updatePassword, updateDisplayName, acceptPrivacyPolicy, logOut,
     // Workspace model
     workspaces, activeWorkspaceId, activeWorkspace, switchWorkspace, createWorkspace, setWorkspaceMode,
     renameWorkspace, deleteWorkspace,
@@ -1238,6 +1282,7 @@ export function usePaymentState() {
     workspaceBackups, createBackupNow, restoreFromBackup,
     addFamilyMember, joinFamilyGroup, leaveFamilyGroup,
     incomingInvitations, approveInvitation, declineInvitation, updateMemberRole, removeFamilyMember,
+    outgoingInvitations, cancelInvitation,
     isAuthLoading, familyRole, isReadOnly, inviteCode, regenerateInviteCode,
     payments, allPayments, history, allHistory, countries, rate, summaryCurrency, notifications, isLoaded, isSyncing,
     familyMessages, sendFamilyMessage,
@@ -1253,7 +1298,7 @@ export function usePaymentState() {
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
     portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, setPriceReference, deletePortfolioHolding, bulkTagPortfolioHoldings,
     portfolioPriceHistory,
-    portfolioContributions, addPortfolioContribution, deletePortfolioContribution,
+    portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
