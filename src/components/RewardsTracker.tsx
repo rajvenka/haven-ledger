@@ -481,7 +481,7 @@ export default function RewardsTracker({
   }, [calcProgram, calcPoints, calcCustomRate, pointRates]);
 
   return (
-    <div className="space-y-6">
+    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-6 text-left select-none bg-slate-50 dark:bg-slate-900">
       {/* Title Header with action button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

@@ -178,7 +178,7 @@ export default function IncomeView({
   const showPayDateField = frequency === 'monthly' || frequency === 'adhoc';
 
   return (
-    <div className="space-y-5 text-left animate-in fade-in-50 duration-300">
+    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-5 text-left select-none bg-slate-50 dark:bg-slate-900 animate-in fade-in-50 duration-300">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">Income</h2>
