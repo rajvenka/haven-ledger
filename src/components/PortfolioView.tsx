@@ -106,6 +106,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [importParsing, setImportParsing] = useState(false);
   const [importPreview, setImportPreview] = useState<{ fresh: ParsedHolding[]; duplicates: number } | null>(null);
   const [importSourceTag, setImportSourceTag] = useState('');
+  const [importBuyDate, setImportBuyDate] = useState(todayStr());
   const [importSaving, setImportSaving] = useState(false);
 
   const isDuplicateHolding = (parsed: ParsedHolding) => {
@@ -143,12 +144,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
       await bulkAddPortfolioHoldings(
         importPreview.fresh.map(h => ({
           holdingType: h.holdingType, broker: h.broker, symbol: h.symbol, isin: h.isin, exchange: h.exchange,
-          quantity: h.quantity, buyPrice: h.buyPrice, buyDate: todayStr(), currentPrice: h.currentPrice,
+          quantity: h.quantity, buyPrice: h.buyPrice, buyDate: importBuyDate, currentPrice: h.currentPrice,
           source: importSourceTag.trim() || undefined,
         }))
       );
       setImportPreview(null);
       setImportSourceTag('');
+      setImportBuyDate(todayStr());
       setIsImporting(false);
     });
     setImportSaving(false);
@@ -405,7 +407,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 {importTemplate === 'zerodha_stocks' && "Console → Holdings → Download as XLSX"}
                 {importTemplate === 'groww_stocks' && "Groww app → Reports → Stocks Holdings Statement (XLSX)"}
                 {importTemplate === 'groww_mf' && "Groww app → Reports → Mutual Funds Holdings Statement (XLSX)"}
-                {' '}· Prices/quantities come from the file at export time, dated today. Already-imported holdings are automatically skipped.
+                {' '}· Prices/quantities come from the file at export time. Already-imported holdings are automatically skipped.
               </p>
 
               <input type="file" accept=".xlsx,.xls" onChange={handleImportFile} disabled={importParsing} className="text-xs" />
@@ -426,6 +428,15 @@ export default function PortfolioView(props: PortfolioViewProps) {
                             <span className="text-slate-400">{h.quantity} @ ₹{h.buyPrice.toFixed(2)}</span>
                           </div>
                         ))}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 shrink-0">Purchase date for all</label>
+                        <input
+                          type="date"
+                          value={importBuyDate}
+                          onChange={(e) => setImportBuyDate(e.target.value)}
+                          className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+                        />
                       </div>
                       <input
                         type="text"
