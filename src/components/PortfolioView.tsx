@@ -1,5 +1,5 @@
 import { parseBrokerFile, BrokerTemplate, ParsedHolding } from '../utils/brokerImport';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   TrendingUp, TrendingDown, Plus, Trash2, RefreshCw, Users, Wallet,
   CheckCircle2, X, Briefcase, Gift, Receipt, Upload
@@ -128,6 +128,38 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
   const activeHoldings = portfolioHoldings.filter(h => h.status === 'active');
 
+  // Dynamic filter options built from whatever's actually in the data - broker+type combos and source tags
+  const [holdingFilter, setHoldingFilter] = useState('all');
+  const filterOptions = useMemo(() => {
+    const combos = new Set<string>();
+    const sources = new Set<string>();
+    activeHoldings.forEach(h => {
+      combos.add(`${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`);
+      if (h.source) sources.add(h.source);
+    });
+    return { combos: Array.from(combos).sort(), sources: Array.from(sources).sort() };
+  }, [activeHoldings]);
+
+  const filteredActiveHoldings = useMemo(() => {
+    if (holdingFilter === 'all') return activeHoldings;
+    return activeHoldings.filter(h => {
+      const combo = `${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`;
+      return combo === holdingFilter || h.source === holdingFilter;
+    });
+  }, [activeHoldings, holdingFilter]);
+
+  // Change since the last time prices were refreshed (the two most recent snapshots for a holding)
+  const getSinceLastRefreshPct = (holdingId: string): number | null => {
+    const snapshots = portfolioPriceHistory
+      .filter(p => p.holding_id === holdingId)
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+    if (snapshots.length < 2) return null;
+    const [latest, previous] = snapshots;
+    if (Number(previous.price) === 0) return null;
+    return ((Number(latest.price) - Number(previous.price)) / Number(previous.price)) * 100;
+  };
+
+
   // Finds the closest recorded price snapshot at least N days old for a holding,
   // so we can show "vs last week / last month" without needing a live data feed for history.
   const getPriceNDaysAgo = (holdingId: string, days: number): number | null => {
@@ -235,6 +267,24 @@ export default function PortfolioView(props: PortfolioViewProps) {
     });
     setRefreshingPrices(false);
   };
+
+  // Auto-refresh once when the page loads, if prices look stale - saves a manual click most of
+  // the time, since holdings composition rarely changes day to day. Throttled so it doesn't
+  // fire on every re-render or hammer the free price API.
+  const autoRefreshTriggeredRef = React.useRef(false);
+  useEffect(() => {
+    if (autoRefreshTriggeredRef.current) return;
+    if (isReadOnly) return;
+    const refreshableStocks = activeHoldings.filter(h => h.holding_type !== 'mutual_fund');
+    if (refreshableStocks.length === 0) return;
+    const staleThresholdMs = 6 * 60 * 60 * 1000; // 6 hours
+    const isStale = refreshableStocks.some(h => !h.current_price_updated_at || (Date.now() - new Date(h.current_price_updated_at).getTime()) > staleThresholdMs);
+    if (isStale) {
+      autoRefreshTriggeredRef.current = true;
+      refreshAllPrices();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeHoldings.length]);
 
   const handleAddHolding = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -576,126 +626,134 @@ export default function PortfolioView(props: PortfolioViewProps) {
             </form>
           )}
 
+          {(filterOptions.combos.length > 1 || filterOptions.sources.length > 0) && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button onClick={() => setHoldingFilter('all')} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilter === 'all' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
+              {filterOptions.combos.map(c => (
+                <button key={c} onClick={() => setHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilter === c ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{c}</button>
+              ))}
+              {filterOptions.sources.map(s => (
+                <button key={s} onClick={() => setHoldingFilter(s)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilter === s ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}>{s}</button>
+              ))}
+            </div>
+          )}
+
           <div>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Active ({activeHoldings.length})</span>
-            <div className="apple-card divide-y divide-slate-100 dark:divide-slate-900 mt-1.5 overflow-hidden">
-              {activeHoldings.length === 0 ? (
-                <p className="p-6 text-center text-xs text-slate-400">No active holdings yet.</p>
-              ) : activeHoldings.map(h => {
-                const gain = (Number(h.current_price ?? h.buy_price) - Number(h.buy_price)) * Number(h.quantity);
-                const gainPct = ((Number(h.current_price ?? h.buy_price) - Number(h.buy_price)) / Number(h.buy_price)) * 100;
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Active ({filteredActiveHoldings.length}{holdingFilter !== 'all' ? ` of ${activeHoldings.length}` : ''})</span>
+            <div className="apple-card mt-1.5 overflow-x-auto">
+              {filteredActiveHoldings.length === 0 ? (
+                <p className="p-6 text-center text-xs text-slate-400">No active holdings match this filter.</p>
+              ) : (
+                <table className="w-full text-xs min-w-[720px]">
+                  <thead>
+                    <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                      {isSelectingForTag && <th className="p-2.5 text-left w-8"></th>}
+                      <th className="p-2.5 text-left">Instrument</th>
+                      <th className="p-2.5 text-right">Qty</th>
+                      <th className="p-2.5 text-right">Buy Price</th>
+                      <th className="p-2.5 text-right">LTP</th>
+                      <th className="p-2.5 text-right">Invested</th>
+                      <th className="p-2.5 text-right">Cur. Value</th>
+                      <th className="p-2.5 text-right">Net Gain</th>
+                      <th className="p-2.5 text-right">% Chg</th>
+                      <th className="p-2.5 text-right">Since Last Refresh</th>
+                      <th className="p-2.5 text-right"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-900">
+                    {filteredActiveHoldings.map(h => {
+                      const currentPriceNum = Number(h.current_price ?? h.buy_price);
+                      const gain = (currentPriceNum - Number(h.buy_price)) * Number(h.quantity);
+                      const gainPct = ((currentPriceNum - Number(h.buy_price)) / Number(h.buy_price)) * 100;
+                      const invested = Number(h.buy_price) * Number(h.quantity);
+                      const curValue = currentPriceNum * Number(h.quantity);
+                      const sinceRefreshPct = getSinceLastRefreshPct(h.id);
 
-                const priceLastWeek = getPriceNDaysAgo(h.id, 7);
-                const priceLastMonth = getPriceNDaysAgo(h.id, 30);
-                const currentPriceNum = Number(h.current_price ?? h.buy_price);
-                const weekChangePct = priceLastWeek ? ((currentPriceNum - priceLastWeek) / priceLastWeek) * 100 : null;
-                const monthChangePct = priceLastMonth ? ((currentPriceNum - priceLastMonth) / priceLastMonth) * 100 : null;
+                      const targetPrice = h.target_type === 'price' ? Number(h.target_price)
+                        : h.target_type === 'percent' ? Number(h.buy_price) * (1 + Number(h.target_percent) / 100)
+                        : null;
+                      const targetProgressPct = targetPrice
+                        ? Math.max(0, Math.min(100, ((currentPriceNum - Number(h.buy_price)) / (targetPrice - Number(h.buy_price))) * 100))
+                        : null;
 
-                const targetPrice = h.target_type === 'price' ? Number(h.target_price)
-                  : h.target_type === 'percent' ? Number(h.buy_price) * (1 + Number(h.target_percent) / 100)
-                  : null;
-                const targetProgressPct = targetPrice
-                  ? Math.max(0, Math.min(100, ((Number(h.current_price ?? h.buy_price) - Number(h.buy_price)) / (targetPrice - Number(h.buy_price))) * 100))
-                  : null;
+                      const holdUntil = h.hold_type === 'date' ? new Date(h.hold_until_date)
+                        : h.hold_type === 'days' ? new Date(new Date(h.buy_date).getTime() + Number(h.hold_days) * 86400000)
+                        : null;
 
-                const holdUntil = h.hold_type === 'date' ? new Date(h.hold_until_date)
-                  : h.hold_type === 'days' ? new Date(new Date(h.buy_date).getTime() + Number(h.hold_days) * 86400000)
-                  : null;
-                const holdProgressPct = holdUntil
-                  ? Math.max(0, Math.min(100, ((Date.now() - new Date(h.buy_date).getTime()) / (holdUntil.getTime() - new Date(h.buy_date).getTime())) * 100))
-                  : null;
-
-                return (
-                  <div key={h.id} className="p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                    {isSelectingForTag && (
-                      <input
-                        type="checkbox"
-                        checked={selectedHoldingIds.has(h.id)}
-                        onChange={() => toggleHoldingSelected(h.id)}
-                        className="w-4 h-4 shrink-0 cursor-pointer accent-indigo-600"
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <h4 className="text-xs font-bold text-slate-900 dark:text-white">{h.symbol}</h4>
-                        <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{h.broker}</span>
-                        {h.holding_type === 'mutual_fund' ? (
-                          <span className="text-[8px] font-bold px-1.5 py-0.2 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 rounded-full">MF</span>
-                        ) : (
-                          <span className="text-[8px] text-slate-400">{h.exchange}</span>
-                        )}
-                        {h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
-                      </div>
-                      <p className="text-[9px] text-slate-400 mt-0.5">{h.quantity} {h.holding_type === 'mutual_fund' ? 'units' : 'shares'} @ ₹{h.buy_price} · bought {h.buy_date}</p>
-                      {targetPrice && (
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <div className="w-16 h-1 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                            <div className="h-full bg-indigo-500" style={{ width: `${targetProgressPct}%` }} />
-                          </div>
-                          <span className="text-[8px] text-slate-400">Target ₹{targetPrice.toFixed(2)} · {targetProgressPct!.toFixed(0)}% there</span>
-                        </div>
-                      )}
-                      {holdUntil && (
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <div className="w-16 h-1 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                            <div className="h-full bg-amber-500" style={{ width: `${holdProgressPct}%` }} />
-                          </div>
-                          <span className="text-[8px] text-slate-400">Hold until {holdUntil.toISOString().slice(0, 10)} · {holdProgressPct!.toFixed(0)}% through</span>
-                        </div>
-                      )}
-                      {(weekChangePct !== null || monthChangePct !== null) && (
-                        <div className="flex items-center gap-2 mt-1">
-                          {weekChangePct !== null && (
-                            <span className={`text-[8px] font-bold ${weekChangePct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                              1wk {weekChangePct >= 0 ? '+' : ''}{weekChangePct.toFixed(1)}%
-                            </span>
+                      return (
+                        <tr key={h.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
+                          {isSelectingForTag && (
+                            <td className="p-2.5">
+                              <input type="checkbox" checked={selectedHoldingIds.has(h.id)} onChange={() => toggleHoldingSelected(h.id)} className="w-4 h-4 cursor-pointer accent-indigo-600" />
+                            </td>
                           )}
-                          {monthChangePct !== null && (
-                            <span className={`text-[8px] font-bold ${monthChangePct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                              1mo {monthChangePct >= 0 ? '+' : ''}{monthChangePct.toFixed(1)}%
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {priceEdits[h.id] !== undefined ? (
-                        <div className="flex items-center gap-1">
-                          <input
-                            autoFocus
-                            type="number"
-                            value={priceEdits[h.id]}
-                            onChange={(e) => setPriceEdits(prev => ({ ...prev, [h.id]: e.target.value }))}
-                            className="w-20 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px]"
-                          />
-                          <button onClick={() => saveCurrentPrice(h.id)} className="p-1 bg-indigo-600 text-white rounded-md cursor-pointer"><CheckCircle2 className="w-3 h-3" /></button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setPriceEdits(prev => ({ ...prev, [h.id]: String(h.current_price ?? h.buy_price) }))}
-                          className="text-right cursor-pointer"
-                          title="Update current price"
-                        >
-                          <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1">₹{Number(h.current_price ?? h.buy_price).toLocaleString()} <RefreshCw className="w-2.5 h-2.5 text-slate-400" /></span>
-                          <span className={`text-[9px] font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)} ({gainPct.toFixed(1)}%)</span>
-                        </button>
-                      )}
-                      {!isReadOnly && (sellingId === h.id ? (
-                        <div className="flex items-center gap-1">
-                          <input type="number" value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} placeholder="Sell price" className="w-20 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px]" />
-                          <button onClick={confirmSell} className="p-1 bg-rose-500 text-white rounded-md cursor-pointer"><CheckCircle2 className="w-3 h-3" /></button>
-                          <button onClick={() => setSellingId(null)} className="p-1 text-slate-400 cursor-pointer"><X className="w-3 h-3" /></button>
-                        </div>
-                      ) : (
-                        <button onClick={() => { setSellingId(h.id); setSellPrice(String(h.current_price ?? h.buy_price)); }} className="px-2 py-1 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 text-[9px] font-black uppercase rounded-md cursor-pointer">Sell</button>
-                      ))}
-                      {!isReadOnly && (
-                        <button onClick={() => runAction(() => deletePortfolioHolding(h.id))} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                          <td className="p-2.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-bold text-slate-900 dark:text-white">{h.symbol}</span>
+                              <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{h.broker}</span>
+                              {h.holding_type === 'mutual_fund' && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 rounded-full">MF</span>}
+                              {h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
+                            </div>
+                            {(targetPrice || holdUntil) && (
+                              <div className="flex items-center gap-2 mt-1">
+                                {targetPrice && <span className="text-[8px] text-slate-400">Target ₹{targetPrice.toFixed(2)} · {targetProgressPct!.toFixed(0)}%</span>}
+                                {holdUntil && <span className="text-[8px] text-slate-400">Hold until {holdUntil.toISOString().slice(0, 10)}</span>}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">{h.quantity}</td>
+                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">₹{Number(h.buy_price).toFixed(2)}</td>
+                          <td className="p-2.5 text-right">
+                            {priceEdits[h.id] !== undefined ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <input
+                                  autoFocus
+                                  type="number"
+                                  value={priceEdits[h.id]}
+                                  onChange={(e) => setPriceEdits(prev => ({ ...prev, [h.id]: e.target.value }))}
+                                  className="w-20 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px]"
+                                />
+                                <button onClick={() => saveCurrentPrice(h.id)} className="p-1 bg-indigo-600 text-white rounded-md cursor-pointer"><CheckCircle2 className="w-3 h-3" /></button>
+                              </div>
+                            ) : (
+                              <button onClick={() => setPriceEdits(prev => ({ ...prev, [h.id]: String(currentPriceNum) }))} className="font-bold text-slate-900 dark:text-white flex items-center gap-1 ml-auto cursor-pointer" title="Update current price">
+                                ₹{currentPriceNum.toFixed(2)} <RefreshCw className="w-2.5 h-2.5 text-slate-400" />
+                              </button>
+                            )}
+                          </td>
+                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">{fmt(invested)}</td>
+                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">{fmt(curValue)}</td>
+                          <td className={`p-2.5 text-right font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)}</td>
+                          <td className={`p-2.5 text-right font-bold ${gainPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gainPct >= 0 ? '+' : ''}{gainPct.toFixed(2)}%</td>
+                          <td className="p-2.5 text-right">
+                            {sinceRefreshPct !== null ? (
+                              <span className={`font-bold ${sinceRefreshPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{sinceRefreshPct >= 0 ? '+' : ''}{sinceRefreshPct.toFixed(2)}%</span>
+                            ) : (
+                              <span className="text-slate-300 dark:text-slate-700">—</span>
+                            )}
+                          </td>
+                          <td className="p-2.5 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              {!isReadOnly && (sellingId === h.id ? (
+                                <div className="flex items-center gap-1">
+                                  <input type="number" value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} placeholder="Sell price" className="w-16 px-1.5 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[10px]" />
+                                  <button onClick={confirmSell} className="p-1 bg-rose-500 text-white rounded-md cursor-pointer"><CheckCircle2 className="w-3 h-3" /></button>
+                                  <button onClick={() => setSellingId(null)} className="p-1 text-slate-400 cursor-pointer"><X className="w-3 h-3" /></button>
+                                </div>
+                              ) : (
+                                <button onClick={() => { setSellingId(h.id); setSellPrice(String(currentPriceNum)); }} className="px-2 py-1 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 text-[9px] font-black uppercase rounded-md cursor-pointer">Sell</button>
+                              ))}
+                              {!isReadOnly && (
+                                <button onClick={() => runAction(() => deletePortfolioHolding(h.id))} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
 
