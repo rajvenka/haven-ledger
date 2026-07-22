@@ -17,7 +17,12 @@ interface PortfolioViewProps {
   addPortfolioSplit: (contributorId: string, percent: number, from: string, to?: string) => Promise<void>;
   deletePortfolioSplit: (id: string) => Promise<void>;
   portfolioHoldings: any[];
-  addPortfolioHolding: (h: { broker: string; symbol: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; notes?: string }) => Promise<void>;
+  addPortfolioHolding: (h: {
+    broker: string; symbol: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; notes?: string;
+    source?: string;
+    targetType?: 'price' | 'percent'; targetPrice?: number; targetPercent?: number;
+    holdType?: 'days' | 'date'; holdDays?: number; holdUntilDate?: string;
+  }) => Promise<void>;
   updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
   deletePortfolioHolding: (id: string) => Promise<void>;
   portfolioContributions: any[];
@@ -75,6 +80,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [hQty, setHQty] = useState('');
   const [hPrice, setHPrice] = useState('');
   const [hDate, setHDate] = useState(todayStr());
+  const [hSource, setHSource] = useState('');
+  const [showTargetPlan, setShowTargetPlan] = useState(false);
+  const [hTargetType, setHTargetType] = useState<'price' | 'percent'>('percent');
+  const [hTargetValue, setHTargetValue] = useState('');
+  const [hHoldType, setHHoldType] = useState<'days' | 'date'>('days');
+  const [hHoldDays, setHHoldDays] = useState('');
+  const [hHoldUntilDate, setHHoldUntilDate] = useState('');
   const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
   const [sellingId, setSellingId] = useState<string | null>(null);
   const [sellPrice, setSellPrice] = useState('');
@@ -87,8 +99,18 @@ export default function PortfolioView(props: PortfolioViewProps) {
     e.preventDefault();
     if (!hSymbol.trim() || !hQty || !hPrice) return;
     await runAction(async () => {
-      await addPortfolioHolding({ broker: hBroker, symbol: hSymbol, exchange: hExchange, quantity: parseFloat(hQty), buyPrice: parseFloat(hPrice), buyDate: hDate });
-      setHSymbol(''); setHQty(''); setHPrice(''); setIsAddingHolding(false);
+      await addPortfolioHolding({
+        broker: hBroker, symbol: hSymbol, exchange: hExchange, quantity: parseFloat(hQty), buyPrice: parseFloat(hPrice), buyDate: hDate,
+        source: hSource.trim() || undefined,
+        targetType: showTargetPlan && hTargetValue ? hTargetType : undefined,
+        targetPrice: showTargetPlan && hTargetType === 'price' && hTargetValue ? parseFloat(hTargetValue) : undefined,
+        targetPercent: showTargetPlan && hTargetType === 'percent' && hTargetValue ? parseFloat(hTargetValue) : undefined,
+        holdType: showTargetPlan && ((hHoldType === 'days' && hHoldDays) || (hHoldType === 'date' && hHoldUntilDate)) ? hHoldType : undefined,
+        holdDays: showTargetPlan && hHoldType === 'days' && hHoldDays ? parseInt(hHoldDays) : undefined,
+        holdUntilDate: showTargetPlan && hHoldType === 'date' && hHoldUntilDate ? hHoldUntilDate : undefined,
+      });
+      setHSymbol(''); setHQty(''); setHPrice(''); setHSource(''); setHTargetValue(''); setHHoldDays(''); setHHoldUntilDate('');
+      setShowTargetPlan(false); setIsAddingHolding(false);
     });
   };
 
@@ -285,18 +307,56 @@ export default function PortfolioView(props: PortfolioViewProps) {
           </div>
 
           {isAddingHolding && (
-            <form onSubmit={handleAddHolding} className="apple-card p-4 grid grid-cols-2 md:grid-cols-3 gap-2.5">
-              <select value={hBroker} onChange={(e) => setHBroker(e.target.value as any)} className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
-                <option>Zerodha</option><option>Groww</option><option>Other</option>
-              </select>
-              <select value={hExchange} onChange={(e) => setHExchange(e.target.value as any)} className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
-                <option>NSE</option><option>BSE</option>
-              </select>
-              <input type="text" value={hSymbol} onChange={(e) => setHSymbol(e.target.value)} placeholder="Symbol e.g. TCS" className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
-              <input type="number" value={hQty} onChange={(e) => setHQty(e.target.value)} placeholder="Quantity" className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
-              <input type="number" value={hPrice} onChange={(e) => setHPrice(e.target.value)} placeholder="Buy price/share" className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
-              <input type="date" value={hDate} onChange={(e) => setHDate(e.target.value)} className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
-              <div className="col-span-2 md:col-span-3 flex gap-2">
+            <form onSubmit={handleAddHolding} className="apple-card p-4 space-y-2.5">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
+                <select value={hBroker} onChange={(e) => setHBroker(e.target.value as any)} className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
+                  <option>Zerodha</option><option>Groww</option><option>Other</option>
+                </select>
+                <select value={hExchange} onChange={(e) => setHExchange(e.target.value as any)} className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
+                  <option>NSE</option><option>BSE</option>
+                </select>
+                <input type="text" value={hSymbol} onChange={(e) => setHSymbol(e.target.value)} placeholder="Symbol e.g. TCS" className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                <input type="number" value={hQty} onChange={(e) => setHQty(e.target.value)} placeholder="Quantity" className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                <input type="number" value={hPrice} onChange={(e) => setHPrice(e.target.value)} placeholder="Buy price/share" className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                <input type="date" value={hDate} onChange={(e) => setHDate(e.target.value)} className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                <input
+                  type="text"
+                  list="source-suggestions"
+                  value={hSource}
+                  onChange={(e) => setHSource(e.target.value)}
+                  placeholder="Source e.g. Own Research, Rajavel, TV"
+                  className="col-span-2 md:col-span-3 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+                />
+                <datalist id="source-suggestions">
+                  {Array.from(new Set(portfolioHoldings.map(h => h.source).filter(Boolean))).map(s => <option key={s} value={s} />)}
+                </datalist>
+              </div>
+
+              <button type="button" onClick={() => setShowTargetPlan(!showTargetPlan)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
+                {showTargetPlan ? '− Hide target & hold plan' : '+ Set target & hold plan (optional)'}
+              </button>
+
+              {showTargetPlan && (
+                <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                  <div className="flex gap-1.5 col-span-2">
+                    <button type="button" onClick={() => setHTargetType('percent')} className={`flex-1 py-1 rounded-md text-[10px] font-bold cursor-pointer ${hTargetType === 'percent' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500'}`}>Target % Gain</button>
+                    <button type="button" onClick={() => setHTargetType('price')} className={`flex-1 py-1 rounded-md text-[10px] font-bold cursor-pointer ${hTargetType === 'price' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500'}`}>Target Price ₹</button>
+                  </div>
+                  <input type="number" value={hTargetValue} onChange={(e) => setHTargetValue(e.target.value)} placeholder={hTargetType === 'percent' ? 'e.g. 25 (%)' : 'e.g. 1500 (₹)'} className="col-span-2 px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-xs" />
+
+                  <div className="flex gap-1.5 col-span-2 pt-1">
+                    <button type="button" onClick={() => setHHoldType('days')} className={`flex-1 py-1 rounded-md text-[10px] font-bold cursor-pointer ${hHoldType === 'days' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500'}`}>Hold N Days</button>
+                    <button type="button" onClick={() => setHHoldType('date')} className={`flex-1 py-1 rounded-md text-[10px] font-bold cursor-pointer ${hHoldType === 'date' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500'}`}>Hold Until Date</button>
+                  </div>
+                  {hHoldType === 'days' ? (
+                    <input type="number" value={hHoldDays} onChange={(e) => setHHoldDays(e.target.value)} placeholder="e.g. 90 days" className="col-span-2 px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-xs" />
+                  ) : (
+                    <input type="date" value={hHoldUntilDate} onChange={(e) => setHHoldUntilDate(e.target.value)} className="col-span-2 px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-xs" />
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-2">
                 <button type="button" onClick={() => setIsAddingHolding(false)} className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[11px] font-black uppercase rounded-lg cursor-pointer">Cancel</button>
                 <button type="submit" className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer">Add</button>
               </div>
@@ -311,6 +371,21 @@ export default function PortfolioView(props: PortfolioViewProps) {
               ) : activeHoldings.map(h => {
                 const gain = (Number(h.current_price ?? h.buy_price) - Number(h.buy_price)) * Number(h.quantity);
                 const gainPct = ((Number(h.current_price ?? h.buy_price) - Number(h.buy_price)) / Number(h.buy_price)) * 100;
+
+                const targetPrice = h.target_type === 'price' ? Number(h.target_price)
+                  : h.target_type === 'percent' ? Number(h.buy_price) * (1 + Number(h.target_percent) / 100)
+                  : null;
+                const targetProgressPct = targetPrice
+                  ? Math.max(0, Math.min(100, ((Number(h.current_price ?? h.buy_price) - Number(h.buy_price)) / (targetPrice - Number(h.buy_price))) * 100))
+                  : null;
+
+                const holdUntil = h.hold_type === 'date' ? new Date(h.hold_until_date)
+                  : h.hold_type === 'days' ? new Date(new Date(h.buy_date).getTime() + Number(h.hold_days) * 86400000)
+                  : null;
+                const holdProgressPct = holdUntil
+                  ? Math.max(0, Math.min(100, ((Date.now() - new Date(h.buy_date).getTime()) / (holdUntil.getTime() - new Date(h.buy_date).getTime())) * 100))
+                  : null;
+
                 return (
                   <div key={h.id} className="p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                     <div className="flex-1 min-w-0">
@@ -318,8 +393,25 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         <h4 className="text-xs font-bold text-slate-900 dark:text-white">{h.symbol}</h4>
                         <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{h.broker}</span>
                         <span className="text-[8px] text-slate-400">{h.exchange}</span>
+                        {h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
                       </div>
                       <p className="text-[9px] text-slate-400 mt-0.5">{h.quantity} shares @ ₹{h.buy_price} · bought {h.buy_date}</p>
+                      {targetPrice && (
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <div className="w-16 h-1 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div className="h-full bg-indigo-500" style={{ width: `${targetProgressPct}%` }} />
+                          </div>
+                          <span className="text-[8px] text-slate-400">Target ₹{targetPrice.toFixed(2)} · {targetProgressPct!.toFixed(0)}% there</span>
+                        </div>
+                      )}
+                      {holdUntil && (
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <div className="w-16 h-1 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div className="h-full bg-amber-500" style={{ width: `${holdProgressPct}%` }} />
+                          </div>
+                          <span className="text-[8px] text-slate-400">Hold until {holdUntil.toISOString().slice(0, 10)} · {holdProgressPct!.toFixed(0)}% through</span>
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {priceEdits[h.id] !== undefined ? (
@@ -601,6 +693,27 @@ export default function PortfolioView(props: PortfolioViewProps) {
       {/* STATEMENT TAB */}
       {tab === 'statement' && (
         <div className="space-y-4">
+          {activeHoldings.some(h => h.target_type) && (
+            <div className="apple-card p-4 space-y-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Target Progress</span>
+              {activeHoldings.filter(h => h.target_type).map(h => {
+                const targetPrice = h.target_type === 'price' ? Number(h.target_price) : Number(h.buy_price) * (1 + Number(h.target_percent) / 100);
+                const progress = Math.max(0, Math.min(100, ((Number(h.current_price ?? h.buy_price) - Number(h.buy_price)) / (targetPrice - Number(h.buy_price))) * 100));
+                return (
+                  <div key={h.id} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{h.symbol} {h.source && <span className="text-[9px] text-slate-400">· {h.source}</span>}</span>
+                      <span className="text-slate-500">₹{Number(h.current_price ?? h.buy_price).toFixed(2)} → ₹{targetPrice.toFixed(2)} target</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                      <div className={`h-full ${progress >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${progress}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           <div className="apple-card p-4 space-y-2 text-xs">
             <div className="flex justify-between"><span className="text-slate-500">Total Contributed</span><span className="font-bold text-slate-900 dark:text-white">{fmt(totalContributed)}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Deployed in Active Holdings</span><span className="font-bold text-slate-900 dark:text-white">{fmt(totalInvestedActive)}</span></div>

@@ -963,11 +963,17 @@ export function usePaymentState() {
 
   const addPortfolioHolding = async (holding: {
     broker: string; symbol: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; notes?: string;
+    source?: string;
+    targetType?: 'price' | 'percent'; targetPrice?: number; targetPercent?: number;
+    holdType?: 'days' | 'date'; holdDays?: number; holdUntilDate?: string;
   }) => {
     if (!activePortfolioId) throw new Error('Select a portfolio first.');
     const { error } = await supabase.from('portfolio_holdings').insert({
       portfolio_id: activePortfolioId, broker: holding.broker, symbol: holding.symbol.toUpperCase(), exchange: holding.exchange,
       quantity: holding.quantity, buy_price: holding.buyPrice, buy_date: holding.buyDate, notes: holding.notes ?? null,
+      source: holding.source ?? null,
+      target_type: holding.targetType ?? null, target_price: holding.targetPrice ?? null, target_percent: holding.targetPercent ?? null,
+      hold_type: holding.holdType ?? null, hold_days: holding.holdDays ?? null, hold_until_date: holding.holdUntilDate ?? null,
     });
     if (error) throw error;
     await loadPortfolioDetails();
