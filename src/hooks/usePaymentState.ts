@@ -158,10 +158,11 @@ export function usePaymentState() {
       setFamilyMembers([]);
     }
 
-    const { data: invites } = await supabase
+    const { data: invites, error: invitesError } = await supabase
       .from('workspace_invitations')
-      .select('id, workspace_id, from_user_id, to_email, proposed_role, proposed_access_level, proposed_features, status, created_at, workspaces(name, invite_code), profiles!workspace_invitations_from_user_id_fkey(email, display_name)')
+      .select('id, workspace_id, from_user_id, to_email, proposed_role, proposed_access_level, proposed_features, status, created_at, workspaces(name, invite_code), profiles!family_invitations_from_user_id_fkey(email, display_name)')
       .eq('status', 'pending');
+    if (invitesError) console.error('Failed to load pending invitations:', invitesError);
 
     setIncomingInvitations((invites ?? []).map((i: any) => ({
       id: i.id, fromUid: i.from_user_id, fromEmail: i.profiles?.email ?? '', fromName: i.profiles?.display_name ?? i.profiles?.email ?? 'Workspace owner',
