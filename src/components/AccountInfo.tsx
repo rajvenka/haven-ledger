@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Download, 
   Upload, 
@@ -201,7 +201,13 @@ export default function AccountInfo({
   const [familyEmail, setFamilyEmail] = useState('');
   const [familyEmailRole, setFamilyEmailRole] = useState<'view' | 'modify'>('modify');
   const ALL_FEATURES = ['income', 'rewards', 'ai', 'team', 'chat', 'agent'];
-  const [familyFeatures, setFamilyFeatures] = useState<string[]>(ALL_FEATURES);
+  const myAvailableFeatures = userProfile?.licensePlanFeatures ?? ALL_FEATURES;
+  const [familyFeatures, setFamilyFeatures] = useState<string[]>(myAvailableFeatures);
+
+  useEffect(() => {
+    setFamilyFeatures(myAvailableFeatures);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userProfile?.licensePlanFeatures?.join(',')]);
   const toggleFeature = (f: string) => setFamilyFeatures(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
   const FEATURE_META: Record<string, string> = { income: 'Income', rewards: 'Rewards & Perks', ai: 'AI Insights', team: 'Family Sharing / Team', chat: 'Family Chat', agent: 'AI Agent' };
   const [joinGroupId, setJoinGroupId] = useState('');
@@ -618,14 +624,15 @@ export default function AccountInfo({
                 <div className="flex items-center justify-between">
                   <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">App Access</span>
                   <div className="flex gap-1">
-                    <button type="button" onClick={() => setFamilyFeatures(ALL_FEATURES)} className="text-[9px] font-bold text-indigo-500 cursor-pointer">Full</button>
+                    <button type="button" onClick={() => setFamilyFeatures(myAvailableFeatures)} className="text-[9px] font-bold text-indigo-500 cursor-pointer">Match My Plan</button>
                     <span className="text-[9px] text-slate-300">·</span>
                     <button type="button" onClick={() => setFamilyFeatures([])} className="text-[9px] font-bold text-indigo-500 cursor-pointer">Light (Bills Only)</button>
                   </div>
                 </div>
-                {accessPlans.length > 0 && (
+                <p className="text-[9px] text-slate-400 -mt-1">You can only share features included in your own plan ({userProfile?.licensePlanName || 'Light'}).</p>
+                {accessPlans.filter(plan => plan.features.every(f => myAvailableFeatures.includes(f))).length > 0 && (
                   <div className="flex gap-1.5 flex-wrap">
-                    {accessPlans.map(plan => (
+                    {accessPlans.filter(plan => plan.features.every(f => myAvailableFeatures.includes(f))).map(plan => (
                       <button
                         key={plan.id}
                         type="button"
@@ -639,17 +646,22 @@ export default function AccountInfo({
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-1.5">
-                  {ALL_FEATURES.map(f => (
+                  {ALL_FEATURES.map(f => {
+                    const locked = !myAvailableFeatures.includes(f);
+                    return (
                     <button
                       key={f}
                       type="button"
+                      disabled={locked}
                       onClick={() => toggleFeature(f)}
-                      className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer transition-all text-left ${familyFeatures.includes(f) ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900' : 'bg-slate-50 dark:bg-slate-900 text-slate-400 border border-slate-100 dark:border-slate-800'}`}
+                      title={locked ? "Not included in your own plan" : undefined}
+                      className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all text-left ${locked ? 'bg-slate-50 dark:bg-slate-900 text-slate-300 dark:text-slate-700 border border-slate-100 dark:border-slate-800 cursor-not-allowed opacity-60' : familyFeatures.includes(f) ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900 cursor-pointer' : 'bg-slate-50 dark:bg-slate-900 text-slate-400 border border-slate-100 dark:border-slate-800 cursor-pointer'}`}
                     >
-                      {familyFeatures.includes(f) ? <Check className="w-3 h-3 shrink-0" /> : <span className="w-3 h-3 shrink-0" />}
+                      {familyFeatures.includes(f) && !locked ? <Check className="w-3 h-3 shrink-0" /> : <span className="w-3 h-3 shrink-0" />}
                       {FEATURE_META[f]}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
                 <p className="text-[9px] text-slate-400">Dashboard, Expenses, Manage Bills, and Payment History are always included. Pick which extras this person can see.</p>
               </form>

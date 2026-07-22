@@ -322,7 +322,11 @@ export function usePaymentState() {
     setIsSyncing(true);
     try {
       const cleanEmail = email.trim().toLowerCase();
-      const { error } = await supabase.from('workspace_invitations').insert({ workspace_id: activeWorkspace.id, from_user_id: user.id, to_email: cleanEmail, proposed_role: role, proposed_access_level: accessLevel, proposed_features: features });
+      // Can't grant an invitee more than you have yourself.
+      const myFeatures = userProfile?.licensePlanFeatures ?? [];
+      const clampedFeatures = features.filter(f => myFeatures.includes(f));
+      const clampedAccessLevel = clampedFeatures.length >= myFeatures.length && myFeatures.length > 0 ? accessLevel : (clampedFeatures.length === 0 ? 'limited' : accessLevel);
+      const { error } = await supabase.from('workspace_invitations').insert({ workspace_id: activeWorkspace.id, from_user_id: user.id, to_email: cleanEmail, proposed_role: role, proposed_access_level: clampedAccessLevel, proposed_features: clampedFeatures });
       if (error) throw error;
 
       const { data: emailResult, error: emailError } = await supabase.functions.invoke('invite-workspace-member', {
