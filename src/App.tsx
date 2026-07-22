@@ -6,6 +6,7 @@ import {
   History, 
   Award,
   Wallet,
+  Briefcase,
   ShieldCheck,
   Bell, 
   X, 
@@ -50,6 +51,7 @@ import ProfileScopeModal from './components/ProfileScopeModal';
 import OnboardingView from './components/OnboardingView';
 import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import RewardsTracker from './components/RewardsTracker';
+import PortfolioView from './components/PortfolioView';
 import IncomeView from './components/IncomeView';
 import AdminUsersView from './components/AdminUsersView';
 
@@ -150,6 +152,29 @@ export default function App() {
     resolveUpgradeRequest,
     adminSetUserPlan,
     setSuperAdminStatus,
+    portfolios,
+    activePortfolioId,
+    switchPortfolio,
+    createPortfolio,
+    portfolioContributors,
+    addPortfolioContributor,
+    deletePortfolioContributor,
+    portfolioSplits,
+    addPortfolioSplit,
+    deletePortfolioSplit,
+    portfolioHoldings,
+    addPortfolioHolding,
+    updatePortfolioHolding,
+    deletePortfolioHolding,
+    portfolioContributions,
+    addPortfolioContribution,
+    deletePortfolioContribution,
+    portfolioDividends,
+    addPortfolioDividend,
+    deletePortfolioDividend,
+    portfolioFees,
+    addPortfolioFee,
+    deletePortfolioFee,
     appNotificationsEnabled,
     mobileNotificationsEnabled,
     saveNotificationSettings,
@@ -618,6 +643,23 @@ export default function App() {
                       )}
                     </button>
                   )}
+
+                  <button
+                    onClick={() => setActiveTab('portfolio')}
+                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                      activeTab === 'portfolio'
+                        ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Briefcase className="w-4 h-4 shrink-0 opacity-80" />
+                      <span>Portfolio</span>
+                    </div>
+                    {activeTab === 'portfolio' && (
+                      <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
+                    )}
+                  </button>
                 </nav>
               </div>
 
@@ -975,6 +1017,23 @@ export default function App() {
                           )}
                         </button>
                       )}
+
+                      <button
+                        onClick={() => { setActiveTab('portfolio'); setIsMobileMenuOpen(false); }}
+                        className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                          activeTab === 'portfolio'
+                            ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Briefcase className="w-4.5 h-4.5 shrink-0 opacity-80" />
+                          <span>Portfolio</span>
+                        </div>
+                        {activeTab === 'portfolio' && (
+                          <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
+                        )}
+                      </button>
                     </nav>
                   </div>
 
@@ -1318,6 +1377,32 @@ export default function App() {
                 onUpdateReward={updateReward}
                 onDeleteReward={deleteReward}
                 isReadOnly={isReadOnly}
+              />
+            ) : activeTab === 'portfolio' ? (
+              <PortfolioView
+                portfolios={portfolios}
+                activePortfolioId={activePortfolioId}
+                switchPortfolio={switchPortfolio}
+                createPortfolio={createPortfolio}
+                portfolioContributors={portfolioContributors}
+                addPortfolioContributor={addPortfolioContributor}
+                deletePortfolioContributor={deletePortfolioContributor}
+                portfolioSplits={portfolioSplits}
+                addPortfolioSplit={addPortfolioSplit}
+                deletePortfolioSplit={deletePortfolioSplit}
+                portfolioHoldings={portfolioHoldings}
+                addPortfolioHolding={addPortfolioHolding}
+                updatePortfolioHolding={updatePortfolioHolding}
+                deletePortfolioHolding={deletePortfolioHolding}
+                portfolioContributions={portfolioContributions}
+                addPortfolioContribution={addPortfolioContribution}
+                deletePortfolioContribution={deletePortfolioContribution}
+                portfolioDividends={portfolioDividends}
+                addPortfolioDividend={addPortfolioDividend}
+                deletePortfolioDividend={deletePortfolioDividend}
+                portfolioFees={portfolioFees}
+                addPortfolioFee={addPortfolioFee}
+                deletePortfolioFee={deletePortfolioFee}
               />
             ) : activeTab === 'income' ? (
               <IncomeView

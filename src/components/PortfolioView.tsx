@@ -1,0 +1,513 @@
+import React, { useState, useMemo } from 'react';
+import {
+  TrendingUp, TrendingDown, Plus, Trash2, RefreshCw, Users, Wallet,
+  CheckCircle2, X, ChevronDown, Briefcase, Gift, Receipt
+} from 'lucide-react';
+
+interface PortfolioViewProps {
+  portfolios: any[];
+  activePortfolioId: string | null;
+  switchPortfolio: (id: string) => void;
+  createPortfolio: (name: string) => Promise<any>;
+  portfolioContributors: any[];
+  addPortfolioContributor: (name: string) => Promise<void>;
+  deletePortfolioContributor: (id: string) => Promise<void>;
+  portfolioSplits: any[];
+  addPortfolioSplit: (contributorId: string, percent: number, from: string, to?: string) => Promise<void>;
+  deletePortfolioSplit: (id: string) => Promise<void>;
+  portfolioHoldings: any[];
+  addPortfolioHolding: (h: { broker: string; symbol: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; notes?: string }) => Promise<void>;
+  updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
+  deletePortfolioHolding: (id: string) => Promise<void>;
+  portfolioContributions: any[];
+  addPortfolioContribution: (contributorId: string, amount: number, date: string, notes?: string) => Promise<void>;
+  deletePortfolioContribution: (id: string) => Promise<void>;
+  portfolioDividends: any[];
+  addPortfolioDividend: (symbol: string, amount: number, date: string, holdingId?: string, notes?: string) => Promise<void>;
+  deletePortfolioDividend: (id: string) => Promise<void>;
+  portfolioFees: any[];
+  addPortfolioFee: (broker: string, feeType: string, amount: number, date: string, notes?: string) => Promise<void>;
+  deletePortfolioFee: (id: string) => Promise<void>;
+}
+
+const fmt = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
+export default function PortfolioView(props: PortfolioViewProps) {
+  const {
+    portfolios, activePortfolioId, switchPortfolio, createPortfolio,
+    portfolioContributors, addPortfolioContributor, deletePortfolioContributor,
+    portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
+    portfolioHoldings, addPortfolioHolding, updatePortfolioHolding, deletePortfolioHolding,
+    portfolioContributions, addPortfolioContribution, deletePortfolioContribution,
+    portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
+    portfolioFees, addPortfolioFee, deletePortfolioFee,
+  } = props;
+
+  const [tab, setTab] = useState<'holdings' | 'contributions' | 'statement'>('holdings');
+  const [isCreatingPortfolio, setIsCreatingPortfolio] = useState(portfolios.length === 0);
+  const [newPortfolioName, setNewPortfolioName] = useState('');
+
+  // ---- Holdings ----
+  const [isAddingHolding, setIsAddingHolding] = useState(false);
+  const [hBroker, setHBroker] = useState<'Zerodha' | 'Groww' | 'Other'>('Zerodha');
+  const [hSymbol, setHSymbol] = useState('');
+  const [hExchange, setHExchange] = useState<'NSE' | 'BSE'>('NSE');
+  const [hQty, setHQty] = useState('');
+  const [hPrice, setHPrice] = useState('');
+  const [hDate, setHDate] = useState(todayStr());
+  const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
+  const [sellingId, setSellingId] = useState<string | null>(null);
+  const [sellPrice, setSellPrice] = useState('');
+  const [sellDate, setSellDate] = useState(todayStr());
+
+  const activeHoldings = portfolioHoldings.filter(h => h.status === 'active');
+  const soldHoldings = portfolioHoldings.filter(h => h.status === 'sold');
+
+  const handleAddHolding = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!hSymbol.trim() || !hQty || !hPrice) return;
+    await addPortfolioHolding({ broker: hBroker, symbol: hSymbol, exchange: hExchange, quantity: parseFloat(hQty), buyPrice: parseFloat(hPrice), buyDate: hDate });
+    setHSymbol(''); setHQty(''); setHPrice(''); setIsAddingHolding(false);
+  };
+
+  const saveCurrentPrice = async (id: string) => {
+    const val = parseFloat(priceEdits[id]);
+    if (!val) return;
+    await updatePortfolioHolding(id, { currentPrice: val });
+    setPriceEdits(prev => { const next = { ...prev }; delete next[id]; return next; });
+  };
+
+  const confirmSell = async () => {
+    if (!sellingId || !sellPrice) return;
+    await updatePortfolioHolding(sellingId, { status: 'sold', soldPrice: parseFloat(sellPrice), soldDate: sellDate });
+    setSellingId(null); setSellPrice('');
+  };
+
+  // ---- Contributions & Split ----
+  const [isAddingContribution, setIsAddingContribution] = useState(false);
+  const [cContributorId, setCContributorId] = useState('');
+  const [cAmount, setCAmount] = useState('');
+  const [cDate, setCDate] = useState(todayStr());
+  const [isAddingContributor, setIsAddingContributor] = useState(false);
+  const [newContributorName, setNewContributorName] = useState('');
+  const [isAddingSplit, setIsAddingSplit] = useState(false);
+  const [splitContributorId, setSplitContributorId] = useState('');
+  const [splitPercent, setSplitPercent] = useState('');
+  const [splitFrom, setSplitFrom] = useState(todayStr());
+  const [splitTo, setSplitTo] = useState('');
+
+  const handleAddContribution = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cContributorId || !cAmount) return;
+    await addPortfolioContribution(cContributorId, parseFloat(cAmount), cDate);
+    setCAmount(''); setIsAddingContribution(false);
+  };
+
+  const currentSplits = useMemo(() => {
+    const today = todayStr();
+    return portfolioContributors.map(c => {
+      const active = portfolioSplits.find(s => s.contributor_id === c.id && s.effective_from <= today && (!s.effective_to || s.effective_to >= today));
+      return { contributor: c, percent: active?.split_percent ?? 0 };
+    });
+  }, [portfolioContributors, portfolioSplits]);
+
+  // ---- Statement calculations ----
+  const totalContributed = portfolioContributions.reduce((s, c) => s + Number(c.amount), 0);
+  const totalInvestedActive = activeHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
+  const currentValueActive = activeHoldings.reduce((s, h) => s + Number(h.current_price ?? h.buy_price) * Number(h.quantity), 0);
+  const unrealizedGain = currentValueActive - totalInvestedActive;
+  const realizedGain = soldHoldings.reduce((s, h) => s + (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity), 0);
+  const totalDividends = portfolioDividends.reduce((s, d) => s + Number(d.amount), 0);
+  const totalFees = portfolioFees.reduce((s, f) => s + Number(f.amount), 0);
+  const netGain = unrealizedGain + realizedGain + totalDividends - totalFees;
+
+  if (portfolios.length === 0 || isCreatingPortfolio) {
+    return (
+      <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-5 text-left select-none bg-slate-50 dark:bg-slate-900">
+        <div className="apple-card p-8 flex flex-col items-center text-center gap-3 max-w-sm mx-auto mt-10">
+          <Briefcase className="w-10 h-10 text-indigo-500" />
+          <h2 className="text-sm font-black text-slate-900 dark:text-white">Create Your Portfolio</h2>
+          <p className="text-xs text-slate-400">Track stocks, contributions, and gains — split however you and your co-investor agree, and it can change over time.</p>
+          <form
+            onSubmit={async (e) => { e.preventDefault(); if (!newPortfolioName.trim()) return; await createPortfolio(newPortfolioName.trim()); setNewPortfolioName(''); setIsCreatingPortfolio(false); }}
+            className="w-full space-y-2 mt-2"
+          >
+            <input
+              autoFocus
+              type="text"
+              value={newPortfolioName}
+              onChange={(e) => setNewPortfolioName(e.target.value)}
+              placeholder="Portfolio name, e.g. Me & Arjun"
+              className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs"
+            />
+            <button type="submit" className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-wider rounded-xl cursor-pointer">
+              Create Portfolio
+            </button>
+            {portfolios.length > 0 && (
+              <button type="button" onClick={() => setIsCreatingPortfolio(false)} className="w-full text-[10px] text-slate-400 underline cursor-pointer">Cancel</button>
+            )}
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-5 text-left select-none bg-slate-50 dark:bg-slate-900">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Briefcase className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+          <div className="relative">
+            <select
+              value={activePortfolioId || ''}
+              onChange={(e) => switchPortfolio(e.target.value)}
+              className="appearance-none bg-transparent text-lg font-bold text-slate-900 dark:text-white pr-6 cursor-pointer outline-none"
+            >
+              {portfolios.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+        </div>
+        <button onClick={() => setIsCreatingPortfolio(true)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer flex items-center gap-1">
+          <Plus className="w-3 h-3" /> New Portfolio
+        </button>
+      </div>
+
+      {/* Headline stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="apple-card p-4">
+          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Contributed</span>
+          <span className="text-base font-black text-slate-900 dark:text-white">{fmt(totalContributed)}</span>
+        </div>
+        <div className="apple-card p-4">
+          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Current Holdings Value</span>
+          <span className="text-base font-black text-slate-900 dark:text-white">{fmt(currentValueActive)}</span>
+        </div>
+        <div className="apple-card p-4">
+          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Unrealized Gain</span>
+          <span className={`text-base font-black flex items-center gap-1 ${unrealizedGain >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+            {unrealizedGain >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+            {fmt(Math.abs(unrealizedGain))}
+          </span>
+        </div>
+        <div className="apple-card p-4">
+          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Net Gain (all-in)</span>
+          <span className={`text-base font-black ${netGain >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>{fmt(netGain)}</span>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-slate-150 dark:border-slate-800 gap-1">
+        {(['holdings', 'contributions', 'statement'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-3.5 py-2 text-xs font-bold capitalize cursor-pointer transition-all ${tab === t ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 dark:border-indigo-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}
+          >
+            {t === 'contributions' ? 'Contributions & Split' : t}
+          </button>
+        ))}
+      </div>
+
+      {/* HOLDINGS TAB */}
+      {tab === 'holdings' && (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <button onClick={() => setIsAddingHolding(!isAddingHolding)} className="apple-btn-primary px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5">
+              <Plus className="w-3.5 h-3.5" /> Add Stock
+            </button>
+          </div>
+
+          {isAddingHolding && (
+            <form onSubmit={handleAddHolding} className="apple-card p-4 grid grid-cols-2 md:grid-cols-3 gap-2.5">
+              <select value={hBroker} onChange={(e) => setHBroker(e.target.value as any)} className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
+                <option>Zerodha</option><option>Groww</option><option>Other</option>
+              </select>
+              <select value={hExchange} onChange={(e) => setHExchange(e.target.value as any)} className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
+                <option>NSE</option><option>BSE</option>
+              </select>
+              <input type="text" value={hSymbol} onChange={(e) => setHSymbol(e.target.value)} placeholder="Symbol e.g. TCS" className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+              <input type="number" value={hQty} onChange={(e) => setHQty(e.target.value)} placeholder="Quantity" className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+              <input type="number" value={hPrice} onChange={(e) => setHPrice(e.target.value)} placeholder="Buy price/share" className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+              <input type="date" value={hDate} onChange={(e) => setHDate(e.target.value)} className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+              <div className="col-span-2 md:col-span-3 flex gap-2">
+                <button type="button" onClick={() => setIsAddingHolding(false)} className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[11px] font-black uppercase rounded-lg cursor-pointer">Cancel</button>
+                <button type="submit" className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer">Add</button>
+              </div>
+            </form>
+          )}
+
+          <div>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Active ({activeHoldings.length})</span>
+            <div className="apple-card divide-y divide-slate-100 dark:divide-slate-900 mt-1.5 overflow-hidden">
+              {activeHoldings.length === 0 ? (
+                <p className="p-6 text-center text-xs text-slate-400">No active holdings yet.</p>
+              ) : activeHoldings.map(h => {
+                const gain = (Number(h.current_price ?? h.buy_price) - Number(h.buy_price)) * Number(h.quantity);
+                const gainPct = ((Number(h.current_price ?? h.buy_price) - Number(h.buy_price)) / Number(h.buy_price)) * 100;
+                return (
+                  <div key={h.id} className="p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="text-xs font-bold text-slate-900 dark:text-white">{h.symbol}</h4>
+                        <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{h.broker}</span>
+                        <span className="text-[8px] text-slate-400">{h.exchange}</span>
+                      </div>
+                      <p className="text-[9px] text-slate-400 mt-0.5">{h.quantity} shares @ ₹{h.buy_price} · bought {h.buy_date}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {priceEdits[h.id] !== undefined ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            autoFocus
+                            type="number"
+                            value={priceEdits[h.id]}
+                            onChange={(e) => setPriceEdits(prev => ({ ...prev, [h.id]: e.target.value }))}
+                            className="w-20 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px]"
+                          />
+                          <button onClick={() => saveCurrentPrice(h.id)} className="p-1 bg-indigo-600 text-white rounded-md cursor-pointer"><CheckCircle2 className="w-3 h-3" /></button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setPriceEdits(prev => ({ ...prev, [h.id]: String(h.current_price ?? h.buy_price) }))}
+                          className="text-right cursor-pointer"
+                          title="Update current price"
+                        >
+                          <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1">₹{Number(h.current_price ?? h.buy_price).toLocaleString()} <RefreshCw className="w-2.5 h-2.5 text-slate-400" /></span>
+                          <span className={`text-[9px] font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)} ({gainPct.toFixed(1)}%)</span>
+                        </button>
+                      )}
+                      {sellingId === h.id ? (
+                        <div className="flex items-center gap-1">
+                          <input type="number" value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} placeholder="Sell price" className="w-20 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px]" />
+                          <button onClick={confirmSell} className="p-1 bg-rose-500 text-white rounded-md cursor-pointer"><CheckCircle2 className="w-3 h-3" /></button>
+                          <button onClick={() => setSellingId(null)} className="p-1 text-slate-400 cursor-pointer"><X className="w-3 h-3" /></button>
+                        </div>
+                      ) : (
+                        <button onClick={() => { setSellingId(h.id); setSellPrice(String(h.current_price ?? h.buy_price)); }} className="px-2 py-1 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 text-[9px] font-black uppercase rounded-md cursor-pointer">Sell</button>
+                      )}
+                      <button onClick={() => deletePortfolioHolding(h.id)} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {soldHoldings.length > 0 && (
+            <div>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Sold ({soldHoldings.length})</span>
+              <div className="apple-card divide-y divide-slate-100 dark:divide-slate-900 mt-1.5 overflow-hidden opacity-75">
+                {soldHoldings.map(h => {
+                  const gain = (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity);
+                  return (
+                    <div key={h.id} className="p-3 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">{h.symbol} <span className="text-[8px] text-slate-400 uppercase">{h.broker}</span></h4>
+                        <p className="text-[9px] text-slate-400">{h.quantity} @ ₹{h.buy_price} → ₹{h.sold_price} on {h.sold_date}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-[11px] font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)}</span>
+                        <button onClick={() => deletePortfolioHolding(h.id)} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* CONTRIBUTIONS & SPLIT TAB */}
+      {tab === 'contributions' && (
+        <div className="space-y-4">
+          <div className="apple-card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Contributors & Current Split</span>
+              <button onClick={() => setIsAddingContributor(!isAddingContributor)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Add Person</button>
+            </div>
+            {isAddingContributor && (
+              <form onSubmit={async (e) => { e.preventDefault(); if (!newContributorName.trim()) return; await addPortfolioContributor(newContributorName.trim()); setNewContributorName(''); setIsAddingContributor(false); }} className="flex gap-2">
+                <input autoFocus type="text" value={newContributorName} onChange={(e) => setNewContributorName(e.target.value)} placeholder="Name" className="flex-1 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                <button type="submit" className="px-3 py-1.5 bg-indigo-600 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer">Add</button>
+              </form>
+            )}
+            <div className="space-y-1.5">
+              {currentSplits.map(({ contributor, percent }) => (
+                <div key={contributor.id} className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">{contributor.display_name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-slate-900 dark:text-white">{percent}%</span>
+                    <button onClick={() => deletePortfolioContributor(contributor.id)} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button onClick={() => setIsAddingSplit(!isAddingSplit)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Set Split for a Period</button>
+            {isAddingSplit && (
+              <form
+                onSubmit={async (e) => { e.preventDefault(); if (!splitContributorId || !splitPercent) return; await addPortfolioSplit(splitContributorId, parseFloat(splitPercent), splitFrom, splitTo || undefined); setSplitPercent(''); setIsAddingSplit(false); }}
+                className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-900"
+              >
+                <select value={splitContributorId} onChange={(e) => setSplitContributorId(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
+                  <option value="">Select person</option>
+                  {portfolioContributors.map(c => <option key={c.id} value={c.id}>{c.display_name}</option>)}
+                </select>
+                <input type="number" value={splitPercent} onChange={(e) => setSplitPercent(e.target.value)} placeholder="% e.g. 50" className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                <input type="date" value={splitFrom} onChange={(e) => setSplitFrom(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                <input type="date" value={splitTo} onChange={(e) => setSplitTo(e.target.value)} placeholder="End (optional)" className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                <button type="submit" className="col-span-2 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer">Save Split</button>
+              </form>
+            )}
+            {portfolioSplits.length > 0 && (
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-900 space-y-1">
+                <span className="text-[9px] font-bold text-slate-400 uppercase">Split History</span>
+                {portfolioSplits.map(s => {
+                  const c = portfolioContributors.find(x => x.id === s.contributor_id);
+                  return (
+                    <div key={s.id} className="flex items-center justify-between text-[10px] text-slate-500">
+                      <span>{c?.display_name} — {s.split_percent}% ({s.effective_from} → {s.effective_to || 'ongoing'})</span>
+                      <button onClick={() => deletePortfolioSplit(s.id)} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="apple-card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Wallet className="w-3.5 h-3.5" /> Contribution Log</span>
+              <button onClick={() => setIsAddingContribution(!isAddingContribution)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Log Contribution</button>
+            </div>
+            {isAddingContribution && (
+              <form onSubmit={handleAddContribution} className="grid grid-cols-3 gap-2">
+                <select value={cContributorId} onChange={(e) => setCContributorId(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
+                  <option value="">Who</option>
+                  {portfolioContributors.map(c => <option key={c.id} value={c.id}>{c.display_name}</option>)}
+                </select>
+                <input type="number" value={cAmount} onChange={(e) => setCAmount(e.target.value)} placeholder="Amount" className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                <input type="date" value={cDate} onChange={(e) => setCDate(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                <button type="submit" className="col-span-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer">Add</button>
+              </form>
+            )}
+            <div className="divide-y divide-slate-100 dark:divide-slate-900">
+              {portfolioContributions.length === 0 ? (
+                <p className="text-center text-xs text-slate-400 py-4">No contributions logged yet.</p>
+              ) : portfolioContributions.map(c => {
+                const person = portfolioContributors.find(x => x.id === c.contributor_id);
+                return (
+                  <div key={c.id} className="py-2 flex items-center justify-between text-xs">
+                    <span className="text-slate-600 dark:text-slate-300">{person?.display_name} · {c.contribution_date}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-900 dark:text-white">{fmt(Number(c.amount))}</span>
+                      <button onClick={() => deletePortfolioContribution(c.id)} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* STATEMENT TAB */}
+      {tab === 'statement' && (
+        <div className="space-y-4">
+          <div className="apple-card p-4 space-y-2 text-xs">
+            <div className="flex justify-between"><span className="text-slate-500">Total Contributed</span><span className="font-bold text-slate-900 dark:text-white">{fmt(totalContributed)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Deployed in Active Holdings</span><span className="font-bold text-slate-900 dark:text-white">{fmt(totalInvestedActive)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Current Value of Active Holdings</span><span className="font-bold text-slate-900 dark:text-white">{fmt(currentValueActive)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Unrealized Gain/Loss</span><span className={`font-bold ${unrealizedGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{fmt(unrealizedGain)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Realized Gain/Loss (sold)</span><span className={`font-bold ${realizedGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{fmt(realizedGain)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Dividends Received</span><span className="font-bold text-emerald-600">+{fmt(totalDividends)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Fees Paid (AMC etc)</span><span className="font-bold text-rose-500">-{fmt(totalFees)}</span></div>
+            <div className="flex justify-between pt-2 border-t border-slate-100 dark:border-slate-900 text-sm">
+              <span className="font-black text-slate-900 dark:text-white">Net Gain (all-in)</span>
+              <span className={`font-black ${netGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{fmt(netGain)}</span>
+            </div>
+          </div>
+
+          <div className="apple-card p-4 space-y-2">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Per-Person Share (based on today's split)</span>
+            {currentSplits.map(({ contributor, percent }) => {
+              const contributed = portfolioContributions.filter(c => c.contributor_id === contributor.id).reduce((s, c) => s + Number(c.amount), 0);
+              const shareOfGain = netGain * (percent / 100);
+              return (
+                <div key={contributor.id} className="flex items-center justify-between text-xs py-1">
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">{contributor.display_name} ({percent}%)</span>
+                  <span className="text-slate-500">Contributed {fmt(contributed)} · Share of gain <span className={shareOfGain >= 0 ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'}>{fmt(shareOfGain)}</span></span>
+                </div>
+              );
+            })}
+            <p className="text-[9px] text-slate-400 pt-1">Gain split uses today's active percentage — historical contributions are tracked exactly per person above, in the Contributions tab.</p>
+          </div>
+
+          <div className="apple-card p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Gift className="w-3.5 h-3.5" /> Dividends</span>
+              <QuickAddDividend onAdd={addPortfolioDividend} />
+            </div>
+            {portfolioDividends.length === 0 ? <p className="text-[11px] text-slate-400">None recorded.</p> : portfolioDividends.map(d => (
+              <div key={d.id} className="flex items-center justify-between text-xs">
+                <span className="text-slate-600 dark:text-slate-300">{d.symbol} · {d.dividend_date}</span>
+                <div className="flex items-center gap-2"><span className="font-bold text-emerald-600">+{fmt(Number(d.amount))}</span><button onClick={() => deletePortfolioDividend(d.id)} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button></div>
+              </div>
+            ))}
+          </div>
+
+          <div className="apple-card p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5" /> AMC & Fees</span>
+              <QuickAddFee onAdd={addPortfolioFee} />
+            </div>
+            {portfolioFees.length === 0 ? <p className="text-[11px] text-slate-400">None recorded.</p> : portfolioFees.map(f => (
+              <div key={f.id} className="flex items-center justify-between text-xs">
+                <span className="text-slate-600 dark:text-slate-300">{f.broker} · {f.fee_type} · {f.fee_date}</span>
+                <div className="flex items-center gap-2"><span className="font-bold text-rose-500">-{fmt(Number(f.amount))}</span><button onClick={() => deletePortfolioFee(f.id)} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function QuickAddDividend({ onAdd }: { onAdd: (symbol: string, amount: number, date: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [symbol, setSymbol] = useState('');
+  const [amount, setAmount] = useState('');
+  const [date, setDate] = useState(todayStr());
+  if (!open) return <button onClick={() => setOpen(true)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Add</button>;
+  return (
+    <form onSubmit={async (e) => { e.preventDefault(); if (!symbol.trim() || !amount) return; await onAdd(symbol.trim(), parseFloat(amount), date); setSymbol(''); setAmount(''); setOpen(false); }} className="flex gap-1.5">
+      <input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="Symbol" className="w-20 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]" />
+      <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amt" className="w-16 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]" />
+      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]" />
+      <button type="submit" className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold cursor-pointer">Save</button>
+    </form>
+  );
+}
+
+function QuickAddFee({ onAdd }: { onAdd: (broker: string, feeType: string, amount: number, date: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [broker, setBroker] = useState('Zerodha');
+  const [amount, setAmount] = useState('');
+  const [date, setDate] = useState(todayStr());
+  if (!open) return <button onClick={() => setOpen(true)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Add</button>;
+  return (
+    <form onSubmit={async (e) => { e.preventDefault(); if (!amount) return; await onAdd(broker, 'AMC', parseFloat(amount), date); setAmount(''); setOpen(false); }} className="flex gap-1.5">
+      <select value={broker} onChange={(e) => setBroker(e.target.value)} className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]">
+        <option>Zerodha</option><option>Groww</option><option>Other</option>
+      </select>
+      <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amt" className="w-16 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]" />
+      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]" />
+      <button type="submit" className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold cursor-pointer">Save</button>
+    </form>
+  );
+}
