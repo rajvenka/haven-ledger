@@ -31,8 +31,11 @@ interface PortfolioViewProps {
   updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
   deletePortfolioHolding: (id: string) => Promise<void>;
   portfolioContributions: any[];
-  addPortfolioContribution: (memberUserId: string, amount: number, date: string, notes?: string) => Promise<void>;
+  addPortfolioContribution: (memberUserId: string, amount: number, date: string, notes?: string, contributionType?: 'one_off' | 'recurring') => Promise<void>;
   deletePortfolioContribution: (id: string) => Promise<void>;
+  portfolioWithdrawals: any[];
+  addPortfolioWithdrawal: (memberUserId: string, amount: number, date: string, notes?: string) => Promise<void>;
+  deletePortfolioWithdrawal: (id: string) => Promise<void>;
   portfolioDividends: any[];
   addPortfolioDividend: (symbol: string, amount: number, date: string, holdingId?: string, notes?: string) => Promise<void>;
   deletePortfolioDividend: (id: string) => Promise<void>;
@@ -55,6 +58,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
     portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, deletePortfolioHolding,
     portfolioContributions, addPortfolioContribution, deletePortfolioContribution,
+    portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
     portfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,
@@ -232,6 +236,19 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [cMemberId, setCMemberId] = useState('');
   const [cAmount, setCAmount] = useState('');
   const [cDate, setCDate] = useState(todayStr());
+  const [isAddingWithdrawal, setIsAddingWithdrawal] = useState(false);
+  const [wMemberId, setWMemberId] = useState('');
+  const [wAmount, setWAmount] = useState('');
+  const [wDate, setWDate] = useState(todayStr());
+
+  const handleAddWithdrawal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!wMemberId || !wAmount) return;
+    await runAction(async () => {
+      await addPortfolioWithdrawal(wMemberId, parseFloat(wAmount), wDate);
+      setWAmount(''); setIsAddingWithdrawal(false);
+    });
+  };
   const [isAddingSplit, setIsAddingSplit] = useState(false);
   const [splitMemberId, setSplitMemberId] = useState('');
   const [splitPercent, setSplitPercent] = useState('');
@@ -280,7 +297,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
   const markTransferred = async (memberUserId: string, amount: number) => {
     await runAction(async () => {
-      await addPortfolioContribution(memberUserId, amount, todayStr(), 'Recurring plan transfer');
+      await addPortfolioContribution(memberUserId, amount, todayStr(), 'Recurring plan transfer', 'recurring');
     });
   };
 
@@ -295,6 +312,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
   // ---- Statement calculations ----
   const totalContributed = portfolioContributions.reduce((s, c) => s + Number(c.amount), 0);
+  const totalWithdrawn = portfolioWithdrawals.reduce((s, w) => s + Number(w.amount), 0);
+  const netContributed = totalContributed - totalWithdrawn;
   const totalInvestedActive = activeHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
   const currentValueActive = activeHoldings.reduce((s, h) => s + Number(h.current_price ?? h.buy_price) * Number(h.quantity), 0);
   const unrealizedGain = currentValueActive - totalInvestedActive;
@@ -699,7 +718,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
           <div className="apple-card p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Wallet className="w-3.5 h-3.5" /> Contribution Log</span>
-              {!isReadOnly && <button onClick={() => setIsAddingContribution(!isAddingContribution)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Log Contribution</button>}
+              {!isReadOnly && <button onClick={() => setIsAddingContribution(!isAddingContribution)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Log One-Off Payment</button>}
             </div>
             {isAddingContribution && (
               <form onSubmit={handleAddContribution} className="grid grid-cols-3 gap-2">
@@ -719,10 +738,50 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 const m = workspaceMembers.find(x => x.uid === c.member_user_id);
                 return (
                   <div key={c.id} className="py-2 flex items-center justify-between text-xs">
-                    <span className="text-slate-600 dark:text-slate-300">{m ? memberName(m) : 'Former member'} · {c.contribution_date}</span>
+                    <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                      {m ? memberName(m) : 'Former member'} · {c.contribution_date}
+                      {c.contribution_type === 'recurring' && (
+                        <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">Plan</span>
+                      )}
+                    </span>
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-slate-900 dark:text-white">{fmt(Number(c.amount))}</span>
                       {!isReadOnly && <button onClick={() => runAction(() => deletePortfolioContribution(c.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="apple-card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Wallet className="w-3.5 h-3.5" /> Withdrawals</span>
+              {!isReadOnly && <button onClick={() => setIsAddingWithdrawal(!isAddingWithdrawal)} className="text-[10px] font-bold text-rose-500 cursor-pointer">+ Log Withdrawal</button>}
+            </div>
+            <p className="text-[9px] text-slate-400">Money taken out of the pool back to a person - separate from selling a stock, which stays in the pool as cash.</p>
+            {isAddingWithdrawal && (
+              <form onSubmit={handleAddWithdrawal} className="grid grid-cols-3 gap-2">
+                <select value={wMemberId} onChange={(e) => setWMemberId(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
+                  <option value="">Who</option>
+                  {workspaceMembers.map(m => <option key={m.uid} value={m.uid}>{memberName(m)}</option>)}
+                </select>
+                <input type="number" value={wAmount} onChange={(e) => setWAmount(e.target.value)} placeholder="Amount" className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                <input type="date" value={wDate} onChange={(e) => setWDate(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                <button type="submit" className="col-span-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer">Withdraw</button>
+              </form>
+            )}
+            <div className="divide-y divide-slate-100 dark:divide-slate-900">
+              {portfolioWithdrawals.length === 0 ? (
+                <p className="text-center text-xs text-slate-400 py-4">No withdrawals logged.</p>
+              ) : portfolioWithdrawals.map(w => {
+                const m = workspaceMembers.find(x => x.uid === w.member_user_id);
+                return (
+                  <div key={w.id} className="py-2 flex items-center justify-between text-xs">
+                    <span className="text-slate-600 dark:text-slate-300">{m ? memberName(m) : 'Former member'} · {w.withdrawal_date}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-rose-500">-{fmt(Number(w.amount))}</span>
+                      {!isReadOnly && <button onClick={() => runAction(() => deletePortfolioWithdrawal(w.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>}
                     </div>
                   </div>
                 );
@@ -867,6 +926,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
           <div className="apple-card p-4 space-y-2 text-xs">
             <div className="flex justify-between"><span className="text-slate-500">Total Contributed (cash in)</span><span className="font-bold text-slate-900 dark:text-white">{fmt(totalContributed)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Total Withdrawn (cash out)</span><span className="font-bold text-rose-500">-{fmt(totalWithdrawn)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Net Contributed</span><span className="font-bold text-slate-900 dark:text-white">{fmt(netContributed)}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Total Investment (cost basis, active + sold)</span><span className="font-bold text-slate-900 dark:text-white">{fmt(totalInvestedAllTime)}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Current Value of Active Holdings</span><span className="font-bold text-slate-900 dark:text-white">{fmt(currentValueActive)}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Unrealized Gain/Loss</span><span className={`font-bold ${unrealizedGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{fmt(unrealizedGain)}</span></div>
@@ -887,11 +948,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Per-Person Share (based on today's split)</span>
             {currentSplits.map(({ member, percent }) => {
               const contributed = portfolioContributions.filter(c => c.member_user_id === member.uid).reduce((s, c) => s + Number(c.amount), 0);
+              const withdrawn = portfolioWithdrawals.filter(w => w.member_user_id === member.uid).reduce((s, w) => s + Number(w.amount), 0);
               const shareOfGain = netGain * (percent / 100);
               return (
                 <div key={member.uid} className="flex items-center justify-between text-xs py-1">
                   <span className="font-semibold text-slate-700 dark:text-slate-300">{memberName(member)} ({percent}%)</span>
-                  <span className="text-slate-500">Contributed {fmt(contributed)} · Share of gain <span className={shareOfGain >= 0 ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'}>{fmt(shareOfGain)}</span></span>
+                  <span className="text-slate-500">
+                    Net {fmt(contributed - withdrawn)}{withdrawn > 0 ? ` (${fmt(contributed)} in, ${fmt(withdrawn)} out)` : ''} · Share of gain <span className={shareOfGain >= 0 ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'}>{fmt(shareOfGain)}</span>
+                  </span>
                 </div>
               );
             })}

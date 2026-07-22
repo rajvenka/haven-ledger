@@ -163,6 +163,9 @@ export default function App() {
     portfolioContributions,
     addPortfolioContribution,
     deletePortfolioContribution,
+    portfolioWithdrawals,
+    addPortfolioWithdrawal,
+    deletePortfolioWithdrawal,
     portfolioDividends,
     addPortfolioDividend,
     deletePortfolioDividend,
@@ -1408,6 +1411,9 @@ export default function App() {
                 portfolioContributions={portfolioContributions}
                 addPortfolioContribution={addPortfolioContribution}
                 deletePortfolioContribution={deletePortfolioContribution}
+                portfolioWithdrawals={portfolioWithdrawals}
+                addPortfolioWithdrawal={addPortfolioWithdrawal}
+                deletePortfolioWithdrawal={deletePortfolioWithdrawal}
                 portfolioDividends={portfolioDividends}
                 addPortfolioDividend={addPortfolioDividend}
                 deletePortfolioDividend={deletePortfolioDividend}
