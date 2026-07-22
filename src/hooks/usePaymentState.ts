@@ -901,7 +901,7 @@ export function usePaymentState() {
   useEffect(() => { if (isLoaded) loadPortfolioDetails(); }, [isLoaded, loadPortfolioDetails]);
 
   const addPortfolioHolding = async (holding: {
-    holdingType?: 'stock' | 'mutual_fund'; broker: string; symbol: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; notes?: string;
+    holdingType?: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; notes?: string;
     source?: string;
     targetType?: 'price' | 'percent'; targetPrice?: number; targetPercent?: number;
     holdType?: 'days' | 'date'; holdDays?: number; holdUntilDate?: string;
@@ -909,12 +909,32 @@ export function usePaymentState() {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_holdings').insert({
       workspace_id: activeWorkspaceId, created_by: user?.id ?? null,
-      holding_type: holding.holdingType ?? 'stock', broker: holding.broker, symbol: holding.symbol.toUpperCase(), exchange: holding.exchange,
-      quantity: holding.quantity, buy_price: holding.buyPrice, buy_date: holding.buyDate, notes: holding.notes ?? null,
+      holding_type: holding.holdingType ?? 'stock', broker: holding.broker, symbol: holding.symbol.toUpperCase(), isin: holding.isin ?? null, exchange: holding.exchange,
+      quantity: holding.quantity, buy_price: holding.buyPrice, buy_date: holding.buyDate,
+      current_price: holding.currentPrice ?? null, current_price_updated_at: holding.currentPrice != null ? new Date().toISOString() : null,
+      notes: holding.notes ?? null,
       source: holding.source ?? null,
       target_type: holding.targetType ?? null, target_price: holding.targetPrice ?? null, target_percent: holding.targetPercent ?? null,
       hold_type: holding.holdType ?? null, hold_days: holding.holdDays ?? null, hold_until_date: holding.holdUntilDate ?? null,
     });
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
+  // Bulk import from a broker file - inserts many holdings in one request, then refreshes once.
+  const bulkAddPortfolioHoldings = async (holdings: {
+    holdingType: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string;
+  }[]) => {
+    if (!activeWorkspaceId) throw new Error('Select a workspace first.');
+    if (holdings.length === 0) return;
+    const rows = holdings.map(h => ({
+      workspace_id: activeWorkspaceId, created_by: user?.id ?? null,
+      holding_type: h.holdingType, broker: h.broker, symbol: h.symbol.toUpperCase(), isin: h.isin ?? null, exchange: h.exchange,
+      quantity: h.quantity, buy_price: h.buyPrice, buy_date: h.buyDate,
+      current_price: h.currentPrice ?? null, current_price_updated_at: h.currentPrice != null ? new Date().toISOString() : null,
+      source: h.source ?? null,
+    }));
+    const { error } = await supabase.from('portfolio_holdings').insert(rows);
     if (error) throw error;
     await loadPortfolioDetails();
   };
@@ -1176,7 +1196,7 @@ export function usePaymentState() {
     accessPlans, createAccessPlan, updateAccessPlan, deleteAccessPlan,
     myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan, setSuperAdminStatus,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, addPortfolioHolding, updatePortfolioHolding, deletePortfolioHolding,
+    portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, deletePortfolioHolding,
     portfolioContributions, addPortfolioContribution, deletePortfolioContribution,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,

@@ -1,7 +1,8 @@
+import { parseBrokerFile, BrokerTemplate, ParsedHolding } from '../utils/brokerImport';
 import React, { useState, useMemo } from 'react';
 import {
   TrendingUp, TrendingDown, Plus, Trash2, RefreshCw, Users, Wallet,
-  CheckCircle2, X, Briefcase, Gift, Receipt
+  CheckCircle2, X, Briefcase, Gift, Receipt, Upload
 } from 'lucide-react';
 
 interface WorkspaceMemberLite {
@@ -19,11 +20,14 @@ interface PortfolioViewProps {
   deletePortfolioSplit: (id: string) => Promise<void>;
   portfolioHoldings: any[];
   addPortfolioHolding: (h: {
-    holdingType?: 'stock' | 'mutual_fund'; broker: string; symbol: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; notes?: string;
+    holdingType?: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; notes?: string;
     source?: string;
     targetType?: 'price' | 'percent'; targetPrice?: number; targetPercent?: number;
     holdType?: 'days' | 'date'; holdDays?: number; holdUntilDate?: string;
   }) => Promise<void>;
+  bulkAddPortfolioHoldings: (holdings: {
+    holdingType: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string;
+  }[]) => Promise<void>;
   updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
   deletePortfolioHolding: (id: string) => Promise<void>;
   portfolioContributions: any[];
@@ -49,7 +53,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, addPortfolioHolding, updatePortfolioHolding, deletePortfolioHolding,
+    portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, deletePortfolioHolding,
     portfolioContributions, addPortfolioContribution, deletePortfolioContribution,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
@@ -95,6 +99,60 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
   const [refreshingPrices, setRefreshingPrices] = useState(false);
   const [priceRefreshSummary, setPriceRefreshSummary] = useState<string | null>(null);
+
+  // ---- Broker file import ----
+  const [isImporting, setIsImporting] = useState(false);
+  const [importTemplate, setImportTemplate] = useState<BrokerTemplate>('zerodha_stocks');
+  const [importParsing, setImportParsing] = useState(false);
+  const [importPreview, setImportPreview] = useState<{ fresh: ParsedHolding[]; duplicates: number } | null>(null);
+  const [importSourceTag, setImportSourceTag] = useState('');
+  const [importSaving, setImportSaving] = useState(false);
+
+  const isDuplicateHolding = (parsed: ParsedHolding) => {
+    return portfolioHoldings.some(h => {
+      if (h.status !== 'active') return false;
+      if (parsed.isin && h.isin) return h.isin === parsed.isin;
+      // Fall back to symbol+broker match when ISIN isn't available (e.g. Groww MF export)
+      return h.symbol === parsed.symbol.toUpperCase() && h.broker === parsed.broker && h.holding_type === parsed.holdingType;
+    });
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportParsing(true);
+    setFormError(null);
+    setImportPreview(null);
+    try {
+      const parsed = await parseBrokerFile(file, importTemplate);
+      const fresh = parsed.filter(h => !isDuplicateHolding(h));
+      const duplicates = parsed.length - fresh.length;
+      setImportPreview({ fresh, duplicates });
+    } catch (err: any) {
+      setFormError(err?.message || 'Could not read that file.');
+    } finally {
+      setImportParsing(false);
+      e.target.value = '';
+    }
+  };
+
+  const confirmImport = async () => {
+    if (!importPreview || importPreview.fresh.length === 0) return;
+    setImportSaving(true);
+    await runAction(async () => {
+      await bulkAddPortfolioHoldings(
+        importPreview.fresh.map(h => ({
+          holdingType: h.holdingType, broker: h.broker, symbol: h.symbol, isin: h.isin, exchange: h.exchange,
+          quantity: h.quantity, buyPrice: h.buyPrice, buyDate: todayStr(), currentPrice: h.currentPrice,
+          source: importSourceTag.trim() || undefined,
+        }))
+      );
+      setImportPreview(null);
+      setImportSourceTag('');
+      setIsImporting(false);
+    });
+    setImportSaving(false);
+  };
 
   const refreshAllPrices = async () => {
     setRefreshingPrices(true);
@@ -310,7 +368,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       {tab === 'holdings' && (
         <div className="space-y-4">
           {!isReadOnly && (
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 flex-wrap">
             {activeHoldings.length > 0 && (
               <button
                 onClick={refreshAllPrices}
@@ -320,6 +378,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <RefreshCw className={`w-3.5 h-3.5 ${refreshingPrices ? 'animate-spin' : ''}`} /> {refreshingPrices ? 'Refreshing…' : 'Refresh Prices'}
               </button>
             )}
+            <button
+              onClick={() => { setIsImporting(!isImporting); setImportPreview(null); }}
+              className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+            >
+              <Upload className="w-3.5 h-3.5" /> Import from Broker
+            </button>
             <button onClick={() => setIsAddingHolding(!isAddingHolding)} className="apple-btn-primary px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5">
               <Plus className="w-3.5 h-3.5" /> Add Holding
             </button>
@@ -327,6 +391,62 @@ export default function PortfolioView(props: PortfolioViewProps) {
           )}
           {priceRefreshSummary && (
             <p className="text-[10px] text-slate-400 -mt-2">{priceRefreshSummary}</p>
+          )}
+
+          {isImporting && (
+            <div className="apple-card p-4 space-y-3">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Import Holdings File</span>
+              <div className="flex gap-1.5 flex-wrap">
+                <button type="button" onClick={() => { setImportTemplate('zerodha_stocks'); setImportPreview(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'zerodha_stocks' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Zerodha Stocks</button>
+                <button type="button" onClick={() => { setImportTemplate('groww_stocks'); setImportPreview(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'groww_stocks' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Stocks</button>
+                <button type="button" onClick={() => { setImportTemplate('groww_mf'); setImportPreview(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'groww_mf' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Mutual Funds</button>
+              </div>
+              <p className="text-[9px] text-slate-400">
+                {importTemplate === 'zerodha_stocks' && "Console → Holdings → Download as XLSX"}
+                {importTemplate === 'groww_stocks' && "Groww app → Reports → Stocks Holdings Statement (XLSX)"}
+                {importTemplate === 'groww_mf' && "Groww app → Reports → Mutual Funds Holdings Statement (XLSX)"}
+                {' '}· Prices/quantities come from the file at export time, dated today. Already-imported holdings are automatically skipped.
+              </p>
+
+              <input type="file" accept=".xlsx,.xls" onChange={handleImportFile} disabled={importParsing} className="text-xs" />
+              {importParsing && <p className="text-[10px] text-slate-400">Reading file…</p>}
+
+              {importPreview && (
+                <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-900">
+                  <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                    {importPreview.fresh.length} new holding{importPreview.fresh.length !== 1 ? 's' : ''} found
+                    {importPreview.duplicates > 0 && ` · ${importPreview.duplicates} already in your portfolio (skipped)`}
+                  </p>
+                  {importPreview.fresh.length > 0 && (
+                    <>
+                      <div className="max-h-40 overflow-y-auto space-y-1">
+                        {importPreview.fresh.map((h, i) => (
+                          <div key={i} className="flex items-center justify-between text-[10px] px-2 py-1 bg-slate-50 dark:bg-slate-900 rounded">
+                            <span className="text-slate-600 dark:text-slate-300">{h.symbol}</span>
+                            <span className="text-slate-400">{h.quantity} @ ₹{h.buyPrice.toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <input
+                        type="text"
+                        list="source-suggestions"
+                        value={importSourceTag}
+                        onChange={(e) => setImportSourceTag(e.target.value)}
+                        placeholder="Tag all of these as e.g. Rajavel Stock SME (optional)"
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+                      />
+                      <button
+                        onClick={confirmImport}
+                        disabled={importSaving}
+                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer"
+                      >
+                        {importSaving ? 'Importing…' : `Import ${importPreview.fresh.length} Holding${importPreview.fresh.length !== 1 ? 's' : ''}`}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           {isAddingHolding && (

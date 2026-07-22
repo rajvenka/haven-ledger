@@ -157,6 +157,7 @@ export default function App() {
     deletePortfolioSplit,
     portfolioHoldings,
     addPortfolioHolding,
+    bulkAddPortfolioHoldings,
     updatePortfolioHolding,
     deletePortfolioHolding,
     portfolioContributions,
@@ -1401,6 +1402,7 @@ export default function App() {
                 deletePortfolioSplit={deletePortfolioSplit}
                 portfolioHoldings={portfolioHoldings}
                 addPortfolioHolding={addPortfolioHolding}
+                bulkAddPortfolioHoldings={bulkAddPortfolioHoldings}
                 updatePortfolioHolding={updatePortfolioHolding}
                 deletePortfolioHolding={deletePortfolioHolding}
                 portfolioContributions={portfolioContributions}
