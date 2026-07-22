@@ -220,7 +220,7 @@ export default function App() {
     if (!hasFeature('rewards') && activeTab === 'rewards') setActiveTab('summary');
     if (!hasFeature('ai') && activeTab === 'ai') setActiveTab('summary');
     if (isLimitedAccess && activeTab === 'admin_users') setActiveTab('summary');
-    if (!hasFeature('team') && activeTab === 'account' && settingsSubTab === 'members') setSettingsSubTab('preferences');
+    if (!hasFeature('team') && incomingInvitations.length === 0 && activeTab === 'account' && settingsSubTab === 'members') setSettingsSubTab('preferences');
   }, [activeWorkspace, activeTab, settingsSubTab]);
 
   const toggleAgent = () => {
@@ -701,7 +701,7 @@ export default function App() {
               )}
 
               {/* SECTION: NETWORK & TEAMS */}
-              {hasFeature('team') && (
+              {(hasFeature('team') || incomingInvitations.length > 0) && (
               <div className="space-y-1">
                 <span className="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 tracking-wider uppercase block text-left">
                   Network & Teams
@@ -1102,7 +1102,7 @@ export default function App() {
                   )}
 
                   {/* SECTION: NETWORK & TEAMS */}
-                  {hasFeature('team') && (
+                  {(hasFeature('team') || incomingInvitations.length > 0) && (
                   <div className="space-y-1">
                     <span className="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 tracking-wider uppercase block text-left">
                       Network & Teams
