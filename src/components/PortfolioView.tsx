@@ -211,7 +211,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const realizedGain = soldHoldings.reduce((s, h) => s + (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity), 0);
   const totalDividends = portfolioDividends.reduce((s, d) => s + Number(d.amount), 0);
   const totalFees = portfolioFees.reduce((s, f) => s + Number(f.amount), 0);
+  const totalInvestedAllTime = totalInvestedActive + soldHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
   const netGain = unrealizedGain + realizedGain + totalDividends - totalFees;
+  const returnPct = totalInvestedAllTime > 0 ? (netGain / totalInvestedAllTime) * 100 : 0;
 
   return (
     <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-5 text-left select-none bg-slate-50 dark:bg-slate-900">
@@ -229,14 +231,23 @@ export default function PortfolioView(props: PortfolioViewProps) {
       )}
 
       {/* Headline stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <div className="apple-card p-4">
-          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Contributed</span>
-          <span className="text-base font-black text-slate-900 dark:text-white">{fmt(totalContributed)}</span>
+          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Total Investment</span>
+          <span className="text-base font-black text-slate-900 dark:text-white">{fmt(totalInvestedAllTime)}</span>
+          <span className="text-[9px] text-slate-400 block mt-0.5">active + sold, cost basis</span>
         </div>
         <div className="apple-card p-4">
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Current Holdings Value</span>
           <span className="text-base font-black text-slate-900 dark:text-white">{fmt(currentValueActive)}</span>
+        </div>
+        <div className="apple-card p-4">
+          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Return %</span>
+          <span className={`text-base font-black flex items-center gap-1 ${returnPct >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+            {returnPct >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+            {returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%
+          </span>
+          <span className="text-[9px] text-slate-400 block mt-0.5">vs. total investment</span>
         </div>
         <div className="apple-card p-4">
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Unrealized Gain</span>
@@ -246,8 +257,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
           </span>
         </div>
         <div className="apple-card p-4">
-          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Net Gain (all-in)</span>
+          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Net Gain (P&L, all-in)</span>
           <span className={`text-base font-black ${netGain >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>{fmt(netGain)}</span>
+          <span className="text-[9px] text-slate-400 block mt-0.5">incl. dividends & fees</span>
         </div>
       </div>
 
@@ -654,16 +666,20 @@ export default function PortfolioView(props: PortfolioViewProps) {
           )}
 
           <div className="apple-card p-4 space-y-2 text-xs">
-            <div className="flex justify-between"><span className="text-slate-500">Total Contributed</span><span className="font-bold text-slate-900 dark:text-white">{fmt(totalContributed)}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Deployed in Active Holdings</span><span className="font-bold text-slate-900 dark:text-white">{fmt(totalInvestedActive)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Total Contributed (cash in)</span><span className="font-bold text-slate-900 dark:text-white">{fmt(totalContributed)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Total Investment (cost basis, active + sold)</span><span className="font-bold text-slate-900 dark:text-white">{fmt(totalInvestedAllTime)}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Current Value of Active Holdings</span><span className="font-bold text-slate-900 dark:text-white">{fmt(currentValueActive)}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Unrealized Gain/Loss</span><span className={`font-bold ${unrealizedGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{fmt(unrealizedGain)}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Realized Gain/Loss (sold)</span><span className={`font-bold ${realizedGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{fmt(realizedGain)}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Dividends Received</span><span className="font-bold text-emerald-600">+{fmt(totalDividends)}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Fees Paid (AMC etc)</span><span className="font-bold text-rose-500">-{fmt(totalFees)}</span></div>
             <div className="flex justify-between pt-2 border-t border-slate-100 dark:border-slate-900 text-sm">
-              <span className="font-black text-slate-900 dark:text-white">Net Gain (all-in)</span>
+              <span className="font-black text-slate-900 dark:text-white">Net Gain (P&L, all-in)</span>
               <span className={`font-black ${netGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{fmt(netGain)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="font-black text-slate-900 dark:text-white">Return % (vs. total investment)</span>
+              <span className={`font-black ${returnPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%</span>
             </div>
           </div>
 
