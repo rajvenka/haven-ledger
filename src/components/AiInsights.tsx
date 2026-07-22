@@ -154,9 +154,12 @@ export default function AiInsights({
   };
 
   // Run dynamic Gemini AI Insights
+  const [usingOfflinePreview, setUsingOfflinePreview] = useState(false);
+
   const runAiAudit = async () => {
     setLoading(true);
     setError(null);
+    setUsingOfflinePreview(false);
     try {
       const response = await fetch('/api/insights', {
         method: 'POST',
@@ -171,30 +174,35 @@ export default function AiInsights({
       });
 
       if (!response.ok) {
-        throw new Error('Gemini API endpoint did not respond. Utilizing offline smart heuristics.');
+        let errMessage = 'The AI audit failed to respond.';
+        try {
+          const errData = await response.json();
+          errMessage = errData.error || errMessage;
+        } catch { /* ignore parse failure, use default message */ }
+        throw new Error(errMessage);
       }
 
       const result = await response.json();
       setInsightsData(result);
     } catch (err: any) {
       console.warn("AI Insights error:", err);
-      // Seamlessly fall back to calculated smart local insights
-      setInsightsData(generateLocalInsights());
-      setError("Note: Gemini backend is starting up or key is unconfigured. Showing generated billing insights via local smart auditor.");
+      setInsightsData(null);
+      setError(err.message || 'Something went wrong reaching the AI audit.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Generate initial state
-  useEffect(() => {
-    if (payments.length > 0) {
-      setInsightsData(generateLocalInsights());
-    }
-  }, [payments]);
+  const showOfflinePreviewInstead = () => {
+    setInsightsData(generateLocalInsights());
+    setUsingOfflinePreview(true);
+    setError(null);
+  };
 
-  // If no insights loaded
-  const currentData = insightsData || generateLocalInsights();
+  // Generate initial state — no more auto-filling with the local heuristic preview on load.
+  // That silently made every fresh visit look like "AI already ran" when it hadn't.
+  const currentData = insightsData;
+  const isRealAiResult = insightsData !== null && !usingOfflinePreview;
 
   return (
     <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-6 text-left select-none bg-slate-50 dark:bg-slate-900">
@@ -228,15 +236,49 @@ export default function AiInsights({
         </button>
       </div>
 
-      {/* Warning status if using fallback */}
+      {/* Real error state, with an explicit opt-in for the offline estimate - never a silent swap */}
       {error && (
-        <div className="p-3 bg-amber-50/50 dark:bg-amber-950/10 border border-amber-200/20 dark:border-amber-900/20 rounded-xl text-left flex items-start gap-2.5">
-          <Lightbulb className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold leading-normal">
-            {error}
-          </p>
+        <div className="p-4 bg-rose-50/50 dark:bg-rose-950/10 border border-rose-200/30 dark:border-rose-900/30 rounded-xl text-left flex items-start gap-2.5">
+          <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+          <div className="flex-1 space-y-2">
+            <p className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold leading-normal">{error}</p>
+            <button
+              onClick={showOfflinePreviewInstead}
+              className="text-[10px] font-bold text-slate-500 dark:text-slate-400 underline cursor-pointer"
+            >
+              Show a rule-based estimate instead (not AI)
+            </button>
+          </div>
         </div>
       )}
+
+      {/* Empty state before the first audit ever runs */}
+      {!currentData && !error && !loading && (
+        <div className="apple-card p-10 flex flex-col items-center text-center gap-3">
+          <BrainCircuit className="w-10 h-10 text-slate-300 dark:text-slate-700" />
+          <div>
+            <h3 className="text-sm font-black text-slate-900 dark:text-white">No audit run yet</h3>
+            <p className="text-xs text-slate-400 mt-1 max-w-[320px] mx-auto leading-relaxed">
+              This page only shows real analysis after you run one — nothing here is precomputed. Tap "Run Gemini AI Audit" above to have it actually look at your bills.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {currentData && (
+      <>
+      {/* Badge showing whether this is real AI output or the offline estimate */}
+      <div className="flex items-center gap-1.5">
+        {isRealAiResult ? (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400">
+            <Sparkles className="w-2.5 h-2.5" /> AI-Generated Analysis
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400">
+            Rule-Based Estimate (not AI)
+          </span>
+        )}
+      </div>
 
       {/* Main Grid: Health Score & Forecast */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -410,6 +452,9 @@ export default function AiInsights({
           </AnimatePresence>
         </div>
       </div>
+
+      </>
+      )}
 
       {/* Link to Agent Section (Interlocking workflow) */}
       <div className="apple-card p-6 flex flex-col md:flex-row md:items-center justify-between gap-5 text-left relative overflow-hidden">
