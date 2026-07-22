@@ -380,8 +380,13 @@ export function usePaymentState() {
     try {
       const invite = incomingInvitations.find(i => i.id === invitationId);
       if (!invite) throw new Error('Invitation not found.');
-      const { data: joinedWorkspaceId, error: rpcErr } = await supabase.rpc('join_workspace_by_code', { code: invite.inviteCode, requested_role: role, requested_access_level: invite.proposedAccessLevel || 'full', requested_features: invite.proposedFeatures || ['income', 'rewards', 'ai', 'team', 'chat', 'agent'] });
-      if (rpcErr) throw rpcErr;
+      const rpcParams = { code: invite.inviteCode, requested_role: role, requested_access_level: invite.proposedAccessLevel || 'full', requested_features: invite.proposedFeatures || ['income', 'rewards', 'ai', 'team', 'chat', 'agent'] };
+      console.log('[DEBUG] Calling join_workspace_by_code with params:', JSON.stringify(rpcParams, null, 2));
+      const { data: joinedWorkspaceId, error: rpcErr } = await supabase.rpc('join_workspace_by_code', rpcParams);
+      console.log('[DEBUG] RPC response - data:', joinedWorkspaceId, 'error:', JSON.stringify(rpcErr, null, 2));
+      if (rpcErr) {
+        throw new Error(`DEBUG - Params sent: ${JSON.stringify(rpcParams)} | Error: ${rpcErr.message} | Code: ${(rpcErr as any).code} | Details: ${(rpcErr as any).details} | Hint: ${(rpcErr as any).hint}`);
+      }
       if (!joinedWorkspaceId) throw new Error('Could not join the workspace - the invite code may be invalid.');
       // Defensive check: confirm membership genuinely exists before marking this approved,
       // since a silent RPC failure here previously left an invite marked 'approved' with
