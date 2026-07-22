@@ -201,7 +201,7 @@ export default function AccountInfo({
   const [familyEmail, setFamilyEmail] = useState('');
   const [familyEmailRole, setFamilyEmailRole] = useState<'view' | 'modify'>('modify');
   const ALL_FEATURES = ['income', 'rewards', 'ai', 'team', 'chat', 'agent'];
-  const myAvailableFeatures = userProfile?.licensePlanFeatures ?? ALL_FEATURES;
+  const myAvailableFeatures = userProfile?.isSuperAdmin ? ALL_FEATURES : (userProfile?.licensePlanFeatures ?? ALL_FEATURES);
   const [familyFeatures, setFamilyFeatures] = useState<string[]>(myAvailableFeatures);
 
   useEffect(() => {
