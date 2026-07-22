@@ -65,6 +65,7 @@ export default function App() {
     signInWithGoogle,
     resetPassword,
     updatePassword,
+    acceptPrivacyPolicy,
     logOut,
     workspaces,
     activeWorkspaceId,
@@ -148,6 +149,7 @@ export default function App() {
     fetchPendingUpgradeRequests,
     resolveUpgradeRequest,
     adminSetUserPlan,
+    setSuperAdminStatus,
     appNotificationsEnabled,
     mobileNotificationsEnabled,
     saveNotificationSettings,
@@ -371,6 +373,7 @@ export default function App() {
           onSignUp={signUp} 
           onResetPassword={resetPassword} 
           onSignInWithGoogle={signInWithGoogle} 
+          onAcceptPrivacy={acceptPrivacyPolicy}
         />
       </IPhoneFrame>
     );
@@ -1258,6 +1261,9 @@ export default function App() {
                 onRequestUpgrade={requestUpgrade}
                 onDisconnectWhatsApp={disconnectWhatsApp}
                 onCreateFamily={async () => { await createWorkspace(activeWorkspace?.type === 'business' ? 'My Business' : 'My Family', activeWorkspace?.type || 'family'); }}
+                activeWorkspace={activeWorkspace}
+                onRenameWorkspace={renameWorkspace}
+                onDeleteWorkspace={deleteWorkspace}
                 onJoinFamilyGroup={joinFamilyGroup}
                 onLeaveFamilyGroup={leaveFamilyGroup}
                 incomingInvitations={incomingInvitations}
@@ -1331,6 +1337,8 @@ export default function App() {
                 fetchPendingUpgradeRequests={fetchPendingUpgradeRequests}
                 onResolveUpgradeRequest={resolveUpgradeRequest}
                 onSetUserPlan={adminSetUserPlan}
+                onSetSuperAdmin={setSuperAdminStatus}
+                currentUserId={user?.id}
               />
             ) : (
               <PaymentHistoryView 

@@ -119,6 +119,12 @@ export function usePaymentState() {
     const { error } = await supabase.auth.updateUser({ password });
     if (error) throw error;
   };
+  const acceptPrivacyPolicy = async () => {
+    const { data } = await supabase.auth.getUser();
+    const uid = data?.user?.id;
+    if (!uid) return;
+    await supabase.from('profiles').update({ privacy_accepted_at: new Date().toISOString() }).eq('id', uid);
+  };
   const logOut = async () => { await supabase.auth.signOut(); };
 
   // Load every workspace this user belongs to (not just one)
@@ -857,6 +863,11 @@ export function usePaymentState() {
     if (userId === user?.id) await refreshWorkspaces(user!.id, activeWorkspaceId);
   };
 
+  const setSuperAdminStatus = async (userId: string, isAdmin: boolean) => {
+    const { error } = await supabase.from('profiles').update({ is_super_admin: isAdmin }).eq('id', userId);
+    if (error) throw error;
+  };
+
   const resolveUpgradeRequest = async (requestId: string, userId: string, planId: string, approve: boolean) => {
     if (approve) {
       await adminSetUserPlan(userId, planId);
@@ -905,6 +916,9 @@ export function usePaymentState() {
   // ---------- WhatsApp linking ----------
   const startWhatsAppVerification = async (phone: string) => {
     if (!user) throw new Error('Not signed in.');
+    if (!userProfile?.isSuperAdmin && !(userProfile?.licensePlanFeatures ?? []).includes('whatsapp')) {
+      throw new Error('WhatsApp integration is a Pro Max feature. Request an upgrade in Preferences.');
+    }
     const cleanPhone = phone.replace(/[^\d]/g, '');
     if (cleanPhone.length < 8) throw new Error('Enter a valid phone number with country code, e.g. 14155552671.');
     const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -983,7 +997,7 @@ export function usePaymentState() {
 
   return {
     user, userProfile, familyMembers, viewMode, setViewMode,
-    signUp, signIn, signInWithGoogle, resetPassword, updatePassword, logOut,
+    signUp, signIn, signInWithGoogle, resetPassword, updatePassword, acceptPrivacyPolicy, logOut,
     // Workspace model
     workspaces, activeWorkspaceId, activeWorkspace, switchWorkspace, createWorkspace, setWorkspaceMode,
     renameWorkspace, deleteWorkspace,
@@ -1002,7 +1016,7 @@ export function usePaymentState() {
     checkPaymentReminders, requestNotificationPermission, resetToDefaults, fetchAllUsersForAdmin, inviteNewUser,
     startWhatsAppVerification, disconnectWhatsApp,
     accessPlans, createAccessPlan, updateAccessPlan, deleteAccessPlan,
-    myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan,
+    myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan, setSuperAdminStatus,
     appNotificationsEnabled, mobileNotificationsEnabled, saveNotificationSettings,
   };
 }

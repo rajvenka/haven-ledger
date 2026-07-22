@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Mail, Lock, User, Smartphone, ShieldCheck, AlertCircle, CheckCircle } from 'lucide-react';
+import PrivacyPolicyModal from './PrivacyPolicyModal';
 
 interface AuthViewProps {
   onSignIn: (email: string, pass: string) => Promise<void>;
   onSignUp: (email: string, pass: string, name: string) => Promise<void>;
   onResetPassword: (email: string) => Promise<void>;
   onSignInWithGoogle: () => Promise<void>;
+  onAcceptPrivacy?: () => Promise<void>;
 }
 
-export default function AuthView({ onSignIn, onSignUp, onResetPassword, onSignInWithGoogle }: AuthViewProps) {
+export default function AuthView({ onSignIn, onSignUp, onResetPassword, onSignInWithGoogle, onAcceptPrivacy }: AuthViewProps) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [isResetMode, setIsResetMode] = useState(false);
   const [name, setName] = useState('');
@@ -18,6 +20,8 @@ export default function AuthView({ onSignIn, onSignUp, onResetPassword, onSignIn
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
   const handleGoogleSignIn = async () => {
     setError(null);
@@ -46,7 +50,9 @@ export default function AuthView({ onSignIn, onSignUp, onResetPassword, onSignIn
       } else if (isSignUp) {
         if (!name.trim()) throw new Error('Please enter your name.');
         if (password.length < 6) throw new Error('Password must be at least 6 characters.');
+        if (!agreedToPrivacy) throw new Error('Please agree to the Privacy Policy to create an account.');
         await onSignUp(email.trim(), password, name.trim());
+        try { await onAcceptPrivacy?.(); } catch { /* best-effort, don't block signup on this */ }
         setSuccessMessage("Account created! Check your inbox for a confirmation email, then come back and sign in.");
         setIsSignUp(false);
       } else {
@@ -155,9 +161,26 @@ export default function AuthView({ onSignIn, onSignUp, onResetPassword, onSignIn
             </div>
           )}
 
+          {isSignUp && !isResetMode && (
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={agreedToPrivacy}
+                onChange={(e) => setAgreedToPrivacy(e.target.checked)}
+                className="mt-0.5 cursor-pointer"
+              />
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                I agree to the{' '}
+                <button type="button" onClick={() => setShowPrivacyModal(true)} className="text-indigo-600 dark:text-indigo-400 font-semibold underline cursor-pointer">
+                  Privacy Policy
+                </button>
+              </span>
+            </label>
+          )}
+
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || (isSignUp && !isResetMode && !agreedToPrivacy)}
             className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer active:scale-[0.98]"
           >
             {loading ? (
@@ -165,6 +188,8 @@ export default function AuthView({ onSignIn, onSignUp, onResetPassword, onSignIn
             ) : isResetMode ? 'Send Reset Link' : isSignUp ? 'Create Account' : 'Sign In'}
           </button>
         </form>
+
+        <PrivacyPolicyModal isOpen={showPrivacyModal} onClose={() => setShowPrivacyModal(false)} />
 
         <div className="flex items-center justify-between text-[10px] font-bold">
           {!isResetMode ? (

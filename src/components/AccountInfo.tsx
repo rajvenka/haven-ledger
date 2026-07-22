@@ -48,6 +48,9 @@ interface AccountInfoProps {
   isReadOnly?: boolean;
   onAddFamilyMember: (email: string, role?: 'view' | 'modify', accessLevel?: 'full' | 'limited', features?: string[]) => Promise<void>;
   onCreateFamily?: () => Promise<void>;
+  activeWorkspace?: { id: string; name: string; type: 'family' | 'business'; role: string; isOwner: boolean } | null;
+  onRenameWorkspace?: (id: string, name: string) => Promise<void>;
+  onDeleteWorkspace?: (id: string) => Promise<void>;
   onJoinFamilyGroup: (code: string) => Promise<void>;
   onLeaveFamilyGroup?: () => Promise<void>;
   incomingInvitations?: FamilyInvitation[];
@@ -98,6 +101,9 @@ export default function AccountInfo({
   isReadOnly = false,
   onAddFamilyMember,
   onCreateFamily,
+  activeWorkspace,
+  onRenameWorkspace,
+  onDeleteWorkspace,
   onJoinFamilyGroup,
   onLeaveFamilyGroup,
   incomingInvitations = [],
@@ -201,8 +207,13 @@ export default function AccountInfo({
   // Family forms state
   const [familyEmail, setFamilyEmail] = useState('');
   const [familyEmailRole, setFamilyEmailRole] = useState<'view' | 'modify'>('modify');
+  const [isRenamingWorkspace, setIsRenamingWorkspace] = useState(false);
+  const [workspaceRenameValue, setWorkspaceRenameValue] = useState('');
+  const [workspaceActionBusy, setWorkspaceActionBusy] = useState(false);
+  const [workspaceActionError, setWorkspaceActionError] = useState<string | null>(null);
   const ALL_FEATURES = ['income', 'rewards', 'ai', 'team', 'chat', 'agent'];
   const myAvailableFeatures = userProfile?.isSuperAdmin ? ALL_FEATURES : (userProfile?.licensePlanFeatures ?? ALL_FEATURES);
+  const hasWhatsApp = userProfile?.isSuperAdmin || (userProfile?.licensePlanFeatures ?? []).includes('whatsapp');
   const [familyFeatures, setFamilyFeatures] = useState<string[]>(myAvailableFeatures);
 
   useEffect(() => {
@@ -557,6 +568,73 @@ export default function AccountInfo({
             </div>
           )}
 
+          {activeWorkspace?.isOwner && (
+            <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Manage This Workspace</span>
+              {isRenamingWorkspace ? (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!workspaceRenameValue.trim() || !activeWorkspace) return;
+                    setWorkspaceActionError(null);
+                    setWorkspaceActionBusy(true);
+                    try {
+                      await onRenameWorkspace?.(activeWorkspace.id, workspaceRenameValue.trim());
+                      setIsRenamingWorkspace(false);
+                    } catch (err: any) {
+                      setWorkspaceActionError(err.message || 'Could not rename workspace.');
+                    } finally {
+                      setWorkspaceActionBusy(false);
+                    }
+                  }}
+                  className="flex gap-2"
+                >
+                  <input
+                    autoFocus
+                    type="text"
+                    value={workspaceRenameValue}
+                    onChange={(e) => setWorkspaceRenameValue(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+                  />
+                  <button type="submit" disabled={workspaceActionBusy} className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer">Save</button>
+                  <button type="button" onClick={() => setIsRenamingWorkspace(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer">Cancel</button>
+                </form>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">{activeWorkspace.name}</span>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => { setWorkspaceRenameValue(activeWorkspace.name); setIsRenamingWorkspace(true); }}
+                      className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer"
+                    >
+                      Rename
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!activeWorkspace) return;
+                        if (!window.confirm(`Delete "${activeWorkspace.name}" and all of its data? This can't be undone.`)) return;
+                        setWorkspaceActionError(null);
+                        setWorkspaceActionBusy(true);
+                        try {
+                          await onDeleteWorkspace?.(activeWorkspace.id);
+                        } catch (err: any) {
+                          setWorkspaceActionError(err.message || 'Could not delete workspace.');
+                        } finally {
+                          setWorkspaceActionBusy(false);
+                        }
+                      }}
+                      disabled={workspaceActionBusy}
+                      className="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer disabled:opacity-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              )}
+              {workspaceActionError && <p className="text-[10px] text-red-500 font-semibold">{workspaceActionError}</p>}
+              <p className="text-[9px] text-slate-400">You can also switch, rename, or delete workspaces from the switcher next to your workspace name at the top.</p>
+            </div>
+          )}
           {/* Invite code / share panel — hosts see it, and solo users can create a family to get one */}
           {(familyRole === 'host' || !familyRole) && (
             <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
@@ -1234,6 +1312,22 @@ export default function AccountInfo({
             <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
               <MessageSquare className="w-4 h-4 text-emerald-500" /> Connect WhatsApp
             </h4>
+            {!hasWhatsApp ? (
+              <div className="space-y-2">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">WhatsApp integration is a Pro Max feature.</p>
+                <button
+                  onClick={() => {
+                    const proMax = accessPlans.find(p => p.name === 'Pro Max');
+                    if (proMax) onRequestUpgrade?.(proMax.id);
+                  }}
+                  disabled={myUpgradeRequest?.planName === 'Pro Max'}
+                  className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/30 hover:bg-indigo-100 dark:hover:bg-indigo-950/50 disabled:opacity-50 text-indigo-600 dark:text-indigo-400 text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer"
+                >
+                  {myUpgradeRequest?.planName === 'Pro Max' ? 'Requested' : 'Request Pro Max'}
+                </button>
+              </div>
+            ) : (
+            <>
             {userProfile?.whatsappPhone ? (
               <div className="flex items-center justify-between">
                 <div>
@@ -1277,6 +1371,8 @@ export default function AccountInfo({
             )}
             {waError && <p className="text-[10px] text-red-500 font-semibold">{waError}</p>}
             <p className="text-[9px] text-slate-400">Once linked, text things like "log gas bill $200" or "what's due today?" and Haven Vault replies right in WhatsApp.</p>
+            </>
+            )}
           </div>
 
           {/* Backup and Restore Utilities Accordion (High Density Styled Cards) */}

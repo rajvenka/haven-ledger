@@ -41,12 +41,14 @@ interface AdminUsersViewProps {
   fetchPendingUpgradeRequests?: () => Promise<UpgradeRequest[]>;
   onResolveUpgradeRequest?: (requestId: string, userId: string, planId: string, approve: boolean) => Promise<void>;
   onSetUserPlan?: (userId: string, planId: string) => Promise<void>;
+  onSetSuperAdmin?: (userId: string, isAdmin: boolean) => Promise<void>;
+  currentUserId?: string;
 }
 
 const ALL_PLAN_FEATURES = ['income', 'rewards', 'ai', 'team', 'chat', 'agent'];
 const PLAN_FEATURE_LABELS: Record<string, string> = { income: 'Income', rewards: 'Rewards', ai: 'AI Insights', team: 'Team', chat: 'Chat', agent: 'AI Agent' };
 
-export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, accessPlans = [], onCreatePlan, onUpdatePlan, onDeletePlan, fetchPendingUpgradeRequests, onResolveUpgradeRequest, onSetUserPlan }: AdminUsersViewProps) {
+export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, accessPlans = [], onCreatePlan, onUpdatePlan, onDeletePlan, fetchPendingUpgradeRequests, onResolveUpgradeRequest, onSetUserPlan, onSetSuperAdmin, currentUserId }: AdminUsersViewProps) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -143,6 +145,24 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
       await load();
     } finally {
       setChangingPlanFor(null);
+    }
+  };
+
+  const [togglingAdminFor, setTogglingAdminFor] = useState<string | null>(null);
+  const handleToggleSuperAdmin = async (u: AdminUser) => {
+    const makingAdmin = !u.isSuperAdmin;
+    const confirmed = window.confirm(
+      makingAdmin
+        ? `Make ${u.displayName || u.email} a super admin? They'll be able to see every user and change anyone's plan.`
+        : `Remove super admin from ${u.displayName || u.email}?`
+    );
+    if (!confirmed) return;
+    setTogglingAdminFor(u.id);
+    try {
+      await onSetSuperAdmin?.(u.id, makingAdmin);
+      await load();
+    } finally {
+      setTogglingAdminFor(null);
     }
   };
 
@@ -389,6 +409,16 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
                   <span className="text-xs font-bold text-slate-900 dark:text-white truncate">{u.displayName || u.email.split('@')[0]}</span>
                   {u.isSuperAdmin && (
                     <span className="px-1.5 py-0.5 bg-indigo-600 text-white text-[8px] font-black uppercase tracking-wider rounded-full shrink-0">Admin</span>
+                  )}
+                  {u.id !== currentUserId && (
+                    <button
+                      onClick={() => handleToggleSuperAdmin(u)}
+                      disabled={togglingAdminFor === u.id}
+                      title={u.isSuperAdmin ? 'Remove super admin' : 'Make super admin'}
+                      className={`p-1 rounded-md shrink-0 cursor-pointer disabled:opacity-40 ${u.isSuperAdmin ? 'text-indigo-500 hover:text-slate-400' : 'text-slate-300 hover:text-indigo-500'}`}
+                    >
+                      <ShieldCheck className="w-3 h-3" />
+                    </button>
                   )}
                 </div>
                 <span className="text-[10px] text-slate-400 truncate">{u.email}</span>
