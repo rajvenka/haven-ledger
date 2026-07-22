@@ -30,6 +30,7 @@ interface PortfolioViewProps {
     holdingType: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string;
   }[]) => Promise<void>;
   updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
+  setPriceReference: (id: string, price: number, date?: string) => Promise<void>;
   deletePortfolioHolding: (id: string) => Promise<void>;
   bulkTagPortfolioHoldings: (holdingIds: string[], source: string) => Promise<void>;
   portfolioContributions: any[];
@@ -54,7 +55,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings,
+    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, setPriceReference, deletePortfolioHolding, bulkTagPortfolioHoldings,
     portfolioContributions, addPortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
@@ -149,27 +150,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
   }, [activeHoldings, holdingFilter]);
 
   // Change since the last time prices were refreshed (the two most recent snapshots for a holding)
-  const getSinceLastRefreshPct = (holdingId: string): number | null => {
-    const snapshots = portfolioPriceHistory
-      .filter(p => p.holding_id === holdingId)
-      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-    if (snapshots.length < 2) return null;
-    const [latest, previous] = snapshots;
-    if (Number(previous.price) === 0) return null;
-    return ((Number(latest.price) - Number(previous.price)) / Number(previous.price)) * 100;
-  };
-
-
-  // Finds the closest recorded price snapshot at least N days old for a holding,
-  // so we can show "vs last week / last month" without needing a live data feed for history.
-  const getPriceNDaysAgo = (holdingId: string, days: number): number | null => {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
-    const candidates = portfolioPriceHistory
-      .filter(p => p.holding_id === holdingId && p.recorded_date <= cutoffStr)
-      .sort((a, b) => (a.recorded_date < b.recorded_date ? 1 : -1)); // most recent first, among those old enough
-    return candidates.length > 0 ? Number(candidates[0].price) : null;
+  // Progress against the explicit reference checkpoint (set on first load, or manually
+  // overridden) - not just "the last time a price happened to update," which is noisy.
+  const getSinceReferencePct = (h: any): number | null => {
+    if (h.reference_price == null) return null;
+    const ref = Number(h.reference_price);
+    if (ref === 0) return null;
+    const current = Number(h.current_price ?? h.buy_price);
+    return ((current - ref) / ref) * 100;
   };
 
   const soldHoldings = portfolioHoldings.filter(h => h.status === 'sold');
@@ -656,7 +644,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       <th className="p-2.5 text-right">Cur. Value</th>
                       <th className="p-2.5 text-right">Net Gain</th>
                       <th className="p-2.5 text-right">% Chg</th>
-                      <th className="p-2.5 text-right">Since Last Refresh</th>
+                      <th className="p-2.5 text-right">Since Reference</th>
                       <th className="p-2.5 text-right"></th>
                     </tr>
                   </thead>
@@ -667,7 +655,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       const gainPct = ((currentPriceNum - Number(h.buy_price)) / Number(h.buy_price)) * 100;
                       const invested = Number(h.buy_price) * Number(h.quantity);
                       const curValue = currentPriceNum * Number(h.quantity);
-                      const sinceRefreshPct = getSinceLastRefreshPct(h.id);
+                      const sinceReferencePct = getSinceReferencePct(h);
 
                       const targetPrice = h.target_type === 'price' ? Number(h.target_price)
                         : h.target_type === 'percent' ? Number(h.buy_price) * (1 + Number(h.target_percent) / 100)
@@ -726,11 +714,28 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           <td className={`p-2.5 text-right font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)}</td>
                           <td className={`p-2.5 text-right font-bold ${gainPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gainPct >= 0 ? '+' : ''}{gainPct.toFixed(2)}%</td>
                           <td className="p-2.5 text-right">
-                            {sinceRefreshPct !== null ? (
-                              <span className={`font-bold ${sinceRefreshPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{sinceRefreshPct >= 0 ? '+' : ''}{sinceRefreshPct.toFixed(2)}%</span>
-                            ) : (
-                              <span className="text-slate-300 dark:text-slate-700">—</span>
-                            )}
+                            <div className="flex items-center justify-end gap-1.5">
+                              {sinceReferencePct !== null ? (
+                                <span className={`font-bold ${sinceReferencePct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`} title={`Reference: ₹${Number(h.reference_price).toFixed(2)} on ${h.reference_date}`}>
+                                  {sinceReferencePct >= 0 ? '+' : ''}{sinceReferencePct.toFixed(2)}%
+                                </span>
+                              ) : (
+                                <span className="text-slate-300 dark:text-slate-700">—</span>
+                              )}
+                              {!isReadOnly && (
+                                <button
+                                  onClick={() => {
+                                    if (window.confirm(`Set today's price (₹${currentPriceNum.toFixed(2)}) as the new reference point for ${h.symbol}? Progress will be measured from here going forward.`)) {
+                                      runAction(() => setPriceReference(h.id, currentPriceNum));
+                                    }
+                                  }}
+                                  title="Set today's price as the new reference"
+                                  className="p-0.5 text-slate-300 hover:text-indigo-500 cursor-pointer"
+                                >
+                                  <RefreshCw className="w-2.5 h-2.5" />
+                                </button>
+                              )}
+                            </div>
                           </td>
                           <td className="p-2.5 text-right">
                             <div className="flex items-center justify-end gap-1">
