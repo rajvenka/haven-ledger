@@ -864,7 +864,7 @@ export function usePaymentState() {
   const fetchAllUsersForAdmin = async () => {
     const { data: profiles, error } = await supabase
       .from('profiles')
-      .select('id, email, display_name, created_at, is_super_admin, license_plan_id, access_plans(id, name)')
+      .select('id, email, display_name, created_at, is_super_admin, license_plan_id, access_plans!profiles_license_plan_id_fkey(id, name)')
       .order('created_at', { ascending: false });
     if (error) throw error;
 
