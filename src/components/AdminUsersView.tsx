@@ -250,6 +250,10 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
               </div>
               {editingPlanId === plan.id && (
                 <div className="p-2.5 pt-0 space-y-2">
+                  <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-bold text-left bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900 cursor-default">
+                    <Check className="w-3 h-3 shrink-0" />
+                    Bills & Expenses (always included)
+                  </div>
                   <div className="grid grid-cols-2 gap-1.5">
                     {ALL_PLAN_FEATURES.map(f => (
                       <button
@@ -286,6 +290,10 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
               <button type="button" onClick={() => { setIsCreatingPlan(false); setNewPlanName(''); setNewPlanFeatures([]); }} className="p-2 text-slate-400 cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
+            </div>
+            <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-bold text-left bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900 cursor-default">
+              <Check className="w-3 h-3 shrink-0" />
+              Bills & Expenses (always included)
             </div>
             <div className="grid grid-cols-2 gap-1.5">
               {ALL_PLAN_FEATURES.map(f => (
