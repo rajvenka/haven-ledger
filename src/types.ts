@@ -135,6 +135,7 @@ export interface UserProfile {
   licensePlanId?: string;
   licensePlanName?: string;
   licensePlanFeatures?: string[];
+  canCreateBusiness?: boolean;
   appNotificationsEnabled?: boolean;
   mobileNotificationsEnabled?: boolean;
   ownNotificationsEnabled?: boolean;

@@ -28,14 +28,15 @@ interface AccessPlan {
   description?: string;
   features: string[];
   isSystem: boolean;
+  canCreateBusiness?: boolean;
 }
 
 interface AdminUsersViewProps {
   fetchAllUsersForAdmin: () => Promise<AdminUser[]>;
   inviteNewUser: (email: string) => Promise<any>;
   accessPlans?: AccessPlan[];
-  onCreatePlan?: (name: string, features: string[], description?: string) => Promise<void>;
-  onUpdatePlan?: (id: string, updates: { name?: string; description?: string; features?: string[] }) => Promise<void>;
+  onCreatePlan?: (name: string, features: string[], description?: string, canCreateBusiness?: boolean) => Promise<void>;
+  onUpdatePlan?: (id: string, updates: { name?: string; description?: string; features?: string[]; canCreateBusiness?: boolean }) => Promise<void>;
   onDeletePlan?: (id: string) => Promise<void>;
   fetchPendingUpgradeRequests?: () => Promise<UpgradeRequest[]>;
   onResolveUpgradeRequest?: (requestId: string, userId: string, planId: string, approve: boolean) => Promise<void>;
@@ -56,6 +57,7 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
   const [isCreatingPlan, setIsCreatingPlan] = useState(false);
   const [newPlanName, setNewPlanName] = useState('');
   const [newPlanFeatures, setNewPlanFeatures] = useState<string[]>([]);
+  const [newPlanCanCreateBusiness, setNewPlanCanCreateBusiness] = useState(false);
   const [planBusy, setPlanBusy] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
 
@@ -67,9 +69,10 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
     if (!newPlanName.trim()) return;
     setPlanBusy(true);
     try {
-      await onCreatePlan?.(newPlanName.trim(), newPlanFeatures);
+      await onCreatePlan?.(newPlanName.trim(), newPlanFeatures, undefined, newPlanCanCreateBusiness);
       setNewPlanName('');
       setNewPlanFeatures([]);
+      setNewPlanCanCreateBusiness(false);
       setIsCreatingPlan(false);
     } catch (err: any) {
       setPlanError(err.message || 'Could not create plan.');
@@ -80,11 +83,13 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
 
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [editFeatures, setEditFeatures] = useState<string[]>([]);
+  const [editCanCreateBusiness, setEditCanCreateBusiness] = useState(false);
   const [editBusy, setEditBusy] = useState(false);
 
   const startEditingPlan = (plan: AccessPlan) => {
     setEditingPlanId(plan.id);
     setEditFeatures(plan.features);
+    setEditCanCreateBusiness(plan.canCreateBusiness ?? false);
   };
 
   const toggleEditFeature = (f: string) => setEditFeatures(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
@@ -93,7 +98,7 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
     if (!editingPlanId) return;
     setEditBusy(true);
     try {
-      await onUpdatePlan?.(editingPlanId, { features: editFeatures });
+      await onUpdatePlan?.(editingPlanId, { features: editFeatures, canCreateBusiness: editCanCreateBusiness });
       setEditingPlanId(null);
     } finally {
       setEditBusy(false);
@@ -267,6 +272,10 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
                       </button>
                     ))}
                   </div>
+                  <label className="flex items-center gap-2 px-2 py-1.5 cursor-pointer">
+                    <input type="checkbox" checked={editCanCreateBusiness} onChange={(e) => setEditCanCreateBusiness(e.target.checked)} className="cursor-pointer" />
+                    <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">Can create Business workspaces</span>
+                  </label>
                   <button onClick={saveEditedPlan} disabled={editBusy} className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer">
                     {editBusy ? 'Saving…' : 'Save Changes'}
                   </button>
@@ -308,6 +317,10 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
                 </button>
               ))}
             </div>
+            <label className="flex items-center gap-2 px-2 py-1.5 cursor-pointer">
+              <input type="checkbox" checked={newPlanCanCreateBusiness} onChange={(e) => setNewPlanCanCreateBusiness(e.target.checked)} className="cursor-pointer" />
+              <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">Can create Business workspaces</span>
+            </label>
             {planError && <p className="text-[10px] text-red-500 font-semibold">{planError}</p>}
             <button type="submit" disabled={planBusy || !newPlanName.trim()} className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase tracking-wider rounded-lg cursor-pointer">
               {planBusy ? 'Creating…' : 'Create Plan'}

@@ -418,7 +418,7 @@ export default function App() {
             <details className="text-center">
               <summary className="text-[10px] text-indigo-500 font-bold cursor-pointer list-none">Prefer to create your own workspace instead?</summary>
               <div className="mt-3">
-                <OnboardingView onSelectMode={setWorkspaceMode} isSyncing={isSyncing} />
+                <OnboardingView onSelectMode={setWorkspaceMode} isSyncing={isSyncing} canCreateBusiness={userProfile?.isSuperAdmin || userProfile?.canCreateBusiness} />
               </div>
             </details>
           </div>
@@ -427,7 +427,7 @@ export default function App() {
     }
     return (
       <IPhoneFrame>
-        <OnboardingView onSelectMode={setWorkspaceMode} isSyncing={isSyncing} />
+        <OnboardingView onSelectMode={setWorkspaceMode} isSyncing={isSyncing} canCreateBusiness={userProfile?.isSuperAdmin || userProfile?.canCreateBusiness} />
       </IPhoneFrame>
     );
   }
@@ -465,6 +465,7 @@ export default function App() {
               onCreateNew={createWorkspace}
               onRename={renameWorkspace}
               onDelete={deleteWorkspace}
+              canCreateBusiness={userProfile?.isSuperAdmin || userProfile?.canCreateBusiness}
             />
 
             {/* Menu Sections */}
@@ -806,6 +807,7 @@ export default function App() {
                   onCreateNew={createWorkspace}
               onRename={renameWorkspace}
               onDelete={deleteWorkspace}
+              canCreateBusiness={userProfile?.isSuperAdmin || userProfile?.canCreateBusiness}
                 />
 
                 {/* Menu Sections */}
@@ -1889,6 +1891,7 @@ export default function App() {
             activeWorkspace={activeWorkspace}
             onSwitchWorkspace={switchWorkspace}
             onCreateWorkspace={createWorkspace}
+            canCreateBusiness={userProfile?.isSuperAdmin || userProfile?.canCreateBusiness}
           />
         )}
 

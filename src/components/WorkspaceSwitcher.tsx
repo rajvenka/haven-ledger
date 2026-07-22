@@ -9,9 +9,10 @@ interface WorkspaceSwitcherProps {
   onCreateNew: (name: string, type: 'family' | 'business') => Promise<any>;
   onRename?: (id: string, name: string) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
+  canCreateBusiness?: boolean;
 }
 
-export default function WorkspaceSwitcher({ workspaces, activeWorkspace, onSwitch, onCreateNew, onRename, onDelete }: WorkspaceSwitcherProps) {
+export default function WorkspaceSwitcher({ workspaces, activeWorkspace, onSwitch, onCreateNew, onRename, onDelete, canCreateBusiness = true }: WorkspaceSwitcherProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -133,8 +134,19 @@ export default function WorkspaceSwitcher({ workspaces, activeWorkspace, onSwitc
                 />
                 <div className="flex gap-1.5">
                   <button type="button" onClick={() => setNewType('family')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${newType === 'family' ? 'bg-[#007aff] text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Family</button>
-                  <button type="button" onClick={() => setNewType('business')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${newType === 'business' ? 'bg-[#34c759] text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Business</button>
+                  <button
+                    type="button"
+                    onClick={() => canCreateBusiness && setNewType('business')}
+                    disabled={!canCreateBusiness}
+                    title={!canCreateBusiness ? 'Your plan doesn\'t include Business workspaces - request an upgrade in Preferences' : undefined}
+                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${newType === 'business' ? 'bg-[#34c759] text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+                  >
+                    Business
+                  </button>
                 </div>
+                {!canCreateBusiness && (
+                  <p className="text-[9px] text-slate-400">Business workspaces need a plan with that add-on — request one in Preferences.</p>
+                )}
                 <button type="submit" disabled={busy || !newName.trim()} className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer">
                   {busy ? 'Creating…' : 'Create'}
                 </button>

@@ -30,6 +30,7 @@ interface ProfileScopeModalProps {
   activeWorkspace?: Workspace | null;
   onSwitchWorkspace?: (id: string) => Promise<void>;
   onCreateWorkspace?: (name: string, type: 'family' | 'business') => Promise<any>;
+  canCreateBusiness?: boolean;
 }
 
 export default function ProfileScopeModal({
@@ -46,13 +47,14 @@ export default function ProfileScopeModal({
   workspaces = [],
   activeWorkspace = null,
   onSwitchWorkspace,
-  onCreateWorkspace
+  onCreateWorkspace,
+  canCreateBusiness = true
 }: ProfileScopeModalProps) {
   const [copied, setCopied] = useState(false);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
-  const [newWorkspaceType, setNewWorkspaceType] = useState<'family' | 'business'>('business');
+  const [newWorkspaceType, setNewWorkspaceType] = useState<'family' | 'business'>('family');
   const [isCreatingBusy, setIsCreatingBusy] = useState(false);
 
   // Safely find the host group's customized names/references
@@ -216,7 +218,15 @@ export default function ProfileScopeModal({
                         />
                         <div className="flex gap-1.5">
                           <button type="button" onClick={() => setNewWorkspaceType('family')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${newWorkspaceType === 'family' ? 'bg-[#007aff] text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Family</button>
-                          <button type="button" onClick={() => setNewWorkspaceType('business')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${newWorkspaceType === 'business' ? 'bg-[#34c759] text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Business</button>
+                          <button
+                            type="button"
+                            onClick={() => canCreateBusiness && setNewWorkspaceType('business')}
+                            disabled={!canCreateBusiness}
+                            title={!canCreateBusiness ? 'Your plan doesn\'t include Business workspaces' : undefined}
+                            className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${newWorkspaceType === 'business' ? 'bg-[#34c759] text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+                          >
+                            Business
+                          </button>
                         </div>
                         <div className="flex gap-1.5">
                           <button type="button" onClick={() => setIsCreatingWorkspace(false)} className="flex-1 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer">Cancel</button>

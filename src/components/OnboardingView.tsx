@@ -5,9 +5,10 @@ import { Home, Briefcase, Sparkles, Shield, ChevronRight, Check } from 'lucide-r
 interface OnboardingViewProps {
   onSelectMode: (mode: 'family' | 'business') => Promise<void>;
   isSyncing: boolean;
+  canCreateBusiness?: boolean;
 }
 
-export default function OnboardingView({ onSelectMode, isSyncing }: OnboardingViewProps) {
+export default function OnboardingView({ onSelectMode, isSyncing, canCreateBusiness = true }: OnboardingViewProps) {
   const [selectedMode, setSelectedMode] = useState<'family' | 'business'>('family');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,8 +103,9 @@ export default function OnboardingView({ onSelectMode, isSyncing }: OnboardingVi
             {/* Business Option */}
             <button
               type="button"
-              onClick={() => setSelectedMode('business')}
-              className={`w-full text-left p-4 rounded-xl border transition-all duration-200 cursor-pointer ${
+              onClick={() => canCreateBusiness && setSelectedMode('business')}
+              disabled={!canCreateBusiness}
+              className={`w-full text-left p-4 rounded-xl border transition-all duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
                 selectedMode === 'business'
                   ? 'border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/10 ring-1 ring-indigo-500/30'
                   : 'border-[#e5e5ea] dark:border-[#2c2c2e] hover:bg-slate-50 dark:hover:bg-slate-900/50'
@@ -125,7 +127,9 @@ export default function OnboardingView({ onSelectMode, isSyncing }: OnboardingVi
                     )}
                   </div>
                   <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 leading-relaxed">
-                    Designed for freelancers, founders, and small teams. Track operating expenses (OPEX), project tools, manage cost centers, calculate business runway, and project capital reserves.
+                    {canCreateBusiness
+                      ? 'Designed for freelancers, founders, and small teams. Track operating expenses (OPEX), project tools, manage cost centers, calculate business runway, and project capital reserves.'
+                      : "Not included in your current plan - you'll be able to request access once you're set up."}
                   </p>
                 </div>
               </div>

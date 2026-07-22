@@ -199,8 +199,8 @@ export function usePaymentState() {
         if (profile.license_plan_id) {
           (async () => {
             try {
-              const { data: plan } = await supabase.from('access_plans').select('name, features').eq('id', profile.license_plan_id).maybeSingle();
-              if (plan) setUserProfile(prev => prev ? { ...prev, licensePlanName: plan.name, licensePlanFeatures: plan.features ?? [] } : prev);
+              const { data: plan } = await supabase.from('access_plans').select('name, features, can_create_business').eq('id', profile.license_plan_id).maybeSingle();
+              if (plan) setUserProfile(prev => prev ? { ...prev, licensePlanName: plan.name, licensePlanFeatures: plan.features ?? [], canCreateBusiness: plan.can_create_business ?? false } : prev);
             } catch (err) {
               console.warn('Failed to load license plan details:', err);
             }
@@ -770,27 +770,28 @@ export function usePaymentState() {
   };
 
   // ---------- Access Plans (reusable named feature bundles) ----------
-  const [accessPlans, setAccessPlans] = useState<{ id: string; name: string; description?: string; features: string[]; isSystem: boolean }[]>([]);
+  const [accessPlans, setAccessPlans] = useState<{ id: string; name: string; description?: string; features: string[]; isSystem: boolean; canCreateBusiness?: boolean }[]>([]);
 
   const loadAccessPlans = useCallback(async () => {
     const { data } = await supabase.from('access_plans').select('*').order('created_at', { ascending: true });
-    setAccessPlans((data ?? []).map((p: any) => ({ id: p.id, name: p.name, description: p.description, features: p.features ?? [], isSystem: p.is_system })));
+    setAccessPlans((data ?? []).map((p: any) => ({ id: p.id, name: p.name, description: p.description, features: p.features ?? [], isSystem: p.is_system, canCreateBusiness: p.can_create_business ?? false })));
   }, []);
 
   useEffect(() => { if (isLoaded) loadAccessPlans(); }, [isLoaded, loadAccessPlans]);
 
-  const createAccessPlan = async (name: string, features: string[], description?: string) => {
+  const createAccessPlan = async (name: string, features: string[], description?: string, canCreateBusiness?: boolean) => {
     if (!user) throw new Error('Not signed in.');
-    const { error } = await supabase.from('access_plans').insert({ name, description: description ?? null, features, created_by: user.id });
+    const { error } = await supabase.from('access_plans').insert({ name, description: description ?? null, features, can_create_business: canCreateBusiness ?? false, created_by: user.id });
     if (error) throw error;
     await loadAccessPlans();
   };
 
-  const updateAccessPlan = async (id: string, updates: { name?: string; description?: string; features?: string[] }) => {
+  const updateAccessPlan = async (id: string, updates: { name?: string; description?: string; features?: string[]; canCreateBusiness?: boolean }) => {
     const row: any = {};
     if (updates.name !== undefined) row.name = updates.name;
     if (updates.description !== undefined) row.description = updates.description;
     if (updates.features !== undefined) row.features = updates.features;
+    if (updates.canCreateBusiness !== undefined) row.can_create_business = updates.canCreateBusiness;
     const { error } = await supabase.from('access_plans').update(row).eq('id', id);
     if (error) throw error;
     await loadAccessPlans();
