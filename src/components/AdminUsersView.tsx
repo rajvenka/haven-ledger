@@ -272,10 +272,12 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
                       </button>
                     ))}
                   </div>
+                  {!['Light', 'Pro', 'Pro Max'].includes(plan.name) && (
                   <label className="flex items-center gap-2 px-2 py-1.5 cursor-pointer">
                     <input type="checkbox" checked={editCanCreateBusiness} onChange={(e) => setEditCanCreateBusiness(e.target.checked)} className="cursor-pointer" />
                     <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">Can create Business workspaces</span>
                   </label>
+                  )}
                   <button onClick={saveEditedPlan} disabled={editBusy} className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer">
                     {editBusy ? 'Saving…' : 'Save Changes'}
                   </button>
