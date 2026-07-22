@@ -439,7 +439,7 @@ export default function App() {
       <div className="flex-1 flex flex-row h-full bg-slate-50 dark:bg-slate-900 relative overflow-hidden text-left">
         
         {/* Persistent Desktop Sidebar Navigation (Hidden on Mobile) */}
-        <aside className="hidden md:flex flex-col w-64 bg-white dark:bg-slate-950 border-r border-slate-150/80 dark:border-slate-900 shrink-0 z-20 select-none p-6">
+        <aside className="hidden md:flex flex-col w-64 h-dvh bg-white dark:bg-slate-950 border-r border-slate-150/80 dark:border-slate-900 shrink-0 z-20 select-none p-6">
           <div className="flex-1 min-h-0 overflow-y-auto space-y-6">
             {/* Elegant Header with Logo & Status */}
             <div className="flex items-center gap-3">
@@ -710,7 +710,7 @@ export default function App() {
           </div>
 
           {/* User Profile Card inside Sidebar */}
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-900/80 flex flex-col gap-3">
+          <div className="shrink-0 pt-4 border-t border-slate-100 dark:border-slate-900/80 flex flex-col gap-3">
             <div 
               onClick={() => setIsProfileScopeModalOpen(true)}
               className="flex items-center gap-3 bg-slate-50/80 dark:bg-slate-900/40 p-3 rounded-2xl border border-slate-100 dark:border-slate-800/80 shadow-sm cursor-pointer hover:bg-slate-100/70 dark:hover:bg-slate-900/60 transition-colors group"
@@ -769,7 +769,7 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 30 }}
               transition={{ duration: 0.25, ease: 'easeInOut' }}
-              className="md:hidden fixed inset-0 bg-white dark:bg-slate-950 z-50 flex flex-col select-none p-6"
+              className="md:hidden fixed inset-0 h-dvh bg-white dark:bg-slate-950 z-50 flex flex-col select-none p-6"
               style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.5rem)' }}
             >
               {/* Inside Menu Drawer - scrolls independently, footer below stays fixed */}
@@ -1069,7 +1069,7 @@ export default function App() {
               </div>
 
               {/* User Profile Card and Actions inside Sidebar */}
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-900/80 flex flex-col gap-3">
+              <div className="shrink-0 pt-4 border-t border-slate-100 dark:border-slate-900/80 flex flex-col gap-3">
                 <div className="flex items-center gap-3 bg-slate-50/80 dark:bg-slate-900/40 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800/80 shadow-sm">
                   <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-sm font-black uppercase shrink-0 border border-indigo-200/20 dark:border-indigo-800/20">
                     {userProfile?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U'}
