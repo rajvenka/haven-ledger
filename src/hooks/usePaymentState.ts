@@ -1035,6 +1035,13 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
+  const bulkDeletePortfolioHoldings = async (holdingIds: string[]) => {
+    if (holdingIds.length === 0) return;
+    const { error } = await supabase.from('portfolio_holdings').delete().in('id', holdingIds);
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
   const addPortfolioSplit = async (memberUserId: string, splitPercent: number, effectiveFrom: string, effectiveTo?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_splits').insert({
@@ -1296,7 +1303,7 @@ export function usePaymentState() {
     accessPlans, createAccessPlan, updateAccessPlan, deleteAccessPlan,
     myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan, setSuperAdminStatus,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, setPriceReference, deletePortfolioHolding, bulkTagPortfolioHoldings,
+    portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, setPriceReference, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings,
     portfolioPriceHistory,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,

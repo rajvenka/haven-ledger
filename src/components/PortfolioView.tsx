@@ -33,6 +33,7 @@ interface PortfolioViewProps {
   setPriceReference: (id: string, price: number, date?: string) => Promise<void>;
   deletePortfolioHolding: (id: string) => Promise<void>;
   bulkTagPortfolioHoldings: (holdingIds: string[], source: string) => Promise<void>;
+  bulkDeletePortfolioHoldings: (holdingIds: string[]) => Promise<void>;
   portfolioContributions: any[];
   addPortfolioContribution: (memberUserId: string, amount: number, date: string, notes?: string, contributionType?: 'one_off' | 'recurring') => Promise<void>;
   updatePortfolioContribution: (id: string, updates: { amount?: number; contributionDate?: string }) => Promise<void>;
@@ -56,7 +57,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, setPriceReference, deletePortfolioHolding, bulkTagPortfolioHoldings,
+    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, setPriceReference, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
@@ -127,6 +128,31 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setBulkTagSaving(false);
   };
 
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const applyBulkDelete = async () => {
+    if (selectedHoldingIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedHoldingIds.size} selected holding${selectedHoldingIds.size !== 1 ? 's' : ''}? This can't be undone.`)) return;
+    setBulkDeleting(true);
+    await runAction(async () => {
+      await bulkDeletePortfolioHoldings(Array.from(selectedHoldingIds));
+      exitSelectMode();
+    });
+    setBulkDeleting(false);
+  };
+
+  // ---- Column sorting ----
+  type SortField = 'symbol' | 'quantity' | 'buy_price' | 'current_price' | 'invested' | 'current_value' | 'gain' | 'gain_pct' | 'since_reference';
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => (prev === 'desc' ? 'asc' : 'desc'));
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
 
   const activeHoldings = portfolioHoldings.filter(h => h.status === 'active');
 
@@ -143,12 +169,38 @@ export default function PortfolioView(props: PortfolioViewProps) {
   }, [activeHoldings]);
 
   const filteredActiveHoldings = useMemo(() => {
-    if (holdingFilter === 'all') return activeHoldings;
-    return activeHoldings.filter(h => {
-      const combo = `${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`;
-      return combo === holdingFilter || h.source === holdingFilter;
+    let list = activeHoldings;
+    if (holdingFilter !== 'all') {
+      list = activeHoldings.filter(h => {
+        const combo = `${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`;
+        return combo === holdingFilter || h.source === holdingFilter;
+      });
+    }
+    if (!sortField) return list;
+
+    const valueFor = (h: any): number | string => {
+      const current = Number(h.current_price ?? h.buy_price);
+      switch (sortField) {
+        case 'symbol': return h.symbol;
+        case 'quantity': return Number(h.quantity);
+        case 'buy_price': return Number(h.buy_price);
+        case 'current_price': return current;
+        case 'invested': return Number(h.buy_price) * Number(h.quantity);
+        case 'current_value': return current * Number(h.quantity);
+        case 'gain': return (current - Number(h.buy_price)) * Number(h.quantity);
+        case 'gain_pct': return ((current - Number(h.buy_price)) / Number(h.buy_price)) * 100;
+        case 'since_reference': return h.reference_price != null && Number(h.reference_price) !== 0 ? ((current - Number(h.reference_price)) / Number(h.reference_price)) * 100 : -Infinity;
+        default: return 0;
+      }
+    };
+
+    return [...list].sort((a, b) => {
+      const av = valueFor(a);
+      const bv = valueFor(b);
+      const cmp = typeof av === 'string' && typeof bv === 'string' ? av.localeCompare(bv) : (av as number) - (bv as number);
+      return sortDirection === 'asc' ? cmp : -cmp;
     });
-  }, [activeHoldings, holdingFilter]);
+  }, [activeHoldings, holdingFilter, sortField, sortDirection]);
 
   // Change since the last time prices were refreshed (the two most recent snapshots for a holding)
   // Progress against the explicit reference checkpoint (set on first load, or manually
@@ -450,7 +502,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 onClick={() => (isSelectingForTag ? exitSelectMode() : setIsSelectingForTag(true))}
                 className={`px-4 py-2 border rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer ${isSelectingForTag ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'}`}
               >
-                <CheckCircle2 className="w-3.5 h-3.5" /> {isSelectingForTag ? 'Cancel Selection' : 'Bulk Tag'}
+                <CheckCircle2 className="w-3.5 h-3.5" /> {isSelectingForTag ? 'Cancel Selection' : 'Select / Bulk Actions'}
               </button>
             )}
             <button
@@ -482,6 +534,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer shrink-0"
               >
                 {bulkTagSaving ? 'Applying…' : 'Apply Tag'}
+              </button>
+              <button
+                onClick={applyBulkDelete}
+                disabled={bulkDeleting || selectedHoldingIds.size === 0}
+                className="px-4 py-2 bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer shrink-0"
+              >
+                {bulkDeleting ? 'Deleting…' : 'Delete Selected'}
               </button>
             </div>
           )}
@@ -640,16 +699,45 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <table className="w-full text-xs min-w-[720px]">
                   <thead>
                     <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
-                      {isSelectingForTag && <th className="p-2.5 text-left w-8"></th>}
-                      <th className="p-2.5 text-left">Instrument</th>
-                      <th className="p-2.5 text-right">Qty</th>
-                      <th className="p-2.5 text-right">Buy Price</th>
-                      <th className="p-2.5 text-right">LTP</th>
-                      <th className="p-2.5 text-right">Invested</th>
-                      <th className="p-2.5 text-right">Cur. Value</th>
-                      <th className="p-2.5 text-right">Net Gain</th>
-                      <th className="p-2.5 text-right">% Chg</th>
-                      <th className="p-2.5 text-right">Since Reference</th>
+                      {isSelectingForTag && (
+                        <th className="p-2.5 text-left w-8">
+                          <input
+                            type="checkbox"
+                            checked={filteredActiveHoldings.length > 0 && filteredActiveHoldings.every(h => selectedHoldingIds.has(h.id))}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedHoldingIds(prev => new Set([...prev, ...filteredActiveHoldings.map(h => h.id)]));
+                              } else {
+                                setSelectedHoldingIds(prev => { const next = new Set(prev); filteredActiveHoldings.forEach(h => next.delete(h.id)); return next; });
+                              }
+                            }}
+                            className="w-4 h-4 cursor-pointer accent-indigo-600"
+                            title="Select all"
+                          />
+                        </th>
+                      )}
+                      {([
+                        ['symbol', 'Instrument', 'text-left'],
+                        ['quantity', 'Qty', 'text-right'],
+                        ['buy_price', 'Buy Price', 'text-right'],
+                        ['current_price', 'LTP', 'text-right'],
+                        ['invested', 'Invested', 'text-right'],
+                        ['current_value', 'Cur. Value', 'text-right'],
+                        ['gain', 'Net Gain', 'text-right'],
+                        ['gain_pct', '% Chg', 'text-right'],
+                        ['since_reference', 'Since Reference', 'text-right'],
+                      ] as [SortField, string, string][]).map(([field, label, align]) => (
+                        <th
+                          key={field}
+                          onClick={() => toggleSort(field)}
+                          className={`p-2.5 ${align} cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-300`}
+                        >
+                          <span className="inline-flex items-center gap-0.5">
+                            {label}
+                            {sortField === field && <span className="text-indigo-500">{sortDirection === 'asc' ? '↑' : '↓'}</span>}
+                          </span>
+                        </th>
+                      ))}
                       <th className="p-2.5 text-right"></th>
                     </tr>
                   </thead>
