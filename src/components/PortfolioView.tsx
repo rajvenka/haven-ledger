@@ -195,6 +195,36 @@ export default function PortfolioView(props: PortfolioViewProps) {
     });
   }, [workspaceMembers, portfolioSplits]);
 
+  const getPeriodBounds = (frequency: 'monthly' | 'quarterly' | 'yearly', ref = new Date()) => {
+    if (frequency === 'monthly') {
+      return {
+        start: new Date(ref.getFullYear(), ref.getMonth(), 1),
+        end: new Date(ref.getFullYear(), ref.getMonth() + 1, 0),
+        label: ref.toLocaleString('default', { month: 'long', year: 'numeric' }),
+      };
+    }
+    if (frequency === 'quarterly') {
+      const q = Math.floor(ref.getMonth() / 3);
+      return {
+        start: new Date(ref.getFullYear(), q * 3, 1),
+        end: new Date(ref.getFullYear(), q * 3 + 3, 0),
+        label: `Q${q + 1} ${ref.getFullYear()}`,
+      };
+    }
+    return {
+      start: new Date(ref.getFullYear(), 0, 1),
+      end: new Date(ref.getFullYear(), 11, 31),
+      label: String(ref.getFullYear()),
+    };
+  };
+
+  const markTransferred = async (memberUserId: string, amount: number) => {
+    await runAction(async () => {
+      await addPortfolioContribution(memberUserId, amount, todayStr(), 'Recurring plan transfer');
+    });
+  };
+
+
   // ---- Investment Plan ----
   const [isAddingPlan, setIsAddingPlan] = useState(false);
   const [planMemberId, setPlanMemberId] = useState('');
@@ -574,6 +604,45 @@ export default function PortfolioView(props: PortfolioViewProps) {
       {/* INVESTMENT PLAN TAB */}
       {tab === 'plan' && (
         <div className="space-y-4">
+          {portfolioRecurringPlans.some(p => p.active) && (
+            <div className="apple-card p-4 space-y-3">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Fund Transfer Status</span>
+              <p className="text-[9px] text-slate-400">Who's transferred their share for the current period, and who hasn't yet.</p>
+              <div className="space-y-2">
+                {portfolioRecurringPlans.filter(p => p.active).map(plan => {
+                  const m = workspaceMembers.find(x => x.uid === plan.member_user_id);
+                  const period = getPeriodBounds(plan.frequency);
+                  const transferredThisPeriod = portfolioContributions
+                    .filter(c => c.member_user_id === plan.member_user_id)
+                    .filter(c => { const d = new Date(c.contribution_date); return d >= period.start && d <= period.end; })
+                    .reduce((s, c) => s + Number(c.amount), 0);
+                  const remaining = Math.max(0, Number(plan.expected_amount) - transferredThisPeriod);
+                  const fulfilled = remaining === 0;
+                  return (
+                    <div key={plan.id} className="flex items-center justify-between gap-3 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 dark:text-white">{m ? memberName(m) : 'Former member'}</p>
+                        <p className="text-[10px] text-slate-400">{period.label} · expected {fmt(Number(plan.expected_amount))}{transferredThisPeriod > 0 && !fulfilled ? ` · transferred ${fmt(transferredThisPeriod)} so far` : ''}</p>
+                      </div>
+                      {fulfilled ? (
+                        <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase rounded-full shrink-0">Transferred</span>
+                      ) : !isReadOnly ? (
+                        <button
+                          onClick={() => markTransferred(plan.member_user_id, remaining)}
+                          className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer shrink-0"
+                        >
+                          Mark {fmt(remaining)} Transferred
+                        </button>
+                      ) : (
+                        <span className="px-2.5 py-1 bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase rounded-full shrink-0">Pending</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="apple-card p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Recurring Contribution Plan</span>
