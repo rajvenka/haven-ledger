@@ -84,6 +84,39 @@ export default function ReportsView(props: ReportsViewProps) {
         <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 rounded-xl text-[11px] text-rose-600 dark:text-rose-400 font-semibold">{formError}</div>
       )}
 
+      {/* Price Change by Stock */}
+      {activeHoldings.length > 0 && (() => {
+        const data = activeHoldings
+          .filter(h => h.reference_price != null && Number(h.reference_price) !== 0)
+          .map(h => {
+            const current = Number(h.current_price ?? h.buy_price);
+            const ref = Number(h.reference_price);
+            return { symbol: h.symbol, changePct: ((current - ref) / ref) * 100 };
+          })
+          .sort((a, b) => a.changePct - b.changePct);
+        if (data.length === 0) return null;
+        return (
+          <div className="apple-card p-4 space-y-3">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Price Change by Stock (Since Reference)</span>
+            <div className="h-64 overflow-x-auto">
+              <div style={{ minWidth: `${data.length * 55}px`, height: '100%' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.3} vertical={false} />
+                    <XAxis dataKey="symbol" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} interval={0} angle={-45} textAnchor="end" height={60} />
+                    <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} unit="%" />
+                    <Tooltip formatter={(v: number) => [`${v >= 0 ? '+' : ''}${v.toFixed(2)}%`, 'Since Reference']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                    <Bar dataKey="changePct" radius={[3, 3, 3, 3]}>
+                      {data.map((d, i) => <Cell key={i} fill={d.changePct >= 0 ? '#10b981' : '#ef4444'} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Portfolio Allocation */}
       {activeHoldings.length > 0 && (() => {
         const bySource = new Map<string, number>();
