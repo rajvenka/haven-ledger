@@ -30,7 +30,6 @@ interface PortfolioViewProps {
     holdingType: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string;
   }[]) => Promise<void>;
   updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
-  setPriceReference: (id: string, price: number, date?: string) => Promise<void>;
   deletePortfolioHolding: (id: string) => Promise<void>;
   bulkTagPortfolioHoldings: (holdingIds: string[], source: string) => Promise<void>;
   bulkDeletePortfolioHoldings: (holdingIds: string[]) => Promise<void>;
@@ -60,7 +59,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, setPriceReference, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings,
+    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
@@ -883,28 +882,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           <td className={`p-2.5 text-right font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)}</td>
                           <td className={`p-2.5 text-right font-bold ${gainPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gainPct >= 0 ? '+' : ''}{gainPct.toFixed(2)}%</td>
                           <td className="p-2.5 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {sinceReferencePct !== null ? (
-                                <span className={`font-bold ${sinceReferencePct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`} title={`Reference: ₹${Number(h.reference_price).toFixed(2)} on ${h.reference_date}`}>
-                                  {sinceReferencePct >= 0 ? '+' : ''}{sinceReferencePct.toFixed(2)}%
-                                </span>
-                              ) : (
-                                <span className="text-slate-300 dark:text-slate-700">—</span>
-                              )}
-                              {!isReadOnly && (
-                                <button
-                                  onClick={() => {
-                                    if (window.confirm(`Set today's price (₹${currentPriceNum.toFixed(2)}) as the new reference point for ${h.symbol}? Progress will be measured from here going forward.`)) {
-                                      runAction(() => setPriceReference(h.id, currentPriceNum));
-                                    }
-                                  }}
-                                  title="Set today's price as the new reference"
-                                  className="p-0.5 text-slate-300 hover:text-indigo-500 cursor-pointer"
-                                >
-                                  <RefreshCw className="w-2.5 h-2.5" />
-                                </button>
-                              )}
-                            </div>
+                            {sinceReferencePct !== null ? (
+                              <span className={`font-bold ${sinceReferencePct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`} title={`Reference: ₹${Number(h.reference_price).toFixed(2)} on ${h.reference_date}`}>
+                                {sinceReferencePct >= 0 ? '+' : ''}{sinceReferencePct.toFixed(2)}%
+                              </span>
+                            ) : (
+                              <span className="text-slate-300 dark:text-slate-700">—</span>
+                            )}
                           </td>
                           <td className="p-2.5 text-right">
                             <div className="flex items-center justify-end gap-1">

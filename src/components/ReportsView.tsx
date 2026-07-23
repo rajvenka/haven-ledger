@@ -159,6 +159,107 @@ export default function ReportsView(props: ReportsViewProps) {
         })()}
       </div>
 
+      {/* Target Progress - Exceeds / On Target / Off Target */}
+      {(() => {
+        const targeted = activeHoldings.filter(h => h.target_type).map(h => {
+          const buyPrice = Number(h.buy_price);
+          const currentPrice = Number(h.current_price ?? h.buy_price);
+          const targetPrice = h.target_type === 'price' ? Number(h.target_price) : buyPrice * (1 + Number(h.target_percent) / 100);
+          const priceProgressPct = targetPrice !== buyPrice ? ((currentPrice - buyPrice) / (targetPrice - buyPrice)) * 100 : 0;
+          const remainingPct = targetPrice > 0 ? ((targetPrice - currentPrice) / currentPrice) * 100 : null;
+
+          // Effective target date - from hold_until_date directly, or buy_date + hold_days
+          let targetDate: Date | null = null;
+          if (h.hold_type === 'date' && h.hold_until_date) targetDate = new Date(h.hold_until_date);
+          else if (h.hold_type === 'days' && h.hold_days) targetDate = new Date(new Date(h.buy_date).getTime() + Number(h.hold_days) * 86400000);
+
+          let timeElapsedPct: number | null = null;
+          if (targetDate) {
+            const start = new Date(h.buy_date).getTime();
+            const end = targetDate.getTime();
+            const now = Date.now();
+            timeElapsedPct = end !== start ? Math.max(0, Math.min(100, ((now - start) / (end - start)) * 100)) : 100;
+          }
+
+          const exceeded = currentPrice >= targetPrice;
+          const onPace = timeElapsedPct === null ? null : priceProgressPct >= timeElapsedPct;
+          const bucket = exceeded ? 'exceeds' : (onPace === false ? 'off' : 'on'); // no date data -> benefit of the doubt, shown as "on" with a caveat
+
+          return { h, targetPrice, priceProgressPct, remainingPct, timeElapsedPct, exceeded, onPace, bucket };
+        });
+
+        if (targeted.length === 0) return null;
+
+        const groups: { key: string; label: string; colorClass: string; items: typeof targeted }[] = [
+          { key: 'exceeds', label: 'Exceeds Target', colorClass: 'text-emerald-600 dark:text-emerald-400', items: targeted.filter(t => t.bucket === 'exceeds') },
+          { key: 'on', label: 'On Target', colorClass: 'text-indigo-600 dark:text-indigo-400', items: targeted.filter(t => t.bucket === 'on') },
+          { key: 'off', label: 'Off Target', colorClass: 'text-rose-600 dark:text-rose-400', items: targeted.filter(t => t.bucket === 'off') },
+        ];
+
+        return (
+          <div className="apple-card p-4 space-y-4">
+            <div>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Target Progress</span>
+              <p className="text-[9px] text-slate-400 mt-0.5">"On/Off Target" compares price progress made vs. time elapsed toward your target date (pacing). Holdings with no target date are shown as On Target with price-only progress.</p>
+            </div>
+            {groups.map(g => g.items.length > 0 && (
+              <div key={g.key} className="space-y-2">
+                <span className={`text-[9px] font-black uppercase tracking-wider ${g.colorClass}`}>{g.label} ({g.items.length})</span>
+                {g.items.map(({ h, targetPrice, priceProgressPct, remainingPct, timeElapsedPct }) => (
+                  <div key={h.id} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{h.symbol} {h.source && <span className="text-[9px] text-slate-400">· {h.source}</span>}</span>
+                      <span className="text-slate-500">
+                        ₹{Number(h.current_price ?? h.buy_price).toFixed(2)} → ₹{targetPrice.toFixed(2)}
+                        {remainingPct !== null && remainingPct > 0 && ` · ${remainingPct.toFixed(0)}% left to go`}
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden relative">
+                      <div className={`h-full ${priceProgressPct >= 100 ? 'bg-emerald-500' : priceProgressPct < 0 ? 'bg-rose-500' : 'bg-indigo-500'}`} style={{ width: `${Math.max(0, Math.min(100, priceProgressPct))}%` }} />
+                      {timeElapsedPct !== null && (
+                        <div className="absolute top-0 bottom-0 w-0.5 bg-slate-400 dark:bg-slate-500" style={{ left: `${timeElapsedPct}%` }} title={`${timeElapsedPct.toFixed(0)}% of time to target elapsed`} />
+                      )}
+                    </div>
+                    <p className="text-[9px] text-slate-400">
+                      Price progress {priceProgressPct.toFixed(0)}%{timeElapsedPct !== null ? ` · Time elapsed ${timeElapsedPct.toFixed(0)}% (grey marker)` : ' · no target date set'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* New Stocks Added */}
+      {(() => {
+        const now = Date.now();
+        const days = (n: number) => now - n * 86400000;
+        const last30 = activeHoldings.filter(h => new Date(h.buy_date).getTime() >= days(30));
+        const last90 = activeHoldings.filter(h => new Date(h.buy_date).getTime() >= days(90) && new Date(h.buy_date).getTime() < days(30));
+        const last365 = activeHoldings.filter(h => new Date(h.buy_date).getTime() >= days(365) && new Date(h.buy_date).getTime() < days(90));
+        if (last30.length === 0 && last90.length === 0 && last365.length === 0) return null;
+        const bucket = (label: string, items: any[]) => items.length > 0 && (
+          <div key={label} className="space-y-1">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{label} ({items.length})</span>
+            {items.map(h => (
+              <div key={h.id} className="flex items-center justify-between text-xs py-1">
+                <span className="text-slate-600 dark:text-slate-300">{h.symbol} {h.source && <span className="text-[9px] text-slate-400">· {h.source}</span>}</span>
+                <span className="text-slate-400 text-[10px]">bought {h.buy_date}</span>
+              </div>
+            ))}
+          </div>
+        );
+        return (
+          <div className="apple-card p-4 space-y-3">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">New Stocks Added</span>
+            {bucket('Last 30 Days', last30)}
+            {bucket('Last 3 Months', last90)}
+            {bucket('Last Year', last365)}
+          </div>
+        );
+      })()}
+
       {/* Month-wise Profit & Loss */}
       <div className="apple-card p-4 space-y-3">
         <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Month-wise Profit & Loss</span>
@@ -205,27 +306,6 @@ export default function ReportsView(props: ReportsViewProps) {
       </div>
 
       <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block pt-2">Summary Report</span>
-
-      {activeHoldings.some(h => h.target_type) && (
-        <div className="apple-card p-4 space-y-2">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Target Progress</span>
-          {activeHoldings.filter(h => h.target_type).map(h => {
-            const targetPrice = h.target_type === 'price' ? Number(h.target_price) : Number(h.buy_price) * (1 + Number(h.target_percent) / 100);
-            const progress = Math.max(0, Math.min(100, ((Number(h.current_price ?? h.buy_price) - Number(h.buy_price)) / (targetPrice - Number(h.buy_price))) * 100));
-            return (
-              <div key={h.id} className="space-y-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-700 dark:text-slate-300">{h.symbol} {h.source && <span className="text-[9px] text-slate-400">· {h.source}</span>}</span>
-                  <span className="text-slate-500">₹{Number(h.current_price ?? h.buy_price).toFixed(2)} → ₹{targetPrice.toFixed(2)} target</span>
-                </div>
-                <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                  <div className={`h-full ${progress >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${progress}%` }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
 
       <div className="apple-card p-4 space-y-2 text-xs">
         <div className="flex justify-between"><span className="text-slate-500">Total Contributed (cash in)</span><span className="font-bold text-slate-900 dark:text-white">{fmt(totalContributed)}</span></div>

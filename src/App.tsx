@@ -167,7 +167,6 @@ export default function App() {
     addPortfolioHolding,
     bulkAddPortfolioHoldings,
     updatePortfolioHolding,
-    setPriceReference,
     deletePortfolioHolding,
     bulkTagPortfolioHoldings,
     bulkDeletePortfolioHoldings,
@@ -1499,7 +1498,6 @@ export default function App() {
                 addPortfolioHolding={addPortfolioHolding}
                 bulkAddPortfolioHoldings={bulkAddPortfolioHoldings}
                 updatePortfolioHolding={updatePortfolioHolding}
-                setPriceReference={setPriceReference}
                 deletePortfolioHolding={deletePortfolioHolding}
                 bulkTagPortfolioHoldings={bulkTagPortfolioHoldings}
                 bulkDeletePortfolioHoldings={bulkDeletePortfolioHoldings}

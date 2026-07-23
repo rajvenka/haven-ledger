@@ -997,7 +997,7 @@ export function usePaymentState() {
   };
 
   const updatePortfolioHolding = async (id: string, updates: {
-    currentPrice?: number; status?: 'active' | 'sold'; soldPrice?: number; soldDate?: string; quantity?: number; notes?: string;
+    currentPrice?: number; priceDate?: string; status?: 'active' | 'sold'; soldPrice?: number; soldDate?: string; quantity?: number; notes?: string;
     holdingType?: 'stock' | 'mutual_fund'; source?: string;
   }) => {
     const row: any = {};
@@ -1009,21 +1009,24 @@ export function usePaymentState() {
     if (updates.notes !== undefined) row.notes = updates.notes;
     if (updates.holdingType !== undefined) row.holding_type = updates.holdingType;
     if (updates.source !== undefined) row.source = updates.source;
+
+    // Reference price always tracks whichever capture is chronologically latest - a
+    // backdated update (e.g. re-importing an older file) can never move it backwards.
+    // No manual "set as reference" step needed; this just happens automatically.
+    if (updates.currentPrice !== undefined) {
+      const priceDate = updates.priceDate ?? new Date().toISOString().slice(0, 10);
+      const { data: existing } = await supabase.from('portfolio_holdings').select('reference_date').eq('id', id).maybeSingle();
+      if (!existing?.reference_date || priceDate >= existing.reference_date) {
+        row.reference_price = updates.currentPrice;
+        row.reference_date = priceDate;
+      }
+    }
+
     const { error } = await supabase.from('portfolio_holdings').update(row).eq('id', id);
     if (error) throw error;
     if (updates.currentPrice !== undefined && activeWorkspaceId) {
-      await supabase.from('portfolio_price_history').insert({ workspace_id: activeWorkspaceId, holding_id: id, price: updates.currentPrice });
+      await supabase.from('portfolio_price_history').insert({ workspace_id: activeWorkspaceId, holding_id: id, price: updates.currentPrice, recorded_date: updates.priceDate ?? new Date().toISOString().slice(0, 10) });
     }
-    await loadPortfolioDetails();
-  };
-
-  // Explicitly overrides the reference checkpoint (e.g. "make 15/08's price my new baseline").
-  // Distinct from a normal price update - this is a deliberate user action, not automatic.
-  const setPriceReference = async (id: string, price: number, date?: string) => {
-    const { error } = await supabase.from('portfolio_holdings').update({
-      reference_price: price, reference_date: date ?? new Date().toISOString().slice(0, 10),
-    }).eq('id', id);
-    if (error) throw error;
     await loadPortfolioDetails();
   };
 
@@ -1340,7 +1343,7 @@ export function usePaymentState() {
     accessPlans, createAccessPlan, updateAccessPlan, deleteAccessPlan,
     myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan, setSuperAdminStatus,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, setPriceReference, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings,
+    portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioPriceHistory,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
