@@ -122,7 +122,7 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
         quantity: units,
         buyPrice: units > 0 ? invested / units : 0,
         currentPrice: units > 0 ? current / units : 0,
-        source: r['Source'] ? String(r['Source']).trim() : undefined, // "Groww" (bought via app) or "External" (linked via CAS/PAN, bought elsewhere)
+        source: r['Source'] ? (String(r['Source']).trim() === 'Groww' ? 'Bought via Groww' : String(r['Source']).trim()) : undefined, // "Bought via Groww" (purchased through the app) or "External" (linked via CAS/PAN, bought elsewhere) - relabeled so it's not confused with the broker filter
       };
     });
 }
