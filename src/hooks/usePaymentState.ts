@@ -964,7 +964,7 @@ export function usePaymentState() {
       current_price: holding.currentPrice ?? null, current_price_updated_at: holding.currentPrice != null ? new Date().toISOString() : null,
       reference_price: holding.currentPrice ?? holding.buyPrice, reference_date: new Date().toISOString().slice(0, 10),
       notes: holding.notes ?? null,
-      source: holding.source ?? null,
+      source: holding.source ?? null, change_flag: 'added',
       target_type: holding.targetType ?? null, target_price: holding.targetPrice ?? null, target_percent: holding.targetPercent ?? null,
       hold_type: holding.holdType ?? null, hold_days: holding.holdDays ?? null, hold_until_date: holding.holdUntilDate ?? null,
     }).select('id').single();
@@ -987,12 +987,20 @@ export function usePaymentState() {
       quantity: h.quantity, buy_price: h.buyPrice, buy_date: h.buyDate,
       current_price: h.currentPrice ?? null, current_price_updated_at: h.currentPrice != null ? new Date().toISOString() : null,
       reference_price: h.currentPrice ?? h.buyPrice, reference_date: new Date().toISOString().slice(0, 10),
-      source: h.source ?? null,
+      source: h.source ?? null, change_flag: 'added',
     }));
     const { data: inserted, error } = await supabase.from('portfolio_holdings').insert(rows).select('id, current_price');
     if (error) throw error;
     const snapshotRows = (inserted ?? []).filter(r => r.current_price != null).map(r => ({ workspace_id: activeWorkspaceId, holding_id: r.id, price: r.current_price }));
     if (snapshotRows.length > 0) await supabase.from('portfolio_price_history').insert(snapshotRows);
+    await loadPortfolioDetails();
+  };
+
+  // Reconciles an existing holding's quantity against a fresh import, tagging whether
+  // it grew or shrank so it can be filtered like any other tag.
+  const reconcilePortfolioHoldingQuantity = async (id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced') => {
+    const { error } = await supabase.from('portfolio_holdings').update({ quantity: newQuantity, change_flag: changeFlag }).eq('id', id);
+    if (error) throw error;
     await loadPortfolioDetails();
   };
 
@@ -1351,7 +1359,7 @@ export function usePaymentState() {
     accessPlans, createAccessPlan, updateAccessPlan, deleteAccessPlan,
     myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan, setSuperAdminStatus,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings,
+    portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioPriceHistory,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,

@@ -166,6 +166,7 @@ export default function App() {
     portfolioPriceHistory,
     addPortfolioHolding,
     bulkAddPortfolioHoldings,
+    reconcilePortfolioHoldingQuantity,
     updatePortfolioHolding,
     deletePortfolioHolding,
     bulkTagPortfolioHoldings,
@@ -1497,6 +1498,7 @@ export default function App() {
                 portfolioPriceHistory={portfolioPriceHistory}
                 addPortfolioHolding={addPortfolioHolding}
                 bulkAddPortfolioHoldings={bulkAddPortfolioHoldings}
+                reconcilePortfolioHoldingQuantity={reconcilePortfolioHoldingQuantity}
                 updatePortfolioHolding={updatePortfolioHolding}
                 deletePortfolioHolding={deletePortfolioHolding}
                 bulkTagPortfolioHoldings={bulkTagPortfolioHoldings}

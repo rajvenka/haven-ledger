@@ -29,6 +29,7 @@ interface PortfolioViewProps {
   bulkAddPortfolioHoldings: (holdings: {
     holdingType: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string;
   }[]) => Promise<void>;
+  reconcilePortfolioHoldingQuantity: (id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced') => Promise<void>;
   updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
   deletePortfolioHolding: (id: string) => Promise<void>;
   bulkTagPortfolioHoldings: (holdingIds: string[], source: string) => Promise<void>;
@@ -59,7 +60,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings,
+    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
@@ -167,14 +168,18 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
   // Dynamic filter options built from whatever's actually in the data - broker+type combos and source tags
   const [holdingFilters, setHoldingFilters] = useState<Set<string>>(new Set());
+  const CHANGE_FLAG_LABELS: Record<string, string> = { added: 'Added', qty_increased: 'Qty Added', qty_reduced: 'Qty Reduced' };
+
   const filterOptions = useMemo(() => {
     const combos = new Set<string>();
     const sources = new Set<string>();
+    const changes = new Set<string>();
     activeHoldings.forEach(h => {
       combos.add(`${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`);
       if (h.source) sources.add(h.source);
+      if (h.change_flag && CHANGE_FLAG_LABELS[h.change_flag]) changes.add(CHANGE_FLAG_LABELS[h.change_flag]);
     });
-    return { combos: Array.from(combos).sort(), sources: Array.from(sources).sort() };
+    return { combos: Array.from(combos).sort(), sources: Array.from(sources).sort(), changes: Array.from(changes).sort() };
   }, [activeHoldings]);
 
   const toggleHoldingFilter = (value: string) => {
@@ -190,11 +195,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
     if (holdingFilters.size > 0) {
       const selectedCombos = filterOptions.combos.filter(c => holdingFilters.has(c));
       const selectedSources = filterOptions.sources.filter(s => holdingFilters.has(s));
+      const selectedChanges = filterOptions.changes.filter(c => holdingFilters.has(c));
       list = activeHoldings.filter(h => {
         const combo = `${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`;
         const comboOk = selectedCombos.length === 0 || selectedCombos.includes(combo);
         const sourceOk = selectedSources.length === 0 || (h.source && selectedSources.includes(h.source));
-        return comboOk && sourceOk;
+        const changeLabel = h.change_flag ? CHANGE_FLAG_LABELS[h.change_flag] : null;
+        const changeOk = selectedChanges.length === 0 || (changeLabel && selectedChanges.includes(changeLabel));
+        return comboOk && sourceOk && changeOk;
       });
     }
     if (!sortField) return list;
@@ -243,19 +251,29 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [isImporting, setIsImporting] = useState(false);
   const [importTemplate, setImportTemplate] = useState<BrokerTemplate>('zerodha');
   const [importParsing, setImportParsing] = useState(false);
-  const [importPreview, setImportPreview] = useState<{ fresh: ParsedHolding[]; duplicates: number; excludedExternal: number } | null>(null);
+  const [importPreview, setImportPreview] = useState<{
+    fresh: ParsedHolding[];
+    qtyChanged: { parsed: ParsedHolding; existing: any; direction: 'increased' | 'reduced' }[];
+    unchanged: number;
+    excludedExternal: number;
+  } | null>(null);
   const [importSourceTag, setImportSourceTag] = useState('');
   const [importBuyDate, setImportBuyDate] = useState(todayStr());
   const [importSaving, setImportSaving] = useState(false);
 
-  const isDuplicateHolding = (parsed: ParsedHolding) => {
-    return portfolioHoldings.some(h => {
+  type ImportClassification = { status: 'new' } | { status: 'unchanged'; existing: any } | { status: 'qty_changed'; existing: any; direction: 'increased' | 'reduced' };
+
+  const classifyImportRow = (parsed: ParsedHolding): ImportClassification => {
+    const existing = portfolioHoldings.find(h => {
       if (h.status !== 'active') return false;
       if (h.broker !== parsed.broker) return false; // same stock via a different broker is a separate, legitimate holding
       if (parsed.isin && h.isin) return h.isin === parsed.isin;
       // Fall back to symbol match when ISIN isn't available (e.g. Groww MF export)
       return h.symbol === parsed.symbol.toUpperCase() && h.holding_type === parsed.holdingType;
     });
+    if (!existing) return { status: 'new' };
+    if (Number(existing.quantity) === parsed.quantity) return { status: 'unchanged', existing };
+    return { status: 'qty_changed', existing, direction: parsed.quantity > Number(existing.quantity) ? 'increased' : 'reduced' };
   };
 
   const [importRawParsed, setImportRawParsed] = useState<ParsedHolding[] | null>(null);
@@ -283,24 +301,36 @@ export default function PortfolioView(props: PortfolioViewProps) {
   useEffect(() => {
     if (!importRawParsed) { setImportPreview(null); return; }
     const scoped = includeExternal ? importRawParsed : importRawParsed.filter(h => h.source !== 'External');
-    const fresh = scoped.filter(h => !isDuplicateHolding(h));
-    const duplicates = scoped.length - fresh.length;
+    const fresh: ParsedHolding[] = [];
+    const qtyChanged: { parsed: ParsedHolding; existing: any; direction: 'increased' | 'reduced' }[] = [];
+    let unchanged = 0;
+    scoped.forEach(h => {
+      const c = classifyImportRow(h);
+      if (c.status === 'new') fresh.push(h);
+      else if (c.status === 'qty_changed') qtyChanged.push({ parsed: h, existing: c.existing, direction: c.direction });
+      else unchanged++;
+    });
     const excludedExternal = importRawParsed.length - scoped.length;
-    setImportPreview({ fresh, duplicates, excludedExternal });
+    setImportPreview({ fresh, qtyChanged, unchanged, excludedExternal });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importRawParsed, includeExternal]);
 
   const confirmImport = async () => {
-    if (!importPreview || importPreview.fresh.length === 0) return;
+    if (!importPreview || (importPreview.fresh.length === 0 && importPreview.qtyChanged.length === 0)) return;
     setImportSaving(true);
     await runAction(async () => {
-      await bulkAddPortfolioHoldings(
-        importPreview.fresh.map(h => ({
-          holdingType: h.holdingType, broker: h.broker, symbol: h.symbol, isin: h.isin, exchange: h.exchange,
-          quantity: h.quantity, buyPrice: h.buyPrice, buyDate: importBuyDate, currentPrice: h.currentPrice,
-          source: h.source || importSourceTag.trim() || undefined,
-        }))
-      );
+      if (importPreview.fresh.length > 0) {
+        await bulkAddPortfolioHoldings(
+          importPreview.fresh.map(h => ({
+            holdingType: h.holdingType, broker: h.broker, symbol: h.symbol, isin: h.isin, exchange: h.exchange,
+            quantity: h.quantity, buyPrice: h.buyPrice, buyDate: importBuyDate, currentPrice: h.currentPrice,
+            source: h.source || importSourceTag.trim() || undefined,
+          }))
+        );
+      }
+      for (const { parsed, existing, direction } of importPreview.qtyChanged) {
+        await reconcilePortfolioHoldingQuantity(existing.id, parsed.quantity, direction === 'increased' ? 'qty_increased' : 'qty_reduced');
+      }
       setImportPreview(null);
       setImportRawParsed(null); setIncludeExternal(false);
       setImportSourceTag('');
@@ -390,6 +420,16 @@ export default function PortfolioView(props: PortfolioViewProps) {
       await updatePortfolioHolding(id, { currentPrice: val });
       setPriceEdits(prev => { const next = { ...prev }; delete next[id]; return next; });
     });
+  };
+
+  const toggleExpandHolding = (h: any) => {
+    if (expandedHoldingId === h.id) { setExpandedHoldingId(null); return; }
+    setExpandedHoldingId(h.id);
+    setEditTargetType(h.target_type || 'percent');
+    setEditTargetValue(h.target_type === 'price' ? String(h.target_price ?? '') : String(h.target_percent ?? ''));
+    setEditHoldType(h.hold_type || 'date');
+    setEditHoldDays(String(h.hold_days ?? ''));
+    setEditHoldUntilDate(h.hold_until_date || '');
   };
 
   const confirmSell = async () => {
@@ -602,11 +642,28 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-900">
                   <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
                     {importPreview.fresh.length} new holding{importPreview.fresh.length !== 1 ? 's' : ''} found
-                    {importPreview.duplicates > 0 && ` · ${importPreview.duplicates} already in your portfolio (skipped)`}
+                    {importPreview.qtyChanged.length > 0 && ` · ${importPreview.qtyChanged.length} with a changed quantity`}
+                    {importPreview.unchanged > 0 && ` · ${importPreview.unchanged} unchanged (skipped)`}
                     {importPreview.excludedExternal > 0 && ` · ${importPreview.excludedExternal} external fund${importPreview.excludedExternal !== 1 ? 's' : ''} excluded`}
                   </p>
+                  {importPreview.qtyChanged.length > 0 && (
+                    <div className="space-y-1">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">Quantity Changed</span>
+                      <div className="max-h-32 overflow-y-auto space-y-1">
+                        {importPreview.qtyChanged.map((qc, i) => (
+                          <div key={i} className="flex items-center justify-between text-[10px] px-2 py-1 bg-amber-50 dark:bg-amber-950/20 rounded">
+                            <span className="text-slate-600 dark:text-slate-300">{qc.parsed.symbol}</span>
+                            <span className={`font-bold ${qc.direction === 'increased' ? 'text-emerald-600' : 'text-rose-500'}`}>
+                              {qc.existing.quantity} → {qc.parsed.quantity} ({qc.direction === 'increased' ? '+' : ''}{qc.parsed.quantity - Number(qc.existing.quantity)})
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {importPreview.fresh.length > 0 && (
                     <>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">New</span>
                       <div className="max-h-40 overflow-y-auto space-y-1">
                         {importPreview.fresh.map((h, i) => (
                           <div key={i} className="flex items-center justify-between text-[10px] px-2 py-1 bg-slate-50 dark:bg-slate-900 rounded">
@@ -636,14 +693,16 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         placeholder="Tag any without a detected source as e.g. Rajavel Stock SME (optional)"
                         className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
                       />
-                      <button
-                        onClick={confirmImport}
-                        disabled={importSaving}
-                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer"
-                      >
-                        {importSaving ? 'Importing…' : `Import ${importPreview.fresh.length} Holding${importPreview.fresh.length !== 1 ? 's' : ''}`}
-                      </button>
                     </>
+                  )}
+                  {(importPreview.fresh.length > 0 || importPreview.qtyChanged.length > 0) && (
+                    <button
+                      onClick={confirmImport}
+                      disabled={importSaving}
+                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer"
+                    >
+                      {importSaving ? 'Importing…' : `Import ${importPreview.fresh.length} New${importPreview.qtyChanged.length > 0 ? ` + Update ${importPreview.qtyChanged.length}` : ''}`}
+                    </button>
                   )}
                 </div>
               )}
@@ -728,6 +787,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
               ))}
               {filterOptions.sources.map(s => (
                 <button key={s} onClick={() => toggleHoldingFilter(s)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(s) ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}>{s}</button>
+              ))}
+              {filterOptions.changes.map(c => (
+                <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(c) ? 'bg-amber-500 text-white' : 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400'}`}>{c}</button>
               ))}
             </div>
           )}
@@ -842,6 +904,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           <td className="p-2.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-bold text-slate-900 dark:text-white">{h.symbol}</span>
+                              <button
+                                onClick={() => toggleExpandHolding(h)}
+                                title="Set target price & date"
+                                className="text-slate-300 hover:text-indigo-500 cursor-pointer"
+                              >
+                                <ChevronDown className={`w-3 h-3 transition-transform ${expandedHoldingId === h.id ? 'rotate-180' : ''}`} />
+                              </button>
                               <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{h.broker}</span>
                               {!isReadOnly ? (
                                 <button
@@ -855,6 +924,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                 h.holding_type === 'mutual_fund' && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 rounded-full">MF</span>
                               )}
                               {h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
+                              {h.change_flag && CHANGE_FLAG_LABELS[h.change_flag] && <span className="text-[8px] font-black px-1.5 py-0.2 bg-amber-500 text-white rounded-full">{CHANGE_FLAG_LABELS[h.change_flag]}</span>}
                               {h.currency && h.currency !== 'INR' && <span className="text-[8px] font-black px-1.5 py-0.2 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 rounded-full">{h.currency}</span>}
                             </div>
                             {(targetPrice || holdUntil) && (
@@ -912,15 +982,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                 <button onClick={() => runAction(() => deletePortfolioHolding(h.id))} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                               )}
                               <button
-                                onClick={() => {
-                                  if (expandedHoldingId === h.id) { setExpandedHoldingId(null); return; }
-                                  setExpandedHoldingId(h.id);
-                                  setEditTargetType(h.target_type || 'percent');
-                                  setEditTargetValue(h.target_type === 'price' ? String(h.target_price ?? '') : String(h.target_percent ?? ''));
-                                  setEditHoldType(h.hold_type || 'date');
-                                  setEditHoldDays(String(h.hold_days ?? ''));
-                                  setEditHoldUntilDate(h.hold_until_date || '');
-                                }}
+                                onClick={() => toggleExpandHolding(h)}
                                 title="Set target price & date"
                                 className="p-1 text-slate-300 hover:text-indigo-500 cursor-pointer"
                               >
