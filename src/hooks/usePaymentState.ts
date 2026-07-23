@@ -1010,7 +1010,7 @@ export function usePaymentState() {
   // date becomes the current state (price, quantity, reference) - all via the same "latest date
   // wins" reference logic as a normal update.
   const bulkHistoricalImport = async (
-    snapshots: { date: string; holdings: { broker: string; holdingType: 'stock' | 'mutual_fund'; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; source?: string }[] }[]
+    snapshots: { date: string; holdings: { broker: string; holdingType: 'stock' | 'mutual_fund'; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; currentPrice?: number; source?: string }[] }[]
   ) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const sorted = [...snapshots].sort((a, b) => a.date.localeCompare(b.date));
@@ -1059,9 +1059,10 @@ export function usePaymentState() {
           holding_type: first.row.holdingType, broker: first.row.broker, symbol: first.row.symbol.toUpperCase(),
           isin: first.row.isin ?? null, exchange: first.row.exchange,
           quantity: first.row.quantity, buy_price: first.row.buyPrice, buy_date: first.date,
+          current_price: first.row.currentPrice ?? first.row.buyPrice, current_price_updated_at: new Date().toISOString(),
           source: first.row.source ?? null, change_flag: 'added',
           status: wasSoldInBetween ? 'sold' : 'active',
-          sold_price: wasSoldInBetween ? last.row.buyPrice : null,
+          sold_price: wasSoldInBetween ? (last.row.currentPrice ?? last.row.buyPrice) : null,
           sold_date: inferredSoldDate,
         }).select('id').single();
         if (error) throw error;
@@ -1070,8 +1071,10 @@ export function usePaymentState() {
         if (wasSoldInBetween) soldCount++;
       }
 
-      // Every date in this stock's history becomes a price point
-      const historyRows = occurrences.map(o => ({ workspace_id: activeWorkspaceId, holding_id: holdingId, price: o.row.buyPrice, recorded_date: o.date }));
+      // Every date in this stock's history becomes a price point - using the actual market/closing
+      // price where the export provides one, not the average cost, so trend charts show real
+      // price movement rather than a flat line at cost basis.
+      const historyRows = occurrences.map(o => ({ workspace_id: activeWorkspaceId, holding_id: holdingId, price: o.row.currentPrice ?? o.row.buyPrice, recorded_date: o.date }));
       const { error: histErr } = await supabase.from('portfolio_price_history').insert(historyRows);
       if (histErr) throw histErr;
       priceHistoryCount += historyRows.length;
@@ -1079,18 +1082,23 @@ export function usePaymentState() {
       if (existing && wasSoldInBetween) {
         // Was active in our records but is missing from the latest file - mark it sold now
         await supabase.from('portfolio_holdings').update({
-          status: 'sold', sold_price: last.row.buyPrice, sold_date: inferredSoldDate,
+          status: 'sold', sold_price: last.row.currentPrice ?? last.row.buyPrice, sold_date: inferredSoldDate,
         }).eq('id', holdingId);
         soldCount++;
         continue;
       }
 
       if (!wasSoldInBetween) {
-        // Latest date wins for current state - same rule as a normal update
+        // Latest date wins for current state - same rule as a normal update.
+        // buy_price gets refreshed to the latest snapshot's average price (the broker's own
+        // recalculated blended cost basis as of that date), while current_price uses the
+        // actual market/closing price - these were incorrectly conflated before, making
+        // Total Investment inaccurate whenever more of a stock was bought over time.
         const { data: currentRef } = await supabase.from('portfolio_holdings').select('reference_date, quantity').eq('id', holdingId).maybeSingle();
-        const row: any = { current_price: last.row.buyPrice, current_price_updated_at: new Date().toISOString() };
+        const marketPrice = last.row.currentPrice ?? last.row.buyPrice;
+        const row: any = { current_price: marketPrice, current_price_updated_at: new Date().toISOString(), buy_price: last.row.buyPrice };
         if (!currentRef?.reference_date || last.date >= currentRef.reference_date) {
-          row.reference_price = last.row.buyPrice;
+          row.reference_price = marketPrice;
           row.reference_date = last.date;
         }
         if (existing && currentRef && Number(currentRef.quantity) !== last.row.quantity) {

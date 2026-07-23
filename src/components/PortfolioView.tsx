@@ -322,7 +322,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     await runAction(async () => {
       const result = await bulkHistoricalImport(historicalSnapshots.map(s => ({
         date: s.date,
-        holdings: s.holdings.map(h => ({ broker: h.broker, holdingType: h.holdingType, symbol: h.symbol, isin: h.isin, exchange: h.exchange, quantity: h.quantity, buyPrice: h.buyPrice, source: h.source })),
+        holdings: s.holdings.map(h => ({ broker: h.broker, holdingType: h.holdingType, symbol: h.symbol, isin: h.isin, exchange: h.exchange, quantity: h.quantity, buyPrice: h.buyPrice, currentPrice: h.currentPrice, source: h.source })),
       })));
       setHistoricalResult(result);
       setHistoricalSnapshots([]);
