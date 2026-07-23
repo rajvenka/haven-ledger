@@ -126,3 +126,35 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
       };
     });
 }
+
+// Extracts the date this snapshot represents, so multiple dated exports can be
+// processed as a historical timeline. Zerodha embeds it in the sheet ("...as on
+// YYYY-MM-DD"); Groww embeds it in the filename (DD-MM-YYYY).
+export function extractFileDate(fileName: string, workbook: XLSX.WorkBook, template: BrokerTemplate): string | null {
+  if (template === 'zerodha') {
+    for (const sheetName of workbook.SheetNames) {
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: null }) as any[][];
+      for (const row of rows) {
+        for (const cell of row) {
+          if (typeof cell === 'string') {
+            const m = cell.match(/as on (\d{4}-\d{2}-\d{2})/);
+            if (m) return m[1];
+          }
+        }
+      }
+    }
+    return null;
+  }
+  // Groww: filename contains DD-MM-YYYY
+  const m = fileName.match(/(\d{2})-(\d{2})-(\d{4})/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  return null;
+}
+
+export async function parseBrokerFileWithDate(file: File, template: BrokerTemplate): Promise<{ holdings: ParsedHolding[]; fileDate: string | null }> {
+  const buf = await file.arrayBuffer();
+  const workbook = XLSX.read(buf, { type: 'array' });
+  const fileDate = extractFileDate(file.name, workbook, template);
+  const holdings = await parseBrokerFile(file, template);
+  return { holdings, fileDate };
+}

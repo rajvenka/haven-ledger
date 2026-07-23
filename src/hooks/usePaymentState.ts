@@ -1004,6 +1004,85 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
+  // Processes multiple dated broker exports as a historical timeline in one pass: for each
+  // stock, the earliest known date becomes its buy_date/buy_price if it's genuinely new, every
+  // date in between becomes a price_history point (building a real trend line), and the latest
+  // date becomes the current state (price, quantity, reference) - all via the same "latest date
+  // wins" reference logic as a normal update.
+  const bulkHistoricalImport = async (
+    snapshots: { date: string; holdings: { broker: string; holdingType: 'stock' | 'mutual_fund'; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; source?: string }[] }[]
+  ) => {
+    if (!activeWorkspaceId) throw new Error('Select a workspace first.');
+    const sorted = [...snapshots].sort((a, b) => a.date.localeCompare(b.date));
+
+    // Group every (date, row) occurrence by a stable stock key
+    const byKey = new Map<string, { date: string; row: any }[]>();
+    sorted.forEach(snap => {
+      snap.holdings.forEach(row => {
+        const key = `${row.broker}::${row.isin || row.symbol.toUpperCase()}::${row.holdingType}`;
+        if (!byKey.has(key)) byKey.set(key, []);
+        byKey.get(key)!.push({ date: snap.date, row });
+      });
+    });
+
+    let newCount = 0;
+    let updatedCount = 0;
+    let priceHistoryCount = 0;
+
+    for (const [, occurrences] of byKey) {
+      occurrences.sort((a, b) => a.date.localeCompare(b.date));
+      const first = occurrences[0];
+      const last = occurrences[occurrences.length - 1];
+
+      let holdingId: string;
+      const existing = portfolioHoldings.find(h => {
+        if (h.status !== 'active') return false;
+        if (h.broker !== first.row.broker) return false;
+        if (first.row.isin && h.isin) return h.isin === first.row.isin;
+        return h.symbol === first.row.symbol.toUpperCase() && h.holding_type === first.row.holdingType;
+      });
+
+      if (existing) {
+        holdingId = existing.id;
+      } else {
+        const { data: inserted, error } = await supabase.from('portfolio_holdings').insert({
+          workspace_id: activeWorkspaceId, created_by: user?.id ?? null,
+          holding_type: first.row.holdingType, broker: first.row.broker, symbol: first.row.symbol.toUpperCase(),
+          isin: first.row.isin ?? null, exchange: first.row.exchange,
+          quantity: first.row.quantity, buy_price: first.row.buyPrice, buy_date: first.date,
+          source: first.row.source ?? null, change_flag: 'added',
+        }).select('id').single();
+        if (error) throw error;
+        holdingId = inserted.id;
+        newCount++;
+      }
+
+      // Every date in this stock's history becomes a price point
+      const historyRows = occurrences.map(o => ({ workspace_id: activeWorkspaceId, holding_id: holdingId, price: o.row.buyPrice, recorded_date: o.date }));
+      const { error: histErr } = await supabase.from('portfolio_price_history').insert(historyRows);
+      if (histErr) throw histErr;
+      priceHistoryCount += historyRows.length;
+
+      // Latest date wins for current state - same rule as a normal update
+      const { data: currentRef } = await supabase.from('portfolio_holdings').select('reference_date, quantity').eq('id', holdingId).maybeSingle();
+      const row: any = { current_price: last.row.buyPrice, current_price_updated_at: new Date().toISOString() };
+      if (!currentRef?.reference_date || last.date >= currentRef.reference_date) {
+        row.reference_price = last.row.buyPrice;
+        row.reference_date = last.date;
+      }
+      if (existing && currentRef && Number(currentRef.quantity) !== last.row.quantity) {
+        row.quantity = last.row.quantity;
+        row.change_flag = last.row.quantity > Number(currentRef.quantity) ? 'qty_increased' : 'qty_reduced';
+        updatedCount++;
+      }
+      const { error: updErr } = await supabase.from('portfolio_holdings').update(row).eq('id', holdingId);
+      if (updErr) throw updErr;
+    }
+
+    await loadPortfolioDetails();
+    return { newCount, updatedCount, priceHistoryCount, stockCount: byKey.size };
+  };
+
   const updatePortfolioHolding = async (id: string, updates: {
     currentPrice?: number; priceDate?: string; status?: 'active' | 'sold'; soldPrice?: number; soldDate?: string; quantity?: number; notes?: string;
     holdingType?: 'stock' | 'mutual_fund'; source?: string;
@@ -1359,7 +1438,7 @@ export function usePaymentState() {
     accessPlans, createAccessPlan, updateAccessPlan, deleteAccessPlan,
     myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan, setSuperAdminStatus,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings,
+    portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioPriceHistory,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,

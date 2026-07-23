@@ -1,4 +1,4 @@
-import { parseBrokerFile, BrokerTemplate, ParsedHolding } from '../utils/brokerImport';
+import { parseBrokerFile, parseBrokerFileWithDate, BrokerTemplate, ParsedHolding } from '../utils/brokerImport';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   TrendingUp, TrendingDown, Plus, Trash2, RefreshCw, Users, Wallet,
@@ -30,6 +30,7 @@ interface PortfolioViewProps {
     holdingType: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string;
   }[]) => Promise<void>;
   reconcilePortfolioHoldingQuantity: (id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced') => Promise<void>;
+  bulkHistoricalImport: (snapshots: { date: string; holdings: any[] }[]) => Promise<{ newCount: number; updatedCount: number; priceHistoryCount: number; stockCount: number }>;
   updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
   deletePortfolioHolding: (id: string) => Promise<void>;
   bulkTagPortfolioHoldings: (holdingIds: string[], source: string) => Promise<void>;
@@ -60,7 +61,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings,
+    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
@@ -278,6 +279,56 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
   const [importRawParsed, setImportRawParsed] = useState<ParsedHolding[] | null>(null);
   const [includeExternal, setIncludeExternal] = useState(false);
+
+  // ---- Historical backfill (multiple dated files at once) ----
+  const [isHistoricalMode, setIsHistoricalMode] = useState(false);
+  const [historicalTemplate, setHistoricalTemplate] = useState<BrokerTemplate>('zerodha');
+  const [historicalParsing, setHistoricalParsing] = useState(false);
+  const [historicalSnapshots, setHistoricalSnapshots] = useState<{ date: string; holdings: ParsedHolding[]; fileName: string }[]>([]);
+  const [historicalSaving, setHistoricalSaving] = useState(false);
+  const [historicalResult, setHistoricalResult] = useState<{ newCount: number; updatedCount: number; priceHistoryCount: number; stockCount: number } | null>(null);
+
+  const handleHistoricalFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files: File[] = e.target.files ? Array.from(e.target.files) : [];
+    if (files.length === 0) return;
+    setHistoricalParsing(true);
+    setFormError(null);
+    try {
+      const parsed = await Promise.all(files.map(async f => {
+        const { holdings, fileDate } = await parseBrokerFileWithDate(f, historicalTemplate);
+        return { date: fileDate, holdings, fileName: f.name };
+      }));
+      const missingDate = parsed.find(p => !p.date);
+      if (missingDate) throw new Error(`Couldn't find a date in "${missingDate.fileName}" - check it's the right file type.`);
+      // Dedupe by date - if two files claim the same date, keep whichever has more rows
+      const byDate = new Map<string, { date: string; holdings: ParsedHolding[]; fileName: string }>();
+      parsed.forEach(p => {
+        const existing = byDate.get(p.date!);
+        if (!existing || p.holdings.length > existing.holdings.length) byDate.set(p.date!, { date: p.date!, holdings: p.holdings, fileName: p.fileName });
+      });
+      setHistoricalSnapshots(Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date)));
+      setHistoricalResult(null);
+    } catch (err: any) {
+      setFormError(err?.message || 'Could not read one of those files.');
+    } finally {
+      setHistoricalParsing(false);
+      e.target.value = '';
+    }
+  };
+
+  const confirmHistoricalImport = async () => {
+    if (historicalSnapshots.length < 1) return;
+    setHistoricalSaving(true);
+    await runAction(async () => {
+      const result = await bulkHistoricalImport(historicalSnapshots.map(s => ({
+        date: s.date,
+        holdings: s.holdings.map(h => ({ broker: h.broker, holdingType: h.holdingType, symbol: h.symbol, isin: h.isin, exchange: h.exchange, quantity: h.quantity, buyPrice: h.buyPrice, source: h.source })),
+      })));
+      setHistoricalResult(result);
+      setHistoricalSnapshots([]);
+    });
+    setHistoricalSaving(false);
+  };
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -572,6 +623,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
             >
               <Upload className="w-3.5 h-3.5" /> Import from Broker
             </button>
+            <button
+              onClick={() => { setIsHistoricalMode(!isHistoricalMode); setHistoricalSnapshots([]); setHistoricalResult(null); }}
+              className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+            >
+              <Upload className="w-3.5 h-3.5" /> Backfill History
+            </button>
             <button onClick={() => setIsAddingHolding(!isAddingHolding)} className="apple-btn-primary px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5">
               <Plus className="w-3.5 h-3.5" /> Add Holding
             </button>
@@ -705,6 +762,54 @@ export default function PortfolioView(props: PortfolioViewProps) {
                     </button>
                   )}
                 </div>
+              )}
+            </div>
+          )}
+
+          {isHistoricalMode && (
+            <div className="apple-card p-4 space-y-3">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Backfill Historical Prices</span>
+              <p className="text-[9px] text-slate-400">Select several dated exports from the same broker at once (e.g. one file per month). Each file's date is detected automatically, and the whole timeline is processed together - the earliest file sets when a stock was first known, every date becomes a price point for the trend charts, and the latest file becomes the current price.</p>
+              <div className="flex gap-1.5 flex-wrap">
+                <button type="button" onClick={() => { setHistoricalTemplate('zerodha'); setHistoricalSnapshots([]); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${historicalTemplate === 'zerodha' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Zerodha (Stocks + MF)</button>
+                <button type="button" onClick={() => { setHistoricalTemplate('groww_stocks'); setHistoricalSnapshots([]); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${historicalTemplate === 'groww_stocks' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Stocks</button>
+                <button type="button" onClick={() => { setHistoricalTemplate('groww_mf'); setHistoricalSnapshots([]); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${historicalTemplate === 'groww_mf' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Mutual Funds</button>
+              </div>
+
+              <label className="flex flex-col items-center justify-center gap-2 px-4 py-6 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500 rounded-xl cursor-pointer transition-colors bg-slate-50/50 dark:bg-slate-900/50">
+                <Upload className="w-5 h-5 text-slate-400" />
+                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{historicalParsing ? 'Reading files…' : 'Click to choose multiple .xlsx files'}</span>
+                <span className="text-[10px] text-slate-400">select all your dated exports at once</span>
+                <input type="file" accept=".xlsx,.xls" multiple onChange={handleHistoricalFiles} disabled={historicalParsing} className="hidden" />
+              </label>
+
+              {historicalSnapshots.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                    {historicalSnapshots.length} dated snapshot{historicalSnapshots.length !== 1 ? 's' : ''} found, {historicalSnapshots[0].date} → {historicalSnapshots[historicalSnapshots.length - 1].date}
+                  </p>
+                  <div className="max-h-40 overflow-y-auto space-y-1">
+                    {historicalSnapshots.map(s => (
+                      <div key={s.date} className="flex items-center justify-between text-[10px] px-2 py-1 bg-slate-50 dark:bg-slate-900 rounded">
+                        <span className="text-slate-600 dark:text-slate-300">{s.date}</span>
+                        <span className="text-slate-400">{s.holdings.length} holdings · {s.fileName}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={confirmHistoricalImport}
+                    disabled={historicalSaving}
+                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer"
+                  >
+                    {historicalSaving ? 'Processing timeline…' : `Process ${historicalSnapshots.length} Snapshots`}
+                  </button>
+                </div>
+              )}
+
+              {historicalResult && (
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                  Done: {historicalResult.stockCount} stocks processed, {historicalResult.newCount} newly added, {historicalResult.updatedCount} quantity updated, {historicalResult.priceHistoryCount} price points recorded.
+                </p>
               )}
             </div>
           )}
