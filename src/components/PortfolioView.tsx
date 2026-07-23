@@ -216,19 +216,24 @@ export default function PortfolioView(props: PortfolioViewProps) {
     return Number(h.live_price) >= ltp ? 'Price Up (Live)' : 'Price Down (Live)';
   };
 
+  const UNCLASSIFIED_LABEL = 'Unclassified';
+
   const filterOptions = useMemo(() => {
     const combos = new Set<string>();
     const sources = new Set<string>();
     const changes = new Set<string>();
     const priceMoves = new Set<string>();
+    let hasUnclassified = false;
     activeHoldings.forEach(h => {
       combos.add(`${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`);
-      if (h.source) sources.add(h.source);
+      if (h.source) sources.add(h.source); else hasUnclassified = true;
       if (h.change_flag && CHANGE_FLAG_LABELS[h.change_flag]) changes.add(CHANGE_FLAG_LABELS[h.change_flag]);
       const moveLabel = getSinceUploadLabel(h);
       if (moveLabel) priceMoves.add(moveLabel);
     });
-    return { combos: Array.from(combos).sort(), sources: Array.from(sources).sort(), changes: Array.from(changes).sort(), priceMoves: Array.from(priceMoves).sort() };
+    const sortedSources = Array.from(sources).sort();
+    if (hasUnclassified) sortedSources.push(UNCLASSIFIED_LABEL);
+    return { combos: Array.from(combos).sort(), sources: sortedSources, changes: Array.from(changes).sort(), priceMoves: Array.from(priceMoves).sort() };
   }, [activeHoldings]);
 
   const toggleHoldingFilter = (value: string) => {
@@ -249,7 +254,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       list = activeHoldings.filter(h => {
         const combo = `${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`;
         const comboOk = selectedCombos.length === 0 || selectedCombos.includes(combo);
-        const sourceOk = selectedSources.length === 0 || (h.source && selectedSources.includes(h.source));
+        const sourceOk = selectedSources.length === 0 || (h.source ? selectedSources.includes(h.source) : selectedSources.includes(UNCLASSIFIED_LABEL));
         const changeLabel = h.change_flag ? CHANGE_FLAG_LABELS[h.change_flag] : null;
         const changeOk = selectedChanges.length === 0 || (changeLabel && selectedChanges.includes(changeLabel));
         const moveLabel = getSinceUploadLabel(h);
@@ -302,11 +307,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const soldFilterOptions = useMemo(() => {
     const combos = new Set<string>();
     const sources = new Set<string>();
+    let hasUnclassified = false;
     soldHoldings.forEach(h => {
       combos.add(`${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`);
-      if (h.source) sources.add(h.source);
+      if (h.source) sources.add(h.source); else hasUnclassified = true;
     });
-    return { combos: Array.from(combos).sort(), sources: Array.from(sources).sort() };
+    const sortedSources = Array.from(sources).sort();
+    if (hasUnclassified) sortedSources.push(UNCLASSIFIED_LABEL);
+    return { combos: Array.from(combos).sort(), sources: sortedSources };
   }, [soldHoldings]);
 
   const toggleSoldHoldingFilter = (value: string) => {
@@ -330,7 +338,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       list = soldHoldings.filter(h => {
         const combo = `${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`;
         const comboOk = selectedCombos.length === 0 || selectedCombos.includes(combo);
-        const sourceOk = selectedSources.length === 0 || (h.source && selectedSources.includes(h.source));
+        const sourceOk = selectedSources.length === 0 || (h.source ? selectedSources.includes(h.source) : selectedSources.includes(UNCLASSIFIED_LABEL));
         return comboOk && sourceOk;
       });
     }

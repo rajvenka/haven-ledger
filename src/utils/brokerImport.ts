@@ -125,7 +125,7 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
         quantity: units,
         buyPrice: units > 0 ? invested / units : 0,
         currentPrice: units > 0 ? current / units : 0,
-        source: r['Source'] ? (String(r['Source']).trim() === 'Groww' ? 'Bought via Groww' : String(r['Source']).trim()) : undefined,
+        source: r['Source'] && String(r['Source']).trim() === 'External' ? 'External' : undefined,
       };
     });
 }
