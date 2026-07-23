@@ -1524,8 +1524,16 @@ export default function App() {
                 workspaceName={activeWorkspace?.name}
                 workspaceMembers={familyMembers}
                 isReadOnly={isReadOnly}
+                portfolioSplits={portfolioSplits}
+                addPortfolioSplit={addPortfolioSplit}
+                deletePortfolioSplit={deletePortfolioSplit}
                 portfolioContributions={portfolioContributions}
                 addPortfolioContribution={addPortfolioContribution}
+                updatePortfolioContribution={updatePortfolioContribution}
+                deletePortfolioContribution={deletePortfolioContribution}
+                portfolioWithdrawals={portfolioWithdrawals}
+                addPortfolioWithdrawal={addPortfolioWithdrawal}
+                deletePortfolioWithdrawal={deletePortfolioWithdrawal}
                 portfolioRecurringPlans={portfolioRecurringPlans}
                 addPortfolioRecurringPlan={addPortfolioRecurringPlan}
                 updatePortfolioRecurringPlan={updatePortfolioRecurringPlan}
