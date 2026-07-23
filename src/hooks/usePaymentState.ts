@@ -952,7 +952,7 @@ export function usePaymentState() {
 
   const addPortfolioHolding = async (holding: {
     holdingType?: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; notes?: string;
-    source?: string;
+    source?: string; currency?: 'INR' | 'USD' | 'AUD';
     targetType?: 'price' | 'percent'; targetPrice?: number; targetPercent?: number;
     holdType?: 'days' | 'date'; holdDays?: number; holdUntilDate?: string;
   }) => {
@@ -960,7 +960,7 @@ export function usePaymentState() {
     const { data: inserted, error } = await supabase.from('portfolio_holdings').insert({
       workspace_id: activeWorkspaceId, created_by: user?.id ?? null,
       holding_type: holding.holdingType ?? 'stock', broker: holding.broker, symbol: holding.symbol.toUpperCase(), isin: holding.isin ?? null, exchange: holding.exchange,
-      quantity: holding.quantity, buy_price: holding.buyPrice, buy_date: holding.buyDate,
+      quantity: holding.quantity, buy_price: holding.buyPrice, buy_date: holding.buyDate, currency: holding.currency ?? 'INR',
       current_price: holding.currentPrice ?? null, current_price_updated_at: holding.currentPrice != null ? new Date().toISOString() : null,
       reference_price: holding.currentPrice ?? holding.buyPrice, reference_date: new Date().toISOString().slice(0, 10),
       notes: holding.notes ?? null,

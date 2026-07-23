@@ -22,7 +22,7 @@ interface PortfolioViewProps {
   portfolioPriceHistory: any[];
   addPortfolioHolding: (h: {
     holdingType?: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; notes?: string;
-    source?: string;
+    source?: string; currency?: 'INR' | 'USD' | 'AUD';
     targetType?: 'price' | 'percent'; targetPrice?: number; targetPercent?: number;
     holdType?: 'days' | 'date'; holdDays?: number; holdUntilDate?: string;
   }) => Promise<void>;
@@ -87,6 +87,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [hPrice, setHPrice] = useState('');
   const [hDate, setHDate] = useState(todayStr());
   const [hSource, setHSource] = useState('');
+  const [hCurrency, setHCurrency] = useState<'INR' | 'USD' | 'AUD'>('INR');
   const [showTargetPlan, setShowTargetPlan] = useState(false);
   const [hTargetType, setHTargetType] = useState<'price' | 'percent'>('percent');
   const [hTargetValue, setHTargetValue] = useState('');
@@ -220,7 +221,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
   // ---- Broker file import ----
   const [isImporting, setIsImporting] = useState(false);
-  const [importTemplate, setImportTemplate] = useState<BrokerTemplate>('zerodha_stocks');
+  const [importTemplate, setImportTemplate] = useState<BrokerTemplate>('zerodha');
   const [importParsing, setImportParsing] = useState(false);
   const [importPreview, setImportPreview] = useState<{ fresh: ParsedHolding[]; duplicates: number } | null>(null);
   const [importSourceTag, setImportSourceTag] = useState('');
@@ -335,6 +336,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       await addPortfolioHolding({
         holdingType: hHoldingType, broker: hBroker, symbol: hSymbol, exchange: hExchange, quantity: parseFloat(hQty), buyPrice: parseFloat(hPrice), buyDate: hDate,
         source: hSource.trim() || undefined,
+        currency: hCurrency,
         targetType: showTargetPlan && hTargetValue ? hTargetType : undefined,
         targetPrice: showTargetPlan && hTargetType === 'price' && hTargetValue ? parseFloat(hTargetValue) : undefined,
         targetPercent: showTargetPlan && hTargetType === 'percent' && hTargetValue ? parseFloat(hTargetValue) : undefined,
@@ -552,12 +554,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <div className="apple-card p-4 space-y-3">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Import Holdings File</span>
               <div className="flex gap-1.5 flex-wrap">
-                <button type="button" onClick={() => { setImportTemplate('zerodha_stocks'); setImportPreview(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'zerodha_stocks' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Zerodha Stocks</button>
+                <button type="button" onClick={() => { setImportTemplate('zerodha'); setImportPreview(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'zerodha' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Zerodha (Stocks + MF)</button>
                 <button type="button" onClick={() => { setImportTemplate('groww_stocks'); setImportPreview(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'groww_stocks' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Stocks</button>
                 <button type="button" onClick={() => { setImportTemplate('groww_mf'); setImportPreview(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'groww_mf' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Mutual Funds</button>
               </div>
               <p className="text-[9px] text-slate-400">
-                {importTemplate === 'zerodha_stocks' && "Console → Holdings → Download as XLSX"}
+                {importTemplate === 'zerodha' && "Console → Holdings → Download as XLSX (stocks and mutual funds are both detected automatically)"}
                 {importTemplate === 'groww_stocks' && "Groww app → Reports → Stocks Holdings Statement (XLSX)"}
                 {importTemplate === 'groww_mf' && "Groww app → Reports → Mutual Funds Holdings Statement (XLSX)"}
                 {' '}· Prices/quantities come from the file at export time. Already-imported holdings are automatically skipped.
@@ -581,7 +583,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       <div className="max-h-40 overflow-y-auto space-y-1">
                         {importPreview.fresh.map((h, i) => (
                           <div key={i} className="flex items-center justify-between text-[10px] px-2 py-1 bg-slate-50 dark:bg-slate-900 rounded">
-                            <span className="text-slate-600 dark:text-slate-300">{h.symbol}</span>
+                            <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                              {h.symbol}
+                              {h.holdingType === 'mutual_fund' && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 rounded-full">MF</span>}
+                            </span>
                             <span className="text-slate-400">{h.quantity} @ ₹{h.buyPrice.toFixed(2)}</span>
                           </div>
                         ))}
@@ -636,6 +641,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <input type="number" value={hQty} onChange={(e) => setHQty(e.target.value)} placeholder={hHoldingType === 'stock' ? 'Quantity' : 'Units'} className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
                 <input type="number" value={hPrice} onChange={(e) => setHPrice(e.target.value)} placeholder={hHoldingType === 'stock' ? 'Buy price/share' : 'Buy NAV'} className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
                 <input type="date" value={hDate} onChange={(e) => setHDate(e.target.value)} className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                <select value={hCurrency} onChange={(e) => setHCurrency(e.target.value as any)} className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" title="Currency this holding is tracked in">
+                  <option value="INR">₹ INR</option>
+                  <option value="USD">$ USD</option>
+                  <option value="AUD">A$ AUD</option>
+                </select>
                 <input
                   type="text"
                   list="source-suggestions"
@@ -693,6 +703,33 @@ export default function PortfolioView(props: PortfolioViewProps) {
               ))}
             </div>
           )}
+
+          {holdingFilter !== 'all' && (() => {
+            const subInvested = filteredActiveHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
+            const subCurrent = filteredActiveHoldings.reduce((s, h) => s + Number(h.current_price ?? h.buy_price) * Number(h.quantity), 0);
+            const subGain = subCurrent - subInvested;
+            const subGainPct = subInvested > 0 ? (subGain / subInvested) * 100 : 0;
+            return (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="apple-card p-3 bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
+                  <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{holdingFilter}" Invested</span>
+                  <span className="text-sm font-black text-slate-900 dark:text-white">{fmt(subInvested)}</span>
+                </div>
+                <div className="apple-card p-3 bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
+                  <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{holdingFilter}" Current Value</span>
+                  <span className="text-sm font-black text-slate-900 dark:text-white">{fmt(subCurrent)}</span>
+                </div>
+                <div className="apple-card p-3 bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
+                  <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{holdingFilter}" Net Gain</span>
+                  <span className={`text-sm font-black ${subGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{subGain >= 0 ? '+' : ''}{fmt(subGain)}</span>
+                </div>
+                <div className="apple-card p-3 bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
+                  <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{holdingFilter}" % Chg</span>
+                  <span className={`text-sm font-black ${subGainPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{subGainPct >= 0 ? '+' : ''}{subGainPct.toFixed(2)}%</span>
+                </div>
+              </div>
+            );
+          })()}
 
           <div>
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Active ({filteredActiveHoldings.length}{holdingFilter !== 'all' ? ` of ${activeHoldings.length}` : ''})</span>
@@ -788,6 +825,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                 h.holding_type === 'mutual_fund' && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 rounded-full">MF</span>
                               )}
                               {h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
+                              {h.currency && h.currency !== 'INR' && <span className="text-[8px] font-black px-1.5 py-0.2 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 rounded-full">{h.currency}</span>}
                             </div>
                             {(targetPrice || holdUntil) && (
                               <div className="flex items-center gap-2 mt-1">

@@ -11,7 +11,7 @@ export interface ParsedHolding {
   currentPrice: number;
 }
 
-export type BrokerTemplate = 'zerodha_stocks' | 'groww_stocks' | 'groww_mf';
+export type BrokerTemplate = 'zerodha' | 'groww_stocks' | 'groww_mf';
 
 // These files all have a few preamble rows (client name, summary figures) before
 // the actual data table starts, so we scan for the header row instead of assuming row 0.
@@ -38,30 +38,50 @@ function rowsToObjects(rows: any[][], headerIdx: number): Record<string, any>[] 
   return out;
 }
 
+function parseZerodhaSheet(rows: any[][], holdingType: 'stock' | 'mutual_fund'): ParsedHolding[] {
+  const headerIdx = findHeaderRowIndex(rows, 'Symbol');
+  if (headerIdx === -1) return [];
+  const records = rowsToObjects(rows, headerIdx);
+  return records
+    .filter(r => r['Symbol'])
+    .map(r => ({
+      broker: 'Zerodha' as const,
+      holdingType,
+      symbol: String(r['Symbol']).trim(),
+      isin: r['ISIN'] ? String(r['ISIN']).trim() : undefined,
+      exchange: 'NSE' as const,
+      quantity: (Number(r['Quantity Available']) || 0) + (Number(r['Quantity Pledged (Margin)']) || 0),
+      buyPrice: Number(r['Average Price']) || 0,
+      currentPrice: Number(r['Previous Closing Price']) || 0,
+    }))
+    .filter(h => h.quantity > 0);
+}
+
 export async function parseBrokerFile(file: File, template: BrokerTemplate): Promise<ParsedHolding[]> {
   const buf = await file.arrayBuffer();
   const workbook = XLSX.read(buf, { type: 'array' });
+
+  if (template === 'zerodha') {
+    // Zerodha's own export contains multiple sheets in one file - Equity (stocks) and
+    // Mutual Funds - so both get parsed automatically instead of needing separate uploads
+    // or manual re-tagging after the fact.
+    const results: ParsedHolding[] = [];
+    const equitySheetName = workbook.SheetNames.find(n => n.toLowerCase() === 'equity') || workbook.SheetNames[0];
+    if (equitySheetName) {
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[equitySheetName], { header: 1, defval: null }) as any[][];
+      results.push(...parseZerodhaSheet(rows, 'stock'));
+    }
+    const mfSheetName = workbook.SheetNames.find(n => n.toLowerCase().includes('mutual fund'));
+    if (mfSheetName) {
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[mfSheetName], { header: 1, defval: null }) as any[][];
+      results.push(...parseZerodhaSheet(rows, 'mutual_fund'));
+    }
+    if (results.length === 0) throw new Error("Couldn't find any holdings - is this a Zerodha holdings export?");
+    return results;
+  }
+
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
-
-  if (template === 'zerodha_stocks') {
-    const headerIdx = findHeaderRowIndex(rows, 'Symbol');
-    if (headerIdx === -1) throw new Error("Couldn't find the 'Symbol' column - is this a Zerodha holdings export?");
-    const records = rowsToObjects(rows, headerIdx);
-    return records
-      .filter(r => r['Symbol'])
-      .map(r => ({
-        broker: 'Zerodha' as const,
-        holdingType: 'stock' as const,
-        symbol: String(r['Symbol']).trim(),
-        isin: r['ISIN'] ? String(r['ISIN']).trim() : undefined,
-        exchange: 'NSE' as const,
-        quantity: (Number(r['Quantity Available']) || 0) + (Number(r['Quantity Pledged (Margin)']) || 0),
-        buyPrice: Number(r['Average Price']) || 0,
-        currentPrice: Number(r['Previous Closing Price']) || 0,
-      }))
-      .filter(h => h.quantity > 0);
-  }
 
   if (template === 'groww_stocks') {
     const headerIdx = findHeaderRowIndex(rows, 'Stock Name');
