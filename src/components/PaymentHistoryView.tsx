@@ -69,7 +69,7 @@ export default function PaymentHistoryView({
   });
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-4 text-left select-none bg-slate-50 dark:bg-slate-900">
+    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-4 text-left bg-slate-50 dark:bg-slate-900">
       
       {/* Title Bar with clear action */}
       <div className="flex justify-between items-center px-1 shrink-0">

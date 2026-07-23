@@ -205,7 +205,7 @@ export default function AiInsights({
   const isRealAiResult = insightsData !== null && !usingOfflinePreview;
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-6 text-left select-none bg-slate-50 dark:bg-slate-900">
+    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-6 text-left bg-slate-50 dark:bg-slate-900">
       {/* Header Block */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-2xl text-white shadow-sm border border-slate-200/10 relative overflow-hidden">
         <div className="absolute right-0 top-0 translate-x-12 -translate-y-6 w-48 h-48 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />

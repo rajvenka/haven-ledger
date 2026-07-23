@@ -358,7 +358,7 @@ export default function AccountInfo({
   const familyPercentReal = totalSum > 0 ? (familyOnlyTotal / totalSum) * 100 : 0;
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-4 text-left select-none bg-slate-50 dark:bg-slate-900">
+    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-4 text-left bg-slate-50 dark:bg-slate-900">
       
       {/* Title Bar with Instructions Toggle */}
       <div className="flex justify-between items-center px-1 shrink-0">

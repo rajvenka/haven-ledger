@@ -673,11 +673,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const totalDividends = portfolioDividends.reduce((s, d) => s + Number(d.amount), 0);
   const totalFees = portfolioFees.reduce((s, f) => s + Number(f.amount), 0);
   const totalInvestedAllTime = totalInvestedActive + soldHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
-  const netGain = unrealizedGain + realizedGain + totalDividends - totalFees;
+  const netGain = (balanceCash + currentValueActive) - netContributed;
   const returnPct = netContributed > 0 ? (netGain / netContributed) * 100 : 0;
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-5 text-left select-none bg-slate-50 dark:bg-slate-900">
+    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-5 text-left bg-slate-50 dark:bg-slate-900">
       {/* Header */}
       <div className="flex items-center gap-2">
         <Briefcase className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
@@ -765,7 +765,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         <div className="apple-card p-4">
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Net Gain (P&L, all-in)</span>
           <span className={`text-base font-black ${netGain >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>{fmt(netGain)}</span>
-          <span className="text-[9px] text-slate-400 block mt-0.5">incl. dividends & fees</span>
+          <span className="text-[9px] text-slate-400 block mt-0.5">cash + stock value vs. contributed</span>
         </div>
       </div>
 

@@ -22,6 +22,7 @@ interface ReportsViewProps {
   addPortfolioFee: (broker: string, feeType: string, amount: number, date: string, notes?: string) => Promise<void>;
   deletePortfolioFee: (id: string) => Promise<void>;
   portfolioSplits: any[];
+  portfolioCashBalances: any[];
   portfolioSnapshots: any[];
   takePortfolioSnapshot: (date: string, groups: { label: string; invested: number; current: number }[]) => Promise<void>;
   deletePortfolioSnapshotBatch: (date: string) => Promise<void>;
@@ -37,7 +38,7 @@ export default function ReportsView(props: ReportsViewProps) {
     portfolioHoldings, portfolioContributions, portfolioWithdrawals,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
-    portfolioSplits, portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
+    portfolioSplits, portfolioCashBalances, portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
   } = props;
 
   const [formError, setFormError] = useState<string | null>(null);
@@ -57,6 +58,7 @@ export default function ReportsView(props: ReportsViewProps) {
   const totalContributed = portfolioContributions.reduce((s, c) => s + Number(c.amount), 0);
   const totalWithdrawn = portfolioWithdrawals.reduce((s, w) => s + Number(w.amount), 0);
   const netContributed = totalContributed - totalWithdrawn;
+  const balanceCash = portfolioCashBalances.reduce((s: number, c: any) => s + Number(c.amount), 0);
   const totalInvestedActive = activeHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
   const currentValueActive = activeHoldings.reduce((s, h) => s + Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity), 0);
   const unrealizedGain = currentValueActive - totalInvestedActive;
@@ -64,7 +66,7 @@ export default function ReportsView(props: ReportsViewProps) {
   const totalDividends = portfolioDividends.reduce((s, d) => s + Number(d.amount), 0);
   const totalFees = portfolioFees.reduce((s, f) => s + Number(f.amount), 0);
   const totalInvestedAllTime = totalInvestedActive + soldHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
-  const netGain = unrealizedGain + realizedGain + totalDividends - totalFees;
+  const netGain = (balanceCash + currentValueActive) - netContributed;
   const returnPct = netContributed > 0 ? (netGain / netContributed) * 100 : 0;
 
   const currentSplits = workspaceMembers.map(m => {
@@ -74,7 +76,7 @@ export default function ReportsView(props: ReportsViewProps) {
   });
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-5 text-left select-none bg-slate-50 dark:bg-slate-900">
+    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-5 text-left bg-slate-50 dark:bg-slate-900">
       <div className="flex items-center gap-2">
         <FileBarChart className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
         <h2 className="text-lg font-bold text-slate-900 dark:text-white">{workspaceName ? `${workspaceName} Reports` : 'Reports'}</h2>

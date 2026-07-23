@@ -1568,6 +1568,7 @@ export default function App() {
                 addPortfolioFee={addPortfolioFee}
                 deletePortfolioFee={deletePortfolioFee}
                 portfolioSplits={portfolioSplits}
+                portfolioCashBalances={portfolioCashBalances}
                 portfolioSnapshots={portfolioSnapshots}
                 takePortfolioSnapshot={takePortfolioSnapshot}
                 deletePortfolioSnapshotBatch={deletePortfolioSnapshotBatch}

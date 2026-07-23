@@ -141,7 +141,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-5 text-left select-none bg-slate-50 dark:bg-slate-900">
+    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-5 text-left bg-slate-50 dark:bg-slate-900">
       <div className="flex items-center gap-2">
         <ClipboardList className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
         <h2 className="text-lg font-bold text-slate-900 dark:text-white">{workspaceName ? `${workspaceName} Investment Plan` : 'Investment Plan'}</h2>
