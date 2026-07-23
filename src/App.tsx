@@ -183,6 +183,9 @@ export default function App() {
     portfolioWithdrawals,
     addPortfolioWithdrawal,
     deletePortfolioWithdrawal,
+    portfolioCashBalances,
+    setPortfolioCashBalance,
+    deletePortfolioCashBalance,
     portfolioDividends,
     addPortfolioDividend,
     deletePortfolioDividend,
@@ -1507,6 +1510,7 @@ export default function App() {
                 bulkTagPortfolioHoldings={bulkTagPortfolioHoldings}
                 bulkDeletePortfolioHoldings={bulkDeletePortfolioHoldings}
                 deleteAllPortfolioData={deleteAllPortfolioData}
+                portfolioCashBalances={portfolioCashBalances}
                 portfolioSnapshots={portfolioSnapshots}
                 takePortfolioSnapshot={takePortfolioSnapshot}
                 deletePortfolioSnapshotBatch={deletePortfolioSnapshotBatch}
@@ -1539,6 +1543,9 @@ export default function App() {
                 portfolioWithdrawals={portfolioWithdrawals}
                 addPortfolioWithdrawal={addPortfolioWithdrawal}
                 deletePortfolioWithdrawal={deletePortfolioWithdrawal}
+                portfolioCashBalances={portfolioCashBalances}
+                setPortfolioCashBalance={setPortfolioCashBalance}
+                deletePortfolioCashBalance={deletePortfolioCashBalance}
                 portfolioRecurringPlans={portfolioRecurringPlans}
                 addPortfolioRecurringPlan={addPortfolioRecurringPlan}
                 updatePortfolioRecurringPlan={updatePortfolioRecurringPlan}

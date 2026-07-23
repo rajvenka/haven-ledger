@@ -16,6 +16,7 @@ interface PortfolioViewProps {
   workspaceMembers: WorkspaceMemberLite[];
   isReadOnly?: boolean;
   portfolioSplits: any[];
+  portfolioCashBalances: any[];
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
   deletePortfolioSplit: (id: string) => Promise<void>;
   portfolioHoldings: any[];
@@ -61,7 +62,7 @@ const memberName = (m: WorkspaceMemberLite) => m.displayName || m.email.split('@
 export default function PortfolioView(props: PortfolioViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly,
-    portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
+    portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances,
     portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
@@ -568,6 +569,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const totalWithdrawn = portfolioWithdrawals.reduce((s, w) => s + Number(w.amount), 0);
   const netContributed = totalContributed - totalWithdrawn;
   const totalInvestedActive = activeHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
+  const balanceCash = portfolioCashBalances.reduce((s: number, c: any) => s + Number(c.amount), 0);
+  const totalStockInvestment = totalInvestedActive; // current cost basis of active stock + MF holdings
+  const bookedProfitLoss = (balanceCash + totalStockInvestment) - netContributed;
   const currentValueActive = activeHoldings.reduce((s, h) => s + Number(h.current_price ?? h.buy_price) * Number(h.quantity), 0);
   const unrealizedGain = currentValueActive - totalInvestedActive;
   const realizedGain = soldHoldings.reduce((s, h) => s + (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity), 0);
@@ -610,12 +614,33 @@ export default function PortfolioView(props: PortfolioViewProps) {
       )}
 
       {/* Headline stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="apple-card p-4">
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Total Investment</span>
           <span className="text-base font-black text-slate-900 dark:text-white">{fmt(netContributed)}</span>
           <span className="text-[9px] text-slate-400 block mt-0.5">actual contributions, net of withdrawals</span>
         </div>
+        <div className="apple-card p-4">
+          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Balance Cash</span>
+          <span className="text-base font-black text-slate-900 dark:text-white">{fmt(balanceCash)}</span>
+          <span className="text-[9px] text-slate-400 block mt-0.5">from Investment Plan</span>
+        </div>
+        <div className="apple-card p-4">
+          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Booked Profit/Loss</span>
+          <span className={`text-base font-black flex items-center gap-1 ${bookedProfitLoss >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+            {bookedProfitLoss >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+            {fmt(Math.abs(bookedProfitLoss))}
+          </span>
+          <span className="text-[9px] text-slate-400 block mt-0.5">cash + stock value vs. contributed</span>
+        </div>
+        <div className="apple-card p-4">
+          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Total Stock Investment</span>
+          <span className="text-base font-black text-slate-900 dark:text-white">{fmt(totalStockInvestment)}</span>
+          <span className="text-[9px] text-slate-400 block mt-0.5">stock & MF purchase value</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="apple-card p-4">
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Current Holdings Value</span>
           <span className="text-base font-black text-slate-900 dark:text-white">{fmt(currentValueActive)}</span>

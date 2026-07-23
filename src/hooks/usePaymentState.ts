@@ -918,6 +918,7 @@ export function usePaymentState() {
   const [portfolioSplits, setPortfolioSplits] = useState<any[]>([]);
   const [portfolioContributions, setPortfolioContributions] = useState<any[]>([]);
   const [portfolioWithdrawals, setPortfolioWithdrawals] = useState<any[]>([]);
+  const [portfolioCashBalances, setPortfolioCashBalances] = useState<any[]>([]);
   const [portfolioDividends, setPortfolioDividends] = useState<any[]>([]);
   const [portfolioFees, setPortfolioFees] = useState<any[]>([]);
   const [portfolioRecurringPlans, setPortfolioRecurringPlans] = useState<any[]>([]);
@@ -925,10 +926,10 @@ export function usePaymentState() {
   const loadPortfolioDetails = useCallback(async () => {
     if (!activeWorkspaceId) {
       setPortfolioHoldings([]); setPortfolioPriceHistory([]); setPortfolioSplits([]); setPortfolioContributions([]); setPortfolioWithdrawals([]);
-      setPortfolioDividends([]); setPortfolioFees([]); setPortfolioRecurringPlans([]);
+      setPortfolioDividends([]); setPortfolioFees([]); setPortfolioRecurringPlans([]); setPortfolioCashBalances([]);
       return;
     }
-    const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }] = await Promise.all([
+    const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: cashBalances }] = await Promise.all([
       supabase.from('portfolio_holdings').select('*').eq('workspace_id', activeWorkspaceId).order('buy_date', { ascending: false }),
       supabase.from('portfolio_price_history').select('*').eq('workspace_id', activeWorkspaceId).order('recorded_date', { ascending: false }),
       supabase.from('portfolio_splits').select('*').eq('workspace_id', activeWorkspaceId).order('effective_from'),
@@ -937,6 +938,7 @@ export function usePaymentState() {
       supabase.from('portfolio_dividends').select('*').eq('workspace_id', activeWorkspaceId).order('dividend_date', { ascending: false }),
       supabase.from('portfolio_fees').select('*').eq('workspace_id', activeWorkspaceId).order('fee_date', { ascending: false }),
       supabase.from('portfolio_recurring_plans').select('*').eq('workspace_id', activeWorkspaceId).order('created_at'),
+      supabase.from('portfolio_cash_balances').select('*').eq('workspace_id', activeWorkspaceId).order('location'),
     ]);
     setPortfolioHoldings(holdings ?? []);
     setPortfolioPriceHistory(priceHistory ?? []);
@@ -946,6 +948,7 @@ export function usePaymentState() {
     setPortfolioDividends(dividends ?? []);
     setPortfolioFees(fees ?? []);
     setPortfolioRecurringPlans(plans ?? []);
+    setPortfolioCashBalances(cashBalances ?? []);
   }, [activeWorkspaceId]);
 
   useEffect(() => { if (isLoaded) loadPortfolioDetails(); }, [isLoaded, loadPortfolioDetails]);
@@ -1283,6 +1286,23 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
+  // One row per location - upserts on (workspace_id, location), so setting it again just
+  // updates the current balance rather than creating a growing log.
+  const setPortfolioCashBalance = async (location: 'Zerodha' | 'Groww' | 'Bank' | 'Other', amount: number, asOfDate?: string, notes?: string) => {
+    if (!activeWorkspaceId) throw new Error('Select a workspace first.');
+    const { error } = await supabase.from('portfolio_cash_balances').upsert({
+      workspace_id: activeWorkspaceId, location, amount, as_of_date: asOfDate ?? new Date().toISOString().slice(0, 10), notes: notes ?? null, updated_at: new Date().toISOString(),
+    }, { onConflict: 'workspace_id,location' });
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
+  const deletePortfolioCashBalance = async (id: string) => {
+    const { error } = await supabase.from('portfolio_cash_balances').delete().eq('id', id);
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
   const addPortfolioDividend = async (symbol: string, amount: number, dividendDate: string, holdingId?: string, notes?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_dividends').insert({
@@ -1494,6 +1514,7 @@ export function usePaymentState() {
     portfolioPriceHistory,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
+    portfolioCashBalances, setPortfolioCashBalance, deletePortfolioCashBalance,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
     portfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,

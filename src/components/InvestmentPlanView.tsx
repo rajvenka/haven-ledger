@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Trash2, Users, Wallet, Edit2, CheckCircle2, X, ClipboardList } from 'lucide-react';
+import { Trash2, Users, Wallet, Edit2, CheckCircle2, X, ClipboardList, Banknote } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface WorkspaceMemberLite {
   uid: string;
@@ -21,6 +22,9 @@ interface InvestmentPlanViewProps {
   portfolioWithdrawals: any[];
   addPortfolioWithdrawal: (memberUserId: string, amount: number, date: string, notes?: string) => Promise<void>;
   deletePortfolioWithdrawal: (id: string) => Promise<void>;
+  portfolioCashBalances: any[];
+  setPortfolioCashBalance: (location: 'Zerodha' | 'Groww' | 'Bank' | 'Other', amount: number, asOfDate?: string, notes?: string) => Promise<void>;
+  deletePortfolioCashBalance: (id: string) => Promise<void>;
   portfolioRecurringPlans: any[];
   addPortfolioRecurringPlan: (memberUserId: string, amount: number, frequency: 'monthly' | 'quarterly' | 'yearly', startDate: string, dayOfMonth?: number) => Promise<void>;
   updatePortfolioRecurringPlan: (id: string, updates: { active?: boolean; expectedAmount?: number }) => Promise<void>;
@@ -37,6 +41,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
+    portfolioCashBalances, setPortfolioCashBalance, deletePortfolioCashBalance,
     portfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,
   } = props;
 
@@ -84,6 +89,11 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const [wMemberId, setWMemberId] = useState('');
   const [wAmount, setWAmount] = useState('');
   const [wDate, setWDate] = useState(todayStr());
+
+  // ---- Cash Balance ----
+  const CASH_LOCATIONS: ('Zerodha' | 'Groww' | 'Bank' | 'Other')[] = ['Zerodha', 'Groww', 'Bank', 'Other'];
+  const [editingCashLocation, setEditingCashLocation] = useState<string | null>(null);
+  const [cashAmountInput, setCashAmountInput] = useState('');
 
   const handleAddWithdrawal = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,6 +150,31 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
       {formError && (
         <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 rounded-xl text-[11px] text-rose-600 dark:text-rose-400 font-semibold">{formError}</div>
       )}
+
+      {portfolioContributions.length > 0 && (() => {
+        const events = [
+          ...portfolioContributions.map((c: any) => ({ date: c.contribution_date, delta: Number(c.amount) })),
+          ...portfolioWithdrawals.map((w: any) => ({ date: w.withdrawal_date, delta: -Number(w.amount) })),
+        ].sort((a, b) => a.date.localeCompare(b.date));
+        let running = 0;
+        const chartData = events.map(e => { running += e.delta; return { date: e.date, total: running }; });
+        return (
+          <div className="apple-card p-4 space-y-2">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Contribution Growth</span>
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.3} vertical={false} />
+                  <XAxis dataKey="date" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${(v / 100000).toFixed(1)}L`} />
+                  <Tooltip formatter={(v: number) => [fmt(v), 'Total Contributed']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                  <Line type="monotone" dataKey="total" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="apple-card p-4 space-y-3">
         <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Split Among Workspace Members</span>
@@ -284,6 +319,56 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      <div className="apple-card p-4 space-y-3">
+        <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Banknote className="w-3.5 h-3.5" /> Cash Balance</span>
+        <p className="text-[9px] text-slate-400">Uninvested cash sitting in each location - contributed but not yet deployed into holdings.</p>
+        <div className="grid grid-cols-2 gap-2">
+          {CASH_LOCATIONS.map(loc => {
+            const existing = portfolioCashBalances.find((c: any) => c.location === loc);
+            const isEditing = editingCashLocation === loc;
+            return (
+              <div key={loc} className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                <span className="text-[9px] font-bold text-slate-400 uppercase block mb-1">{loc}</span>
+                {isEditing ? (
+                  <div className="flex gap-1.5">
+                    <input
+                      type="number"
+                      value={cashAmountInput}
+                      onChange={(e) => setCashAmountInput(e.target.value)}
+                      autoFocus
+                      className="w-full px-2 py-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                    />
+                    <button
+                      onClick={() => runAction(async () => {
+                        await setPortfolioCashBalance(loc, parseFloat(cashAmountInput) || 0);
+                        setEditingCashLocation(null);
+                      })}
+                      className="p-1.5 bg-indigo-600 text-white rounded-md cursor-pointer shrink-0"
+                    ><CheckCircle2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setEditingCashLocation(null)} className="p-1.5 text-slate-400 cursor-pointer shrink-0"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-black text-slate-900 dark:text-white">{fmt(Number(existing?.amount ?? 0))}</span>
+                    {!isReadOnly && (
+                      <button
+                        onClick={() => { setEditingCashLocation(loc); setCashAmountInput(String(existing?.amount ?? '')); }}
+                        className="text-slate-300 hover:text-indigo-500 cursor-pointer"
+                      ><Edit2 className="w-3 h-3" /></button>
+                    )}
+                  </div>
+                )}
+                {existing?.as_of_date && <span className="text-[8px] text-slate-400 block mt-1">as of {existing.as_of_date}</span>}
+              </div>
+            );
+          })}
+        </div>
+        <div className="pt-1 flex justify-between text-xs">
+          <span className="font-bold text-slate-500">Total Cash</span>
+          <span className="font-black text-slate-900 dark:text-white">{fmt(portfolioCashBalances.reduce((s: number, c: any) => s + Number(c.amount), 0))}</span>
         </div>
       </div>
 
