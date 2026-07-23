@@ -1240,12 +1240,15 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               </div>
                             )}
                           </td>
-                          <td
-                            className="p-2.5 text-right text-slate-600 dark:text-slate-300 whitespace-nowrap cursor-pointer"
-                            onClick={() => toggleQtyExpand(h.id)}
-                            title="Tap to see full precision"
-                          >
-                            {expandedQtyIds.has(h.id) ? String(h.quantity) : fmtQty(Number(h.quantity))}
+                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300 whitespace-nowrap relative">
+                            <span onClick={() => toggleQtyExpand(h.id)} className="cursor-pointer">
+                              {fmtQty(Number(h.quantity))}
+                            </span>
+                            {expandedQtyIds.has(h.id) && (
+                              <div className="absolute right-0 bottom-full mb-1 z-10 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-nowrap">
+                                {h.quantity}
+                              </div>
+                            )}
                           </td>
                           <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">₹{Number(h.buy_price).toFixed(2)}</td>
                           <td className="p-2.5 text-right">
@@ -1467,12 +1470,15 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               {h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
                             </div>
                           </td>
-                          <td
-                            className="p-2.5 text-right text-slate-600 dark:text-slate-300 whitespace-nowrap cursor-pointer"
-                            onClick={() => toggleQtyExpand(h.id)}
-                            title="Tap to see full precision"
-                          >
-                            {expandedQtyIds.has(h.id) ? String(h.quantity) : fmtQty(Number(h.quantity))}
+                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300 whitespace-nowrap relative">
+                            <span onClick={() => toggleQtyExpand(h.id)} className="cursor-pointer">
+                              {fmtQty(Number(h.quantity))}
+                            </span>
+                            {expandedQtyIds.has(h.id) && (
+                              <div className="absolute right-0 bottom-full mb-1 z-10 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-nowrap">
+                                {h.quantity}
+                              </div>
+                            )}
                           </td>
                           <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">₹{Number(h.buy_price).toFixed(2)}</td>
                           <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">₹{Number(h.sold_price).toFixed(2)}</td>
