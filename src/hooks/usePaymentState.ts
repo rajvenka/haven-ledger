@@ -1048,6 +1048,37 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
+  // ---------- Portfolio snapshots (for Monthly Movement Report) ----------
+  const [portfolioSnapshots, setPortfolioSnapshots] = useState<any[]>([]);
+
+  const loadPortfolioSnapshots = useCallback(async () => {
+    if (!activeWorkspaceId) { setPortfolioSnapshots([]); return; }
+    const { data } = await supabase.from('portfolio_snapshots').select('*').eq('workspace_id', activeWorkspaceId).order('snapshot_date', { ascending: false });
+    setPortfolioSnapshots(data ?? []);
+  }, [activeWorkspaceId]);
+
+  useEffect(() => { if (isLoaded) loadPortfolioSnapshots(); }, [isLoaded, loadPortfolioSnapshots]);
+
+  // Takes a snapshot of today's portfolio value, grouped by source tag (plus an overall
+  // TOTAL row), so it can be compared against a later snapshot in the Monthly Movement Report.
+  const takePortfolioSnapshot = async (date: string, groups: { label: string; invested: number; current: number }[]) => {
+    if (!activeWorkspaceId) throw new Error('Select a workspace first.');
+    const rows = groups.map(g => ({
+      workspace_id: activeWorkspaceId, snapshot_date: date, label: g.label,
+      invested_value: g.invested, current_value: g.current, created_by: user?.id ?? null,
+    }));
+    const { error } = await supabase.from('portfolio_snapshots').insert(rows);
+    if (error) throw error;
+    await loadPortfolioSnapshots();
+  };
+
+  const deletePortfolioSnapshotBatch = async (date: string) => {
+    if (!activeWorkspaceId) return;
+    const { error } = await supabase.from('portfolio_snapshots').delete().eq('workspace_id', activeWorkspaceId).eq('snapshot_date', date);
+    if (error) throw error;
+    await loadPortfolioSnapshots();
+  };
+
   const addPortfolioSplit = async (memberUserId: string, splitPercent: number, effectiveFrom: string, effectiveTo?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_splits').insert({
@@ -1310,6 +1341,7 @@ export function usePaymentState() {
     myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan, setSuperAdminStatus,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
     portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, setPriceReference, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings,
+    portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioPriceHistory,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,

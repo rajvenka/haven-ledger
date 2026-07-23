@@ -34,6 +34,9 @@ interface PortfolioViewProps {
   deletePortfolioHolding: (id: string) => Promise<void>;
   bulkTagPortfolioHoldings: (holdingIds: string[], source: string) => Promise<void>;
   bulkDeletePortfolioHoldings: (holdingIds: string[]) => Promise<void>;
+  portfolioSnapshots: any[];
+  takePortfolioSnapshot: (date: string, groups: { label: string; invested: number; current: number }[]) => Promise<void>;
+  deletePortfolioSnapshotBatch: (date: string) => Promise<void>;
   portfolioContributions: any[];
   addPortfolioContribution: (memberUserId: string, amount: number, date: string, notes?: string, contributionType?: 'one_off' | 'recurring') => Promise<void>;
   updatePortfolioContribution: (id: string, updates: { amount?: number; contributionDate?: string }) => Promise<void>;
@@ -58,13 +61,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
     workspaceName, workspaceMembers, isReadOnly,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
     portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, updatePortfolioHolding, setPriceReference, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings,
+    portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
   } = props;
 
-  const [tab, setTab] = useState<'holdings' | 'contributions' | 'statement'>('holdings');
+  const [tab, setTab] = useState<'holdings' | 'contributions' | 'reports'>('holdings');
   const [formError, setFormError] = useState<string | null>(null);
 
   const runAction = async (fn: () => Promise<any>) => {
@@ -500,7 +504,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
       {/* Tabs */}
       <div className="flex border-b border-slate-150 dark:border-slate-800 gap-1">
-        {(['holdings', 'contributions', 'statement'] as const).map(t => (
+        {(['holdings', 'contributions', 'reports'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -1119,9 +1123,132 @@ export default function PortfolioView(props: PortfolioViewProps) {
         </div>
       )}
 
-      {/* STATEMENT TAB */}
-      {tab === 'statement' && (
+      {/* REPORTS TAB */}
+      {tab === 'reports' && (
         <div className="space-y-4">
+          {/* Monthly Movement Report */}
+          <div className="apple-card p-4 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Monthly Movement Report</span>
+              {!isReadOnly && (
+                <button
+                  onClick={() => runAction(async () => {
+                    const bySource = new Map<string, { invested: number; current: number }>();
+                    activeHoldings.forEach(h => {
+                      const key = h.source || 'Untagged';
+                      const invested = Number(h.buy_price) * Number(h.quantity);
+                      const current = Number(h.current_price ?? h.buy_price) * Number(h.quantity);
+                      const prev = bySource.get(key) || { invested: 0, current: 0 };
+                      bySource.set(key, { invested: prev.invested + invested, current: prev.current + current });
+                    });
+                    const groups = Array.from(bySource.entries()).map(([label, v]) => ({ label, ...v }));
+                    const totalInvested = groups.reduce((s, g) => s + g.invested, 0);
+                    const totalCurrent = groups.reduce((s, g) => s + g.current, 0);
+                    groups.push({ label: 'Total Asset Value', invested: totalInvested, current: totalCurrent });
+                    await takePortfolioSnapshot(todayStr(), groups);
+                  })}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
+                >
+                  Take Snapshot Today
+                </button>
+              )}
+            </div>
+            {(() => {
+              const dates = Array.from(new Set(portfolioSnapshots.map(s => s.snapshot_date))).sort().reverse();
+              if (dates.length < 2) {
+                return <p className="text-[11px] text-slate-400">Take at least 2 snapshots (e.g. one this month, one next month) to see movement between them. {dates.length === 1 ? `1 snapshot recorded so far (${dates[0]}).` : ''}</p>;
+              }
+              const newerDate = dates[0];
+              const olderDate = dates[1];
+              const newerRows = portfolioSnapshots.filter(s => s.snapshot_date === newerDate);
+              const olderRows = portfolioSnapshots.filter(s => s.snapshot_date === olderDate);
+              const labels = Array.from(new Set([...olderRows.map(r => r.label), ...newerRows.map(r => r.label)]));
+              const orderedLabels = [...labels.filter(l => l !== 'Total Asset Value'), ...(labels.includes('Total Asset Value') ? ['Total Asset Value'] : [])];
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs min-w-[640px]">
+                    <thead>
+                      <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                        <th className="p-2 text-left">List</th>
+                        <th className="p-2 text-right">{olderDate} Value</th>
+                        <th className="p-2 text-right">{newerDate} Value</th>
+                        <th className="p-2 text-right">Difference</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-900">
+                      {orderedLabels.map(label => {
+                        const older = olderRows.find(r => r.label === label);
+                        const newer = newerRows.find(r => r.label === label);
+                        const olderVal = Number(older?.current_value ?? 0);
+                        const newerVal = Number(newer?.current_value ?? 0);
+                        const diff = newerVal - olderVal;
+                        const isTotal = label === 'Total Asset Value';
+                        return (
+                          <tr key={label} className={isTotal ? 'font-black' : ''}>
+                            <td className="p-2 text-slate-700 dark:text-slate-300">{label}</td>
+                            <td className="p-2 text-right text-slate-500">{older ? fmt(olderVal) : '—'}</td>
+                            <td className="p-2 text-right text-slate-900 dark:text-white">{newer ? fmt(newerVal) : '—'}</td>
+                            <td className={`p-2 text-right font-bold ${diff >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{diff >= 0 ? '+' : ''}{fmt(diff)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {!isReadOnly && (
+                    <button onClick={() => runAction(() => deletePortfolioSnapshotBatch(newerDate))} className="mt-2 text-[9px] font-bold text-rose-400 hover:text-rose-500 cursor-pointer">Delete {newerDate} snapshot</button>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Month-wise Profit & Loss */}
+          <div className="apple-card p-4 space-y-3">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Month-wise Profit & Loss</span>
+            {(() => {
+              const monthMap = new Map<string, { realized: number; dividends: number; fees: number }>();
+              const monthKey = (d: string) => d.slice(0, 7); // YYYY-MM
+              soldHoldings.forEach(h => {
+                const key = monthKey(h.sold_date);
+                const gain = (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity);
+                const prev = monthMap.get(key) || { realized: 0, dividends: 0, fees: 0 };
+                monthMap.set(key, { ...prev, realized: prev.realized + gain });
+              });
+              portfolioDividends.forEach(d => {
+                const key = monthKey(d.dividend_date);
+                const prev = monthMap.get(key) || { realized: 0, dividends: 0, fees: 0 };
+                monthMap.set(key, { ...prev, dividends: prev.dividends + Number(d.amount) });
+              });
+              portfolioFees.forEach(f => {
+                const key = monthKey(f.fee_date);
+                const prev = monthMap.get(key) || { realized: 0, dividends: 0, fees: 0 };
+                monthMap.set(key, { ...prev, fees: prev.fees + Number(f.amount) });
+              });
+              const months = Array.from(monthMap.keys()).sort().reverse();
+              if (months.length === 0) return <p className="text-[11px] text-slate-400">No sold holdings, dividends, or fees recorded yet.</p>;
+              return (
+                <div className="divide-y divide-slate-100 dark:divide-slate-900">
+                  {months.map(m => {
+                    const { realized, dividends, fees } = monthMap.get(m)!;
+                    const net = realized + dividends - fees;
+                    const label = new Date(`${m}-01`).toLocaleString('default', { month: 'long', year: 'numeric' });
+                    return (
+                      <div key={m} className="py-2 flex items-center justify-between text-xs">
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">{label}</span>
+                        <span className="text-slate-500">
+                          Realized {fmt(realized)} · Div +{fmt(dividends)} · Fees -{fmt(fees)} ·{' '}
+                          <span className={`font-bold ${net >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>Net {net >= 0 ? '+' : ''}{fmt(net)}</span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
+
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block pt-2">Summary Report</span>
+
           {activeHoldings.some(h => h.target_type) && (
             <div className="apple-card p-4 space-y-2">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Target Progress</span>
