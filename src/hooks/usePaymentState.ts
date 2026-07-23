@@ -1028,7 +1028,7 @@ export function usePaymentState() {
       snap.holdings.forEach(row => {
         // Folio number, not fund name, is the real unique identifier for Groww MF - the same
         // scheme name can appear under multiple folios (e.g. one External, one direct).
-        const key = `${row.broker}::${row.isin || row.folioNumber || row.symbol.toUpperCase()}::${row.holdingType}`;
+        const key = `${row.broker}::${row.isin || (row.folioNumber ? `${row.folioNumber}::${row.symbol.toUpperCase()}` : row.symbol.toUpperCase())}::${row.holdingType}`;
         if (!byKey.has(key)) byKey.set(key, []);
         byKey.get(key)!.push({ date: snap.date, row });
       });
@@ -1069,7 +1069,7 @@ export function usePaymentState() {
       const existing = portfolioHoldings.find(h => {
         if (h.broker !== first.row.broker) return false;
         if (first.row.isin && h.isin) return h.isin === first.row.isin;
-        if (first.row.folioNumber && h.folio_number) return h.folio_number === first.row.folioNumber;
+        if (first.row.folioNumber && h.folio_number) return h.folio_number === first.row.folioNumber && h.symbol === first.row.symbol.toUpperCase();
         return h.symbol === first.row.symbol.toUpperCase() && h.holding_type === first.row.holdingType && !h.folio_number && !first.row.folioNumber;
       });
 

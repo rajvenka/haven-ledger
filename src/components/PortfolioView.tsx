@@ -388,7 +388,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       if (parsed.isin && h.isin) return h.isin === parsed.isin;
       // Groww MF: the same fund name can appear more than once under different folios
       // (e.g. one External, one bought via the app) - folio number is what's actually unique.
-      if (parsed.folioNumber && h.folio_number) return h.folio_number === parsed.folioNumber;
+      if (parsed.folioNumber && h.folio_number) return h.folio_number === parsed.folioNumber && h.symbol === parsed.symbol.toUpperCase();
       return h.symbol === parsed.symbol.toUpperCase() && h.holding_type === parsed.holdingType && !h.folio_number && !parsed.folioNumber;
     });
     if (!existing) return { status: 'new' };
