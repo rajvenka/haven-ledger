@@ -963,6 +963,7 @@ export function usePaymentState() {
     const { data: inserted, error } = await supabase.from('portfolio_holdings').insert({
       workspace_id: activeWorkspaceId, created_by: user?.id ?? null,
       holding_type: holding.holdingType ?? 'stock', broker: holding.broker, symbol: holding.symbol.toUpperCase(), isin: holding.isin ?? null, exchange: holding.exchange,
+      ticker: holding.broker === 'Zerodha' ? holding.symbol.toUpperCase() : null,
       quantity: holding.quantity, buy_price: holding.buyPrice, buy_date: holding.buyDate, currency: holding.currency ?? 'INR',
       current_price: holding.currentPrice ?? null, current_price_updated_at: holding.currentPrice != null ? new Date().toISOString() : null,
       reference_price: holding.currentPrice ?? holding.buyPrice, reference_date: new Date().toISOString().slice(0, 10),
@@ -987,6 +988,7 @@ export function usePaymentState() {
     const rows = holdings.map(h => ({
       workspace_id: activeWorkspaceId, created_by: user?.id ?? null,
       holding_type: h.holdingType, broker: h.broker, symbol: h.symbol.toUpperCase(), isin: h.isin ?? null, folio_number: h.folioNumber ?? null, exchange: h.exchange,
+      ticker: h.broker === 'Zerodha' ? h.symbol.toUpperCase() : null,
       quantity: h.quantity, buy_price: h.buyPrice, buy_date: h.buyDate,
       current_price: h.currentPrice ?? null, current_price_updated_at: h.currentPrice != null ? new Date().toISOString() : null,
       reference_price: h.currentPrice ?? h.buyPrice, reference_date: new Date().toISOString().slice(0, 10),
@@ -1097,6 +1099,7 @@ export function usePaymentState() {
           workspace_id: activeWorkspaceId, created_by: user?.id ?? null,
           holding_type: first.row.holdingType, broker: first.row.broker, symbol: first.row.symbol.toUpperCase(),
           isin: first.row.isin ?? null, folio_number: first.row.folioNumber ?? null, exchange: first.row.exchange,
+          ticker: first.row.broker === 'Zerodha' ? first.row.symbol.toUpperCase() : null,
           quantity: first.row.quantity, buy_price: first.row.buyPrice, buy_date: first.date,
           current_price: first.row.currentPrice ?? first.row.buyPrice, current_price_updated_at: new Date().toISOString(),
           source: first.row.source ?? null, change_flag: 'added',
@@ -1136,6 +1139,7 @@ export function usePaymentState() {
         const { data: currentRef } = await supabase.from('portfolio_holdings').select('reference_date, quantity').eq('id', holdingId).maybeSingle();
         const marketPrice = last.row.currentPrice ?? last.row.buyPrice;
         const row: any = { current_price: marketPrice, current_price_updated_at: new Date().toISOString(), buy_price: last.row.buyPrice };
+        if (last.row.broker === 'Zerodha') row.ticker = last.row.symbol.toUpperCase();
         if (!currentRef?.reference_date || last.date >= currentRef.reference_date) {
           row.reference_price = marketPrice;
           row.reference_date = last.date;
@@ -1156,7 +1160,7 @@ export function usePaymentState() {
 
   const updatePortfolioHolding = async (id: string, updates: {
     currentPrice?: number; priceDate?: string; status?: 'active' | 'sold'; soldPrice?: number; soldDate?: string; quantity?: number; notes?: string;
-    holdingType?: 'stock' | 'mutual_fund'; source?: string;
+    holdingType?: 'stock' | 'mutual_fund'; source?: string; ticker?: string | null;
     targetType?: 'price' | 'percent' | null; targetPrice?: number | null; targetPercent?: number | null;
     holdType?: 'days' | 'date' | null; holdDays?: number | null; holdUntilDate?: string | null;
   }) => {
@@ -1169,6 +1173,7 @@ export function usePaymentState() {
     if (updates.notes !== undefined) row.notes = updates.notes;
     if (updates.holdingType !== undefined) row.holding_type = updates.holdingType;
     if (updates.source !== undefined) row.source = updates.source;
+    if (updates.ticker !== undefined) row.ticker = updates.ticker;
     if (updates.targetType !== undefined) row.target_type = updates.targetType;
     if (updates.targetPrice !== undefined) row.target_price = updates.targetPrice;
     if (updates.targetPercent !== undefined) row.target_percent = updates.targetPercent;
@@ -1193,6 +1198,14 @@ export function usePaymentState() {
     if (updates.currentPrice !== undefined && activeWorkspaceId) {
       await supabase.from('portfolio_price_history').insert({ workspace_id: activeWorkspaceId, holding_id: id, price: updates.currentPrice, recorded_date: updates.priceDate ?? new Date().toISOString().slice(0, 10) });
     }
+    await loadPortfolioDetails();
+  };
+
+  // Live-refreshed price, kept entirely separate from current_price (the file-sourced LTP) -
+  // this was the source of a real corruption bug where the two would overwrite each other.
+  const updatePortfolioHoldingLivePrice = async (id: string, price: number) => {
+    const { error } = await supabase.from('portfolio_holdings').update({ live_price: price, live_price_updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) throw error;
     await loadPortfolioDetails();
   };
 
@@ -1542,7 +1555,7 @@ export function usePaymentState() {
     accessPlans, createAccessPlan, updateAccessPlan, deleteAccessPlan,
     myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan, setSuperAdminStatus,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
+    portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, updatePortfolioHoldingLivePrice, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioPriceHistory,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,

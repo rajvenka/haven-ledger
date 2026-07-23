@@ -33,6 +33,7 @@ interface PortfolioViewProps {
   reconcilePortfolioHoldingQuantity: (id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced') => Promise<void>;
   bulkHistoricalImport: (snapshots: { date: string; holdings: any[] }[]) => Promise<{ newCount: number; updatedCount: number; soldCount: number; skippedStaleCount: number; priceHistoryCount: number; stockCount: number }>;
   updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
+  updatePortfolioHoldingLivePrice: (id: string, price: number) => Promise<void>;
   deletePortfolioHolding: (id: string) => Promise<void>;
   bulkTagPortfolioHoldings: (holdingIds: string[], source: string) => Promise<void>;
   bulkDeletePortfolioHoldings: (holdingIds: string[]) => Promise<void>;
@@ -63,7 +64,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances,
-    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
+    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, updatePortfolioHoldingLivePrice, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
@@ -111,6 +112,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [editHoldType, setEditHoldType] = useState<'days' | 'date'>('date');
   const [editHoldDays, setEditHoldDays] = useState('');
   const [editHoldUntilDate, setEditHoldUntilDate] = useState('');
+  const [editTicker, setEditTicker] = useState('');
   const [sellPrice, setSellPrice] = useState('');
   const [sellDate, setSellDate] = useState(todayStr());
 
@@ -157,7 +159,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   };
 
   // ---- Column sorting ----
-  type SortField = 'symbol' | 'quantity' | 'buy_price' | 'current_price' | 'invested' | 'current_value' | 'gain' | 'gain_pct' | 'since_reference';
+  type SortField = 'symbol' | 'quantity' | 'buy_price' | 'current_price' | 'live_price' | 'since_upload' | 'invested' | 'current_value' | 'gain' | 'gain_pct' | 'since_reference';
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const toggleSort = (field: SortField) => {
@@ -195,16 +197,26 @@ export default function PortfolioView(props: PortfolioViewProps) {
     return candidates.length > 0 ? Number(candidates[0].price) : null;
   };
 
+  const getSinceUploadLabel = (h: any): string | null => {
+    if (h.live_price == null) return null;
+    const ltp = Number(h.current_price ?? h.buy_price);
+    if (ltp === 0) return null;
+    return Number(h.live_price) >= ltp ? 'Price Up (Live)' : 'Price Down (Live)';
+  };
+
   const filterOptions = useMemo(() => {
     const combos = new Set<string>();
     const sources = new Set<string>();
     const changes = new Set<string>();
+    const priceMoves = new Set<string>();
     activeHoldings.forEach(h => {
       combos.add(`${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`);
       if (h.source) sources.add(h.source);
       if (h.change_flag && CHANGE_FLAG_LABELS[h.change_flag]) changes.add(CHANGE_FLAG_LABELS[h.change_flag]);
+      const moveLabel = getSinceUploadLabel(h);
+      if (moveLabel) priceMoves.add(moveLabel);
     });
-    return { combos: Array.from(combos).sort(), sources: Array.from(sources).sort(), changes: Array.from(changes).sort() };
+    return { combos: Array.from(combos).sort(), sources: Array.from(sources).sort(), changes: Array.from(changes).sort(), priceMoves: Array.from(priceMoves).sort() };
   }, [activeHoldings]);
 
   const toggleHoldingFilter = (value: string) => {
@@ -221,24 +233,32 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const selectedCombos = filterOptions.combos.filter(c => holdingFilters.has(c));
       const selectedSources = filterOptions.sources.filter(s => holdingFilters.has(s));
       const selectedChanges = filterOptions.changes.filter(c => holdingFilters.has(c));
+      const selectedPriceMoves = filterOptions.priceMoves.filter(p => holdingFilters.has(p));
       list = activeHoldings.filter(h => {
         const combo = `${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`;
         const comboOk = selectedCombos.length === 0 || selectedCombos.includes(combo);
         const sourceOk = selectedSources.length === 0 || (h.source && selectedSources.includes(h.source));
         const changeLabel = h.change_flag ? CHANGE_FLAG_LABELS[h.change_flag] : null;
         const changeOk = selectedChanges.length === 0 || (changeLabel && selectedChanges.includes(changeLabel));
-        return comboOk && sourceOk && changeOk;
+        const moveLabel = getSinceUploadLabel(h);
+        const priceMoveOk = selectedPriceMoves.length === 0 || (moveLabel && selectedPriceMoves.includes(moveLabel));
+        return comboOk && sourceOk && changeOk && priceMoveOk;
       });
     }
     if (!sortField) return list;
 
     const valueFor = (h: any): number | string => {
-      const current = Number(h.current_price ?? h.buy_price);
+      const current = Number(h.live_price ?? h.current_price ?? h.buy_price);
       switch (sortField) {
         case 'symbol': return h.symbol;
         case 'quantity': return Number(h.quantity);
         case 'buy_price': return Number(h.buy_price);
-        case 'current_price': return current;
+        case 'current_price': return Number(h.current_price ?? h.buy_price);
+        case 'live_price': return Number(h.live_price ?? h.current_price ?? h.buy_price);
+        case 'since_upload': {
+          const ltp = Number(h.current_price ?? h.buy_price);
+          return h.live_price != null && ltp !== 0 ? ((Number(h.live_price) - ltp) / ltp) * 100 : -Infinity;
+        }
         case 'invested': return Number(h.buy_price) * Number(h.quantity);
         case 'current_value': return current * Number(h.quantity);
         case 'gain': return (current - Number(h.buy_price)) * Number(h.quantity);
@@ -330,7 +350,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   // Progress against the explicit reference checkpoint (set on first load, or manually
   // overridden) - not just "the last time a price happened to update," which is noisy.
   const getSinceReferencePct = (h: any): number | null => {
-    const current = Number(h.current_price ?? h.buy_price);
+    const current = Number(h.live_price ?? h.current_price ?? h.buy_price);
     if (selectedReferenceDate !== 'latest') {
       const basePrice = getPriceAtOrBefore(h.id, selectedReferenceDate);
       if (basePrice == null || basePrice === 0) return null;
@@ -489,8 +509,16 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setRefreshingPrices(true);
     setPriceRefreshSummary(null);
     await runAction(async () => {
-      const symbols = activeHoldings.filter(h => h.holding_type !== 'mutual_fund').map(h => ({ symbol: h.symbol, exchange: h.exchange }));
-      if (symbols.length === 0) { setPriceRefreshSummary('No stock holdings to refresh (mutual funds need manual NAV updates).'); return; }
+      // Only holdings with a real ticker set can be looked up - Zerodha's symbol is
+      // always a valid ticker, Groww's file only gives a company name so it needs one
+      // entered manually (via the expand panel) before it can be refreshed.
+      const refreshable = activeHoldings.filter(h => h.holding_type !== 'mutual_fund' && h.ticker);
+      const skippedNoTicker = activeHoldings.filter(h => h.holding_type !== 'mutual_fund' && !h.ticker).length;
+      if (refreshable.length === 0) {
+        setPriceRefreshSummary(skippedNoTicker > 0 ? `${skippedNoTicker} stock${skippedNoTicker !== 1 ? 's' : ''} need a ticker set before they can be refreshed.` : 'No stock holdings to refresh (mutual funds need manual NAV updates).');
+        return;
+      }
+      const symbols = refreshable.map(h => ({ symbol: h.ticker, exchange: h.exchange }));
       const resp = await fetch('/api/portfolio-prices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -502,19 +530,20 @@ export default function PortfolioView(props: PortfolioViewProps) {
       let succeeded = 0;
       let failed = 0;
       for (const r of results) {
-        const holding = activeHoldings.find(h => h.symbol === r.symbol && h.exchange === r.exchange);
+        const holding = refreshable.find(h => h.ticker === r.symbol && h.exchange === r.exchange);
         if (!holding) continue;
         if (r.price != null) {
-          await updatePortfolioHolding(holding.id, { currentPrice: r.price });
+          await updatePortfolioHoldingLivePrice(holding.id, r.price);
           succeeded++;
         } else {
           failed++;
         }
       }
+      const skipNote = skippedNoTicker > 0 ? ` · ${skippedNoTicker} skipped (no ticker set)` : '';
       setPriceRefreshSummary(
         failed === 0
-          ? `Updated ${succeeded} price${succeeded !== 1 ? 's' : ''} · delayed a few minutes, not real-time`
-          : `Updated ${succeeded}, couldn't find ${failed} (check the symbol matches Yahoo Finance's ticker) · delayed a few minutes, not real-time`
+          ? `Live price updated for ${succeeded}${skipNote} · delayed a few minutes, not real-time`
+          : `Live price updated for ${succeeded}, couldn't find ${failed}${skipNote} · delayed a few minutes, not real-time`
       );
     });
     setRefreshingPrices(false);
@@ -575,6 +604,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setEditHoldType(h.hold_type || 'date');
     setEditHoldDays(String(h.hold_days ?? ''));
     setEditHoldUntilDate(h.hold_until_date || '');
+    setEditTicker(h.ticker || (h.broker === 'Zerodha' ? h.symbol : ''));
   };
 
   const confirmSell = async () => {
@@ -637,7 +667,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const balanceCash = portfolioCashBalances.reduce((s: number, c: any) => s + Number(c.amount), 0);
   const totalStockInvestment = totalInvestedActive; // current cost basis of active stock + MF holdings
   const bookedProfitLoss = (balanceCash + totalStockInvestment) - netContributed;
-  const currentValueActive = activeHoldings.reduce((s, h) => s + Number(h.current_price ?? h.buy_price) * Number(h.quantity), 0);
+  const currentValueActive = activeHoldings.reduce((s, h) => s + Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity), 0);
   const unrealizedGain = currentValueActive - totalInvestedActive;
   const realizedGain = soldHoldings.reduce((s, h) => s + (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity), 0);
   const totalDividends = portfolioDividends.reduce((s, d) => s + Number(d.amount), 0);
@@ -1018,7 +1048,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             </form>
           )}
 
-          {(filterOptions.combos.length > 1 || filterOptions.sources.length > 0) && (
+          {(filterOptions.combos.length > 1 || filterOptions.sources.length > 0 || filterOptions.priceMoves.length > 0) && (
             <div className="flex items-center gap-1.5 flex-wrap">
               <button onClick={() => setHoldingFilters(new Set())} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.size === 0 ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
               {filterOptions.combos.map(c => (
@@ -1030,13 +1060,16 @@ export default function PortfolioView(props: PortfolioViewProps) {
               {filterOptions.changes.map(c => (
                 <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(c) ? 'bg-amber-500 text-white' : 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400'}`}>{c}</button>
               ))}
+              {filterOptions.priceMoves.map(p => (
+                <button key={p} onClick={() => toggleHoldingFilter(p)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(p) ? (p === 'Price Up (Live)' ? 'bg-emerald-600 text-white' : 'bg-rose-500 text-white') : (p === 'Price Up (Live)' ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400')}`}>{p}</button>
+              ))}
             </div>
           )}
 
           {holdingFilters.size > 0 && (() => {
             const filterLabel = Array.from(holdingFilters).join(' + ');
             const subInvested = filteredActiveHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
-            const subCurrent = filteredActiveHoldings.reduce((s, h) => s + Number(h.current_price ?? h.buy_price) * Number(h.quantity), 0);
+            const subCurrent = filteredActiveHoldings.reduce((s, h) => s + Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity), 0);
             const subGain = subCurrent - subInvested;
             const subGainPct = subInvested > 0 ? (subGain / subInvested) * 100 : 0;
             return (
@@ -1092,6 +1125,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         ['quantity', 'Qty', 'text-right'],
                         ['buy_price', 'Buy Price', 'text-right'],
                         ['current_price', 'LTP', 'text-right'],
+                        ['live_price', 'Live Price', 'text-right'],
+                        ['since_upload', 'Since Upload', 'text-right'],
                         ['invested', 'Invested', 'text-right'],
                         ['current_value', 'Cur. Value', 'text-right'],
                         ['gain', 'Net Gain', 'text-right'],
@@ -1114,7 +1149,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-900">
                     {filteredActiveHoldings.map(h => {
-                      const currentPriceNum = Number(h.current_price ?? h.buy_price);
+                      const currentPriceNum = Number(h.live_price ?? h.current_price ?? h.buy_price);
                       const gain = (currentPriceNum - Number(h.buy_price)) * Number(h.quantity);
                       const gainPct = ((currentPriceNum - Number(h.buy_price)) / Number(h.buy_price)) * 100;
                       const invested = Number(h.buy_price) * Number(h.quantity);
@@ -1143,6 +1178,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           <td className="p-2.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-bold text-slate-900 dark:text-white">{h.symbol}</span>
+                              {h.broker === 'Groww' && h.holding_type === 'stock' && !h.ticker && (
+                                <span title="No ticker set - Refresh Prices will skip this stock until you add one" className="text-rose-500 font-black cursor-help">*</span>
+                              )}
                               <button
                                 onClick={() => toggleExpandHolding(h)}
                                 title="Set target price & date"
@@ -1188,10 +1226,21 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                 <button onClick={() => saveCurrentPrice(h.id)} className="p-1 bg-indigo-600 text-white rounded-md cursor-pointer"><CheckCircle2 className="w-3 h-3" /></button>
                               </div>
                             ) : (
-                              <button onClick={() => setPriceEdits(prev => ({ ...prev, [h.id]: String(currentPriceNum) }))} className="font-bold text-slate-900 dark:text-white flex items-center gap-1 ml-auto cursor-pointer" title="Update current price">
-                                ₹{currentPriceNum.toFixed(2)} <RefreshCw className="w-2.5 h-2.5 text-slate-400" />
+                              <button onClick={() => setPriceEdits(prev => ({ ...prev, [h.id]: String(Number(h.current_price ?? h.buy_price)) }))} className="font-bold text-slate-900 dark:text-white flex items-center gap-1 ml-auto cursor-pointer" title="Update LTP (last file-sourced price)">
+                                ₹{Number(h.current_price ?? h.buy_price).toFixed(2)} <RefreshCw className="w-2.5 h-2.5 text-slate-400" />
                               </button>
                             )}
+                          </td>
+                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">
+                            {h.live_price != null ? `₹${Number(h.live_price).toFixed(2)}` : <span className="text-slate-300 dark:text-slate-700">—</span>}
+                          </td>
+                          <td className="p-2.5 text-right">
+                            {(() => {
+                              const ltp = Number(h.current_price ?? h.buy_price);
+                              if (h.live_price == null || ltp === 0) return <span className="text-slate-300 dark:text-slate-700">—</span>;
+                              const sinceUploadPct = ((Number(h.live_price) - ltp) / ltp) * 100;
+                              return <span className={`font-bold ${sinceUploadPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{sinceUploadPct >= 0 ? '+' : ''}{sinceUploadPct.toFixed(2)}%</span>;
+                            })()}
                           </td>
                           <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">{fmt(invested)}</td>
                           <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">{fmt(curValue)}</td>
@@ -1232,8 +1281,21 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         </tr>
                         {expandedHoldingId === h.id && (
                           <tr>
-                            <td colSpan={isSelectingForTag ? 10 : 9} className="p-3 bg-slate-50 dark:bg-slate-900">
+                            <td colSpan={isSelectingForTag ? 12 : 11} className="p-3 bg-slate-50 dark:bg-slate-900">
                               <div className="grid grid-cols-2 gap-2 max-w-lg">
+                                <div className="col-span-2">
+                                  <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Ticker (for live price refresh)</label>
+                                  <input
+                                    type="text"
+                                    value={editTicker}
+                                    onChange={(e) => setEditTicker(e.target.value.toUpperCase())}
+                                    disabled={h.broker === 'Zerodha'}
+                                    placeholder={h.broker === 'Groww' ? 'e.g. RELIANCE' : ''}
+                                    className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-xs disabled:opacity-60 disabled:cursor-not-allowed"
+                                  />
+                                  {h.broker === 'Zerodha' && <p className="text-[8px] text-slate-400 mt-0.5">Zerodha's symbol is already a real ticker - no change needed.</p>}
+                                  {h.broker === 'Groww' && !h.ticker && <p className="text-[8px] text-rose-500 mt-0.5">Not set - Refresh Prices will skip this stock until you add one.</p>}
+                                </div>
                                 <div className="flex gap-1.5 col-span-2">
                                   <button type="button" onClick={() => setEditTargetType('percent')} className={`flex-1 py-1 rounded-md text-[10px] font-bold cursor-pointer ${editTargetType === 'percent' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500'}`}>Target % Gain</button>
                                   <button type="button" onClick={() => setEditTargetType('price')} className={`flex-1 py-1 rounded-md text-[10px] font-bold cursor-pointer ${editTargetType === 'price' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500'}`}>Target Price ₹</button>
@@ -1258,12 +1320,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                         holdType: (editHoldType === 'days' ? editHoldDays : editHoldUntilDate) ? editHoldType : null,
                                         holdDays: editHoldType === 'days' && editHoldDays ? parseInt(editHoldDays) : null,
                                         holdUntilDate: editHoldType === 'date' && editHoldUntilDate ? editHoldUntilDate : null,
+                                        ticker: editTicker.trim() || null,
                                       });
                                       setExpandedHoldingId(null);
                                     })}
                                     className="col-span-2 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-md cursor-pointer"
                                   >
-                                    Save Target & Hold Plan
+                                    Save Ticker, Target & Hold Plan
                                   </button>
                                 )}
                               </div>

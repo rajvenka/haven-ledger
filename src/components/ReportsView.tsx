@@ -58,7 +58,7 @@ export default function ReportsView(props: ReportsViewProps) {
   const totalWithdrawn = portfolioWithdrawals.reduce((s, w) => s + Number(w.amount), 0);
   const netContributed = totalContributed - totalWithdrawn;
   const totalInvestedActive = activeHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
-  const currentValueActive = activeHoldings.reduce((s, h) => s + Number(h.current_price ?? h.buy_price) * Number(h.quantity), 0);
+  const currentValueActive = activeHoldings.reduce((s, h) => s + Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity), 0);
   const unrealizedGain = currentValueActive - totalInvestedActive;
   const realizedGain = soldHoldings.reduce((s, h) => s + (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity), 0);
   const totalDividends = portfolioDividends.reduce((s, d) => s + Number(d.amount), 0);
@@ -89,7 +89,7 @@ export default function ReportsView(props: ReportsViewProps) {
         const data = activeHoldings
           .filter(h => h.reference_price != null && Number(h.reference_price) !== 0)
           .map(h => {
-            const current = Number(h.current_price ?? h.buy_price);
+            const current = Number(h.live_price ?? h.current_price ?? h.buy_price);
             const ref = Number(h.reference_price);
             return { symbol: h.symbol, changePct: ((current - ref) / ref) * 100 };
           })
@@ -122,7 +122,7 @@ export default function ReportsView(props: ReportsViewProps) {
         const bySource = new Map<string, number>();
         activeHoldings.forEach(h => {
           const key = h.source || 'Untagged';
-          const value = Number(h.current_price ?? h.buy_price) * Number(h.quantity);
+          const value = Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity);
           bySource.set(key, (bySource.get(key) || 0) + value);
         });
         const data = Array.from(bySource.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
@@ -168,7 +168,7 @@ export default function ReportsView(props: ReportsViewProps) {
                 activeHoldings.forEach(h => {
                   const key = h.source || 'Untagged';
                   const invested = Number(h.buy_price) * Number(h.quantity);
-                  const current = Number(h.current_price ?? h.buy_price) * Number(h.quantity);
+                  const current = Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity);
                   const prev = bySource.get(key) || { invested: 0, current: 0 };
                   bySource.set(key, { invested: prev.invested + invested, current: prev.current + current });
                 });
@@ -258,7 +258,7 @@ export default function ReportsView(props: ReportsViewProps) {
       {(() => {
         const targeted = activeHoldings.filter(h => h.target_type).map(h => {
           const buyPrice = Number(h.buy_price);
-          const currentPrice = Number(h.current_price ?? h.buy_price);
+          const currentPrice = Number(h.live_price ?? h.current_price ?? h.buy_price);
           const targetPrice = h.target_type === 'price' ? Number(h.target_price) : buyPrice * (1 + Number(h.target_percent) / 100);
           const priceProgressPct = targetPrice !== buyPrice ? ((currentPrice - buyPrice) / (targetPrice - buyPrice)) * 100 : 0;
           const remainingPct = targetPrice > 0 ? ((targetPrice - currentPrice) / currentPrice) * 100 : null;
@@ -337,7 +337,7 @@ export default function ReportsView(props: ReportsViewProps) {
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-semibold text-slate-700 dark:text-slate-300">{h.symbol} {h.source && <span className="text-[9px] text-slate-400">· {h.source}</span>}</span>
                       <span className="text-slate-500">
-                        ₹{Number(h.current_price ?? h.buy_price).toFixed(2)} → ₹{targetPrice.toFixed(2)}
+                        ₹{Number(h.live_price ?? h.current_price ?? h.buy_price).toFixed(2)} → ₹{targetPrice.toFixed(2)}
                         {remainingPct !== null && remainingPct > 0 && ` · ${remainingPct.toFixed(0)}% left to go`}
                       </span>
                     </div>
