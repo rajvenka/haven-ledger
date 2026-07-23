@@ -158,7 +158,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const activeHoldings = portfolioHoldings.filter(h => h.status === 'active');
 
   // Dynamic filter options built from whatever's actually in the data - broker+type combos and source tags
-  const [holdingFilter, setHoldingFilter] = useState('all');
+  const [holdingFilters, setHoldingFilters] = useState<Set<string>>(new Set());
   const filterOptions = useMemo(() => {
     const combos = new Set<string>();
     const sources = new Set<string>();
@@ -169,12 +169,24 @@ export default function PortfolioView(props: PortfolioViewProps) {
     return { combos: Array.from(combos).sort(), sources: Array.from(sources).sort() };
   }, [activeHoldings]);
 
+  const toggleHoldingFilter = (value: string) => {
+    setHoldingFilters(prev => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value); else next.add(value);
+      return next;
+    });
+  };
+
   const filteredActiveHoldings = useMemo(() => {
     let list = activeHoldings;
-    if (holdingFilter !== 'all') {
+    if (holdingFilters.size > 0) {
+      const selectedCombos = filterOptions.combos.filter(c => holdingFilters.has(c));
+      const selectedSources = filterOptions.sources.filter(s => holdingFilters.has(s));
       list = activeHoldings.filter(h => {
         const combo = `${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`;
-        return combo === holdingFilter || h.source === holdingFilter;
+        const comboOk = selectedCombos.length === 0 || selectedCombos.includes(combo);
+        const sourceOk = selectedSources.length === 0 || (h.source && selectedSources.includes(h.source));
+        return comboOk && sourceOk;
       });
     }
     if (!sortField) return list;
@@ -201,7 +213,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const cmp = typeof av === 'string' && typeof bv === 'string' ? av.localeCompare(bv) : (av as number) - (bv as number);
       return sortDirection === 'asc' ? cmp : -cmp;
     });
-  }, [activeHoldings, holdingFilter, sortField, sortDirection]);
+  }, [activeHoldings, holdingFilters, filterOptions, sortField, sortDirection]);
 
   // Change since the last time prices were refreshed (the two most recent snapshots for a holding)
   // Progress against the explicit reference checkpoint (set on first load, or manually
@@ -223,7 +235,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [isImporting, setIsImporting] = useState(false);
   const [importTemplate, setImportTemplate] = useState<BrokerTemplate>('zerodha');
   const [importParsing, setImportParsing] = useState(false);
-  const [importPreview, setImportPreview] = useState<{ fresh: ParsedHolding[]; duplicates: number } | null>(null);
+  const [importPreview, setImportPreview] = useState<{ fresh: ParsedHolding[]; duplicates: number; excludedExternal: number } | null>(null);
   const [importSourceTag, setImportSourceTag] = useState('');
   const [importBuyDate, setImportBuyDate] = useState(todayStr());
   const [importSaving, setImportSaving] = useState(false);
@@ -238,6 +250,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
     });
   };
 
+  const [importRawParsed, setImportRawParsed] = useState<ParsedHolding[] | null>(null);
+  const [includeExternal, setIncludeExternal] = useState(false);
+
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -246,9 +261,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setImportPreview(null);
     try {
       const parsed = await parseBrokerFile(file, importTemplate);
-      const fresh = parsed.filter(h => !isDuplicateHolding(h));
-      const duplicates = parsed.length - fresh.length;
-      setImportPreview({ fresh, duplicates });
+      setImportRawParsed(parsed);
     } catch (err: any) {
       setFormError(err?.message || 'Could not read that file.');
     } finally {
@@ -256,6 +269,18 @@ export default function PortfolioView(props: PortfolioViewProps) {
       e.target.value = '';
     }
   };
+
+  // Recompute the preview whenever the raw parse or the external-funds toggle changes,
+  // so checking/unchecking doesn't require re-uploading the file.
+  useEffect(() => {
+    if (!importRawParsed) { setImportPreview(null); return; }
+    const scoped = includeExternal ? importRawParsed : importRawParsed.filter(h => h.source !== 'External');
+    const fresh = scoped.filter(h => !isDuplicateHolding(h));
+    const duplicates = scoped.length - fresh.length;
+    const excludedExternal = importRawParsed.length - scoped.length;
+    setImportPreview({ fresh, duplicates, excludedExternal });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importRawParsed, includeExternal]);
 
   const confirmImport = async () => {
     if (!importPreview || importPreview.fresh.length === 0) return;
@@ -269,6 +294,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         }))
       );
       setImportPreview(null);
+      setImportRawParsed(null); setIncludeExternal(false);
       setImportSourceTag('');
       setImportBuyDate(todayStr());
       setIsImporting(false);
@@ -508,7 +534,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
               </button>
             )}
             <button
-              onClick={() => { setIsImporting(!isImporting); setImportPreview(null); }}
+              onClick={() => { setIsImporting(!isImporting); setImportPreview(null); setImportRawParsed(null); setIncludeExternal(false); }}
               className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
             >
               <Upload className="w-3.5 h-3.5" /> Import from Broker
@@ -554,9 +580,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <div className="apple-card p-4 space-y-3">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Import Holdings File</span>
               <div className="flex gap-1.5 flex-wrap">
-                <button type="button" onClick={() => { setImportTemplate('zerodha'); setImportPreview(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'zerodha' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Zerodha (Stocks + MF)</button>
-                <button type="button" onClick={() => { setImportTemplate('groww_stocks'); setImportPreview(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'groww_stocks' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Stocks</button>
-                <button type="button" onClick={() => { setImportTemplate('groww_mf'); setImportPreview(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'groww_mf' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Mutual Funds</button>
+                <button type="button" onClick={() => { setImportTemplate('zerodha'); setImportPreview(null); setImportRawParsed(null); setIncludeExternal(false); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'zerodha' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Zerodha (Stocks + MF)</button>
+                <button type="button" onClick={() => { setImportTemplate('groww_stocks'); setImportPreview(null); setImportRawParsed(null); setIncludeExternal(false); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'groww_stocks' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Stocks</button>
+                <button type="button" onClick={() => { setImportTemplate('groww_mf'); setImportPreview(null); setImportRawParsed(null); setIncludeExternal(false); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'groww_mf' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Mutual Funds</button>
               </div>
               <p className="text-[9px] text-slate-400">
                 {importTemplate === 'zerodha' && "Console → Holdings → Download as XLSX (stocks and mutual funds are both detected automatically)"}
@@ -572,11 +598,19 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <input type="file" accept=".xlsx,.xls" onChange={handleImportFile} disabled={importParsing} className="hidden" />
               </label>
 
+              {importRawParsed && importRawParsed.some(h => h.source === 'External') && (
+                <label className="flex items-center gap-2 px-2.5 py-2 bg-slate-50 dark:bg-slate-900 rounded-lg cursor-pointer">
+                  <input type="checkbox" checked={includeExternal} onChange={(e) => setIncludeExternal(e.target.checked)} className="w-4 h-4 cursor-pointer accent-indigo-600" />
+                  <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Include external funds (held via CAS/PAN, not bought through this broker)</span>
+                </label>
+              )}
+
               {importPreview && (
                 <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-900">
                   <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
                     {importPreview.fresh.length} new holding{importPreview.fresh.length !== 1 ? 's' : ''} found
                     {importPreview.duplicates > 0 && ` · ${importPreview.duplicates} already in your portfolio (skipped)`}
+                    {importPreview.excludedExternal > 0 && ` · ${importPreview.excludedExternal} external fund${importPreview.excludedExternal !== 1 ? 's' : ''} excluded`}
                   </p>
                   {importPreview.fresh.length > 0 && (
                     <>
@@ -695,17 +729,18 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
           {(filterOptions.combos.length > 1 || filterOptions.sources.length > 0) && (
             <div className="flex items-center gap-1.5 flex-wrap">
-              <button onClick={() => setHoldingFilter('all')} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilter === 'all' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
+              <button onClick={() => setHoldingFilters(new Set())} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.size === 0 ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
               {filterOptions.combos.map(c => (
-                <button key={c} onClick={() => setHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilter === c ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{c}</button>
+                <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(c) ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{c}</button>
               ))}
               {filterOptions.sources.map(s => (
-                <button key={s} onClick={() => setHoldingFilter(s)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilter === s ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}>{s}</button>
+                <button key={s} onClick={() => toggleHoldingFilter(s)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(s) ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}>{s}</button>
               ))}
             </div>
           )}
 
-          {holdingFilter !== 'all' && (() => {
+          {holdingFilters.size > 0 && (() => {
+            const filterLabel = Array.from(holdingFilters).join(' + ');
             const subInvested = filteredActiveHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
             const subCurrent = filteredActiveHoldings.reduce((s, h) => s + Number(h.current_price ?? h.buy_price) * Number(h.quantity), 0);
             const subGain = subCurrent - subInvested;
@@ -713,19 +748,19 @@ export default function PortfolioView(props: PortfolioViewProps) {
             return (
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="apple-card p-3 bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
-                  <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{holdingFilter}" Invested</span>
+                  <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{filterLabel}" Invested</span>
                   <span className="text-sm font-black text-slate-900 dark:text-white">{fmt(subInvested)}</span>
                 </div>
                 <div className="apple-card p-3 bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
-                  <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{holdingFilter}" Current Value</span>
+                  <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{filterLabel}" Current Value</span>
                   <span className="text-sm font-black text-slate-900 dark:text-white">{fmt(subCurrent)}</span>
                 </div>
                 <div className="apple-card p-3 bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
-                  <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{holdingFilter}" Net Gain</span>
+                  <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{filterLabel}" Net Gain</span>
                   <span className={`text-sm font-black ${subGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{subGain >= 0 ? '+' : ''}{fmt(subGain)}</span>
                 </div>
                 <div className="apple-card p-3 bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
-                  <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{holdingFilter}" % Chg</span>
+                  <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{filterLabel}" % Chg</span>
                   <span className={`text-sm font-black ${subGainPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{subGainPct >= 0 ? '+' : ''}{subGainPct.toFixed(2)}%</span>
                 </div>
               </div>
@@ -733,7 +768,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
           })()}
 
           <div>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Active ({filteredActiveHoldings.length}{holdingFilter !== 'all' ? ` of ${activeHoldings.length}` : ''})</span>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Active ({filteredActiveHoldings.length}{holdingFilters.size > 0 ? ` of ${activeHoldings.length}` : ''})</span>
             <div className="apple-card mt-1.5 overflow-x-auto">
               {filteredActiveHoldings.length === 0 ? (
                 <p className="p-6 text-center text-xs text-slate-400">No active holdings match this filter.</p>
