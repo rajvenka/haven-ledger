@@ -105,6 +105,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
   const [sellingId, setSellingId] = useState<string | null>(null);
   const [expandedHoldingId, setExpandedHoldingId] = useState<string | null>(null);
+  const [expandedQtyIds, setExpandedQtyIds] = useState<Set<string>>(new Set());
+  const toggleQtyExpand = (id: string) => {
+    setExpandedQtyIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
   const [isConfirmingWipe, setIsConfirmingWipe] = useState(false);
   const [wipeConfirmText, setWipeConfirmText] = useState('');
   const [holdingsTab, setHoldingsTab] = useState<'active' | 'sold'>('active');
@@ -1232,7 +1240,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               </div>
                             )}
                           </td>
-                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300 whitespace-nowrap" title={String(h.quantity)}>{fmtQty(Number(h.quantity))}</td>
+                          <td
+                            className="p-2.5 text-right text-slate-600 dark:text-slate-300 whitespace-nowrap cursor-pointer"
+                            onClick={() => toggleQtyExpand(h.id)}
+                            title="Tap to see full precision"
+                          >
+                            {expandedQtyIds.has(h.id) ? String(h.quantity) : fmtQty(Number(h.quantity))}
+                          </td>
                           <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">₹{Number(h.buy_price).toFixed(2)}</td>
                           <td className="p-2.5 text-right">
                             {priceEdits[h.id] !== undefined ? (
@@ -1453,7 +1467,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               {h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
                             </div>
                           </td>
-                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300 whitespace-nowrap" title={String(h.quantity)}>{fmtQty(Number(h.quantity))}</td>
+                          <td
+                            className="p-2.5 text-right text-slate-600 dark:text-slate-300 whitespace-nowrap cursor-pointer"
+                            onClick={() => toggleQtyExpand(h.id)}
+                            title="Tap to see full precision"
+                          >
+                            {expandedQtyIds.has(h.id) ? String(h.quantity) : fmtQty(Number(h.quantity))}
+                          </td>
                           <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">₹{Number(h.buy_price).toFixed(2)}</td>
                           <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">₹{Number(h.sold_price).toFixed(2)}</td>
                           <td className="p-2.5 text-right text-slate-500">{fmt(invested)}</td>
