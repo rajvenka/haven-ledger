@@ -179,6 +179,18 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [holdingFilters, setHoldingFilters] = useState<Set<string>>(new Set());
   const CHANGE_FLAG_LABELS: Record<string, string> = { added: 'Added', qty_increased: 'Qty Added', qty_reduced: 'Qty Reduced' };
 
+  // Brand-appropriate colors for broker filter pills - Zerodha's blue, Groww's green -
+  // so they're recognizable by brand at a glance, not just generic black/white.
+  const brokerPillClass = (combo: string, selected: boolean) => {
+    if (combo.startsWith('Zerodha')) {
+      return selected ? 'bg-blue-600 text-white' : 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400';
+    }
+    if (combo.startsWith('Groww')) {
+      return selected ? 'bg-emerald-600 text-white' : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400';
+    }
+    return selected ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500';
+  };
+
   // Reference Load Date - lets you pick any date you've ever captured a price for, and see
   // performance from that date to today for every holding. Distinct from the Monthly Movement
   // Report snapshot comparison - this is a per-holding, live filter on the Holdings page itself.
@@ -1052,7 +1064,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <div className="flex items-center gap-1.5 flex-wrap">
               <button onClick={() => setHoldingFilters(new Set())} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.size === 0 ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
               {filterOptions.combos.map(c => (
-                <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(c) ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{c}</button>
+                <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${brokerPillClass(c, holdingFilters.has(c))}`}>{c}</button>
               ))}
               {filterOptions.sources.map(s => (
                 <button key={s} onClick={() => toggleHoldingFilter(s)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(s) ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}>{s}</button>
@@ -1352,7 +1364,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <div className="flex items-center gap-1.5 flex-wrap">
               <button onClick={() => setSoldHoldingFilters(new Set())} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${soldHoldingFilters.size === 0 ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
               {soldFilterOptions.combos.map(c => (
-                <button key={c} onClick={() => toggleSoldHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${soldHoldingFilters.has(c) ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{c}</button>
+                <button key={c} onClick={() => toggleSoldHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${brokerPillClass(c, soldHoldingFilters.has(c))}`}>{c}</button>
               ))}
               {soldFilterOptions.sources.map(s => (
                 <button key={s} onClick={() => toggleSoldHoldingFilter(s)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${soldHoldingFilters.has(s) ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}>{s}</button>
