@@ -105,6 +105,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [expandedHoldingId, setExpandedHoldingId] = useState<string | null>(null);
   const [isConfirmingWipe, setIsConfirmingWipe] = useState(false);
   const [wipeConfirmText, setWipeConfirmText] = useState('');
+  const [holdingsTab, setHoldingsTab] = useState<'active' | 'sold'>('active');
   const [editTargetType, setEditTargetType] = useState<'price' | 'percent'>('percent');
   const [editTargetValue, setEditTargetValue] = useState('');
   const [editHoldType, setEditHoldType] = useState<'days' | 'date'>('date');
@@ -170,6 +171,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
 
   const activeHoldings = portfolioHoldings.filter(h => h.status === 'active');
+  const soldHoldings = portfolioHoldings.filter(h => h.status === 'sold');
 
   // Dynamic filter options built from whatever's actually in the data - broker+type combos and source tags
   const [holdingFilters, setHoldingFilters] = useState<Set<string>>(new Set());
@@ -260,6 +262,70 @@ export default function PortfolioView(props: PortfolioViewProps) {
     });
   }, [activeHoldings, holdingFilters, filterOptions, sortField, sortDirection, selectedReferenceDate]);
 
+  // ---- Sold tab - same filter/sort pattern as Active ----
+  const [soldHoldingFilters, setSoldHoldingFilters] = useState<Set<string>>(new Set());
+  const [soldSortField, setSoldSortField] = useState<string | null>(null);
+  const [soldSortDirection, setSoldSortDirection] = useState<'asc' | 'desc'>('desc');
+
+  const soldFilterOptions = useMemo(() => {
+    const combos = new Set<string>();
+    const sources = new Set<string>();
+    soldHoldings.forEach(h => {
+      combos.add(`${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`);
+      if (h.source) sources.add(h.source);
+    });
+    return { combos: Array.from(combos).sort(), sources: Array.from(sources).sort() };
+  }, [soldHoldings]);
+
+  const toggleSoldHoldingFilter = (value: string) => {
+    setSoldHoldingFilters(prev => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value); else next.add(value);
+      return next;
+    });
+  };
+
+  const toggleSoldSort = (field: string) => {
+    if (soldSortField === field) setSoldSortDirection(prev => (prev === 'desc' ? 'asc' : 'desc'));
+    else { setSoldSortField(field); setSoldSortDirection('desc'); }
+  };
+
+  const filteredSoldHoldings = useMemo(() => {
+    let list = soldHoldings;
+    if (soldHoldingFilters.size > 0) {
+      const selectedCombos = soldFilterOptions.combos.filter(c => soldHoldingFilters.has(c));
+      const selectedSources = soldFilterOptions.sources.filter(s => soldHoldingFilters.has(s));
+      list = soldHoldings.filter(h => {
+        const combo = `${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`;
+        const comboOk = selectedCombos.length === 0 || selectedCombos.includes(combo);
+        const sourceOk = selectedSources.length === 0 || (h.source && selectedSources.includes(h.source));
+        return comboOk && sourceOk;
+      });
+    }
+    if (!soldSortField) return list;
+    const valueFor = (h: any): number | string => {
+      switch (soldSortField) {
+        case 'symbol': return h.symbol;
+        case 'quantity': return Number(h.quantity);
+        case 'buy_price': return Number(h.buy_price);
+        case 'sold_price': return Number(h.sold_price);
+        case 'invested': return Number(h.buy_price) * Number(h.quantity);
+        case 'sold_value': return Number(h.sold_price) * Number(h.quantity);
+        case 'gain': return (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity);
+        case 'gain_pct': return ((Number(h.sold_price) - Number(h.buy_price)) / Number(h.buy_price)) * 100;
+        case 'sold_date': return h.sold_date || '';
+        default: return 0;
+      }
+    };
+    return [...list].sort((a, b) => {
+      const av = valueFor(a);
+      const bv = valueFor(b);
+      const cmp = typeof av === 'string' && typeof bv === 'string' ? av.localeCompare(bv) : (av as number) - (bv as number);
+      return soldSortDirection === 'asc' ? cmp : -cmp;
+    });
+  }, [soldHoldings, soldHoldingFilters, soldFilterOptions, soldSortField, soldSortDirection]);
+
+
   // Change since the last time prices were refreshed (the two most recent snapshots for a holding)
   // Progress against the explicit reference checkpoint (set on first load, or manually
   // overridden) - not just "the last time a price happened to update," which is noisy.
@@ -276,7 +342,6 @@ export default function PortfolioView(props: PortfolioViewProps) {
     return ((current - ref) / ref) * 100;
   };
 
-  const soldHoldings = portfolioHoldings.filter(h => h.status === 'sold');
 
   const [refreshingPrices, setRefreshingPrices] = useState(false);
   const [priceRefreshSummary, setPriceRefreshSummary] = useState<string | null>(null);
@@ -596,6 +661,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
         </div>
       )}
 
+      <div className="flex gap-1.5">
+        <button onClick={() => setHoldingsTab('active')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'active' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Active ({activeHoldings.length})</button>
+        <button onClick={() => setHoldingsTab('sold')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'sold' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Sold ({soldHoldings.length})</button>
+      </div>
+
+      {holdingsTab === 'active' && (
+        <>
       {availableReferenceDates.length > 0 && (
         <div className="flex items-center gap-2">
           <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 shrink-0">Reference Load Date</label>
@@ -1206,29 +1278,96 @@ export default function PortfolioView(props: PortfolioViewProps) {
               )}
             </div>
           </div>
+      </div>
 
-          {soldHoldings.length > 0 && (
-            <div>
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Sold ({soldHoldings.length})</span>
-              <div className="apple-card divide-y divide-slate-100 dark:divide-slate-900 mt-1.5 overflow-hidden opacity-75">
-                {soldHoldings.map(h => {
-                  const gain = (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity);
-                  return (
-                    <div key={h.id} className="p-3 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">{h.symbol} <span className="text-[8px] text-slate-400 uppercase">{h.broker}</span></h4>
-                        <p className="text-[9px] text-slate-400">{h.quantity} @ ₹{h.buy_price} → ₹{h.sold_price} on {h.sold_date}</p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className={`text-[11px] font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)}</span>
-                        {!isReadOnly && <button onClick={() => runAction(() => deletePortfolioHolding(h.id))} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+        </>
+      )}
+
+      {holdingsTab === 'sold' && (
+        <>
+          {(soldFilterOptions.combos.length > 1 || soldFilterOptions.sources.length > 0) && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button onClick={() => setSoldHoldingFilters(new Set())} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${soldHoldingFilters.size === 0 ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
+              {soldFilterOptions.combos.map(c => (
+                <button key={c} onClick={() => toggleSoldHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${soldHoldingFilters.has(c) ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{c}</button>
+              ))}
+              {soldFilterOptions.sources.map(s => (
+                <button key={s} onClick={() => toggleSoldHoldingFilter(s)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${soldHoldingFilters.has(s) ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}>{s}</button>
+              ))}
             </div>
           )}
+
+          <div>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Sold ({filteredSoldHoldings.length}{soldHoldingFilters.size > 0 ? ` of ${soldHoldings.length}` : ''})</span>
+            <div className="apple-card mt-1.5 overflow-x-auto">
+              {filteredSoldHoldings.length === 0 ? (
+                <p className="text-center text-xs text-slate-400 py-8">No sold holdings{soldHoldingFilters.size > 0 ? ' match this filter' : ' yet'}.</p>
+              ) : (
+                <table className="w-full text-xs min-w-[720px]">
+                  <thead>
+                    <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                      {([
+                        ['symbol', 'Instrument', 'text-left'],
+                        ['quantity', 'Qty', 'text-right'],
+                        ['buy_price', 'Buy Price', 'text-right'],
+                        ['sold_price', 'Sold Price', 'text-right'],
+                        ['invested', 'Invested', 'text-right'],
+                        ['sold_value', 'Sold Value', 'text-right'],
+                        ['gain', 'Net Gain', 'text-right'],
+                        ['gain_pct', '% Chg', 'text-right'],
+                        ['sold_date', 'Sold Date', 'text-right'],
+                      ] as [string, string, string][]).map(([field, label, align]) => (
+                        <th
+                          key={field}
+                          onClick={() => toggleSoldSort(field)}
+                          className={`p-2.5 ${align} cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-300`}
+                        >
+                          <span className="inline-flex items-center gap-0.5">
+                            {label}
+                            {soldSortField === field && <span className="text-indigo-500">{soldSortDirection === 'asc' ? '↑' : '↓'}</span>}
+                          </span>
+                        </th>
+                      ))}
+                      <th className="p-2.5 text-right"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-900">
+                    {filteredSoldHoldings.map(h => {
+                      const invested = Number(h.buy_price) * Number(h.quantity);
+                      const soldValue = Number(h.sold_price) * Number(h.quantity);
+                      const gain = soldValue - invested;
+                      const gainPct = invested > 0 ? (gain / invested) * 100 : 0;
+                      return (
+                        <tr key={h.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
+                          <td className="p-2.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-bold text-slate-900 dark:text-white">{h.symbol}</span>
+                              <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{h.broker}</span>
+                              {h.holding_type === 'mutual_fund' && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 rounded-full">MF</span>}
+                              {h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
+                            </div>
+                          </td>
+                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">{h.quantity}</td>
+                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">₹{Number(h.buy_price).toFixed(2)}</td>
+                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">₹{Number(h.sold_price).toFixed(2)}</td>
+                          <td className="p-2.5 text-right text-slate-500">{fmt(invested)}</td>
+                          <td className="p-2.5 text-right text-slate-900 dark:text-white font-semibold">{fmt(soldValue)}</td>
+                          <td className={`p-2.5 text-right font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)}</td>
+                          <td className={`p-2.5 text-right font-bold ${gainPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gainPct >= 0 ? '+' : ''}{gainPct.toFixed(2)}%</td>
+                          <td className="p-2.5 text-right text-slate-400">{h.sold_date}</td>
+                          <td className="p-2.5 text-right">
+                            {!isReadOnly && <button onClick={() => runAction(() => deletePortfolioHolding(h.id))} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
           {!isReadOnly && (
             <div className="apple-card p-4 space-y-2 border-rose-200 dark:border-rose-900/50">
@@ -1262,7 +1401,6 @@ export default function PortfolioView(props: PortfolioViewProps) {
               )}
             </div>
           )}
-        </div>
     </div>
   );
 }
