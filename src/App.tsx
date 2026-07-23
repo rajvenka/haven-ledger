@@ -172,6 +172,7 @@ export default function App() {
     deletePortfolioHolding,
     bulkTagPortfolioHoldings,
     bulkDeletePortfolioHoldings,
+    deleteAllPortfolioData,
     portfolioSnapshots,
     takePortfolioSnapshot,
     deletePortfolioSnapshotBatch,
@@ -1505,6 +1506,7 @@ export default function App() {
                 deletePortfolioHolding={deletePortfolioHolding}
                 bulkTagPortfolioHoldings={bulkTagPortfolioHoldings}
                 bulkDeletePortfolioHoldings={bulkDeletePortfolioHoldings}
+                deleteAllPortfolioData={deleteAllPortfolioData}
                 portfolioSnapshots={portfolioSnapshots}
                 takePortfolioSnapshot={takePortfolioSnapshot}
                 deletePortfolioSnapshotBatch={deletePortfolioSnapshotBatch}

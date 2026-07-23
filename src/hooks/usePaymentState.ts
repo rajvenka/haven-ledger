@@ -977,13 +977,13 @@ export function usePaymentState() {
 
   // Bulk import from a broker file - inserts many holdings in one request, then refreshes once.
   const bulkAddPortfolioHoldings = async (holdings: {
-    holdingType: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string;
+    holdingType: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; folioNumber?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string;
   }[]) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     if (holdings.length === 0) return;
     const rows = holdings.map(h => ({
       workspace_id: activeWorkspaceId, created_by: user?.id ?? null,
-      holding_type: h.holdingType, broker: h.broker, symbol: h.symbol.toUpperCase(), isin: h.isin ?? null, exchange: h.exchange,
+      holding_type: h.holdingType, broker: h.broker, symbol: h.symbol.toUpperCase(), isin: h.isin ?? null, folio_number: h.folioNumber ?? null, exchange: h.exchange,
       quantity: h.quantity, buy_price: h.buyPrice, buy_date: h.buyDate,
       current_price: h.currentPrice ?? null, current_price_updated_at: h.currentPrice != null ? new Date().toISOString() : null,
       reference_price: h.currentPrice ?? h.buyPrice, reference_date: new Date().toISOString().slice(0, 10),
@@ -1010,7 +1010,7 @@ export function usePaymentState() {
   // date becomes the current state (price, quantity, reference) - all via the same "latest date
   // wins" reference logic as a normal update.
   const bulkHistoricalImport = async (
-    snapshots: { date: string; holdings: { broker: string; holdingType: 'stock' | 'mutual_fund'; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; currentPrice?: number; source?: string }[] }[]
+    snapshots: { date: string; holdings: { broker: string; holdingType: 'stock' | 'mutual_fund'; symbol: string; isin?: string; folioNumber?: string; exchange: string; quantity: number; buyPrice: number; currentPrice?: number; source?: string }[] }[]
   ) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const sorted = [...snapshots].sort((a, b) => a.date.localeCompare(b.date));
@@ -1021,7 +1021,9 @@ export function usePaymentState() {
     const byKey = new Map<string, { date: string; row: any }[]>();
     sorted.forEach(snap => {
       snap.holdings.forEach(row => {
-        const key = `${row.broker}::${row.isin || row.symbol.toUpperCase()}::${row.holdingType}`;
+        // Folio number, not fund name, is the real unique identifier for Groww MF - the same
+        // scheme name can appear under multiple folios (e.g. one External, one direct).
+        const key = `${row.broker}::${row.isin || row.folioNumber || row.symbol.toUpperCase()}::${row.holdingType}`;
         if (!byKey.has(key)) byKey.set(key, []);
         byKey.get(key)!.push({ date: snap.date, row });
       });
@@ -1048,7 +1050,8 @@ export function usePaymentState() {
         if (h.status !== 'active') return false;
         if (h.broker !== first.row.broker) return false;
         if (first.row.isin && h.isin) return h.isin === first.row.isin;
-        return h.symbol === first.row.symbol.toUpperCase() && h.holding_type === first.row.holdingType;
+        if (first.row.folioNumber && h.folio_number) return h.folio_number === first.row.folioNumber;
+        return h.symbol === first.row.symbol.toUpperCase() && h.holding_type === first.row.holdingType && !h.folio_number && !first.row.folioNumber;
       });
 
       if (existing) {
@@ -1057,7 +1060,7 @@ export function usePaymentState() {
         const { data: inserted, error } = await supabase.from('portfolio_holdings').insert({
           workspace_id: activeWorkspaceId, created_by: user?.id ?? null,
           holding_type: first.row.holdingType, broker: first.row.broker, symbol: first.row.symbol.toUpperCase(),
-          isin: first.row.isin ?? null, exchange: first.row.exchange,
+          isin: first.row.isin ?? null, folio_number: first.row.folioNumber ?? null, exchange: first.row.exchange,
           quantity: first.row.quantity, buy_price: first.row.buyPrice, buy_date: first.date,
           current_price: first.row.currentPrice ?? first.row.buyPrice, current_price_updated_at: new Date().toISOString(),
           source: first.row.source ?? null, change_flag: 'added',
@@ -1175,6 +1178,22 @@ export function usePaymentState() {
     if (holdingIds.length === 0) return;
     const { error } = await supabase.from('portfolio_holdings').delete().in('id', holdingIds);
     if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
+  // Full reset for this workspace's portfolio - holdings (cascades to price history),
+  // contributions, withdrawals, splits, dividends, fees, recurring plans, and snapshots.
+  // Deliberately destructive and manual - not something that should ever happen by accident.
+  const deleteAllPortfolioData = async () => {
+    if (!activeWorkspaceId) throw new Error('Select a workspace first.');
+    await supabase.from('portfolio_holdings').delete().eq('workspace_id', activeWorkspaceId);
+    await supabase.from('portfolio_contributions').delete().eq('workspace_id', activeWorkspaceId);
+    await supabase.from('portfolio_withdrawals').delete().eq('workspace_id', activeWorkspaceId);
+    await supabase.from('portfolio_splits').delete().eq('workspace_id', activeWorkspaceId);
+    await supabase.from('portfolio_dividends').delete().eq('workspace_id', activeWorkspaceId);
+    await supabase.from('portfolio_fees').delete().eq('workspace_id', activeWorkspaceId);
+    await supabase.from('portfolio_recurring_plans').delete().eq('workspace_id', activeWorkspaceId);
+    await supabase.from('portfolio_snapshots').delete().eq('workspace_id', activeWorkspaceId);
     await loadPortfolioDetails();
   };
 
@@ -1470,7 +1489,7 @@ export function usePaymentState() {
     accessPlans, createAccessPlan, updateAccessPlan, deleteAccessPlan,
     myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan, setSuperAdminStatus,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings,
+    portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioPriceHistory,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,

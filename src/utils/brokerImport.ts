@@ -5,6 +5,7 @@ export interface ParsedHolding {
   holdingType: 'stock' | 'mutual_fund';
   symbol: string;
   isin?: string;
+  folioNumber?: string;
   exchange: 'NSE' | 'BSE';
   quantity: number;
   buyPrice: number;
@@ -109,6 +110,7 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
   const records = rowsToObjects(rows, headerIdx);
   return records
     .filter(r => r['Scheme Name'] && Number(r['Units']) > 0)
+    .filter(r => String(r['Source'] ?? '').trim() !== 'External') // external funds are always excluded - they add confusion, not value, to this tracker
     .map(r => {
       const units = Number(r['Units']) || 0;
       const invested = Number(r['Invested Value']) || 0;
@@ -117,12 +119,13 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
         broker: 'Groww' as const,
         holdingType: 'mutual_fund' as const,
         symbol: String(r['Scheme Name']).trim(),
-        isin: undefined, // Groww's MF export doesn't include ISIN, folio number isn't a reliable dedup key alone
+        isin: undefined, // Groww's MF export doesn't include ISIN
+        folioNumber: r['Folio No.'] ? String(r['Folio No.']).trim() : undefined, // the same fund name can appear more than once under different folios - folio number, not name, is what's actually unique
         exchange: 'NSE' as const,
         quantity: units,
         buyPrice: units > 0 ? invested / units : 0,
         currentPrice: units > 0 ? current / units : 0,
-        source: r['Source'] ? (String(r['Source']).trim() === 'Groww' ? 'Bought via Groww' : String(r['Source']).trim()) : undefined, // "Bought via Groww" (purchased through the app) or "External" (linked via CAS/PAN, bought elsewhere) - relabeled so it's not confused with the broker filter
+        source: r['Source'] ? (String(r['Source']).trim() === 'Groww' ? 'Bought via Groww' : String(r['Source']).trim()) : undefined,
       };
     });
 }

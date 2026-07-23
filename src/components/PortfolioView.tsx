@@ -35,6 +35,7 @@ interface PortfolioViewProps {
   deletePortfolioHolding: (id: string) => Promise<void>;
   bulkTagPortfolioHoldings: (holdingIds: string[], source: string) => Promise<void>;
   bulkDeletePortfolioHoldings: (holdingIds: string[]) => Promise<void>;
+  deleteAllPortfolioData: () => Promise<void>;
   portfolioSnapshots: any[];
   takePortfolioSnapshot: (date: string, groups: { label: string; invested: number; current: number }[]) => Promise<void>;
   deletePortfolioSnapshotBatch: (date: string) => Promise<void>;
@@ -61,7 +62,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings,
+    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
@@ -101,6 +102,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
   const [sellingId, setSellingId] = useState<string | null>(null);
   const [expandedHoldingId, setExpandedHoldingId] = useState<string | null>(null);
+  const [isConfirmingWipe, setIsConfirmingWipe] = useState(false);
+  const [wipeConfirmText, setWipeConfirmText] = useState('');
   const [editTargetType, setEditTargetType] = useState<'price' | 'percent'>('percent');
   const [editTargetValue, setEditTargetValue] = useState('');
   const [editHoldType, setEditHoldType] = useState<'days' | 'date'>('date');
@@ -256,7 +259,6 @@ export default function PortfolioView(props: PortfolioViewProps) {
     fresh: ParsedHolding[];
     qtyChanged: { parsed: ParsedHolding; existing: any; direction: 'increased' | 'reduced' }[];
     unchanged: number;
-    excludedExternal: number;
   } | null>(null);
   const [importSourceTag, setImportSourceTag] = useState('');
   const [importBuyDate, setImportBuyDate] = useState(todayStr());
@@ -269,8 +271,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
       if (h.status !== 'active') return false;
       if (h.broker !== parsed.broker) return false; // same stock via a different broker is a separate, legitimate holding
       if (parsed.isin && h.isin) return h.isin === parsed.isin;
-      // Fall back to symbol match when ISIN isn't available (e.g. Groww MF export)
-      return h.symbol === parsed.symbol.toUpperCase() && h.holding_type === parsed.holdingType;
+      // Groww MF: the same fund name can appear more than once under different folios
+      // (e.g. one External, one bought via the app) - folio number is what's actually unique.
+      if (parsed.folioNumber && h.folio_number) return h.folio_number === parsed.folioNumber;
+      return h.symbol === parsed.symbol.toUpperCase() && h.holding_type === parsed.holdingType && !h.folio_number && !parsed.folioNumber;
     });
     if (!existing) return { status: 'new' };
     if (Number(existing.quantity) === parsed.quantity) return { status: 'unchanged', existing };
@@ -278,7 +282,6 @@ export default function PortfolioView(props: PortfolioViewProps) {
   };
 
   const [importRawParsed, setImportRawParsed] = useState<ParsedHolding[] | null>(null);
-  const [includeExternal, setIncludeExternal] = useState(false);
 
   // ---- Historical backfill (multiple dated files at once) ----
   const [isHistoricalMode, setIsHistoricalMode] = useState(false);
@@ -322,7 +325,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     await runAction(async () => {
       const result = await bulkHistoricalImport(historicalSnapshots.map(s => ({
         date: s.date,
-        holdings: s.holdings.map(h => ({ broker: h.broker, holdingType: h.holdingType, symbol: h.symbol, isin: h.isin, exchange: h.exchange, quantity: h.quantity, buyPrice: h.buyPrice, currentPrice: h.currentPrice, source: h.source })),
+        holdings: s.holdings.map(h => ({ broker: h.broker, holdingType: h.holdingType, symbol: h.symbol, isin: h.isin, folioNumber: h.folioNumber, exchange: h.exchange, quantity: h.quantity, buyPrice: h.buyPrice, currentPrice: h.currentPrice, source: h.source })),
       })));
       setHistoricalResult(result);
       setHistoricalSnapshots([]);
@@ -347,24 +350,20 @@ export default function PortfolioView(props: PortfolioViewProps) {
     }
   };
 
-  // Recompute the preview whenever the raw parse or the external-funds toggle changes,
-  // so checking/unchecking doesn't require re-uploading the file.
+  // Recompute the preview whenever the raw parse changes
   useEffect(() => {
     if (!importRawParsed) { setImportPreview(null); return; }
-    const scoped = includeExternal ? importRawParsed : importRawParsed.filter(h => h.source !== 'External');
     const fresh: ParsedHolding[] = [];
     const qtyChanged: { parsed: ParsedHolding; existing: any; direction: 'increased' | 'reduced' }[] = [];
     let unchanged = 0;
-    scoped.forEach(h => {
+    importRawParsed.forEach(h => {
       const c = classifyImportRow(h);
       if (c.status === 'new') fresh.push(h);
       else if (c.status === 'qty_changed') qtyChanged.push({ parsed: h, existing: c.existing, direction: c.direction });
       else unchanged++;
     });
-    const excludedExternal = importRawParsed.length - scoped.length;
-    setImportPreview({ fresh, qtyChanged, unchanged, excludedExternal });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [importRawParsed, includeExternal]);
+    setImportPreview({ fresh, qtyChanged, unchanged });
+  }, [importRawParsed]);
 
   const confirmImport = async () => {
     if (!importPreview || (importPreview.fresh.length === 0 && importPreview.qtyChanged.length === 0)) return;
@@ -373,7 +372,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       if (importPreview.fresh.length > 0) {
         await bulkAddPortfolioHoldings(
           importPreview.fresh.map(h => ({
-            holdingType: h.holdingType, broker: h.broker, symbol: h.symbol, isin: h.isin, exchange: h.exchange,
+            holdingType: h.holdingType, broker: h.broker, symbol: h.symbol, isin: h.isin, folioNumber: h.folioNumber, exchange: h.exchange,
             quantity: h.quantity, buyPrice: h.buyPrice, buyDate: importBuyDate, currentPrice: h.currentPrice,
             source: h.source || importSourceTag.trim() || undefined,
           }))
@@ -383,7 +382,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         await reconcilePortfolioHoldingQuantity(existing.id, parsed.quantity, direction === 'increased' ? 'qty_increased' : 'qty_reduced');
       }
       setImportPreview(null);
-      setImportRawParsed(null); setIncludeExternal(false);
+      setImportRawParsed(null);
       setImportSourceTag('');
       setImportBuyDate(todayStr());
       setIsImporting(false);
@@ -618,7 +617,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
               </button>
             )}
             <button
-              onClick={() => { setIsImporting(!isImporting); setImportPreview(null); setImportRawParsed(null); setIncludeExternal(false); }}
+              onClick={() => { setIsImporting(!isImporting); setImportPreview(null); setImportRawParsed(null); }}
               className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
             >
               <Upload className="w-3.5 h-3.5" /> Import from Broker
@@ -670,9 +669,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <div className="apple-card p-4 space-y-3">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Import Holdings File</span>
               <div className="flex gap-1.5 flex-wrap">
-                <button type="button" onClick={() => { setImportTemplate('zerodha'); setImportPreview(null); setImportRawParsed(null); setIncludeExternal(false); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'zerodha' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Zerodha (Stocks + MF)</button>
-                <button type="button" onClick={() => { setImportTemplate('groww_stocks'); setImportPreview(null); setImportRawParsed(null); setIncludeExternal(false); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'groww_stocks' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Stocks</button>
-                <button type="button" onClick={() => { setImportTemplate('groww_mf'); setImportPreview(null); setImportRawParsed(null); setIncludeExternal(false); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'groww_mf' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Mutual Funds</button>
+                <button type="button" onClick={() => { setImportTemplate('zerodha'); setImportPreview(null); setImportRawParsed(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'zerodha' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Zerodha (Stocks + MF)</button>
+                <button type="button" onClick={() => { setImportTemplate('groww_stocks'); setImportPreview(null); setImportRawParsed(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'groww_stocks' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Stocks</button>
+                <button type="button" onClick={() => { setImportTemplate('groww_mf'); setImportPreview(null); setImportRawParsed(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'groww_mf' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Mutual Funds</button>
               </div>
               <p className="text-[9px] text-slate-400">
                 {importTemplate === 'zerodha' && "Console → Holdings → Download as XLSX (stocks and mutual funds are both detected automatically)"}
@@ -688,20 +687,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <input type="file" accept=".xlsx,.xls" onChange={handleImportFile} disabled={importParsing} className="hidden" />
               </label>
 
-              {importRawParsed && importRawParsed.some(h => h.source === 'External') && (
-                <label className="flex items-center gap-2 px-2.5 py-2 bg-slate-50 dark:bg-slate-900 rounded-lg cursor-pointer">
-                  <input type="checkbox" checked={includeExternal} onChange={(e) => setIncludeExternal(e.target.checked)} className="w-4 h-4 cursor-pointer accent-indigo-600" />
-                  <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Include external funds (held via CAS/PAN, not bought through this broker)</span>
-                </label>
-              )}
-
               {importPreview && (
                 <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-900">
                   <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
                     {importPreview.fresh.length} new holding{importPreview.fresh.length !== 1 ? 's' : ''} found
                     {importPreview.qtyChanged.length > 0 && ` · ${importPreview.qtyChanged.length} with a changed quantity`}
                     {importPreview.unchanged > 0 && ` · ${importPreview.unchanged} unchanged (skipped)`}
-                    {importPreview.excludedExternal > 0 && ` · ${importPreview.excludedExternal} external fund${importPreview.excludedExternal !== 1 ? 's' : ''} excluded`}
+                    {' '}· external funds always excluded
                   </p>
                   {importPreview.qtyChanged.length > 0 && (
                     <div className="space-y-1">
@@ -1164,6 +1156,39 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {!isReadOnly && (
+            <div className="apple-card p-4 space-y-2 border-rose-200 dark:border-rose-900/50">
+              <span className="text-[10px] font-black text-rose-500 uppercase tracking-wider">Danger Zone</span>
+              <p className="text-[9px] text-slate-400">Permanently deletes everything in this workspace's Portfolio - all holdings, price history, contributions, splits, withdrawals, dividends, fees, recurring plans, and snapshots. This cannot be undone.</p>
+              {!isConfirmingWipe ? (
+                <button onClick={() => setIsConfirmingWipe(true)} className="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 text-[10px] font-black uppercase rounded-lg cursor-pointer">
+                  Delete All Portfolio Data
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold">Type DELETE to confirm - this removes everything permanently.</p>
+                  <div className="flex gap-2">
+                    <input type="text" value={wipeConfirmText} onChange={(e) => setWipeConfirmText(e.target.value)} placeholder="DELETE" className="px-3 py-1.5 bg-white dark:bg-slate-950 border border-rose-200 dark:border-rose-900 rounded-lg text-xs" />
+                    <button
+                      onClick={() => runAction(async () => {
+                        await deleteAllPortfolioData();
+                        setIsConfirmingWipe(false);
+                        setWipeConfirmText('');
+                      })}
+                      disabled={wipeConfirmText !== 'DELETE'}
+                      className="px-3 py-1.5 bg-rose-500 hover:bg-rose-600 disabled:opacity-40 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
+                    >
+                      Confirm Delete
+                    </button>
+                    <button onClick={() => { setIsConfirmingWipe(false); setWipeConfirmText(''); }} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
