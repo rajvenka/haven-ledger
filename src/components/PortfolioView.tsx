@@ -105,14 +105,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
   const [sellingId, setSellingId] = useState<string | null>(null);
   const [expandedHoldingId, setExpandedHoldingId] = useState<string | null>(null);
-  const [expandedQtyIds, setExpandedQtyIds] = useState<Set<string>>(new Set());
-  const toggleQtyExpand = (id: string) => {
-    setExpandedQtyIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
+  const [expandedQtyId, setExpandedQtyId] = useState<string | null>(null);
   const [isConfirmingWipe, setIsConfirmingWipe] = useState(false);
   const [wipeConfirmText, setWipeConfirmText] = useState('');
   const [holdingsTab, setHoldingsTab] = useState<'active' | 'sold'>('active');
@@ -1240,12 +1233,16 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               </div>
                             )}
                           </td>
-                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300 whitespace-nowrap relative">
-                            <span onClick={() => toggleQtyExpand(h.id)} className="cursor-pointer">
+                          <td
+                            className="p-2.5 text-right text-slate-600 dark:text-slate-300 whitespace-nowrap relative"
+                            onMouseEnter={() => setExpandedQtyId(h.id)}
+                            onMouseLeave={() => setExpandedQtyId(prev => (prev === h.id ? null : prev))}
+                          >
+                            <span onClick={() => setExpandedQtyId(prev => (prev === h.id ? null : h.id))} className="cursor-pointer">
                               {fmtQty(Number(h.quantity))}
                             </span>
-                            {expandedQtyIds.has(h.id) && (
-                              <div className="absolute right-0 bottom-full mb-1 z-10 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-nowrap">
+                            {expandedQtyId === h.id && (
+                              <div className="absolute right-0 bottom-full mb-1 z-20 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-nowrap">
                                 {h.quantity}
                               </div>
                             )}
@@ -1470,12 +1467,16 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               {h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
                             </div>
                           </td>
-                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300 whitespace-nowrap relative">
-                            <span onClick={() => toggleQtyExpand(h.id)} className="cursor-pointer">
+                          <td
+                            className="p-2.5 text-right text-slate-600 dark:text-slate-300 whitespace-nowrap relative"
+                            onMouseEnter={() => setExpandedQtyId(h.id)}
+                            onMouseLeave={() => setExpandedQtyId(prev => (prev === h.id ? null : prev))}
+                          >
+                            <span onClick={() => setExpandedQtyId(prev => (prev === h.id ? null : h.id))} className="cursor-pointer">
                               {fmtQty(Number(h.quantity))}
                             </span>
-                            {expandedQtyIds.has(h.id) && (
-                              <div className="absolute right-0 bottom-full mb-1 z-10 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-nowrap">
+                            {expandedQtyId === h.id && (
+                              <div className="absolute right-0 bottom-full mb-1 z-20 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-nowrap">
                                 {h.quantity}
                               </div>
                             )}
