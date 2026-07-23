@@ -65,7 +65,7 @@ export default function ReportsView(props: ReportsViewProps) {
   const totalFees = portfolioFees.reduce((s, f) => s + Number(f.amount), 0);
   const totalInvestedAllTime = totalInvestedActive + soldHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
   const netGain = unrealizedGain + realizedGain + totalDividends - totalFees;
-  const returnPct = totalInvestedAllTime > 0 ? (netGain / totalInvestedAllTime) * 100 : 0;
+  const returnPct = netContributed > 0 ? (netGain / netContributed) * 100 : 0;
 
   const currentSplits = workspaceMembers.map(m => {
     const today = todayStr();
@@ -478,8 +478,8 @@ export default function ReportsView(props: ReportsViewProps) {
       <div className="apple-card p-4 space-y-2 text-xs">
         <div className="flex justify-between"><span className="text-slate-500">Total Contributed (cash in)</span><span className="font-bold text-slate-900 dark:text-white">{fmt(totalContributed)}</span></div>
         <div className="flex justify-between"><span className="text-slate-500">Total Withdrawn (cash out)</span><span className="font-bold text-rose-500">-{fmt(totalWithdrawn)}</span></div>
-        <div className="flex justify-between"><span className="text-slate-500">Net Contributed</span><span className="font-bold text-slate-900 dark:text-white">{fmt(netContributed)}</span></div>
-        <div className="flex justify-between"><span className="text-slate-500">Total Investment (cost basis, active + sold)</span><span className="font-bold text-slate-900 dark:text-white">{fmt(totalInvestedAllTime)}</span></div>
+        <div className="flex justify-between"><span className="text-slate-500">Net Contributed (Total Investment)</span><span className="font-bold text-slate-900 dark:text-white">{fmt(netContributed)}</span></div>
+        <div className="flex justify-between"><span className="text-slate-500">Capital Deployed (cost basis, incl. reinvested)</span><span className="font-bold text-slate-900 dark:text-white">{fmt(totalInvestedAllTime)}</span></div>
         <div className="flex justify-between"><span className="text-slate-500">Current Value of Active Holdings</span><span className="font-bold text-slate-900 dark:text-white">{fmt(currentValueActive)}</span></div>
         <div className="flex justify-between"><span className="text-slate-500">Unrealized Gain/Loss</span><span className={`font-bold ${unrealizedGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{fmt(unrealizedGain)}</span></div>
         <div className="flex justify-between"><span className="text-slate-500">Realized Gain/Loss (sold)</span><span className={`font-bold ${realizedGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{fmt(realizedGain)}</span></div>

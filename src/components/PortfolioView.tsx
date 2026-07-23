@@ -575,7 +575,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const totalFees = portfolioFees.reduce((s, f) => s + Number(f.amount), 0);
   const totalInvestedAllTime = totalInvestedActive + soldHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
   const netGain = unrealizedGain + realizedGain + totalDividends - totalFees;
-  const returnPct = totalInvestedAllTime > 0 ? (netGain / totalInvestedAllTime) * 100 : 0;
+  const returnPct = netContributed > 0 ? (netGain / netContributed) * 100 : 0;
 
   return (
     <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-5 text-left select-none bg-slate-50 dark:bg-slate-900">
@@ -613,8 +613,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <div className="apple-card p-4">
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Total Investment</span>
-          <span className="text-base font-black text-slate-900 dark:text-white">{fmt(totalInvestedAllTime)}</span>
-          <span className="text-[9px] text-slate-400 block mt-0.5">active + sold, cost basis</span>
+          <span className="text-base font-black text-slate-900 dark:text-white">{fmt(netContributed)}</span>
+          <span className="text-[9px] text-slate-400 block mt-0.5">actual contributions, net of withdrawals</span>
         </div>
         <div className="apple-card p-4">
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Current Holdings Value</span>
