@@ -223,7 +223,7 @@ export default function AccountInfo({
   const [workspaceRenameValue, setWorkspaceRenameValue] = useState('');
   const [workspaceActionBusy, setWorkspaceActionBusy] = useState(false);
   const [workspaceActionError, setWorkspaceActionError] = useState<string | null>(null);
-  const ALL_FEATURES = ['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'whatsapp'];
+  const ALL_FEATURES = ['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'whatsapp', 'portfolio'];
   const myAvailableFeatures = userProfile?.isSuperAdmin ? ALL_FEATURES : (userProfile?.licensePlanFeatures ?? ALL_FEATURES);
   const hasWhatsApp = userProfile?.isSuperAdmin || (userProfile?.licensePlanFeatures ?? []).includes('whatsapp');
   const [familyFeatures, setFamilyFeatures] = useState<string[]>(myAvailableFeatures);
@@ -233,7 +233,7 @@ export default function AccountInfo({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userProfile?.licensePlanFeatures?.join(',')]);
   const toggleFeature = (f: string) => setFamilyFeatures(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
-  const FEATURE_META: Record<string, string> = { income: 'Income', rewards: 'Membership Hub', ai: 'AI Insights', team: 'Family Sharing / Team', chat: 'Family Chat', agent: 'AI Agent', whatsapp: 'WhatsApp' };
+  const FEATURE_META: Record<string, string> = { income: 'Income', rewards: 'Membership Hub', ai: 'AI Insights', team: 'Family Sharing / Team', chat: 'Family Chat', agent: 'AI Agent', whatsapp: 'WhatsApp', portfolio: 'Investment / Portfolio' };
   const [joinGroupId, setJoinGroupId] = useState('');
   const [copied, setCopied] = useState(false);
   const [familyError, setFamilyError] = useState<string | null>(null);
@@ -1208,7 +1208,7 @@ export default function AccountInfo({
                       <div className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
                         <Check className="w-3 h-3 text-emerald-500 shrink-0" /> Dashboard, Expenses, Bills, History
                       </div>
-                      {['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'whatsapp'].map(f => {
+                      {['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'whatsapp', 'portfolio'].map(f => {
                         const included = plan.features.includes(f);
                         const labels: Record<string, string> = { income: 'Income', rewards: 'Membership Hub', ai: 'AI Insights', team: 'Family Sharing', chat: 'Family Chat', agent: 'AI Agent', whatsapp: 'WhatsApp' };
                         return (

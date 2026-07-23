@@ -154,7 +154,7 @@ export function usePaymentState() {
       incomeMode: (m.workspaces?.income_mode ?? 'simple') as 'simple' | 'detailed',
       monthlyIncome: m.workspaces?.monthly_income ?? '',
       accessLevel: (m.access_level ?? 'full') as 'full' | 'limited',
-      enabledFeatures: m.enabled_features ?? ['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'whatsapp'],
+      enabledFeatures: m.enabled_features ?? ['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'whatsapp', 'portfolio'],
     }));
     setWorkspaces(list);
 
@@ -330,10 +330,11 @@ export function usePaymentState() {
   // Onboarding entry point: create the user's first workspace of the chosen type
   const setWorkspaceMode = async (mode: 'family' | 'business') => {
     if (!user) throw new Error('Not signed in.');
-    await createWorkspace(mode === 'business' ? 'My Business' : 'My Family', mode);
+    const namePrefix = userProfile?.displayName?.trim() || 'My';
+    await createWorkspace(mode === 'business' ? `${namePrefix} Business` : `${namePrefix} Family`, mode);
   };
 
-  const addFamilyMember = async (email: string, role: 'view' | 'modify' = 'modify', accessLevel: 'full' | 'limited' = 'full', features: string[] = ['income', 'rewards', 'ai', 'team', 'chat', 'agent']) => {
+  const addFamilyMember = async (email: string, role: 'view' | 'modify' = 'modify', accessLevel: 'full' | 'limited' = 'full', features: string[] = ['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'portfolio']) => {
     if (!user) throw new Error('Not signed in.');
     if (!activeWorkspace) throw new Error('Create a workspace first.');
     if (activeWorkspace.role !== 'host') throw new Error('Only the workspace owner can invite members.');
@@ -380,13 +381,9 @@ export function usePaymentState() {
     try {
       const invite = incomingInvitations.find(i => i.id === invitationId);
       if (!invite) throw new Error('Invitation not found.');
-      const rpcParams = { code: invite.inviteCode, requested_role: role, requested_access_level: invite.proposedAccessLevel || 'full', requested_features: invite.proposedFeatures || ['income', 'rewards', 'ai', 'team', 'chat', 'agent'] };
-      console.log('[DEBUG] Calling join_workspace_by_code with params:', JSON.stringify(rpcParams, null, 2));
+      const rpcParams = { code: invite.inviteCode, requested_role: role, requested_access_level: invite.proposedAccessLevel || 'full', requested_features: invite.proposedFeatures || ['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'portfolio'] };
       const { data: joinedWorkspaceId, error: rpcErr } = await supabase.rpc('join_workspace_by_code', rpcParams);
-      console.log('[DEBUG] RPC response - data:', joinedWorkspaceId, 'error:', JSON.stringify(rpcErr, null, 2));
-      if (rpcErr) {
-        throw new Error(`DEBUG - Params sent: ${JSON.stringify(rpcParams)} | Error: ${rpcErr.message} | Code: ${(rpcErr as any).code} | Details: ${(rpcErr as any).details} | Hint: ${(rpcErr as any).hint}`);
-      }
+      if (rpcErr) throw rpcErr;
       if (!joinedWorkspaceId) throw new Error('Could not join the workspace - the invite code may be invalid.');
       // Defensive check: confirm membership genuinely exists before marking this approved,
       // since a silent RPC failure here previously left an invite marked 'approved' with
@@ -1001,6 +998,7 @@ export function usePaymentState() {
 
   const updatePortfolioHolding = async (id: string, updates: {
     currentPrice?: number; status?: 'active' | 'sold'; soldPrice?: number; soldDate?: string; quantity?: number; notes?: string;
+    holdingType?: 'stock' | 'mutual_fund'; source?: string;
   }) => {
     const row: any = {};
     if (updates.currentPrice !== undefined) { row.current_price = updates.currentPrice; row.current_price_updated_at = new Date().toISOString(); }
@@ -1009,6 +1007,8 @@ export function usePaymentState() {
     if (updates.soldDate !== undefined) row.sold_date = updates.soldDate;
     if (updates.quantity !== undefined) row.quantity = updates.quantity;
     if (updates.notes !== undefined) row.notes = updates.notes;
+    if (updates.holdingType !== undefined) row.holding_type = updates.holdingType;
+    if (updates.source !== undefined) row.source = updates.source;
     const { error } = await supabase.from('portfolio_holdings').update(row).eq('id', id);
     if (error) throw error;
     if (updates.currentPrice !== undefined && activeWorkspaceId) {

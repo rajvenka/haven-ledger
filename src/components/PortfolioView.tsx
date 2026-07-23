@@ -563,8 +563,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 {' '}· Prices/quantities come from the file at export time. Already-imported holdings are automatically skipped.
               </p>
 
-              <input type="file" accept=".xlsx,.xls" onChange={handleImportFile} disabled={importParsing} className="text-xs" />
-              {importParsing && <p className="text-[10px] text-slate-400">Reading file…</p>}
+              <label className="flex flex-col items-center justify-center gap-2 px-4 py-6 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500 rounded-xl cursor-pointer transition-colors bg-slate-50/50 dark:bg-slate-900/50">
+                <Upload className="w-5 h-5 text-slate-400" />
+                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{importParsing ? 'Reading file…' : 'Click to choose your .xlsx file'}</span>
+                <span className="text-[10px] text-slate-400">or drag it here</span>
+                <input type="file" accept=".xlsx,.xls" onChange={handleImportFile} disabled={importParsing} className="hidden" />
+              </label>
 
               {importPreview && (
                 <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-900">
@@ -772,7 +776,17 @@ export default function PortfolioView(props: PortfolioViewProps) {
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-bold text-slate-900 dark:text-white">{h.symbol}</span>
                               <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{h.broker}</span>
-                              {h.holding_type === 'mutual_fund' && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 rounded-full">MF</span>}
+                              {!isReadOnly ? (
+                                <button
+                                  onClick={() => runAction(() => updatePortfolioHolding(h.id, { holdingType: h.holding_type === 'mutual_fund' ? 'stock' : 'mutual_fund' }))}
+                                  title="Click to switch between Stock and Mutual Fund"
+                                  className={`text-[8px] font-bold px-1.5 py-0.2 rounded-full cursor-pointer ${h.holding_type === 'mutual_fund' ? 'bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400' : 'bg-slate-50 dark:bg-slate-900 text-slate-400 border border-slate-200 dark:border-slate-800'}`}
+                                >
+                                  {h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}
+                                </button>
+                              ) : (
+                                h.holding_type === 'mutual_fund' && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 rounded-full">MF</span>
+                              )}
                               {h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
                             </div>
                             {(targetPrice || holdUntil) && (

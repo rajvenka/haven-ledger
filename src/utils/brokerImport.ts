@@ -56,7 +56,7 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
         symbol: String(r['Symbol']).trim(),
         isin: r['ISIN'] ? String(r['ISIN']).trim() : undefined,
         exchange: 'NSE' as const,
-        quantity: Number(r['Quantity Available']) || 0,
+        quantity: (Number(r['Quantity Available']) || 0) + (Number(r['Quantity Pledged (Margin)']) || 0),
         buyPrice: Number(r['Average Price']) || 0,
         currentPrice: Number(r['Previous Closing Price']) || 0,
       }))
