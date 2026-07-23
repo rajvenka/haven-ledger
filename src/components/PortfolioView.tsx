@@ -1360,6 +1360,28 @@ export default function PortfolioView(props: PortfolioViewProps) {
             </div>
           )}
 
+          {(() => {
+            const buyValue = filteredSoldHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
+            const soldValue = filteredSoldHoldings.reduce((s, h) => s + Number(h.sold_price) * Number(h.quantity), 0);
+            const pl = soldValue - buyValue;
+            return (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="apple-card p-3">
+                  <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Buy Value</span>
+                  <span className="text-sm font-black text-slate-900 dark:text-white">{fmt(buyValue)}</span>
+                </div>
+                <div className="apple-card p-3">
+                  <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Sold Value</span>
+                  <span className="text-sm font-black text-slate-900 dark:text-white">{fmt(soldValue)}</span>
+                </div>
+                <div className="apple-card p-3">
+                  <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Profit/Loss</span>
+                  <span className={`text-sm font-black ${pl >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{pl >= 0 ? '+' : ''}{fmt(pl)}</span>
+                </div>
+              </div>
+            );
+          })()}
+
           <div>
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Sold ({filteredSoldHoldings.length}{soldHoldingFilters.size > 0 ? ` of ${soldHoldings.length}` : ''})</span>
             <div className="apple-card mt-1.5 overflow-x-auto">
