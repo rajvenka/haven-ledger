@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Trash2, Gift, Receipt, FileBarChart } from 'lucide-react';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface WorkspaceMemberLite {
   uid: string;
@@ -83,6 +84,46 @@ export default function ReportsView(props: ReportsViewProps) {
         <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 rounded-xl text-[11px] text-rose-600 dark:text-rose-400 font-semibold">{formError}</div>
       )}
 
+      {/* Portfolio Allocation */}
+      {activeHoldings.length > 0 && (() => {
+        const bySource = new Map<string, number>();
+        activeHoldings.forEach(h => {
+          const key = h.source || 'Untagged';
+          const value = Number(h.current_price ?? h.buy_price) * Number(h.quantity);
+          bySource.set(key, (bySource.get(key) || 0) + value);
+        });
+        const data = Array.from(bySource.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+        const colors = ['#6366f1', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'];
+        return (
+          <div className="apple-card p-4 space-y-3">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Portfolio Allocation (by Source)</span>
+            <div className="flex items-center gap-4">
+              <div className="w-32 h-32 shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={data} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="100%" paddingAngle={2}>
+                      {data.map((_, i) => <Cell key={i} fill={colors[i % colors.length]} />)}
+                    </Pie>
+                    <Tooltip formatter={(v: number) => fmt(v)} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex-1 space-y-1 max-h-32 overflow-y-auto">
+                {data.map((d, i) => (
+                  <div key={d.name} className="flex items-center justify-between text-[11px]">
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: colors[i % colors.length] }} />
+                      <span className="text-slate-600 dark:text-slate-300 truncate">{d.name}</span>
+                    </span>
+                    <span className="font-bold text-slate-900 dark:text-white shrink-0 ml-2">{fmt(d.value)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Monthly Movement Report */}
       <div className="apple-card p-4 space-y-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
@@ -122,7 +163,27 @@ export default function ReportsView(props: ReportsViewProps) {
           const labels = Array.from(new Set([...olderRows.map(r => r.label), ...newerRows.map(r => r.label)]));
           const orderedLabels = [...labels.filter(l => l !== 'Total Asset Value'), ...(labels.includes('Total Asset Value') ? ['Total Asset Value'] : [])];
           return (
-            <div className="overflow-x-auto">
+            <div className="space-y-3">
+              <div className="h-40">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={orderedLabels.map(label => ({
+                      label: label === 'Total Asset Value' ? 'Total' : label,
+                      [olderDate]: Number(olderRows.find(r => r.label === label)?.current_value ?? 0),
+                      [newerDate]: Number(newerRows.find(r => r.label === label)?.current_value ?? 0),
+                    }))}
+                    margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.3} vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(v: number) => fmt(v)} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                    <Bar dataKey={olderDate} fill="#94a3b8" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey={newerDate} fill="#6366f1" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="overflow-x-auto">
               <table className="w-full text-xs min-w-[640px]">
                 <thead>
                   <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
@@ -154,6 +215,7 @@ export default function ReportsView(props: ReportsViewProps) {
               {!isReadOnly && (
                 <button onClick={() => runAction(() => deletePortfolioSnapshotBatch(newerDate))} className="mt-2 text-[9px] font-bold text-rose-400 hover:text-rose-500 cursor-pointer">Delete {newerDate} snapshot</button>
               )}
+              </div>
             </div>
           );
         })()}
@@ -202,6 +264,38 @@ export default function ReportsView(props: ReportsViewProps) {
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Target Progress</span>
               <p className="text-[9px] text-slate-400 mt-0.5">"On/Off Target" compares price progress made vs. time elapsed toward your target date (pacing). Holdings with no target date are shown as On Target with price-only progress.</p>
             </div>
+            <div className="flex items-center gap-4">
+              <div className="w-28 h-28 shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={groups.filter(g => g.items.length > 0).map(g => ({ name: g.label, value: g.items.length }))}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius="60%"
+                      outerRadius="100%"
+                      paddingAngle={3}
+                    >
+                      {groups.filter(g => g.items.length > 0).map(g => (
+                        <Cell key={g.key} fill={g.key === 'exceeds' ? '#10b981' : g.key === 'on' ? '#6366f1' : '#f43f5e'} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v: number) => [`${v} holding${v !== 1 ? 's' : ''}`, '']} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex-1 space-y-1.5">
+                {groups.map(g => g.items.length > 0 && (
+                  <div key={g.key} className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: g.key === 'exceeds' ? '#10b981' : g.key === 'on' ? '#6366f1' : '#f43f5e' }} />
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{g.label}</span>
+                    </span>
+                    <span className="font-black text-slate-900 dark:text-white">{g.items.length}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
             {groups.map(g => g.items.length > 0 && (
               <div key={g.key} className="space-y-2">
                 <span className={`text-[9px] font-black uppercase tracking-wider ${g.colorClass}`}>{g.label} ({g.items.length})</span>
@@ -239,9 +333,18 @@ export default function ReportsView(props: ReportsViewProps) {
         const last90 = activeHoldings.filter(h => new Date(h.buy_date).getTime() >= days(90) && new Date(h.buy_date).getTime() < days(30));
         const last365 = activeHoldings.filter(h => new Date(h.buy_date).getTime() >= days(365) && new Date(h.buy_date).getTime() < days(90));
         if (last30.length === 0 && last90.length === 0 && last365.length === 0) return null;
+
+        const investedOf = (items: any[]) => items.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
+        const totalInvestedAllBuckets = investedOf(last30) + investedOf(last90) + investedOf(last365);
+        const chartData = [
+          { label: '30d', invested: investedOf(last30), count: last30.length },
+          { label: '3mo', invested: investedOf(last90), count: last90.length },
+          { label: '1yr', invested: investedOf(last365), count: last365.length },
+        ];
+
         const bucket = (label: string, items: any[]) => items.length > 0 && (
           <div key={label} className="space-y-1">
-            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{label} ({items.length})</span>
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{label} ({items.length}) · {fmt(investedOf(items))}</span>
             {items.map(h => (
               <div key={h.id} className="flex items-center justify-between text-xs py-1">
                 <span className="text-slate-600 dark:text-slate-300">{h.symbol} {h.source && <span className="text-[9px] text-slate-400">· {h.source}</span>}</span>
@@ -252,7 +355,20 @@ export default function ReportsView(props: ReportsViewProps) {
         );
         return (
           <div className="apple-card p-4 space-y-3">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">New Stocks Added</span>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">New Stocks Added</span>
+              <span className="text-xs font-black text-slate-900 dark:text-white">{fmt(totalInvestedAllBuckets)} total</span>
+            </div>
+            <div className="h-32">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
+                  <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="label" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={30} />
+                  <Tooltip formatter={(v: number, name: string, props: any) => [`${fmt(v)} (${props.payload.count} stock${props.payload.count !== 1 ? 's' : ''})`, 'Invested']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                  <Bar dataKey="invested" radius={[0, 4, 4, 0]} fill="#6366f1" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
             {bucket('Last 30 Days', last30)}
             {bucket('Last 3 Months', last90)}
             {bucket('Last Year', last365)}
@@ -284,7 +400,25 @@ export default function ReportsView(props: ReportsViewProps) {
           });
           const months = Array.from(monthMap.keys()).sort().reverse();
           if (months.length === 0) return <p className="text-[11px] text-slate-400">No sold holdings, dividends, or fees recorded yet.</p>;
+          const chartData = [...months].reverse().map(m => {
+            const { realized, dividends, fees } = monthMap.get(m)!;
+            return { month: new Date(`${m}-01`).toLocaleString('default', { month: 'short', year: '2-digit' }), net: realized + dividends - fees };
+          });
           return (
+            <>
+            <div className="h-40">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.3} vertical={false} />
+                  <XAxis dataKey="month" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                  <Tooltip formatter={(v: number) => [fmt(v), 'Net P&L']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                  <Bar dataKey="net" radius={[4, 4, 0, 0]}>
+                    {chartData.map((d, i) => <Cell key={i} fill={d.net >= 0 ? '#10b981' : '#f43f5e'} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
             <div className="divide-y divide-slate-100 dark:divide-slate-900">
               {months.map(m => {
                 const { realized, dividends, fees } = monthMap.get(m)!;
@@ -301,6 +435,7 @@ export default function ReportsView(props: ReportsViewProps) {
                 );
               })}
             </div>
+            </>
           );
         })()}
       </div>
