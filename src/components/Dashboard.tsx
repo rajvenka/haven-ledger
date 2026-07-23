@@ -48,6 +48,7 @@ interface DashboardProps {
   countries: CountryConfig[];
   summaryCurrency: Currency;
   onRecordPayment: (payment: RecurringPayment, dueDate?: string) => void;
+  onNavigateToBills?: () => void;
   isReadOnly?: boolean;
   currentUserUid?: string;
   monthlyIncomeEstimate?: number;
@@ -71,6 +72,7 @@ export default function Dashboard({
   countries = [],
   summaryCurrency,
   onRecordPayment,
+  onNavigateToBills,
   isReadOnly = false,
   currentUserUid,
   monthlyIncomeEstimate = 0,
@@ -260,9 +262,12 @@ export default function Dashboard({
               Add your first bill or subscription and this becomes your at-a-glance view of what's due, what's paid, and where your money's going.
             </p>
           </div>
-          <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#007aff] dark:text-[#0a84ff]">
+          <button
+            onClick={() => onNavigateToBills?.()}
+            className="flex items-center gap-1.5 text-[11px] font-bold text-[#007aff] dark:text-[#0a84ff] cursor-pointer hover:underline"
+          >
             <PlusCircle className="w-4 h-4" /> Add a bill from Manage Bills
-          </div>
+          </button>
         </div>
       ) : (
         <>

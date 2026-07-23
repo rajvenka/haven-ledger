@@ -1382,6 +1382,7 @@ export default function App() {
                 countries={countries}
                 summaryCurrency={summaryCurrency}
                 onRecordPayment={handleRecordPayment}
+                onNavigateToBills={() => setActiveTab('configure')}
                 isReadOnly={userProfile?.role === 'view'}
                 monthlyIncomeEstimate={parseFloat(monthlyIncome) || 0}
                 incomeSources={incomeSources}
