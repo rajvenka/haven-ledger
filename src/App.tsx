@@ -8,6 +8,7 @@ import {
   Wallet,
   Briefcase,
   ClipboardList,
+  FileBarChart,
   ShieldCheck,
   Bell, 
   X, 
@@ -54,6 +55,7 @@ import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import RewardsTracker from './components/RewardsTracker';
 import PortfolioView from './components/PortfolioView';
 import InvestmentPlanView from './components/InvestmentPlanView';
+import ReportsView from './components/ReportsView';
 import IncomeView from './components/IncomeView';
 import AdminUsersView from './components/AdminUsersView';
 
@@ -700,6 +702,23 @@ export default function App() {
                       <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                     )}
                   </button>
+
+                  <button
+                    onClick={() => setActiveTab('reports')}
+                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                      activeTab === 'reports'
+                        ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <FileBarChart className="w-4 h-4 shrink-0 opacity-80" />
+                      <span>Reports</span>
+                    </div>
+                    {activeTab === 'reports' && (
+                      <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
+                    )}
+                  </button>
                 </nav>
               </div>
               )}
@@ -1101,6 +1120,23 @@ export default function App() {
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                         )}
                       </button>
+
+                      <button
+                        onClick={() => { setActiveTab('reports'); setIsMobileMenuOpen(false); }}
+                        className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                          activeTab === 'reports'
+                            ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <FileBarChart className="w-4.5 h-4.5 shrink-0 opacity-80" />
+                          <span>Reports</span>
+                        </div>
+                        {activeTab === 'reports' && (
+                          <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
+                        )}
+                      </button>
                     </nav>
                   </div>
                   )}
@@ -1494,6 +1530,25 @@ export default function App() {
                 addPortfolioRecurringPlan={addPortfolioRecurringPlan}
                 updatePortfolioRecurringPlan={updatePortfolioRecurringPlan}
                 deletePortfolioRecurringPlan={deletePortfolioRecurringPlan}
+              />
+            ) : activeTab === 'reports' ? (
+              <ReportsView
+                workspaceName={activeWorkspace?.name}
+                workspaceMembers={familyMembers}
+                isReadOnly={isReadOnly}
+                portfolioHoldings={portfolioHoldings}
+                portfolioContributions={portfolioContributions}
+                portfolioWithdrawals={portfolioWithdrawals}
+                portfolioDividends={portfolioDividends}
+                addPortfolioDividend={addPortfolioDividend}
+                deletePortfolioDividend={deletePortfolioDividend}
+                portfolioFees={portfolioFees}
+                addPortfolioFee={addPortfolioFee}
+                deletePortfolioFee={deletePortfolioFee}
+                portfolioSplits={portfolioSplits}
+                portfolioSnapshots={portfolioSnapshots}
+                takePortfolioSnapshot={takePortfolioSnapshot}
+                deletePortfolioSnapshotBatch={deletePortfolioSnapshotBatch}
               />
             ) : activeTab === 'income' ? (
               <IncomeView
