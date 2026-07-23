@@ -2,7 +2,7 @@ import { parseBrokerFile, parseBrokerFileWithDate, BrokerTemplate, ParsedHolding
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   TrendingUp, TrendingDown, Plus, Trash2, RefreshCw, Users, Wallet,
-  CheckCircle2, X, Briefcase, Gift, Receipt, Upload, Edit2, ChevronDown
+  CheckCircle2, X, Briefcase, Gift, Receipt, Upload, Edit2, ChevronDown, ArrowUpDown
 } from 'lucide-react';
 
 interface WorkspaceMemberLite {
@@ -1069,7 +1069,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
               ) : (
                 <table className="w-full text-xs min-w-[720px]">
                   <thead>
-                    <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                    <tr className="border-b border-slate-100 dark:border-slate-900 text-[11px] font-black text-slate-400 uppercase tracking-wider">
                       {isSelectingForTag && (
                         <th className="p-2.5 text-left w-8">
                           <input
@@ -1105,7 +1105,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         >
                           <span className="inline-flex items-center gap-0.5">
                             {label}
-                            {sortField === field && <span className="text-indigo-500">{sortDirection === 'asc' ? '↑' : '↓'}</span>}
+                            {sortField === field ? <span className="text-indigo-500">{sortDirection === 'asc' ? '↑' : '↓'}</span> : <ArrowUpDown className="w-2.5 h-2.5 text-slate-300 dark:text-slate-600" />}
                           </span>
                         </th>
                       ))}
@@ -1305,7 +1305,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
               ) : (
                 <table className="w-full text-xs min-w-[720px]">
                   <thead>
-                    <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                    <tr className="border-b border-slate-100 dark:border-slate-900 text-[11px] font-black text-slate-400 uppercase tracking-wider">
                       {([
                         ['symbol', 'Instrument', 'text-left'],
                         ['quantity', 'Qty', 'text-right'],
@@ -1324,7 +1324,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         >
                           <span className="inline-flex items-center gap-0.5">
                             {label}
-                            {soldSortField === field && <span className="text-indigo-500">{soldSortDirection === 'asc' ? '↑' : '↓'}</span>}
+                            {soldSortField === field ? <span className="text-indigo-500">{soldSortDirection === 'asc' ? '↑' : '↓'}</span> : <ArrowUpDown className="w-2.5 h-2.5 text-slate-300 dark:text-slate-600" />}
                           </span>
                         </th>
                       ))}
