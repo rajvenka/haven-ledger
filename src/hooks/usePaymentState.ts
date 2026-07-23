@@ -1018,7 +1018,7 @@ export function usePaymentState() {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const sorted = [...snapshots].sort((a, b) => a.date.localeCompare(b.date));
     const allDates = sorted.map(s => s.date);
-    const latestGlobalDate = allDates[allDates.length - 1];
+    const batchLatestDate = allDates[allDates.length - 1];
 
     // Group every (date, row) occurrence by a stable stock key
     const byKey = new Map<string, { date: string; row: any }[]>();
@@ -1032,30 +1032,63 @@ export function usePaymentState() {
       });
     });
 
+    // This upload might be an incremental addition to data we already have (e.g. an older
+    // file added after a more recent one was already processed) - so "latest known date"
+    // must consider what's already in the database too, not just this batch's own dates.
+    // Otherwise an older file uploaded on its own would look like "the latest we know",
+    // wrongly resurrecting stocks that are already correctly marked sold.
+    const brokersInBatch = new Set(sorted.flatMap(s => s.holdings.map(h => h.broker)));
+    let existingMaxKnownDate: string | null = null;
+    for (const broker of brokersInBatch) {
+      const dates = portfolioHoldings
+        .filter(h => h.broker === broker)
+        .map(h => h.status === 'active' ? h.reference_date : h.sold_date)
+        .filter(Boolean);
+      const maxForBroker = dates.length > 0 ? dates.sort().reverse()[0] : null;
+      if (maxForBroker && (!existingMaxKnownDate || maxForBroker > existingMaxKnownDate)) existingMaxKnownDate = maxForBroker;
+    }
+    const trueLatestDate = existingMaxKnownDate && existingMaxKnownDate > batchLatestDate ? existingMaxKnownDate : batchLatestDate;
+
     let newCount = 0;
     let updatedCount = 0;
     let soldCount = 0;
+    let skippedStaleCount = 0;
     let priceHistoryCount = 0;
 
     for (const [, occurrences] of byKey) {
       occurrences.sort((a, b) => a.date.localeCompare(b.date));
       const first = occurrences[0];
       const last = occurrences[occurrences.length - 1];
-      // If this stock's last known appearance isn't in the most recent file, it was sold
-      // sometime between then and the next snapshot - we can't know the exact day, so the
-      // next snapshot's date is the earliest point we can be sure it was already gone.
-      const wasSoldInBetween = last.date !== latestGlobalDate;
-      const soldDateIdx = allDates.indexOf(last.date) + 1;
-      const inferredSoldDate = wasSoldInBetween ? (allDates[soldDateIdx] || last.date) : null;
 
+      // Match against a holding of ANY status - matching only active holdings meant a stock
+      // already correctly marked sold would get a brand new duplicate row instead of being
+      // recognized, if an older file mentioning it was uploaded afterward.
       let holdingId: string;
       const existing = portfolioHoldings.find(h => {
-        if (h.status !== 'active') return false;
         if (h.broker !== first.row.broker) return false;
         if (first.row.isin && h.isin) return h.isin === first.row.isin;
         if (first.row.folioNumber && h.folio_number) return h.folio_number === first.row.folioNumber;
         return h.symbol === first.row.symbol.toUpperCase() && h.holding_type === first.row.holdingType && !h.folio_number && !first.row.folioNumber;
       });
+
+      // If we already have more current information about this specific stock than what
+      // this batch provides, this upload is stale for it - record the price history for
+      // completeness, but don't touch its current status, price, or quantity at all.
+      const existingKnownDate = existing ? (existing.status === 'active' ? existing.reference_date : existing.sold_date) : null;
+      const thisUploadIsStale = !!(existingKnownDate && existingKnownDate > last.date);
+
+      if (thisUploadIsStale && existing) {
+        const historyRows = occurrences.map(o => ({ workspace_id: activeWorkspaceId, holding_id: existing.id, price: o.row.currentPrice ?? o.row.buyPrice, recorded_date: o.date }));
+        const { error: histErr } = await supabase.from('portfolio_price_history').insert(historyRows);
+        if (histErr) throw histErr;
+        priceHistoryCount += historyRows.length;
+        skippedStaleCount++;
+        continue;
+      }
+
+      const wasSoldInBetween = last.date !== trueLatestDate;
+      const soldDateIdx = allDates.indexOf(last.date) + 1;
+      const inferredSoldDate = wasSoldInBetween ? (allDates[soldDateIdx] || last.date) : null;
 
       if (existing) {
         holdingId = existing.id;
@@ -1118,7 +1151,7 @@ export function usePaymentState() {
     }
 
     await loadPortfolioDetails();
-    return { newCount, updatedCount, soldCount, priceHistoryCount, stockCount: byKey.size };
+    return { newCount, updatedCount, soldCount, skippedStaleCount, priceHistoryCount, stockCount: byKey.size };
   };
 
   const updatePortfolioHolding = async (id: string, updates: {

@@ -31,7 +31,7 @@ interface PortfolioViewProps {
     holdingType: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string;
   }[]) => Promise<void>;
   reconcilePortfolioHoldingQuantity: (id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced') => Promise<void>;
-  bulkHistoricalImport: (snapshots: { date: string; holdings: any[] }[]) => Promise<{ newCount: number; updatedCount: number; soldCount: number; priceHistoryCount: number; stockCount: number }>;
+  bulkHistoricalImport: (snapshots: { date: string; holdings: any[] }[]) => Promise<{ newCount: number; updatedCount: number; soldCount: number; skippedStaleCount: number; priceHistoryCount: number; stockCount: number }>;
   updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
   deletePortfolioHolding: (id: string) => Promise<void>;
   bulkTagPortfolioHoldings: (holdingIds: string[], source: string) => Promise<void>;
@@ -319,7 +319,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [historicalParsing, setHistoricalParsing] = useState(false);
   const [historicalSnapshots, setHistoricalSnapshots] = useState<{ date: string; holdings: ParsedHolding[]; fileName: string }[]>([]);
   const [historicalSaving, setHistoricalSaving] = useState(false);
-  const [historicalResult, setHistoricalResult] = useState<{ newCount: number; updatedCount: number; soldCount: number; priceHistoryCount: number; stockCount: number } | null>(null);
+  const [historicalResult, setHistoricalResult] = useState<{ newCount: number; updatedCount: number; soldCount: number; skippedStaleCount: number; priceHistoryCount: number; stockCount: number } | null>(null);
 
   const handleHistoricalFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files: File[] = e.target.files ? Array.from(e.target.files) : [];
@@ -870,7 +870,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
               {historicalResult && (
                 <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                  Done: {historicalResult.stockCount} stocks processed, {historicalResult.newCount} newly added, {historicalResult.updatedCount} quantity updated, {historicalResult.soldCount} marked sold (missing from latest file), {historicalResult.priceHistoryCount} price points recorded.
+                  Done: {historicalResult.stockCount} stocks processed, {historicalResult.newCount} newly added, {historicalResult.updatedCount} quantity updated, {historicalResult.soldCount} marked sold (missing from latest known date), {historicalResult.skippedStaleCount > 0 && `${historicalResult.skippedStaleCount} skipped (older than data already on file), `}{historicalResult.priceHistoryCount} price points recorded.
                 </p>
               )}
             </div>
