@@ -265,7 +265,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         importPreview.fresh.map(h => ({
           holdingType: h.holdingType, broker: h.broker, symbol: h.symbol, isin: h.isin, exchange: h.exchange,
           quantity: h.quantity, buyPrice: h.buyPrice, buyDate: importBuyDate, currentPrice: h.currentPrice,
-          source: importSourceTag.trim() || undefined,
+          source: h.source || importSourceTag.trim() || undefined,
         }))
       );
       setImportPreview(null);
@@ -586,6 +586,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                             <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
                               {h.symbol}
                               {h.holdingType === 'mutual_fund' && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 rounded-full">MF</span>}
+                              {h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
                             </span>
                             <span className="text-slate-400">{h.quantity} @ ₹{h.buyPrice.toFixed(2)}</span>
                           </div>
@@ -605,7 +606,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         list="source-suggestions"
                         value={importSourceTag}
                         onChange={(e) => setImportSourceTag(e.target.value)}
-                        placeholder="Tag all of these as e.g. Rajavel Stock SME (optional)"
+                        placeholder="Tag any without a detected source as e.g. Rajavel Stock SME (optional)"
                         className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
                       />
                       <button

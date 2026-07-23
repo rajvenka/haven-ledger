@@ -9,6 +9,7 @@ export interface ParsedHolding {
   quantity: number;
   buyPrice: number;
   currentPrice: number;
+  source?: string;
 }
 
 export type BrokerTemplate = 'zerodha' | 'groww_stocks' | 'groww_mf';
@@ -121,6 +122,7 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
         quantity: units,
         buyPrice: units > 0 ? invested / units : 0,
         currentPrice: units > 0 ? current / units : 0,
+        source: r['Source'] ? String(r['Source']).trim() : undefined, // "Groww" (bought via app) or "External" (linked via CAS/PAN, bought elsewhere)
       };
     });
 }
