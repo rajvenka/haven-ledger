@@ -2,7 +2,7 @@ import { parseBrokerFile, BrokerTemplate, ParsedHolding } from '../utils/brokerI
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   TrendingUp, TrendingDown, Plus, Trash2, RefreshCw, Users, Wallet,
-  CheckCircle2, X, Briefcase, Gift, Receipt, Upload, Edit2
+  CheckCircle2, X, Briefcase, Gift, Receipt, Upload, Edit2, ChevronDown
 } from 'lucide-react';
 
 interface WorkspaceMemberLite {
@@ -98,6 +98,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [hHoldUntilDate, setHHoldUntilDate] = useState('');
   const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
   const [sellingId, setSellingId] = useState<string | null>(null);
+  const [expandedHoldingId, setExpandedHoldingId] = useState<string | null>(null);
+  const [editTargetType, setEditTargetType] = useState<'price' | 'percent'>('percent');
+  const [editTargetValue, setEditTargetValue] = useState('');
+  const [editHoldType, setEditHoldType] = useState<'days' | 'date'>('date');
+  const [editHoldDays, setEditHoldDays] = useState('');
+  const [editHoldUntilDate, setEditHoldUntilDate] = useState('');
   const [sellPrice, setSellPrice] = useState('');
   const [sellDate, setSellDate] = useState(todayStr());
 
@@ -826,7 +832,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         : null;
 
                       return (
-                        <tr key={h.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
+                        <React.Fragment key={h.id}>
+                        <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
                           {isSelectingForTag && (
                             <td className="p-2.5">
                               <input type="checkbox" checked={selectedHoldingIds.has(h.id)} onChange={() => toggleHoldingSelected(h.id)} className="w-4 h-4 cursor-pointer accent-indigo-600" />
@@ -904,9 +911,65 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               {!isReadOnly && (
                                 <button onClick={() => runAction(() => deletePortfolioHolding(h.id))} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                               )}
+                              <button
+                                onClick={() => {
+                                  if (expandedHoldingId === h.id) { setExpandedHoldingId(null); return; }
+                                  setExpandedHoldingId(h.id);
+                                  setEditTargetType(h.target_type || 'percent');
+                                  setEditTargetValue(h.target_type === 'price' ? String(h.target_price ?? '') : String(h.target_percent ?? ''));
+                                  setEditHoldType(h.hold_type || 'date');
+                                  setEditHoldDays(String(h.hold_days ?? ''));
+                                  setEditHoldUntilDate(h.hold_until_date || '');
+                                }}
+                                title="Set target price & date"
+                                className="p-1 text-slate-300 hover:text-indigo-500 cursor-pointer"
+                              >
+                                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${expandedHoldingId === h.id ? 'rotate-180' : ''}`} />
+                              </button>
                             </div>
                           </td>
                         </tr>
+                        {expandedHoldingId === h.id && (
+                          <tr>
+                            <td colSpan={isSelectingForTag ? 10 : 9} className="p-3 bg-slate-50 dark:bg-slate-900">
+                              <div className="grid grid-cols-2 gap-2 max-w-lg">
+                                <div className="flex gap-1.5 col-span-2">
+                                  <button type="button" onClick={() => setEditTargetType('percent')} className={`flex-1 py-1 rounded-md text-[10px] font-bold cursor-pointer ${editTargetType === 'percent' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500'}`}>Target % Gain</button>
+                                  <button type="button" onClick={() => setEditTargetType('price')} className={`flex-1 py-1 rounded-md text-[10px] font-bold cursor-pointer ${editTargetType === 'price' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500'}`}>Target Price ₹</button>
+                                </div>
+                                <input type="number" value={editTargetValue} onChange={(e) => setEditTargetValue(e.target.value)} placeholder={editTargetType === 'percent' ? 'e.g. 25 (%)' : 'e.g. 1500 (₹)'} className="col-span-2 px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-xs" />
+                                <div className="flex gap-1.5 col-span-2">
+                                  <button type="button" onClick={() => setEditHoldType('days')} className={`flex-1 py-1 rounded-md text-[10px] font-bold cursor-pointer ${editHoldType === 'days' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500'}`}>Hold N Days</button>
+                                  <button type="button" onClick={() => setEditHoldType('date')} className={`flex-1 py-1 rounded-md text-[10px] font-bold cursor-pointer ${editHoldType === 'date' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500'}`}>Hold Until Date</button>
+                                </div>
+                                {editHoldType === 'days' ? (
+                                  <input type="number" value={editHoldDays} onChange={(e) => setEditHoldDays(e.target.value)} placeholder="e.g. 90 days" className="col-span-2 px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-xs" />
+                                ) : (
+                                  <input type="date" value={editHoldUntilDate} onChange={(e) => setEditHoldUntilDate(e.target.value)} className="col-span-2 px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-xs" />
+                                )}
+                                {!isReadOnly && (
+                                  <button
+                                    onClick={() => runAction(async () => {
+                                      await updatePortfolioHolding(h.id, {
+                                        targetType: editTargetValue ? editTargetType : null,
+                                        targetPrice: editTargetValue && editTargetType === 'price' ? parseFloat(editTargetValue) : null,
+                                        targetPercent: editTargetValue && editTargetType === 'percent' ? parseFloat(editTargetValue) : null,
+                                        holdType: (editHoldType === 'days' ? editHoldDays : editHoldUntilDate) ? editHoldType : null,
+                                        holdDays: editHoldType === 'days' && editHoldDays ? parseInt(editHoldDays) : null,
+                                        holdUntilDate: editHoldType === 'date' && editHoldUntilDate ? editHoldUntilDate : null,
+                                      });
+                                      setExpandedHoldingId(null);
+                                    })}
+                                    className="col-span-2 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-md cursor-pointer"
+                                  >
+                                    Save Target & Hold Plan
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        </React.Fragment>
                       );
                     })}
                   </tbody>

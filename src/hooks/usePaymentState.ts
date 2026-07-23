@@ -999,6 +999,8 @@ export function usePaymentState() {
   const updatePortfolioHolding = async (id: string, updates: {
     currentPrice?: number; priceDate?: string; status?: 'active' | 'sold'; soldPrice?: number; soldDate?: string; quantity?: number; notes?: string;
     holdingType?: 'stock' | 'mutual_fund'; source?: string;
+    targetType?: 'price' | 'percent' | null; targetPrice?: number | null; targetPercent?: number | null;
+    holdType?: 'days' | 'date' | null; holdDays?: number | null; holdUntilDate?: string | null;
   }) => {
     const row: any = {};
     if (updates.currentPrice !== undefined) { row.current_price = updates.currentPrice; row.current_price_updated_at = new Date().toISOString(); }
@@ -1009,6 +1011,12 @@ export function usePaymentState() {
     if (updates.notes !== undefined) row.notes = updates.notes;
     if (updates.holdingType !== undefined) row.holding_type = updates.holdingType;
     if (updates.source !== undefined) row.source = updates.source;
+    if (updates.targetType !== undefined) row.target_type = updates.targetType;
+    if (updates.targetPrice !== undefined) row.target_price = updates.targetPrice;
+    if (updates.targetPercent !== undefined) row.target_percent = updates.targetPercent;
+    if (updates.holdType !== undefined) row.hold_type = updates.holdType;
+    if (updates.holdDays !== undefined) row.hold_days = updates.holdDays;
+    if (updates.holdUntilDate !== undefined) row.hold_until_date = updates.holdUntilDate;
 
     // Reference price always tracks whichever capture is chronologically latest - a
     // backdated update (e.g. re-importing an older file) can never move it backwards.
