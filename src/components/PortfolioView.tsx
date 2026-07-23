@@ -30,7 +30,7 @@ interface PortfolioViewProps {
     holdingType: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string;
   }[]) => Promise<void>;
   reconcilePortfolioHoldingQuantity: (id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced') => Promise<void>;
-  bulkHistoricalImport: (snapshots: { date: string; holdings: any[] }[]) => Promise<{ newCount: number; updatedCount: number; priceHistoryCount: number; stockCount: number }>;
+  bulkHistoricalImport: (snapshots: { date: string; holdings: any[] }[]) => Promise<{ newCount: number; updatedCount: number; soldCount: number; priceHistoryCount: number; stockCount: number }>;
   updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
   deletePortfolioHolding: (id: string) => Promise<void>;
   bulkTagPortfolioHoldings: (holdingIds: string[], source: string) => Promise<void>;
@@ -286,7 +286,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [historicalParsing, setHistoricalParsing] = useState(false);
   const [historicalSnapshots, setHistoricalSnapshots] = useState<{ date: string; holdings: ParsedHolding[]; fileName: string }[]>([]);
   const [historicalSaving, setHistoricalSaving] = useState(false);
-  const [historicalResult, setHistoricalResult] = useState<{ newCount: number; updatedCount: number; priceHistoryCount: number; stockCount: number } | null>(null);
+  const [historicalResult, setHistoricalResult] = useState<{ newCount: number; updatedCount: number; soldCount: number; priceHistoryCount: number; stockCount: number } | null>(null);
 
   const handleHistoricalFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files: File[] = e.target.files ? Array.from(e.target.files) : [];
@@ -769,8 +769,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
           {isHistoricalMode && (
             <div className="apple-card p-4 space-y-3">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Backfill Historical Prices</span>
-              <p className="text-[9px] text-slate-400">Select several dated exports from the same broker at once (e.g. one file per month). Each file's date is detected automatically, and the whole timeline is processed together - the earliest file sets when a stock was first known, every date becomes a price point for the trend charts, and the latest file becomes the current price.</p>
-              <div className="flex gap-1.5 flex-wrap">
+              <p className="text-[9px] text-slate-400">Select several dated exports from the same broker at once (e.g. one file per month). Each file's date is detected automatically, and the whole timeline is processed together - the earliest file sets when a stock was first known, every date becomes a price point for the trend charts, the latest file becomes the current price, and any stock present in an earlier file but missing from the latest one is automatically marked Sold (it's no longer in your portfolio).</p>              <div className="flex gap-1.5 flex-wrap">
                 <button type="button" onClick={() => { setHistoricalTemplate('zerodha'); setHistoricalSnapshots([]); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${historicalTemplate === 'zerodha' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Zerodha (Stocks + MF)</button>
                 <button type="button" onClick={() => { setHistoricalTemplate('groww_stocks'); setHistoricalSnapshots([]); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${historicalTemplate === 'groww_stocks' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Stocks</button>
                 <button type="button" onClick={() => { setHistoricalTemplate('groww_mf'); setHistoricalSnapshots([]); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${historicalTemplate === 'groww_mf' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Mutual Funds</button>
@@ -808,7 +807,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
               {historicalResult && (
                 <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                  Done: {historicalResult.stockCount} stocks processed, {historicalResult.newCount} newly added, {historicalResult.updatedCount} quantity updated, {historicalResult.priceHistoryCount} price points recorded.
+                  Done: {historicalResult.stockCount} stocks processed, {historicalResult.newCount} newly added, {historicalResult.updatedCount} quantity updated, {historicalResult.soldCount} marked sold (missing from latest file), {historicalResult.priceHistoryCount} price points recorded.
                 </p>
               )}
             </div>

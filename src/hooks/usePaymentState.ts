@@ -1014,6 +1014,8 @@ export function usePaymentState() {
   ) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const sorted = [...snapshots].sort((a, b) => a.date.localeCompare(b.date));
+    const allDates = sorted.map(s => s.date);
+    const latestGlobalDate = allDates[allDates.length - 1];
 
     // Group every (date, row) occurrence by a stable stock key
     const byKey = new Map<string, { date: string; row: any }[]>();
@@ -1027,12 +1029,19 @@ export function usePaymentState() {
 
     let newCount = 0;
     let updatedCount = 0;
+    let soldCount = 0;
     let priceHistoryCount = 0;
 
     for (const [, occurrences] of byKey) {
       occurrences.sort((a, b) => a.date.localeCompare(b.date));
       const first = occurrences[0];
       const last = occurrences[occurrences.length - 1];
+      // If this stock's last known appearance isn't in the most recent file, it was sold
+      // sometime between then and the next snapshot - we can't know the exact day, so the
+      // next snapshot's date is the earliest point we can be sure it was already gone.
+      const wasSoldInBetween = last.date !== latestGlobalDate;
+      const soldDateIdx = allDates.indexOf(last.date) + 1;
+      const inferredSoldDate = wasSoldInBetween ? (allDates[soldDateIdx] || last.date) : null;
 
       let holdingId: string;
       const existing = portfolioHoldings.find(h => {
@@ -1051,10 +1060,14 @@ export function usePaymentState() {
           isin: first.row.isin ?? null, exchange: first.row.exchange,
           quantity: first.row.quantity, buy_price: first.row.buyPrice, buy_date: first.date,
           source: first.row.source ?? null, change_flag: 'added',
+          status: wasSoldInBetween ? 'sold' : 'active',
+          sold_price: wasSoldInBetween ? last.row.buyPrice : null,
+          sold_date: inferredSoldDate,
         }).select('id').single();
         if (error) throw error;
         holdingId = inserted.id;
         newCount++;
+        if (wasSoldInBetween) soldCount++;
       }
 
       // Every date in this stock's history becomes a price point
@@ -1063,24 +1076,35 @@ export function usePaymentState() {
       if (histErr) throw histErr;
       priceHistoryCount += historyRows.length;
 
-      // Latest date wins for current state - same rule as a normal update
-      const { data: currentRef } = await supabase.from('portfolio_holdings').select('reference_date, quantity').eq('id', holdingId).maybeSingle();
-      const row: any = { current_price: last.row.buyPrice, current_price_updated_at: new Date().toISOString() };
-      if (!currentRef?.reference_date || last.date >= currentRef.reference_date) {
-        row.reference_price = last.row.buyPrice;
-        row.reference_date = last.date;
+      if (existing && wasSoldInBetween) {
+        // Was active in our records but is missing from the latest file - mark it sold now
+        await supabase.from('portfolio_holdings').update({
+          status: 'sold', sold_price: last.row.buyPrice, sold_date: inferredSoldDate,
+        }).eq('id', holdingId);
+        soldCount++;
+        continue;
       }
-      if (existing && currentRef && Number(currentRef.quantity) !== last.row.quantity) {
-        row.quantity = last.row.quantity;
-        row.change_flag = last.row.quantity > Number(currentRef.quantity) ? 'qty_increased' : 'qty_reduced';
-        updatedCount++;
+
+      if (!wasSoldInBetween) {
+        // Latest date wins for current state - same rule as a normal update
+        const { data: currentRef } = await supabase.from('portfolio_holdings').select('reference_date, quantity').eq('id', holdingId).maybeSingle();
+        const row: any = { current_price: last.row.buyPrice, current_price_updated_at: new Date().toISOString() };
+        if (!currentRef?.reference_date || last.date >= currentRef.reference_date) {
+          row.reference_price = last.row.buyPrice;
+          row.reference_date = last.date;
+        }
+        if (existing && currentRef && Number(currentRef.quantity) !== last.row.quantity) {
+          row.quantity = last.row.quantity;
+          row.change_flag = last.row.quantity > Number(currentRef.quantity) ? 'qty_increased' : 'qty_reduced';
+          updatedCount++;
+        }
+        const { error: updErr } = await supabase.from('portfolio_holdings').update(row).eq('id', holdingId);
+        if (updErr) throw updErr;
       }
-      const { error: updErr } = await supabase.from('portfolio_holdings').update(row).eq('id', holdingId);
-      if (updErr) throw updErr;
     }
 
     await loadPortfolioDetails();
-    return { newCount, updatedCount, priceHistoryCount, stockCount: byKey.size };
+    return { newCount, updatedCount, soldCount, priceHistoryCount, stockCount: byKey.size };
   };
 
   const updatePortfolioHolding = async (id: string, updates: {
