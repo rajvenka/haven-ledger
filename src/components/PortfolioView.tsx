@@ -174,6 +174,24 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [holdingFilters, setHoldingFilters] = useState<Set<string>>(new Set());
   const CHANGE_FLAG_LABELS: Record<string, string> = { added: 'Added', qty_increased: 'Qty Added', qty_reduced: 'Qty Reduced' };
 
+  // Reference Load Date - lets you pick any date you've ever captured a price for, and see
+  // performance from that date to today for every holding. Distinct from the Monthly Movement
+  // Report snapshot comparison - this is a per-holding, live filter on the Holdings page itself.
+  const [selectedReferenceDate, setSelectedReferenceDate] = useState<'latest' | string>('latest');
+  const availableReferenceDates = useMemo(() => {
+    return Array.from(new Set(portfolioPriceHistory.map(p => p.recorded_date))).sort().reverse();
+  }, [portfolioPriceHistory]);
+
+  // For a given holding, finds the closest price on or before the selected date - if Zerodha's
+  // snapshot was the 12th and Groww's was the 10th, selecting "12th" uses the 10th for Groww
+  // holdings (the closest available), exactly as agreed.
+  const getPriceAtOrBefore = (holdingId: string, date: string): number | null => {
+    const candidates = portfolioPriceHistory
+      .filter(p => p.holding_id === holdingId && p.recorded_date <= date)
+      .sort((a, b) => (a.recorded_date < b.recorded_date ? 1 : -1));
+    return candidates.length > 0 ? Number(candidates[0].price) : null;
+  };
+
   const filterOptions = useMemo(() => {
     const combos = new Set<string>();
     const sources = new Set<string>();
@@ -222,7 +240,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
         case 'current_value': return current * Number(h.quantity);
         case 'gain': return (current - Number(h.buy_price)) * Number(h.quantity);
         case 'gain_pct': return ((current - Number(h.buy_price)) / Number(h.buy_price)) * 100;
-        case 'since_reference': return h.reference_price != null && Number(h.reference_price) !== 0 ? ((current - Number(h.reference_price)) / Number(h.reference_price)) * 100 : -Infinity;
+        case 'since_reference': {
+          if (selectedReferenceDate !== 'latest') {
+            const basePrice = getPriceAtOrBefore(h.id, selectedReferenceDate);
+            return basePrice != null && basePrice !== 0 ? ((current - basePrice) / basePrice) * 100 : -Infinity;
+          }
+          return h.reference_price != null && Number(h.reference_price) !== 0 ? ((current - Number(h.reference_price)) / Number(h.reference_price)) * 100 : -Infinity;
+        }
         default: return 0;
       }
     };
@@ -233,16 +257,21 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const cmp = typeof av === 'string' && typeof bv === 'string' ? av.localeCompare(bv) : (av as number) - (bv as number);
       return sortDirection === 'asc' ? cmp : -cmp;
     });
-  }, [activeHoldings, holdingFilters, filterOptions, sortField, sortDirection]);
+  }, [activeHoldings, holdingFilters, filterOptions, sortField, sortDirection, selectedReferenceDate]);
 
   // Change since the last time prices were refreshed (the two most recent snapshots for a holding)
   // Progress against the explicit reference checkpoint (set on first load, or manually
   // overridden) - not just "the last time a price happened to update," which is noisy.
   const getSinceReferencePct = (h: any): number | null => {
+    const current = Number(h.current_price ?? h.buy_price);
+    if (selectedReferenceDate !== 'latest') {
+      const basePrice = getPriceAtOrBefore(h.id, selectedReferenceDate);
+      if (basePrice == null || basePrice === 0) return null;
+      return ((current - basePrice) / basePrice) * 100;
+    }
     if (h.reference_price == null) return null;
     const ref = Number(h.reference_price);
     if (ref === 0) return null;
-    const current = Number(h.current_price ?? h.buy_price);
     return ((current - ref) / ref) * 100;
   };
 
@@ -560,6 +589,23 @@ export default function PortfolioView(props: PortfolioViewProps) {
         <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 rounded-xl flex items-center justify-between gap-2">
           <span className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold">{formError}</span>
           <button onClick={() => setFormError(null)} className="text-rose-400 hover:text-rose-600 cursor-pointer"><X className="w-3.5 h-3.5" /></button>
+        </div>
+      )}
+
+      {availableReferenceDates.length > 0 && (
+        <div className="flex items-center gap-2">
+          <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 shrink-0">Reference Load Date</label>
+          <select
+            value={selectedReferenceDate}
+            onChange={(e) => setSelectedReferenceDate(e.target.value)}
+            className="px-2.5 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-semibold"
+          >
+            <option value="latest">Latest</option>
+            {availableReferenceDates.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+          {selectedReferenceDate !== 'latest' && (
+            <span className="text-[9px] text-slate-400">vs today · closest available price used per holding if dates don't align exactly</span>
+          )}
         </div>
       )}
 
@@ -953,7 +999,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         ['current_value', 'Cur. Value', 'text-right'],
                         ['gain', 'Net Gain', 'text-right'],
                         ['gain_pct', '% Chg', 'text-right'],
-                        ['since_reference', 'Since Reference', 'text-right'],
+                        ['since_reference', selectedReferenceDate === 'latest' ? 'Since Reference' : `Since ${selectedReferenceDate}`, 'text-right'],
                       ] as [SortField, string, string][]).map(([field, label, align]) => (
                         <th
                           key={field}
@@ -1056,7 +1102,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           <td className={`p-2.5 text-right font-bold ${gainPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gainPct >= 0 ? '+' : ''}{gainPct.toFixed(2)}%</td>
                           <td className="p-2.5 text-right">
                             {sinceReferencePct !== null ? (
-                              <span className={`font-bold ${sinceReferencePct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`} title={`Reference: ₹${Number(h.reference_price).toFixed(2)} on ${h.reference_date}`}>
+                              <span className={`font-bold ${sinceReferencePct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`} title={selectedReferenceDate !== 'latest' ? `Price on/before ${selectedReferenceDate} used as baseline` : `Reference: ₹${Number(h.reference_price).toFixed(2)} on ${h.reference_date}`}>
                                 {sinceReferencePct >= 0 ? '+' : ''}{sinceReferencePct.toFixed(2)}%
                               </span>
                             ) : (
