@@ -495,8 +495,11 @@ export default function App() {
     );
   }
 
-  // 2.5 Onboarding: user is authenticated but has no workspace yet
-  if (user && workspaces.length === 0) {
+  // 2.5 Onboarding: user is authenticated but has no workspace yet - gated on isLoaded so
+  // this only shows once we've actually confirmed zero workspaces, not just "haven't
+  // finished the initial fetch yet" (workspaces starts as an empty array before that fetch
+  // resolves, which was briefly flashing this screen for returning users on every load).
+  if (user && isLoaded && workspaces.length === 0) {
     // If they were invited to a workspace, show that first - don't force them into
     // creating their own when they're actually here to join someone else's.
     if (incomingInvitations.length > 0) {
@@ -1383,9 +1386,13 @@ export default function App() {
         {/* Workspace Column (Header, Content & Mobile Bottom Nav) */}
         <div className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-900 relative overflow-hidden">
           
-          {/* App Header Bar (Hidden on Desktop Sidebar view) */}
+          {/* App Header Bar (Hidden on Desktop Sidebar view) - fixed rather than sticky so
+              it's guaranteed to stay pinned to the top of the screen regardless of scroll
+              or mobile browser chrome quirks, like a real installed app. The spacer div
+              right after it holds an identical (invisible) copy so page content doesn't
+              render underneath the now out-of-flow header. */}
           <header
-            className="md:hidden px-4 py-3 bg-white dark:bg-slate-950 border-b border-slate-100 dark:border-slate-900 flex justify-between items-center shrink-0 z-10 sticky top-0"
+            className="md:hidden fixed top-0 left-0 right-0 px-4 py-3 bg-white dark:bg-slate-950 border-b border-slate-100 dark:border-slate-900 flex justify-between items-center z-30"
             style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.75rem)' }}
           >
             <div className="flex items-center gap-2">
@@ -1469,6 +1476,10 @@ export default function App() {
               </button>
             </div>
           </header>
+
+          {/* Reserves the same space the fixed header above now occupies (it's out of
+              normal document flow), so page content starts below it instead of underneath. */}
+          <div className="md:hidden shrink-0" style={{ height: 'calc(env(safe-area-inset-top) + 3.75rem)' }} />
 
           {/* Dynamic page content body */}
           <main className="flex-1 overflow-hidden flex flex-col">
