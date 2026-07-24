@@ -187,6 +187,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
   // ---- Bulk tagging existing holdings ----
   const [isSelectingForTag, setIsSelectingForTag] = useState(false);
+  const [bulkActionMode, setBulkActionMode] = useState<'tag' | 'delete'>('tag');
   const [selectedHoldingIds, setSelectedHoldingIds] = useState<Set<string>>(new Set());
   const [bulkTagValue, setBulkTagValue] = useState('');
   const [bulkTagSaving, setBulkTagSaving] = useState(false);
@@ -944,12 +945,26 @@ export default function PortfolioView(props: PortfolioViewProps) {
               </button>
             )}
             {showMoreActions && activeHoldings.length > 0 && (
+              <>
               <button
-                onClick={() => (isSelectingForTag ? exitSelectMode() : setIsSelectingForTag(true))}
-                className={`px-4 py-2 border rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer ${isSelectingForTag ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'}`}
+                onClick={() => {
+                  if (isSelectingForTag && bulkActionMode === 'tag') exitSelectMode();
+                  else { setBulkActionMode('tag'); setIsSelectingForTag(true); }
+                }}
+                className={`px-4 py-2 border rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer ${isSelectingForTag && bulkActionMode === 'tag' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'}`}
               >
-                <CheckCircle2 className="w-3.5 h-3.5" /> {isSelectingForTag ? 'Cancel Selection' : 'Select / Bulk Actions'}
+                <CheckCircle2 className="w-3.5 h-3.5" /> {isSelectingForTag && bulkActionMode === 'tag' ? 'Cancel Selection' : 'Bulk Tag'}
               </button>
+              <button
+                onClick={() => {
+                  if (isSelectingForTag && bulkActionMode === 'delete') exitSelectMode();
+                  else { setBulkActionMode('delete'); setIsSelectingForTag(true); }
+                }}
+                className={`px-4 py-2 border rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer ${isSelectingForTag && bulkActionMode === 'delete' ? 'bg-rose-500 border-rose-500 text-white' : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'}`}
+              >
+                <Trash2 className="w-3.5 h-3.5" /> {isSelectingForTag && bulkActionMode === 'delete' ? 'Cancel Selection' : 'Bulk Delete'}
+              </button>
+              </>
             )}
             {showMoreActions && (
               <button
@@ -982,28 +997,33 @@ export default function PortfolioView(props: PortfolioViewProps) {
           {isSelectingForTag && (
             <div className="apple-card p-3.5 flex flex-col sm:flex-row sm:items-center gap-2.5 bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-900">
               <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 shrink-0">{selectedHoldingIds.size} selected</span>
-              <input
-                type="text"
-                list="source-suggestions"
-                value={bulkTagValue}
-                onChange={(e) => setBulkTagValue(e.target.value)}
-                placeholder="Tag as e.g. Rajavel Stock SME"
-                className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
-              />
-              <button
-                onClick={applyBulkTag}
-                disabled={bulkTagSaving || selectedHoldingIds.size === 0 || !bulkTagValue.trim()}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer shrink-0"
-              >
-                {bulkTagSaving ? 'Applying…' : 'Apply Tag'}
-              </button>
-              <button
-                onClick={applyBulkDelete}
-                disabled={bulkDeleting || selectedHoldingIds.size === 0}
-                className="px-4 py-2 bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer shrink-0"
-              >
-                {bulkDeleting ? 'Deleting…' : 'Delete Selected'}
-              </button>
+              {bulkActionMode === 'tag' ? (
+                <>
+                  <input
+                    type="text"
+                    list="source-suggestions"
+                    value={bulkTagValue}
+                    onChange={(e) => setBulkTagValue(e.target.value)}
+                    placeholder="Tag as e.g. Rajavel Stock SME"
+                    className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+                  />
+                  <button
+                    onClick={applyBulkTag}
+                    disabled={bulkTagSaving || selectedHoldingIds.size === 0 || !bulkTagValue.trim()}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer shrink-0"
+                  >
+                    {bulkTagSaving ? 'Applying…' : 'Apply Tag'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={applyBulkDelete}
+                  disabled={bulkDeleting || selectedHoldingIds.size === 0}
+                  className="px-4 py-2 bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer shrink-0 ml-auto"
+                >
+                  {bulkDeleting ? 'Deleting…' : 'Delete Selected'}
+                </button>
+              )}
             </div>
           )}
           {priceRefreshSummary && (
