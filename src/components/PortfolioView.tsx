@@ -709,7 +709,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       </div>
 
       {isDataLoading ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 py-24">
+        <div className="flex-1 w-full flex flex-col items-center justify-center gap-3 py-24 bg-slate-50 dark:bg-slate-900">
           <RefreshCw className="w-6 h-6 text-indigo-500 animate-spin" />
           <p className="text-xs text-slate-400">Loading your portfolio…</p>
         </div>
