@@ -68,6 +68,8 @@ const DEFAULT_COLUMNS: { key: string; label: string; align: 'text-left' | 'text-
   { key: 'buy_price', label: 'Buy Price', align: 'text-right' },
   { key: 'current_price', label: 'LTP', align: 'text-right' },
   { key: 'live_price', label: 'Live Price', align: 'text-right' },
+  { key: 'daily_change', label: 'Daily Change', align: 'text-right' },
+  { key: 'since_previous_load', label: 'Since Previous Load', align: 'text-right' },
   { key: 'invested', label: 'Invested', align: 'text-right' },
   { key: 'current_value', label: 'Cur. Value', align: 'text-right' },
   { key: 'gain', label: 'Net Gain', align: 'text-right' },
@@ -223,7 +225,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   };
 
   // ---- Column sorting ----
-  type SortField = 'symbol' | 'quantity' | 'buy_price' | 'current_price' | 'live_price' | 'invested' | 'current_value' | 'gain' | 'gain_pct' | 'since_reference';
+  type SortField = 'symbol' | 'quantity' | 'buy_price' | 'current_price' | 'live_price' | 'daily_change' | 'since_previous_load' | 'invested' | 'current_value' | 'gain' | 'gain_pct' | 'since_reference';
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const toggleSort = (field: SortField) => {
@@ -336,6 +338,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
         case 'buy_price': return Number(h.buy_price);
         case 'current_price': return Number(h.current_price ?? h.buy_price);
         case 'live_price': return Number(h.live_price ?? h.current_price ?? h.buy_price);
+        case 'daily_change': return h.live_price != null && h.previous_close != null ? (Number(h.live_price) - Number(h.previous_close)) * Number(h.quantity) : -Infinity;
+        case 'since_previous_load': return h.live_price != null ? (Number(h.live_price) - Number(h.current_price ?? h.buy_price)) * Number(h.quantity) : -Infinity;
         case 'invested': return Number(h.buy_price) * Number(h.quantity);
         case 'current_value': return current * Number(h.quantity);
         case 'gain': return (current - Number(h.buy_price)) * Number(h.quantity);
@@ -1217,6 +1221,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
             const subCurrent = filteredActiveHoldings.reduce((s, h) => s + Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity), 0);
             const subGain = subCurrent - subInvested;
             const subGainPct = subInvested > 0 ? (subGain / subInvested) * 100 : 0;
+            const subDailyEligible = filteredActiveHoldings.filter(h => h.live_price != null && h.previous_close != null);
+            const subDailyChange = subDailyEligible.reduce((s, h) => s + (Number(h.live_price) - Number(h.previous_close)) * Number(h.quantity), 0);
+            const subLoadEligible = filteredActiveHoldings.filter(h => h.live_price != null);
+            const subLoadChange = subLoadEligible.reduce((s, h) => s + (Number(h.live_price) - Number(h.current_price ?? h.buy_price)) * Number(h.quantity), 0);
             return (
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="apple-card p-3 bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
@@ -1234,6 +1242,22 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <div className="apple-card p-3 bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
                   <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{filterLabel}" % Chg</span>
                   <span className={`text-sm font-black ${subGainPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{subGainPct >= 0 ? '+' : ''}{subGainPct.toFixed(2)}%</span>
+                </div>
+                <div className="apple-card p-3 bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
+                  <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{filterLabel}" Daily Change</span>
+                  {subDailyEligible.length > 0 ? (
+                    <span className={`text-sm font-black ${subDailyChange >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{subDailyChange >= 0 ? '+' : ''}{fmt(subDailyChange)}</span>
+                  ) : (
+                    <span className="text-xs text-slate-300 dark:text-slate-700">—</span>
+                  )}
+                </div>
+                <div className="apple-card p-3 bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
+                  <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{filterLabel}" Since Previous Load</span>
+                  {subLoadEligible.length > 0 ? (
+                    <span className={`text-sm font-black ${subLoadChange >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{subLoadChange >= 0 ? '+' : ''}{fmt(subLoadChange)}</span>
+                  ) : (
+                    <span className="text-xs text-slate-300 dark:text-slate-700">—</span>
+                  )}
                 </div>
               </div>
             );
@@ -1408,6 +1432,20 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                     {h.live_price != null ? `₹${Number(h.live_price).toFixed(2)}` : <span className="text-slate-300 dark:text-slate-700">—</span>}
                                   </td>
                                 );
+                              case 'daily_change': {
+                                if (h.live_price == null || h.previous_close == null) {
+                                  return <td key="daily_change" className="p-2.5 text-right"><span className="text-slate-300 dark:text-slate-700">—</span></td>;
+                                }
+                                const dc = (Number(h.live_price) - Number(h.previous_close)) * Number(h.quantity);
+                                return <td key="daily_change" className={`p-2.5 text-right font-bold ${dc >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{dc >= 0 ? '+' : ''}{fmt(dc)}</td>;
+                              }
+                              case 'since_previous_load': {
+                                if (h.live_price == null) {
+                                  return <td key="since_previous_load" className="p-2.5 text-right"><span className="text-slate-300 dark:text-slate-700">—</span></td>;
+                                }
+                                const sl = (Number(h.live_price) - Number(h.current_price ?? h.buy_price)) * Number(h.quantity);
+                                return <td key="since_previous_load" className={`p-2.5 text-right font-bold ${sl >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{sl >= 0 ? '+' : ''}{fmt(sl)}</td>;
+                              }
                               case 'invested':
                                 return <td key="invested" className="p-2.5 text-right text-slate-600 dark:text-slate-300">{fmt(invested)}</td>;
                               case 'current_value':
