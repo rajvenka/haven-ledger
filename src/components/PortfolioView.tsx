@@ -616,20 +616,25 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setImportSaving(false);
   };
 
-  const refreshAllPrices = async () => {
+  const refreshAllPrices = async (scope: 'active' | 'sold' = 'active') => {
     setRefreshingPrices(true);
     setPriceRefreshSummary(null);
     await runAction(async () => {
       // Only holdings with a real ticker set can be looked up - Zerodha's symbol is
       // always a valid ticker, Groww's file only gives a company name so it needs one
       // entered manually (via the expand panel) before it can be refreshed.
-      // Sold holdings are included too (within the last year) so "Since Sold" can show
-      // what happened to the price after you exited, but not refreshed forever - a sale
-      // from years ago isn't worth an ongoing API call every time.
-      const oneYearAgo = Date.now() - 365 * 86400000;
-      const recentSold = soldHoldings.filter(h => h.sold_date && new Date(h.sold_date).getTime() >= oneYearAgo);
-      const refreshable = [...activeHoldings, ...recentSold].filter(h => h.holding_type !== 'mutual_fund' && h.ticker);
-      const skippedNoTicker = [...activeHoldings, ...recentSold].filter(h => h.holding_type !== 'mutual_fund' && !h.ticker).length;
+      // Scoped by tab rather than one combined call - keeps each request naturally small
+      // instead of relying on a single cap being "big enough" as holdings grow, and matches
+      // what a person actually means when they tap Refresh Prices from a specific tab.
+      let scopedHoldings: any[];
+      if (scope === 'sold') {
+        const oneYearAgo = Date.now() - 365 * 86400000;
+        scopedHoldings = soldHoldings.filter(h => h.sold_date && new Date(h.sold_date).getTime() >= oneYearAgo);
+      } else {
+        scopedHoldings = activeHoldings;
+      }
+      const refreshable = scopedHoldings.filter(h => h.holding_type !== 'mutual_fund' && h.ticker);
+      const skippedNoTicker = scopedHoldings.filter(h => h.holding_type !== 'mutual_fund' && !h.ticker).length;
       if (refreshable.length === 0) {
         setPriceRefreshSummary(skippedNoTicker > 0 ? `${skippedNoTicker} stock${skippedNoTicker !== 1 ? 's' : ''} need a ticker set before they can be refreshed.` : 'No stock holdings to refresh (mutual funds need manual NAV updates).');
         return;
@@ -685,7 +690,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     const isStale = refreshableStocks.some(h => !h.current_price_updated_at || (Date.now() - new Date(h.current_price_updated_at).getTime()) > staleThresholdMs);
     if (isStale) {
       autoRefreshTriggeredRef.current = true;
-      refreshAllPrices();
+      refreshAllPrices('active');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeHoldings.length]);
@@ -944,7 +949,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
           <div className="flex justify-end items-center gap-2 flex-wrap">
             {showMoreActions && activeHoldings.length > 0 && (
               <button
-                onClick={refreshAllPrices}
+                onClick={() => refreshAllPrices('active')}
                 disabled={refreshingPrices}
                 className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
@@ -1643,7 +1648,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
           {!isReadOnly && (
           <div className="flex justify-end">
             <button
-              onClick={refreshAllPrices}
+              onClick={() => refreshAllPrices('sold')}
               disabled={refreshingPrices}
               className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
