@@ -1242,7 +1242,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               {fmtQty(Number(h.quantity))}
                             </span>
                             {expandedQtyId === h.id && (
-                              <div className="absolute right-0 bottom-full mb-1 z-20 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-nowrap">
+                              <div className="absolute right-0 bottom-full mb-0.5 z-20 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-nowrap">
                                 {h.quantity}
                               </div>
                             )}
@@ -1476,7 +1476,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               {fmtQty(Number(h.quantity))}
                             </span>
                             {expandedQtyId === h.id && (
-                              <div className="absolute right-0 bottom-full mb-1 z-20 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-nowrap">
+                              <div className="absolute right-0 bottom-full mb-0.5 z-20 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-nowrap">
                                 {h.quantity}
                               </div>
                             )}
