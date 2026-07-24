@@ -453,7 +453,10 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
         <div className="apple-card p-4 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Wallet className="w-3.5 h-3.5" /> Contribution Log</span>
-            {!isReadOnly && <button onClick={() => setIsAddingContribution(!isAddingContribution)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Log One-Off Payment</button>}
+            <div className="flex items-center gap-3">
+              {!isReadOnly && <button onClick={() => setIsAddingContribution(!isAddingContribution)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Log Contribution</button>}
+              {!isReadOnly && <button onClick={() => setIsAddingWithdrawal(!isAddingWithdrawal)} className="text-[10px] font-bold text-rose-500 cursor-pointer">+ Log Withdrawal</button>}
+            </div>
           </div>
           {isAddingContribution && (
             <form onSubmit={handleAddContribution} className="grid grid-cols-3 gap-2">
@@ -469,6 +472,18 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
               </select>
               <textarea value={cNotes} onChange={(e) => setCNotes(e.target.value)} placeholder="Notes (optional) - e.g. bonus deposit, salary top-up" rows={2} className="col-span-3 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs resize-none" />
               <button type="submit" className="col-span-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer">Add</button>
+            </form>
+          )}
+
+          {isAddingWithdrawal && (
+            <form onSubmit={handleAddWithdrawal} className="grid grid-cols-3 gap-2">
+              <select value={wMemberId} onChange={(e) => setWMemberId(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
+                <option value="">Who</option>
+                {workspaceMembers.map(m => <option key={m.uid} value={m.uid}>{memberName(m)}</option>)}
+              </select>
+              <input type="number" value={wAmount} onChange={(e) => setWAmount(e.target.value)} placeholder="Amount" className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+              <input type="date" value={wDate} onChange={(e) => setWDate(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+              <button type="submit" className="col-span-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer">Withdraw</button>
             </form>
           )}
 
@@ -624,22 +639,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
         </div>
 
         <div className="apple-card p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Wallet className="w-3.5 h-3.5" /> Withdrawals</span>
-            {!isReadOnly && <button onClick={() => setIsAddingWithdrawal(!isAddingWithdrawal)} className="text-[10px] font-bold text-rose-500 cursor-pointer">+ Log Withdrawal</button>}
-          </div>
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Wallet className="w-3.5 h-3.5" /> Withdrawals</span>
           <p className="text-[9px] text-slate-400">Money taken out of the pool back to a person - separate from selling a stock, which stays in the pool as cash.</p>
-          {isAddingWithdrawal && (
-            <form onSubmit={handleAddWithdrawal} className="grid grid-cols-3 gap-2">
-              <select value={wMemberId} onChange={(e) => setWMemberId(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
-                <option value="">Who</option>
-                {workspaceMembers.map(m => <option key={m.uid} value={m.uid}>{memberName(m)}</option>)}
-              </select>
-              <input type="number" value={wAmount} onChange={(e) => setWAmount(e.target.value)} placeholder="Amount" className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
-              <input type="date" value={wDate} onChange={(e) => setWDate(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
-              <button type="submit" className="col-span-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer">Withdraw</button>
-            </form>
-          )}
           <div className="divide-y divide-slate-100 dark:divide-slate-900">
             {portfolioWithdrawals.length === 0 ? (
               <p className="text-center text-xs text-slate-400 py-4">No withdrawals logged.</p>
