@@ -997,6 +997,7 @@ export default function App() {
                       Overview & Stats
                     </span>
                     <nav className="flex flex-col gap-1 text-left">
+                      {hasFeature('core') && (
                       <button
                         onClick={() => {
                           setActiveTab('summary');
@@ -1016,7 +1017,9 @@ export default function App() {
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                         )}
                       </button>
+                      )}
 
+                      {hasFeature('core') && (
                       <button
                         onClick={() => {
                           setActiveTab('expenses');
@@ -1036,6 +1039,7 @@ export default function App() {
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                         )}
                       </button>
+                      )}
 
                       {hasFeature('ai') && (
                       <button
@@ -1788,6 +1792,37 @@ export default function App() {
                 <Briefcase className="w-4.5 h-4.5" />
                 <span className="text-[8px] uppercase tracking-wider font-extrabold">Portfolio</span>
               </button>
+              )}
+
+              {/* Investment Plan and Reports fill the footer when Portfolio would otherwise be
+                  the only item there (e.g. Lite-Finance, which has no 'core' access) - keeps
+                  the bar from looking sparse with a single icon. Full plans still use the
+                  drawer for these, since the footer is already fairly full there. */}
+              {hasFeature('portfolio') && !hasFeature('core') && (
+              <>
+              <button
+                onClick={() => setActiveTab('investment_plan')}
+                className={`flex flex-col items-center gap-0.5 py-1 px-1 flex-1 rounded-xl transition-all ${
+                  activeTab === 'investment_plan' 
+                    ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/40 font-black scale-105 shadow-sm border border-indigo-100/30' 
+                    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
+                }`}
+              >
+                <ClipboardList className="w-4.5 h-4.5" />
+                <span className="text-[8px] uppercase tracking-wider font-extrabold">Plan</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('reports')}
+                className={`flex flex-col items-center gap-0.5 py-1 px-1 flex-1 rounded-xl transition-all ${
+                  activeTab === 'reports' 
+                    ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/40 font-black scale-105 shadow-sm border border-indigo-100/30' 
+                    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
+                }`}
+              >
+                <FileBarChart className="w-4.5 h-4.5" />
+                <span className="text-[8px] uppercase tracking-wider font-extrabold">Reports</span>
+              </button>
+              </>
               )}
 
               {/* History Tab button */}
