@@ -32,7 +32,7 @@ const fmt = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigi
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const memberName = (m: WorkspaceMemberLite) => m.displayName || m.email.split('@')[0];
 
-type ReportTab = 'overview' | 'activity' | 'movement' | 'summary';
+type ReportTab = 'overview' | 'insights' | 'activity' | 'movement' | 'summary';
 
 export default function ReportsView(props: ReportsViewProps) {
   const {
@@ -81,6 +81,7 @@ export default function ReportsView(props: ReportsViewProps) {
 
   const TABS: { key: ReportTab; label: string }[] = [
     { key: 'overview', label: 'Overview' },
+    { key: 'insights', label: 'Insights' },
     { key: 'activity', label: 'Activity' },
     { key: 'movement', label: 'Movement' },
     { key: 'summary', label: 'Summary' },
@@ -398,6 +399,92 @@ export default function ReportsView(props: ReportsViewProps) {
         })()}
         </>
       )}
+
+      {reportTab === 'insights' && (() => {
+        const withGain = activeHoldings.map(h => {
+          const current = Number(h.live_price ?? h.current_price ?? h.buy_price);
+          const value = current * Number(h.quantity);
+          const gainPct = Number(h.buy_price) > 0 ? ((current - Number(h.buy_price)) / Number(h.buy_price)) * 100 : 0;
+          return { ...h, _current: current, _value: value, _gainPct: gainPct };
+        });
+        const topHoldings = [...withGain].sort((a, b) => b._value - a._value).slice(0, 5);
+        const topWinners = [...withGain].sort((a, b) => b._gainPct - a._gainPct).slice(0, 5);
+        const topLosers = [...withGain].sort((a, b) => a._gainPct - b._gainPct).slice(0, 5);
+        const bigMovers = withGain.filter(h => Math.abs(h._gainPct) >= 10).sort((a, b) => Math.abs(b._gainPct) - Math.abs(a._gainPct));
+
+        const RECENT_DAYS = 30;
+        const recentCutoff = Date.now() - RECENT_DAYS * 86400000;
+        const recentBuys = withGain.filter(h => h.buy_date && new Date(h.buy_date).getTime() >= recentCutoff);
+        const goodRecentBuys = recentBuys.filter(h => h._gainPct > 0).sort((a, b) => b._gainPct - a._gainPct);
+        const badRecentBuys = recentBuys.filter(h => h._gainPct < 0).sort((a, b) => a._gainPct - b._gainPct);
+
+        const soldWithSinceSold = soldHoldings
+          .filter(h => h.live_price != null && Number(h.sold_price) !== 0)
+          .map(h => ({ ...h, _sinceSoldPct: ((Number(h.live_price) - Number(h.sold_price)) / Number(h.sold_price)) * 100 }));
+        const goodSells = soldWithSinceSold.filter(h => h._sinceSoldPct < 0).sort((a, b) => a._sinceSoldPct - b._sinceSoldPct);
+        const badSells = soldWithSinceSold.filter(h => h._sinceSoldPct > 0).sort((a, b) => b._sinceSoldPct - a._sinceSoldPct);
+
+        const Row = ({ symbol, pct, sub }: { key?: React.Key; symbol: string; pct: number; sub?: string }) => (
+          <div className="flex items-center justify-between text-[11px] py-1">
+            <span className="min-w-0">
+              <span className="text-slate-700 dark:text-slate-300 font-semibold truncate block">{symbol}</span>
+              {sub && <span className="text-[9px] text-slate-400">{sub}</span>}
+            </span>
+            <span className={`font-bold shrink-0 ml-2 ${pct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{pct >= 0 ? '+' : ''}{pct.toFixed(2)}%</span>
+          </div>
+        );
+
+        const Card = ({ title, children, empty }: { title: string; children: React.ReactNode; empty: boolean }) => (
+          <div className="apple-card p-4 space-y-1">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">{title}</span>
+            {empty ? <p className="text-[11px] text-slate-300 dark:text-slate-700 py-2">None right now.</p> : children}
+          </div>
+        );
+
+        return (
+          <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Card title="Top 5 Holdings (by value)" empty={topHoldings.length === 0}>
+              {topHoldings.map(h => <Row key={h.id} symbol={h.symbol} pct={h._gainPct} sub={fmt(h._value)} />)}
+            </Card>
+            <Card title="Top 5 Winners" empty={topWinners.length === 0}>
+              {topWinners.map(h => <Row key={h.id} symbol={h.symbol} pct={h._gainPct} />)}
+            </Card>
+            <Card title="Top 5 Losers" empty={topLosers.length === 0}>
+              {topLosers.map(h => <Row key={h.id} symbol={h.symbol} pct={h._gainPct} />)}
+            </Card>
+            <Card title={`Big Movers (±10%+)`} empty={bigMovers.length === 0}>
+              {bigMovers.map(h => <Row key={h.id} symbol={h.symbol} pct={h._gainPct} />)}
+            </Card>
+          </div>
+
+          <div>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Recent Buys (last {RECENT_DAYS} days)</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1.5">
+              <Card title="Good Decision - price up since buying" empty={goodRecentBuys.length === 0}>
+                {goodRecentBuys.map(h => <Row key={h.id} symbol={h.symbol} pct={h._gainPct} sub={`bought ${h.buy_date}`} />)}
+              </Card>
+              <Card title="Bad Decision - price down since buying" empty={badRecentBuys.length === 0}>
+                {badRecentBuys.map(h => <Row key={h.id} symbol={h.symbol} pct={h._gainPct} sub={`bought ${h.buy_date}`} />)}
+              </Card>
+            </div>
+          </div>
+
+          <div>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Sold Decisions</span>
+            <p className="text-[9px] text-slate-400 mb-1.5">Based on price movement since you sold - needs Refresh Prices on the Sold tab to populate.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Card title="Good Decision - price fell after selling" empty={goodSells.length === 0}>
+                {goodSells.map(h => <Row key={h.id} symbol={h.symbol} pct={h._sinceSoldPct} sub={`sold ${h.sold_date}`} />)}
+              </Card>
+              <Card title="Bad Decision - price rose after selling" empty={badSells.length === 0}>
+                {badSells.map(h => <Row key={h.id} symbol={h.symbol} pct={h._sinceSoldPct} sub={`sold ${h.sold_date}`} />)}
+              </Card>
+            </div>
+          </div>
+          </>
+        );
+      })()}
 
       {reportTab === 'activity' && (
         <>
