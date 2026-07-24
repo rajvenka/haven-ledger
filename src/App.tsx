@@ -1743,18 +1743,20 @@ export default function App() {
                 <span className="text-[8px] uppercase tracking-wider font-extrabold">AI</span>
               </button>
 
-              {/* Account Tab button */}
+              {/* Portfolio Tab button */}
+              {hasFeature('portfolio') && (
               <button
-                onClick={() => setActiveTab('account')}
+                onClick={() => setActiveTab('portfolio')}
                 className={`flex flex-col items-center gap-0.5 py-1 px-1 flex-1 rounded-xl transition-all ${
-                  activeTab === 'account' 
+                  activeTab === 'portfolio' 
                     ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/40 font-black scale-105 shadow-sm border border-indigo-100/30' 
                     : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
                 }`}
               >
-                <Sliders className="w-4.5 h-4.5" />
-                <span className="text-[8px] uppercase tracking-wider font-extrabold">Config</span>
+                <Briefcase className="w-4.5 h-4.5" />
+                <span className="text-[8px] uppercase tracking-wider font-extrabold">Portfolio</span>
               </button>
+              )}
 
               {/* History Tab button */}
               <button
