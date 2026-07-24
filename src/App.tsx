@@ -83,6 +83,7 @@ export default function App() {
     switchWorkspace,
     updateWorkspaceLandingTab,
     updateWorkspaceColumnPrefs,
+    dismissContributionReminder,
     createWorkspace,
     setWorkspaceMode,
     addFamilyMember,
@@ -1634,6 +1635,8 @@ export default function App() {
                 workspaceMembers={contributorMembers}
                 isReadOnly={isReadOnly}
                 currentUserId={user?.id}
+                dismissedReminderKey={activeWorkspace?.dismissedReminderKey}
+                onDismissContributionReminder={dismissContributionReminder}
                 portfolioSplits={portfolioSplits}
                 addPortfolioSplit={addPortfolioSplit}
                 deletePortfolioSplit={deletePortfolioSplit}

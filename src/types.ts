@@ -88,6 +88,7 @@ export interface Workspace {
   enabledFeatures?: string[];
   landingTab?: string | null;
   columnPrefs?: { key: string; visible: boolean }[] | null;
+  dismissedReminderKey?: string | null;
 }
 
 export interface RewardPerk {

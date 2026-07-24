@@ -2,7 +2,7 @@ import { parseBrokerFile, parseBrokerFileWithDate, BrokerTemplate, ParsedHolding
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   TrendingUp, TrendingDown, Plus, Trash2, RefreshCw, Users, Wallet,
-  CheckCircle2, X, Briefcase, Gift, Receipt, Upload, Edit2, ChevronDown, ArrowUpDown, Settings, ChevronUp
+  CheckCircle2, X, Briefcase, Gift, Receipt, Upload, Edit2, ChevronDown, ArrowUpDown, Settings, ChevronUp, Download
 } from 'lucide-react';
 
 interface WorkspaceMemberLite {
@@ -62,6 +62,27 @@ interface PortfolioViewProps {
 
 const fmt = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 const fmtQty = (n: number) => Number.isInteger(n) ? String(n) : n.toFixed(2);
+
+// Generic CSV export - takes column headers and row objects keyed by header, handles
+// quoting/escaping for values containing commas, quotes, or newlines. Used by both the
+// Active and Sold tabs, each building their own rows from whatever's currently filtered/sorted.
+function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
+  const escapeCell = (v: string | number) => {
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [headers.map(escapeCell).join(','), ...rows.map(r => r.map(escapeCell).join(','))];
+  const csv = lines.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 // Instrument is always shown, pinned first - everything else is configurable (show/hide + reorder).
 const DEFAULT_COLUMNS: { key: string; label: string; align: 'text-left' | 'text-right' }[] = [
@@ -149,6 +170,49 @@ export default function PortfolioView(props: PortfolioViewProps) {
   }, [columnPrefs]);
 
   const visibleColumns = resolvedColumns.filter(c => c.visible);
+
+  // Exports exactly what's currently visible: respects the Column customizer's show/hide
+  // and order, and whatever filter/sort is currently applied to the table.
+  const exportActiveHoldingsCsv = () => {
+    const headers = ['Instrument', ...visibleColumns.map(c => c.label)];
+    const getValue = (col: typeof visibleColumns[0], h: any): string | number => {
+      switch (col.key) {
+        case 'quantity': return h.quantity;
+        case 'buy_price': return Number(h.buy_price).toFixed(2);
+        case 'current_price': return Number(h.current_price ?? h.buy_price).toFixed(2);
+        case 'live_price': return h.live_price != null ? Number(h.live_price).toFixed(2) : '';
+        case 'daily_change': return h.live_price != null && h.previous_close != null ? ((Number(h.live_price) - Number(h.previous_close)) * Number(h.quantity)).toFixed(2) : '';
+        case 'since_previous_load': return h.live_price != null ? ((Number(h.live_price) - Number(h.current_price ?? h.buy_price)) * Number(h.quantity)).toFixed(2) : '';
+        case 'invested': return (Number(h.buy_price) * Number(h.quantity)).toFixed(2);
+        case 'current_value': return (Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity)).toFixed(2);
+        case 'gain': return ((Number(h.live_price ?? h.current_price ?? h.buy_price) - Number(h.buy_price)) * Number(h.quantity)).toFixed(2);
+        case 'gain_pct': return Number(h.buy_price) > 0 ? (((Number(h.live_price ?? h.current_price ?? h.buy_price) - Number(h.buy_price)) / Number(h.buy_price)) * 100).toFixed(2) : '';
+        case 'since_reference': { const pct = getSinceReferencePct(h); return pct !== null ? pct.toFixed(2) : ''; }
+        case 'since_reference_amount': { const amt = getSinceReferenceAmount(h); return amt !== null ? amt.toFixed(2) : ''; }
+        default: return '';
+      }
+    };
+    const rows = filteredActiveHoldings.map(h => [h.symbol, ...visibleColumns.map(col => getValue(col, h))]);
+    downloadCsv(`haven-vault-holdings-active-${todayStr()}.csv`, headers, rows);
+  };
+
+  const exportSoldHoldingsCsv = () => {
+    const headers = ['Instrument', 'Qty', 'Buy Price', 'Sold Price', 'Invested', 'Sold Value', 'Net Gain', '% Chg', 'Sold Date', 'Since Sold'];
+    const rows = filteredSoldHoldings.map(h => {
+      const invested = Number(h.buy_price) * Number(h.quantity);
+      const soldValue = Number(h.sold_price) * Number(h.quantity);
+      const gain = soldValue - invested;
+      const gainPct = invested > 0 ? (gain / invested) * 100 : null;
+      const sinceSoldPct = h.live_price != null && Number(h.sold_price) !== 0 ? ((Number(h.live_price) - Number(h.sold_price)) / Number(h.sold_price)) * 100 : null;
+      return [
+        h.symbol, h.quantity, Number(h.buy_price).toFixed(2), Number(h.sold_price).toFixed(2),
+        invested.toFixed(2), soldValue.toFixed(2), gain.toFixed(2), gainPct !== null ? gainPct.toFixed(2) : '',
+        h.sold_date ?? '', sinceSoldPct !== null ? sinceSoldPct.toFixed(2) : '',
+      ];
+    });
+    downloadCsv(`haven-vault-holdings-sold-${todayStr()}.csv`, headers, rows);
+  };
+
 
   const openColumnCustomizer = () => {
     setDraftColumns(resolvedColumns.map(c => ({ key: c.key, visible: c.visible })));
@@ -982,6 +1046,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
               </button>
               </>
             )}
+            {showMoreActions && activeHoldings.length > 0 && (
+              <button
+                onClick={exportActiveHoldingsCsv}
+                className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" /> Export CSV
+              </button>
+            )}
             {showMoreActions && (
               <button
                 onClick={() => { setIsImporting(!isImporting); setImportPreview(null); setImportRawParsed(null); }}
@@ -1650,8 +1722,16 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
       {holdingsTab === 'sold' && (
         <>
-          {!isReadOnly && (
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            {soldHoldings.length > 0 && (
+              <button
+                onClick={exportSoldHoldingsCsv}
+                className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" /> Export CSV
+              </button>
+            )}
+            {!isReadOnly && (
             <button
               onClick={() => refreshAllPrices('sold')}
               disabled={refreshingPrices}
@@ -1659,8 +1739,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
             >
               <RefreshCw className={`w-3.5 h-3.5 ${refreshingPrices ? 'animate-spin' : ''}`} /> {refreshingPrices ? 'Refreshing…' : 'Refresh Prices'}
             </button>
+            )}
           </div>
-          )}
           {priceRefreshSummary && (
             <p className="text-[10px] text-slate-400 -mt-2">{priceRefreshSummary}</p>
           )}

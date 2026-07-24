@@ -13,6 +13,8 @@ interface InvestmentPlanViewProps {
   workspaceMembers: WorkspaceMemberLite[];
   isReadOnly?: boolean;
   currentUserId?: string;
+  dismissedReminderKey?: string | null;
+  onDismissContributionReminder?: (key: string) => Promise<void>;
   portfolioSplits: any[];
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
   deletePortfolioSplit: (id: string) => Promise<void>;
@@ -41,7 +43,7 @@ type PlanTab = 'overview' | 'contributions' | 'settings';
 
 export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const {
-    workspaceName, workspaceMembers, isReadOnly, currentUserId,
+    workspaceName, workspaceMembers, isReadOnly, currentUserId, dismissedReminderKey, onDismissContributionReminder,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
@@ -203,7 +205,9 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
 
   // My own contribution reminder - due within 3 days (or already overdue) and not yet
   // transferred for the current period. Computed live whenever the page loads, no backend
-  // job involved - only shows for the logged-in person's own plan(s).
+  // job involved - only shows for the logged-in person's own plan(s). Dismissing only hides
+  // it for this specific period (keyed by plan id + period label) - a new period's reminder
+  // still shows normally once it comes around.
   const myContributionReminder = useMemo(() => {
     if (!currentUserId) return null;
     const myPlans = portfolioRecurringPlans.filter(p => p.active && p.member_user_id === currentUserId);
@@ -222,10 +226,13 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
       const remaining = Math.max(0, Number(plan.expected_amount) - transferredThisPeriod);
       if (remaining === 0) continue;
 
-      return { plan, remaining, daysUntilDue, dueDate };
+      const reminderKey = `${plan.id}-${period.label}`;
+      if (dismissedReminderKey === reminderKey) continue;
+
+      return { plan, remaining, daysUntilDue, dueDate, reminderKey };
     }
     return null;
-  }, [currentUserId, portfolioRecurringPlans, portfolioContributions]);
+  }, [currentUserId, portfolioRecurringPlans, portfolioContributions, dismissedReminderKey]);
 
   const markTransferred = async (memberUserId: string, amount: number) => {
     await runAction(async () => {
@@ -271,6 +278,13 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
               Mark Transferred
             </button>
           )}
+          <button
+            onClick={() => runAction(() => onDismissContributionReminder?.(myContributionReminder.reminderKey) ?? Promise.resolve())}
+            className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer shrink-0"
+            title="Dismiss for this period"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 

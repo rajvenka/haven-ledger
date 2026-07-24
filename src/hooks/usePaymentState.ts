@@ -147,7 +147,7 @@ export function usePaymentState() {
   const refreshWorkspaces = useCallback(async (uid: string, preferredActiveId?: string | null) => {
     const { data: memberships } = await supabase
       .from('workspace_members')
-      .select('workspace_id, role, access_level, enabled_features, landing_tab, portfolio_column_prefs, workspaces(id, name, type, invite_code, owner_id, income_mode, monthly_income)')
+      .select('workspace_id, role, access_level, enabled_features, landing_tab, portfolio_column_prefs, dismissed_reminder_key, workspaces(id, name, type, invite_code, owner_id, income_mode, monthly_income)')
       .eq('user_id', uid);
 
     const list: Workspace[] = (memberships ?? []).map((m: any) => ({
@@ -163,6 +163,7 @@ export function usePaymentState() {
       enabledFeatures: m.enabled_features ?? ['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'whatsapp', 'portfolio'],
       landingTab: m.landing_tab ?? null,
       columnPrefs: m.portfolio_column_prefs ?? null,
+      dismissedReminderKey: m.dismissed_reminder_key ?? null,
     }));
     setWorkspaces(list);
 
@@ -326,6 +327,16 @@ export function usePaymentState() {
   const updateWorkspaceColumnPrefs = async (prefs: { key: string; visible: boolean }[] | null) => {
     if (!user || !activeWorkspaceId) return;
     const { error } = await supabase.rpc('update_my_column_prefs', { p_workspace_id: activeWorkspaceId, p_prefs: prefs });
+    if (error) throw error;
+    await refreshWorkspaces(user.id, activeWorkspaceId);
+  };
+
+  // Dismissing the contribution reminder only hides it for the current period (keyed by
+  // plan id + period label) - a new period's reminder still shows normally, this isn't a
+  // permanent "never show again".
+  const dismissContributionReminder = async (key: string) => {
+    if (!user || !activeWorkspaceId) return;
+    const { error } = await supabase.rpc('dismiss_contribution_reminder', { p_workspace_id: activeWorkspaceId, p_key: key });
     if (error) throw error;
     await refreshWorkspaces(user.id, activeWorkspaceId);
   };
@@ -1628,7 +1639,7 @@ export function usePaymentState() {
     user, userProfile, familyMembers, viewMode, setViewMode,
     signUp, signIn, signInWithGoogle, resetPassword, updatePassword, updateDisplayName, acceptPrivacyPolicy, logOut, markTourCompleted,
     // Workspace model
-    workspaces, activeWorkspaceId, activeWorkspace, switchWorkspace, createWorkspace, setWorkspaceMode, updateWorkspaceLandingTab, updateWorkspaceColumnPrefs,
+    workspaces, activeWorkspaceId, activeWorkspace, switchWorkspace, createWorkspace, setWorkspaceMode, updateWorkspaceLandingTab, updateWorkspaceColumnPrefs, dismissContributionReminder,
     renameWorkspace, deleteWorkspace,
     incomeSources, addIncomeSource, deleteIncomeSource, incomeMode, updateIncomeMode, monthlyIncome, updateMonthlyIncome,
     workspaceBackups, createBackupNow, restoreFromBackup,
