@@ -213,13 +213,6 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'configure' | 'account' | 'history' | 'ai' | 'income' | 'rewards' | 'portfolio' | 'investment_plan' | 'reports' | 'admin_users'>('summary');
   const lastLandingWorkspaceId = React.useRef<string | null>(null);
-  useEffect(() => {
-    if (!activeWorkspaceId) return;
-    if (lastLandingWorkspaceId.current === activeWorkspaceId) return;
-    lastLandingWorkspaceId.current = activeWorkspaceId;
-    const preferred = activeWorkspace?.landingTab;
-    if (preferred) setActiveTab(preferred as any);
-  }, [activeWorkspaceId, activeWorkspace?.landingTab]);
   const [settingsSubTab, setSettingsSubTab] = useState<'preferences' | 'team'>('preferences');
   const [isAgentOpen, setIsAgentOpen] = useState(false);
   const [isFamilyChatOpen, setIsFamilyChatOpen] = useState(false);
@@ -234,6 +227,21 @@ export default function App() {
     const planIncludes = userProfile?.licensePlanFeatures === undefined ? true : userProfile.licensePlanFeatures.includes(feature);
     return workspaceGrants && planIncludes;
   };
+
+  // Applies the saved landing-page preference when switching into a workspace - guards
+  // against a stale preference pointing at a page the plan no longer grants (e.g. if
+  // downgraded since the preference was set), falling back to Dashboard in that case.
+  useEffect(() => {
+    if (!activeWorkspaceId) return;
+    if (lastLandingWorkspaceId.current === activeWorkspaceId) return;
+    lastLandingWorkspaceId.current = activeWorkspaceId;
+    const preferred = activeWorkspace?.landingTab;
+    if (!preferred) return;
+    const requiredFeature: Record<string, string> = { income: 'income', rewards: 'rewards', ai: 'ai', portfolio: 'portfolio', investment_plan: 'portfolio', reports: 'portfolio' };
+    const gate = requiredFeature[preferred];
+    if (gate && !hasFeature(gate)) return;
+    setActiveTab(preferred as any);
+  }, [activeWorkspaceId, activeWorkspace?.landingTab]);
 
   // Hard enforcement: even if activeTab somehow points at a gated tab (stale state, direct
   // manipulation), bounce back to the dashboard rather than just hiding the nav link.
@@ -1447,6 +1455,7 @@ export default function App() {
                 onUpdateDisplayName={updateDisplayName}
                 currentLandingTab={activeWorkspace?.landingTab}
                 onUpdateLandingTab={updateWorkspaceLandingTab}
+                hasFeature={hasFeature}
                 accessPlans={accessPlans}
                 myUpgradeRequest={myUpgradeRequest}
                 onRequestUpgrade={requestUpgrade}

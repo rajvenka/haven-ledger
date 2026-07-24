@@ -39,6 +39,7 @@ interface AccountInfoProps {
   onUpdateDisplayName?: (name: string) => Promise<void>;
   currentLandingTab?: string | null;
   onUpdateLandingTab?: (tab: string | null) => Promise<void>;
+  hasFeature?: (feature: string) => boolean;
   onDisconnectWhatsApp?: () => Promise<void>;
   accessPlans?: { id: string; name: string; description?: string; features: string[]; isSystem: boolean }[];
   myUpgradeRequest?: { id: string; planName: string; status: string } | null;
@@ -97,6 +98,7 @@ export default function AccountInfo({
   onUpdateDisplayName,
   currentLandingTab,
   onUpdateLandingTab,
+  hasFeature,
   onDisconnectWhatsApp,
   accessPlans = [],
   myUpgradeRequest,
@@ -1191,14 +1193,14 @@ export default function AccountInfo({
               >
                 <option value="">Dashboard (default)</option>
                 <option value="expenses">Expenses</option>
-                <option value="income">Income</option>
+                {(!hasFeature || hasFeature('income')) && <option value="income">Income</option>}
                 <option value="configure">Manage Bills</option>
                 <option value="history">Payment History</option>
-                <option value="rewards">Membership Hub</option>
-                <option value="ai">AI Insights</option>
-                <option value="portfolio">Portfolio</option>
-                <option value="investment_plan">Investment Plan</option>
-                <option value="reports">Reports</option>
+                {(!hasFeature || hasFeature('rewards')) && <option value="rewards">Membership Hub</option>}
+                {(!hasFeature || hasFeature('ai')) && <option value="ai">AI Insights</option>}
+                {(!hasFeature || hasFeature('portfolio')) && <option value="portfolio">Portfolio</option>}
+                {(!hasFeature || hasFeature('portfolio')) && <option value="investment_plan">Investment Plan</option>}
+                {(!hasFeature || hasFeature('portfolio')) && <option value="reports">Reports</option>}
               </select>
             </div>
             {landingTabSaved && <p className="text-[10px] text-emerald-500 font-semibold">Saved.</p>}

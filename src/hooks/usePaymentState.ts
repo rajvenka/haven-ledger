@@ -306,7 +306,7 @@ export function usePaymentState() {
   // workspace membership, not a workspace-wide setting.
   const updateWorkspaceLandingTab = async (tab: string | null) => {
     if (!user || !activeWorkspaceId) return;
-    const { error } = await supabase.from('workspace_members').update({ landing_tab: tab }).eq('workspace_id', activeWorkspaceId).eq('user_id', user.id);
+    const { error } = await supabase.rpc('update_my_landing_tab', { p_workspace_id: activeWorkspaceId, p_tab: tab });
     if (error) throw error;
     await refreshWorkspaces(user.id, activeWorkspaceId);
   };
