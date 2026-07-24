@@ -79,6 +79,7 @@ export default function App() {
     activeWorkspace,
     switchWorkspace,
     updateWorkspaceLandingTab,
+    updateWorkspaceColumnPrefs,
     createWorkspace,
     setWorkspaceMode,
     addFamilyMember,
@@ -1519,6 +1520,8 @@ export default function App() {
                 workspaceMembers={familyMembers}
                 isReadOnly={isReadOnly}
                 isDataLoading={portfolioDataLoading}
+                columnPrefs={activeWorkspace?.columnPrefs}
+                onUpdateColumnPrefs={updateWorkspaceColumnPrefs}
                 portfolioSplits={portfolioSplits}
                 addPortfolioSplit={addPortfolioSplit}
                 deletePortfolioSplit={deletePortfolioSplit}

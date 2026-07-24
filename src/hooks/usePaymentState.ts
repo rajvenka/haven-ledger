@@ -141,7 +141,7 @@ export function usePaymentState() {
   const refreshWorkspaces = useCallback(async (uid: string, preferredActiveId?: string | null) => {
     const { data: memberships } = await supabase
       .from('workspace_members')
-      .select('workspace_id, role, access_level, enabled_features, landing_tab, workspaces(id, name, type, invite_code, owner_id, income_mode, monthly_income)')
+      .select('workspace_id, role, access_level, enabled_features, landing_tab, portfolio_column_prefs, workspaces(id, name, type, invite_code, owner_id, income_mode, monthly_income)')
       .eq('user_id', uid);
 
     const list: Workspace[] = (memberships ?? []).map((m: any) => ({
@@ -156,6 +156,7 @@ export function usePaymentState() {
       accessLevel: (m.access_level ?? 'full') as 'full' | 'limited',
       enabledFeatures: m.enabled_features ?? ['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'whatsapp', 'portfolio'],
       landingTab: m.landing_tab ?? null,
+      columnPrefs: m.portfolio_column_prefs ?? null,
     }));
     setWorkspaces(list);
 
@@ -307,6 +308,16 @@ export function usePaymentState() {
   const updateWorkspaceLandingTab = async (tab: string | null) => {
     if (!user || !activeWorkspaceId) return;
     const { error } = await supabase.rpc('update_my_landing_tab', { p_workspace_id: activeWorkspaceId, p_tab: tab });
+    if (error) throw error;
+    await refreshWorkspaces(user.id, activeWorkspaceId);
+  };
+
+  // Which Holdings table columns are visible and in what order - personal per (workspace,
+  // member), same scoping as landing_tab. Will migrate to a per-portfolio scope alongside
+  // landing_tab whenever multi-portfolio support is actually built.
+  const updateWorkspaceColumnPrefs = async (prefs: { key: string; visible: boolean }[] | null) => {
+    if (!user || !activeWorkspaceId) return;
+    const { error } = await supabase.rpc('update_my_column_prefs', { p_workspace_id: activeWorkspaceId, p_prefs: prefs });
     if (error) throw error;
     await refreshWorkspaces(user.id, activeWorkspaceId);
   };
@@ -1549,7 +1560,7 @@ export function usePaymentState() {
     user, userProfile, familyMembers, viewMode, setViewMode,
     signUp, signIn, signInWithGoogle, resetPassword, updatePassword, updateDisplayName, acceptPrivacyPolicy, logOut,
     // Workspace model
-    workspaces, activeWorkspaceId, activeWorkspace, switchWorkspace, createWorkspace, setWorkspaceMode, updateWorkspaceLandingTab,
+    workspaces, activeWorkspaceId, activeWorkspace, switchWorkspace, createWorkspace, setWorkspaceMode, updateWorkspaceLandingTab, updateWorkspaceColumnPrefs,
     renameWorkspace, deleteWorkspace,
     incomeSources, addIncomeSource, deleteIncomeSource, incomeMode, updateIncomeMode, monthlyIncome, updateMonthlyIncome,
     workspaceBackups, createBackupNow, restoreFromBackup,

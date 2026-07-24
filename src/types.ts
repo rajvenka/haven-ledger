@@ -87,6 +87,7 @@ export interface Workspace {
   accessLevel?: 'full' | 'limited';
   enabledFeatures?: string[];
   landingTab?: string | null;
+  columnPrefs?: { key: string; visible: boolean }[] | null;
 }
 
 export interface RewardPerk {

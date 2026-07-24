@@ -2,7 +2,7 @@ import { parseBrokerFile, parseBrokerFileWithDate, BrokerTemplate, ParsedHolding
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   TrendingUp, TrendingDown, Plus, Trash2, RefreshCw, Users, Wallet,
-  CheckCircle2, X, Briefcase, Gift, Receipt, Upload, Edit2, ChevronDown, ArrowUpDown
+  CheckCircle2, X, Briefcase, Gift, Receipt, Upload, Edit2, ChevronDown, ArrowUpDown, Settings, ChevronUp
 } from 'lucide-react';
 
 interface WorkspaceMemberLite {
@@ -16,6 +16,8 @@ interface PortfolioViewProps {
   workspaceMembers: WorkspaceMemberLite[];
   isReadOnly?: boolean;
   isDataLoading?: boolean;
+  columnPrefs?: { key: string; visible: boolean }[] | null;
+  onUpdateColumnPrefs?: (prefs: { key: string; visible: boolean }[] | null) => Promise<void>;
   portfolioSplits: any[];
   portfolioCashBalances: any[];
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
@@ -59,12 +61,25 @@ interface PortfolioViewProps {
 
 const fmt = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 const fmtQty = (n: number) => Number.isInteger(n) ? String(n) : n.toFixed(2);
+
+// Instrument is always shown, pinned first - everything else is configurable (show/hide + reorder).
+const DEFAULT_COLUMNS: { key: string; label: string; align: 'text-left' | 'text-right' }[] = [
+  { key: 'quantity', label: 'Qty', align: 'text-right' },
+  { key: 'buy_price', label: 'Buy Price', align: 'text-right' },
+  { key: 'current_price', label: 'LTP', align: 'text-right' },
+  { key: 'live_price', label: 'Live Price', align: 'text-right' },
+  { key: 'invested', label: 'Invested', align: 'text-right' },
+  { key: 'current_value', label: 'Cur. Value', align: 'text-right' },
+  { key: 'gain', label: 'Net Gain', align: 'text-right' },
+  { key: 'gain_pct', label: '% Chg', align: 'text-right' },
+  { key: 'since_reference', label: 'Since Reference', align: 'text-right' },
+];
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const memberName = (m: WorkspaceMemberLite) => m.displayName || m.email.split('@')[0];
 
 export default function PortfolioView(props: PortfolioViewProps) {
   const {
-    workspaceName, workspaceMembers, isReadOnly, isDataLoading,
+    workspaceName, workspaceMembers, isReadOnly, isDataLoading, columnPrefs, onUpdateColumnPrefs,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances,
     portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, updatePortfolioHoldingLivePrice, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
@@ -111,6 +126,49 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [isConfirmingWipe, setIsConfirmingWipe] = useState(false);
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [isCustomizingColumns, setIsCustomizingColumns] = useState(false);
+  const [draftColumns, setDraftColumns] = useState<{ key: string; visible: boolean }[]>([]);
+
+  // Merge saved prefs with the default set - handles a saved list that's missing a
+  // newly-added column (appends it visible) so nothing silently disappears after an update.
+  const resolvedColumns = useMemo(() => {
+    if (!columnPrefs || columnPrefs.length === 0) return DEFAULT_COLUMNS.map(c => ({ ...c, visible: true }));
+    const byKey = new Map(columnPrefs.map(p => [p.key, p.visible]));
+    const ordered = columnPrefs
+      .map(p => DEFAULT_COLUMNS.find(c => c.key === p.key))
+      .filter((c): c is typeof DEFAULT_COLUMNS[0] => !!c)
+      .map(c => ({ ...c, visible: byKey.get(c.key) ?? true }));
+    const missing = DEFAULT_COLUMNS.filter(c => !byKey.has(c.key)).map(c => ({ ...c, visible: true }));
+    return [...ordered, ...missing];
+  }, [columnPrefs]);
+
+  const visibleColumns = resolvedColumns.filter(c => c.visible);
+
+  const openColumnCustomizer = () => {
+    setDraftColumns(resolvedColumns.map(c => ({ key: c.key, visible: c.visible })));
+    setIsCustomizingColumns(true);
+  };
+  const moveDraftColumn = (index: number, direction: -1 | 1) => {
+    setDraftColumns(prev => {
+      const next = [...prev];
+      const target = index + direction;
+      if (target < 0 || target >= next.length) return prev;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  };
+  const toggleDraftColumnVisible = (key: string) => {
+    setDraftColumns(prev => prev.map(c => (c.key === key ? { ...c, visible: !c.visible } : c)));
+  };
+  const saveColumnCustomization = async () => {
+    await runAction(() => onUpdateColumnPrefs?.(draftColumns) ?? Promise.resolve());
+    setIsCustomizingColumns(false);
+  };
+  const resetColumnCustomization = async () => {
+    await runAction(() => onUpdateColumnPrefs?.(null) ?? Promise.resolve());
+    setIsCustomizingColumns(false);
+  };
+
   const [wipeConfirmText, setWipeConfirmText] = useState('');
   const [holdingsTab, setHoldingsTab] = useState<'active' | 'sold'>('active');
   const [editTargetType, setEditTargetType] = useState<'price' | 'percent'>('percent');
@@ -165,7 +223,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   };
 
   // ---- Column sorting ----
-  type SortField = 'symbol' | 'quantity' | 'buy_price' | 'current_price' | 'live_price' | 'since_upload' | 'invested' | 'current_value' | 'gain' | 'gain_pct' | 'since_reference';
+  type SortField = 'symbol' | 'quantity' | 'buy_price' | 'current_price' | 'live_price' | 'invested' | 'current_value' | 'gain' | 'gain_pct' | 'since_reference';
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const toggleSort = (field: SortField) => {
@@ -278,10 +336,6 @@ export default function PortfolioView(props: PortfolioViewProps) {
         case 'buy_price': return Number(h.buy_price);
         case 'current_price': return Number(h.current_price ?? h.buy_price);
         case 'live_price': return Number(h.live_price ?? h.current_price ?? h.buy_price);
-        case 'since_upload': {
-          const ltp = Number(h.current_price ?? h.buy_price);
-          return h.live_price != null && ltp !== 0 ? ((Number(h.live_price) - ltp) / ltp) * 100 : -Infinity;
-        }
         case 'invested': return Number(h.buy_price) * Number(h.quantity);
         case 'current_value': return current * Number(h.quantity);
         case 'gain': return (current - Number(h.buy_price)) * Number(h.quantity);
@@ -1146,7 +1200,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
           })()}
 
           <div>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Active ({filteredActiveHoldings.length}{holdingFilters.size > 0 ? ` of ${activeHoldings.length}` : ''})</span>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Active ({filteredActiveHoldings.length}{holdingFilters.size > 0 ? ` of ${activeHoldings.length}` : ''})</span>
+              <button onClick={openColumnCustomizer} className="flex items-center gap-1 text-[9px] font-bold text-slate-400 hover:text-indigo-500 cursor-pointer">
+                <Settings className="w-3 h-3" /> Columns
+              </button>
+            </div>
             <div className="apple-card mt-1.5 overflow-x-auto">
               {filteredActiveHoldings.length === 0 ? (
                 <p className="p-6 text-center text-xs text-slate-400">No active holdings match this filter.</p>
@@ -1172,21 +1231,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         </th>
                       )}
                       {([
-                        ['symbol', 'Instrument', 'text-left'],
-                        ['quantity', 'Qty', 'text-right'],
-                        ['buy_price', 'Buy Price', 'text-right'],
-                        ['current_price', 'LTP', 'text-right'],
-                        ['live_price', 'Live Price', 'text-right'],
-                        ['since_upload', 'Since Upload', 'text-right'],
-                        ['invested', 'Invested', 'text-right'],
-                        ['current_value', 'Cur. Value', 'text-right'],
-                        ['gain', 'Net Gain', 'text-right'],
-                        ['gain_pct', '% Chg', 'text-right'],
-                        ['since_reference', selectedReferenceDate === 'latest' ? 'Since Reference' : `Since ${selectedReferenceDate}`, 'text-right'],
-                      ] as [SortField, string, string][]).map(([field, label, align]) => (
+                        { key: 'symbol', label: 'Instrument', align: 'text-left' as const },
+                        ...visibleColumns.map(c => ({ key: c.key, label: c.key === 'since_reference' ? (selectedReferenceDate === 'latest' ? 'Since Reference' : `Since ${selectedReferenceDate}`) : c.label, align: c.align })),
+                      ]).map(({ key: field, label, align }) => (
                         <th
                           key={field}
-                          onClick={() => toggleSort(field)}
+                          onClick={() => toggleSort(field as SortField)}
                           className={`p-2.5 ${align} cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-300`}
                         >
                           <span className="inline-flex items-center gap-0.5">
@@ -1269,63 +1319,79 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               </div>
                             )}
                           </td>
-                          <td
-                            className="p-2.5 text-right text-slate-600 dark:text-slate-300 whitespace-nowrap relative"
-                            onMouseEnter={() => setExpandedQtyId(h.id)}
-                            onMouseLeave={() => setExpandedQtyId(prev => (prev === h.id ? null : prev))}
-                          >
-                            <span onClick={() => setExpandedQtyId(prev => (prev === h.id ? null : h.id))} className="cursor-pointer">
-                              {fmtQty(Number(h.quantity))}
-                            </span>
-                            {expandedQtyId === h.id && (
-                              <div className="absolute right-0 bottom-full mb-0.5 z-20 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-nowrap">
-                                {h.quantity}
-                              </div>
-                            )}
-                          </td>
-                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">₹{Number(h.buy_price).toFixed(2)}</td>
-                          <td className="p-2.5 text-right">
-                            {priceEdits[h.id] !== undefined ? (
-                              <div className="flex items-center justify-end gap-1">
-                                <input
-                                  autoFocus
-                                  type="number"
-                                  value={priceEdits[h.id]}
-                                  onChange={(e) => setPriceEdits(prev => ({ ...prev, [h.id]: e.target.value }))}
-                                  className="w-20 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px]"
-                                />
-                                <button onClick={() => saveCurrentPrice(h.id)} className="p-1 bg-indigo-600 text-white rounded-md cursor-pointer"><CheckCircle2 className="w-3 h-3" /></button>
-                              </div>
-                            ) : (
-                              <button onClick={() => setPriceEdits(prev => ({ ...prev, [h.id]: String(Number(h.current_price ?? h.buy_price)) }))} className="font-bold text-slate-900 dark:text-white flex items-center gap-1 ml-auto cursor-pointer" title="Update LTP (last file-sourced price)">
-                                ₹{Number(h.current_price ?? h.buy_price).toFixed(2)} <RefreshCw className="w-2.5 h-2.5 text-slate-400" />
-                              </button>
-                            )}
-                          </td>
-                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">
-                            {h.live_price != null ? `₹${Number(h.live_price).toFixed(2)}` : <span className="text-slate-300 dark:text-slate-700">—</span>}
-                          </td>
-                          <td className="p-2.5 text-right">
-                            {(() => {
-                              const ltp = Number(h.current_price ?? h.buy_price);
-                              if (h.live_price == null || ltp === 0) return <span className="text-slate-300 dark:text-slate-700">—</span>;
-                              const sinceUploadPct = ((Number(h.live_price) - ltp) / ltp) * 100;
-                              return <span className={`font-bold ${sinceUploadPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{sinceUploadPct >= 0 ? '+' : ''}{sinceUploadPct.toFixed(2)}%</span>;
-                            })()}
-                          </td>
-                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">{fmt(invested)}</td>
-                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">{fmt(curValue)}</td>
-                          <td className={`p-2.5 text-right font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)}</td>
-                          <td className={`p-2.5 text-right font-bold ${gainPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gainPct >= 0 ? '+' : ''}{gainPct.toFixed(2)}%</td>
-                          <td className="p-2.5 text-right">
-                            {sinceReferencePct !== null ? (
-                              <span className={`font-bold ${sinceReferencePct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`} title={selectedReferenceDate !== 'latest' ? `Price on/before ${selectedReferenceDate} used as baseline` : `Reference: ₹${Number(h.reference_price).toFixed(2)} on ${h.reference_date}`}>
-                                {sinceReferencePct >= 0 ? '+' : ''}{sinceReferencePct.toFixed(2)}%
-                              </span>
-                            ) : (
-                              <span className="text-slate-300 dark:text-slate-700">—</span>
-                            )}
-                          </td>
+                          {visibleColumns.map(col => {
+                            switch (col.key) {
+                              case 'quantity':
+                                return (
+                                  <td
+                                    key="quantity"
+                                    className="p-2.5 text-right text-slate-600 dark:text-slate-300 whitespace-nowrap relative"
+                                    onMouseEnter={() => setExpandedQtyId(h.id)}
+                                    onMouseLeave={() => setExpandedQtyId(prev => (prev === h.id ? null : prev))}
+                                  >
+                                    <span onClick={() => setExpandedQtyId(prev => (prev === h.id ? null : h.id))} className="cursor-pointer">
+                                      {fmtQty(Number(h.quantity))}
+                                    </span>
+                                    {expandedQtyId === h.id && (
+                                      <div className="absolute right-0 bottom-full mb-0.5 z-20 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-nowrap">
+                                        {h.quantity}
+                                      </div>
+                                    )}
+                                  </td>
+                                );
+                              case 'buy_price':
+                                return <td key="buy_price" className="p-2.5 text-right text-slate-600 dark:text-slate-300">₹{Number(h.buy_price).toFixed(2)}</td>;
+                              case 'current_price':
+                                return (
+                                  <td key="current_price" className="p-2.5 text-right">
+                                    {priceEdits[h.id] !== undefined ? (
+                                      <div className="flex items-center justify-end gap-1">
+                                        <input
+                                          autoFocus
+                                          type="number"
+                                          value={priceEdits[h.id]}
+                                          onChange={(e) => setPriceEdits(prev => ({ ...prev, [h.id]: e.target.value }))}
+                                          className="w-20 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px]"
+                                        />
+                                        <button onClick={() => saveCurrentPrice(h.id)} className="p-1 bg-indigo-600 text-white rounded-md cursor-pointer"><CheckCircle2 className="w-3 h-3" /></button>
+                                      </div>
+                                    ) : (
+                                      <button onClick={() => setPriceEdits(prev => ({ ...prev, [h.id]: String(Number(h.current_price ?? h.buy_price)) }))} className="font-bold text-slate-900 dark:text-white flex items-center gap-1 ml-auto cursor-pointer" title="Update LTP (last file-sourced price)">
+                                        ₹{Number(h.current_price ?? h.buy_price).toFixed(2)} <RefreshCw className="w-2.5 h-2.5 text-slate-400" />
+                                      </button>
+                                    )}
+                                  </td>
+                                );
+                              case 'live_price':
+                                return (
+                                  <td key="live_price" className="p-2.5 text-right text-slate-600 dark:text-slate-300">
+                                    {h.live_price != null ? `₹${Number(h.live_price).toFixed(2)}` : <span className="text-slate-300 dark:text-slate-700">—</span>}
+                                  </td>
+                                );
+                              case 'invested':
+                                return <td key="invested" className="p-2.5 text-right text-slate-600 dark:text-slate-300">{fmt(invested)}</td>;
+                              case 'current_value':
+                                return <td key="current_value" className="p-2.5 text-right text-slate-600 dark:text-slate-300">{fmt(curValue)}</td>;
+                              case 'gain':
+                                return <td key="gain" className={`p-2.5 text-right font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)}</td>;
+                              case 'gain_pct':
+                                return <td key="gain_pct" className={`p-2.5 text-right font-bold ${gainPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gainPct >= 0 ? '+' : ''}{gainPct.toFixed(2)}%</td>;
+                              case 'since_reference':
+                                return (
+                                  <td key="since_reference" className="p-2.5 text-right">
+                                    {sinceReferencePct !== null ? (
+                                      <span className={`font-bold ${sinceReferencePct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`} title={selectedReferenceDate !== 'latest' ? `Price on/before ${selectedReferenceDate} used as baseline` : `Reference: ₹${Number(h.reference_price).toFixed(2)} on ${h.reference_date}`}>
+                                        {sinceReferencePct >= 0 ? '+' : ''}{sinceReferencePct.toFixed(2)}%
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-300 dark:text-slate-700">—</span>
+                                    )}
+                                  </td>
+                                );
+                              default:
+                                return null;
+                            }
+                          })}
                           <td className="p-2.5 text-right">
                             <div className="flex items-center justify-end gap-1">
                               {!isReadOnly && (sellingId === h.id ? (
@@ -1352,7 +1418,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         </tr>
                         {expandedHoldingId === h.id && (
                           <tr>
-                            <td colSpan={isSelectingForTag ? 12 : 11} className="p-3 bg-slate-50 dark:bg-slate-900">
+                            <td colSpan={(isSelectingForTag ? 1 : 0) + 2 + visibleColumns.length} className="p-3 bg-slate-50 dark:bg-slate-900">
                               <div className="grid grid-cols-2 gap-2 max-w-lg">
                                 <div className="col-span-2">
                                   <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Ticker (for live price refresh)</label>
@@ -1586,6 +1652,47 @@ export default function PortfolioView(props: PortfolioViewProps) {
             </div>
           )}
       </>
+      )}
+
+      {isCustomizingColumns && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={() => setIsCustomizingColumns(false)}>
+          <div className="bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Customize Columns</h3>
+              <button onClick={() => setIsCustomizingColumns(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X className="w-4 h-4" /></button>
+            </div>
+            <p className="px-4 pt-3 text-[10px] text-slate-400">Instrument always shows first. Toggle others on/off and reorder with the arrows - saved just for you on this workspace.</p>
+            <div className="flex-1 overflow-y-auto p-4 space-y-1.5">
+              <div className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-950 rounded-lg opacity-60">
+                <span className="text-xs font-semibold text-slate-500">Instrument</span>
+                <span className="text-[9px] font-bold text-slate-400 uppercase">Always shown</span>
+              </div>
+              {draftColumns.map((col, i) => {
+                const meta = DEFAULT_COLUMNS.find(c => c.key === col.key);
+                return (
+                  <div key={col.key} className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                    <label className="flex items-center gap-2.5 cursor-pointer flex-1">
+                      <input type="checkbox" checked={col.visible} onChange={() => toggleDraftColumnVisible(col.key)} className="w-4 h-4 cursor-pointer accent-indigo-600" />
+                      <span className={`text-xs font-semibold ${col.visible ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>{meta?.label ?? col.key}</span>
+                    </label>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => moveDraftColumn(i, -1)} disabled={i === 0} className="p-1 text-slate-400 hover:text-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"><ChevronUp className="w-4 h-4" /></button>
+                      <button onClick={() => moveDraftColumn(i, 1)} disabled={i === draftColumns.length - 1} className="p-1 text-slate-400 hover:text-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"><ChevronDown className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex gap-2 shrink-0">
+              <button onClick={resetColumnCustomization} className="flex-1 px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-black uppercase cursor-pointer">
+                Reset
+              </button>
+              <button onClick={saveColumnCustomization} className="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase cursor-pointer">
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
