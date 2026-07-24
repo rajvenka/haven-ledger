@@ -1087,6 +1087,7 @@ export default function App() {
 
                       {hasFeature('income') && (
                       <button
+                        id="tour-tab-income"
                         onClick={() => { setActiveTab('income'); setIsMobileMenuOpen(false); }}
                         className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                           activeTab === 'income'
@@ -1133,6 +1134,7 @@ export default function App() {
                     </span>
                     <nav className="flex flex-col gap-1 text-left">
                       <button
+                        id="tour-tab-portfolio"
                         onClick={() => { setActiveTab('portfolio'); setIsMobileMenuOpen(false); }}
                         className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                           activeTab === 'portfolio'
@@ -1150,6 +1152,7 @@ export default function App() {
                       </button>
 
                       <button
+                        id="tour-tab-investment_plan"
                         onClick={() => { setActiveTab('investment_plan'); setIsMobileMenuOpen(false); }}
                         className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                           activeTab === 'investment_plan'
@@ -1167,6 +1170,7 @@ export default function App() {
                       </button>
 
                       <button
+                        id="tour-tab-reports"
                         onClick={() => { setActiveTab('reports'); setIsMobileMenuOpen(false); }}
                         className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                           activeTab === 'reports'
@@ -1679,6 +1683,7 @@ export default function App() {
             <nav className="pointer-events-auto bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border border-slate-200/50 dark:border-slate-800/40 py-2 px-3 flex justify-between items-center gap-1 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.08)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.4)] max-w-sm mx-auto">
               {/* Summary Tab button */}
               <button
+                id="tour-tab-summary"
                 onClick={() => setActiveTab('summary')}
                 className={`flex flex-col items-center gap-0.5 py-1 px-1 flex-1 rounded-xl transition-all ${
                   activeTab === 'summary' 
@@ -1692,6 +1697,7 @@ export default function App() {
 
               {/* Expenses Tab button */}
               <button
+                id="tour-tab-expenses"
                 onClick={() => setActiveTab('expenses')}
                 className={`flex flex-col items-center gap-0.5 py-1 px-1 flex-1 rounded-xl transition-all ${
                   activeTab === 'expenses' 
@@ -1718,6 +1724,7 @@ export default function App() {
 
               {/* AI Insights Tab button */}
               <button
+                id="tour-tab-ai"
                 onClick={() => setActiveTab('ai')}
                 className={`flex flex-col items-center gap-0.5 py-1 px-1 flex-1 rounded-xl transition-all ${
                   activeTab === 'ai' 
@@ -2224,6 +2231,7 @@ export default function App() {
         {showTour && (
           <AppTour
             onNavigate={(tab) => setActiveTab(tab as any)}
+            onOpenMobileMenu={setIsMobileMenuOpen}
             onFinish={() => { setShowTour(false); markTourCompleted(); }}
             hasFeature={hasFeature}
           />
