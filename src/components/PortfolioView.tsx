@@ -106,6 +106,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [sellingId, setSellingId] = useState<string | null>(null);
   const [expandedHoldingId, setExpandedHoldingId] = useState<string | null>(null);
   const [expandedQtyId, setExpandedQtyId] = useState<string | null>(null);
+  const [expandedNameId, setExpandedNameId] = useState<string | null>(null);
   const [isConfirmingWipe, setIsConfirmingWipe] = useState(false);
   const [wipeConfirmText, setWipeConfirmText] = useState('');
   const [holdingsTab, setHoldingsTab] = useState<'active' | 'sold'>('active');
@@ -1199,7 +1200,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           )}
                           <td className="p-2.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-bold text-slate-900 dark:text-white">{h.symbol}</span>
+                              <span className="relative max-w-[140px]">
+                                <span onClick={() => setExpandedNameId(prev => (prev === h.id ? null : h.id))} onMouseEnter={() => setExpandedNameId(h.id)} onMouseLeave={() => setExpandedNameId(prev => (prev === h.id ? null : prev))} className="font-bold text-slate-900 dark:text-white truncate block cursor-pointer">{h.symbol}</span>
+                                {expandedNameId === h.id && (
+                                  <div className="absolute left-0 bottom-full mb-0.5 z-20 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-normal max-w-[220px]">
+                                    {h.symbol}
+                                  </div>
+                                )}
+                              </span>
                               {h.broker === 'Groww' && h.holding_type === 'stock' && !h.ticker && (
                                 <span title="No ticker set - Refresh Prices will skip this stock until you add one" className="text-rose-500 font-black cursor-help">*</span>
                               )}
@@ -1461,7 +1469,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         <tr key={h.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
                           <td className="p-2.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-bold text-slate-900 dark:text-white">{h.symbol}</span>
+                              <span className="relative max-w-[140px]">
+                                <span onClick={() => setExpandedNameId(prev => (prev === h.id ? null : h.id))} onMouseEnter={() => setExpandedNameId(h.id)} onMouseLeave={() => setExpandedNameId(prev => (prev === h.id ? null : prev))} className="font-bold text-slate-900 dark:text-white truncate block cursor-pointer">{h.symbol}</span>
+                                {expandedNameId === h.id && (
+                                  <div className="absolute left-0 bottom-full mb-0.5 z-20 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-normal max-w-[220px]">
+                                    {h.symbol}
+                                  </div>
+                                )}
+                              </span>
                               <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{h.broker}</span>
                               {h.holding_type === 'mutual_fund' && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 rounded-full">MF</span>}
                               {h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
