@@ -34,6 +34,56 @@ const memberName = (m: WorkspaceMemberLite) => m.displayName || m.email.split('@
 
 type ReportTab = 'overview' | 'insights' | 'activity' | 'movement' | 'summary';
 
+// Defined outside ReportsView so it keeps a stable identity across renders - when it was
+// defined inside the render body, every state update (e.g. toggling one card's details)
+// redefined this as a new function, which made React unmount and remount every card
+// instead of just re-rendering the one that changed, causing all charts to visibly reload.
+function InsightCard({ title, items, pctKey, subFn, isOpen, onToggle, fmt }: {
+  title: string; items: any[]; pctKey: '_gainPct' | '_sinceSoldPct'; subFn?: (h: any) => string;
+  isOpen: boolean; onToggle: () => void; fmt: (n: number) => string;
+}) {
+  const chartData = items.map(h => ({ name: h.symbol.length > 10 ? h.symbol.slice(0, 10) + '…' : h.symbol, pct: h[pctKey] }));
+  return (
+    <div className="apple-card p-4 space-y-2">
+      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">{title} <span className="text-slate-300 dark:text-slate-600 normal-case font-bold">({items.length})</span></span>
+      {items.length === 0 ? (
+        <p className="text-[11px] text-slate-300 dark:text-slate-700 py-2">None right now.</p>
+      ) : (
+        <>
+          <div style={{ height: Math.max(60, items.length * 24) }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
+                <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} width={70} />
+                <Tooltip formatter={(v: number) => [`${v >= 0 ? '+' : ''}${v.toFixed(2)}%`, 'Change']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                <Bar dataKey="pct" radius={[0, 4, 4, 0]}>
+                  {chartData.map((d, i) => <Cell key={i} fill={d.pct >= 0 ? '#10b981' : '#f43f5e'} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <button onClick={onToggle} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
+            {isOpen ? 'Hide details' : 'View details'} <ChevronLeft className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-90' : '-rotate-90'}`} />
+          </button>
+          {isOpen && (
+            <div className="divide-y divide-slate-100 dark:divide-slate-900">
+              {items.map(h => (
+                <div key={h.id} className="flex items-center justify-between text-[11px] py-1">
+                  <span className="min-w-0">
+                    <span className="text-slate-700 dark:text-slate-300 font-semibold truncate block">{h.symbol}</span>
+                    {subFn && <span className="text-[9px] text-slate-400">{subFn(h)}</span>}
+                  </span>
+                  <span className={`font-bold shrink-0 ml-2 ${h[pctKey] >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{h[pctKey] >= 0 ? '+' : ''}{h[pctKey].toFixed(2)}%</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function ReportsView(props: ReportsViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly,
@@ -436,49 +486,6 @@ export default function ReportsView(props: ReportsViewProps) {
           return next;
         });
 
-        const InsightCard = ({ id, title, items, pctKey, subFn }: { id: string; title: string; items: any[]; pctKey: '_gainPct' | '_sinceSoldPct'; subFn?: (h: any) => string }) => {
-          const isOpen = expandedInsightCards.has(id);
-          const chartData = items.map(h => ({ name: h.symbol.length > 10 ? h.symbol.slice(0, 10) + '…' : h.symbol, pct: h[pctKey] }));
-          return (
-            <div className="apple-card p-4 space-y-2">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">{title} <span className="text-slate-300 dark:text-slate-600 normal-case font-bold">({items.length})</span></span>
-              {items.length === 0 ? (
-                <p className="text-[11px] text-slate-300 dark:text-slate-700 py-2">None right now.</p>
-              ) : (
-                <>
-                  <div style={{ height: Math.max(60, items.length * 24) }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
-                        <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
-                        <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} width={70} />
-                        <Tooltip formatter={(v: number) => [`${v >= 0 ? '+' : ''}${v.toFixed(2)}%`, 'Change']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-                        <Bar dataKey="pct" radius={[0, 4, 4, 0]}>
-                          {chartData.map((d, i) => <Cell key={i} fill={d.pct >= 0 ? '#10b981' : '#f43f5e'} />)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <button onClick={() => toggleCard(id)} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
-                    {isOpen ? 'Hide details' : 'View details'} <ChevronLeft className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-90' : '-rotate-90'}`} />
-                  </button>
-                  {isOpen && (
-                    <div className="divide-y divide-slate-100 dark:divide-slate-900">
-                      {items.map(h => (
-                        <div key={h.id} className="flex items-center justify-between text-[11px] py-1">
-                          <span className="min-w-0">
-                            <span className="text-slate-700 dark:text-slate-300 font-semibold truncate block">{h.symbol}</span>
-                            {subFn && <span className="text-[9px] text-slate-400">{subFn(h)}</span>}
-                          </span>
-                          <span className={`font-bold shrink-0 ml-2 ${h[pctKey] >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{h[pctKey] >= 0 ? '+' : ''}{h[pctKey].toFixed(2)}%</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          );
-        };
 
         return (
           <>
@@ -495,18 +502,18 @@ export default function ReportsView(props: ReportsViewProps) {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <InsightCard id="top-holdings" title="Top 5 Holdings (by value)" items={topHoldings} pctKey="_gainPct" subFn={(h) => fmt(h._value)} />
-            <InsightCard id="top-winners" title="Top 5 Winners" items={topWinners} pctKey="_gainPct" />
-            <InsightCard id="top-losers" title="Top 5 Losers" items={topLosers} pctKey="_gainPct" />
-            <InsightCard id="movers-up" title="Big Movers Up (10%+)" items={moversUp} pctKey="_gainPct" />
-            <InsightCard id="movers-down" title="Big Movers Down (10%+)" items={moversDown} pctKey="_gainPct" />
+            <InsightCard title="Top 5 Holdings (by value)" items={topHoldings} pctKey="_gainPct" subFn={(h) => fmt(h._value)} isOpen={expandedInsightCards.has("top-holdings")} onToggle={() => toggleCard("top-holdings")} fmt={fmt} />
+            <InsightCard title="Top 5 Winners" items={topWinners} pctKey="_gainPct" isOpen={expandedInsightCards.has("top-winners")} onToggle={() => toggleCard("top-winners")} fmt={fmt} />
+            <InsightCard title="Top 5 Losers" items={topLosers} pctKey="_gainPct" isOpen={expandedInsightCards.has("top-losers")} onToggle={() => toggleCard("top-losers")} fmt={fmt} />
+            <InsightCard title="Big Movers Up (10%+)" items={moversUp} pctKey="_gainPct" isOpen={expandedInsightCards.has("movers-up")} onToggle={() => toggleCard("movers-up")} fmt={fmt} />
+            <InsightCard title="Big Movers Down (10%+)" items={moversDown} pctKey="_gainPct" isOpen={expandedInsightCards.has("movers-down")} onToggle={() => toggleCard("movers-down")} fmt={fmt} />
           </div>
 
           <div>
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Recent Buys (last {RECENT_DAYS} days)</span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1.5">
-              <InsightCard id="good-buys" title="Good Decision - price up since buying" items={goodRecentBuys} pctKey="_gainPct" subFn={(h) => `bought ${h.buy_date}`} />
-              <InsightCard id="bad-buys" title="Bad Decision - price down since buying" items={badRecentBuys} pctKey="_gainPct" subFn={(h) => `bought ${h.buy_date}`} />
+              <InsightCard title="Good Decision - price up since buying" items={goodRecentBuys} pctKey="_gainPct" subFn={(h) => `bought ${h.buy_date}`} isOpen={expandedInsightCards.has("good-buys")} onToggle={() => toggleCard("good-buys")} fmt={fmt} />
+              <InsightCard title="Bad Decision - price down since buying" items={badRecentBuys} pctKey="_gainPct" subFn={(h) => `bought ${h.buy_date}`} isOpen={expandedInsightCards.has("bad-buys")} onToggle={() => toggleCard("bad-buys")} fmt={fmt} />
             </div>
           </div>
 
@@ -514,8 +521,8 @@ export default function ReportsView(props: ReportsViewProps) {
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Sold Decisions</span>
             <p className="text-[9px] text-slate-400 mb-1.5">Based on price movement since you sold - needs Refresh Prices on the Sold tab to populate.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <InsightCard id="good-sells" title="Good Decision - price fell after selling" items={goodSells} pctKey="_sinceSoldPct" subFn={(h) => `sold ${h.sold_date}`} />
-              <InsightCard id="bad-sells" title="Bad Decision - price rose after selling" items={badSells} pctKey="_sinceSoldPct" subFn={(h) => `sold ${h.sold_date}`} />
+              <InsightCard title="Good Decision - price fell after selling" items={goodSells} pctKey="_sinceSoldPct" subFn={(h) => `sold ${h.sold_date}`} isOpen={expandedInsightCards.has("good-sells")} onToggle={() => toggleCard("good-sells")} fmt={fmt} />
+              <InsightCard title="Bad Decision - price rose after selling" items={badSells} pctKey="_sinceSoldPct" subFn={(h) => `sold ${h.sold_date}`} isOpen={expandedInsightCards.has("bad-sells")} onToggle={() => toggleCard("bad-sells")} fmt={fmt} />
             </div>
           </div>
           </>
