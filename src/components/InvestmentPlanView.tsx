@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Trash2, Users, Wallet, Edit2, CheckCircle2, X, ClipboardList, Banknote } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { LineChart, Line, BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface WorkspaceMemberLite {
   uid: string;
@@ -170,6 +170,33 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                   <Tooltip formatter={(v: number) => [fmt(v), 'Total Contributed']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
                   <Line type="monotone" dataKey="total" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
                 </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        );
+      })()}
+
+      {workspaceMembers.length > 0 && (() => {
+        const chartData = workspaceMembers.map(m => {
+          const contributed = portfolioContributions.filter((c: any) => c.member_user_id === m.uid).reduce((s: number, c: any) => s + Number(c.amount), 0);
+          const withdrawn = portfolioWithdrawals.filter((w: any) => w.member_user_id === m.uid).reduce((s: number, w: any) => s + Number(w.amount), 0);
+          return { name: memberName(m), amount: contributed - withdrawn };
+        });
+        const colors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'];
+        return (
+          <div className="apple-card p-4 space-y-2">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Contribution by Person</span>
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.3} vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${(v / 100000).toFixed(1)}L`} />
+                  <Tooltip formatter={(v: number) => [fmt(v), 'Net Contributed']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                  <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
+                    {chartData.map((_, i) => <Cell key={i} fill={colors[i % colors.length]} />)}
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
