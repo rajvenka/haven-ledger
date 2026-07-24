@@ -74,7 +74,8 @@ const DEFAULT_COLUMNS: { key: string; label: string; align: 'text-left' | 'text-
   { key: 'current_value', label: 'Cur. Value', align: 'text-right' },
   { key: 'gain', label: 'Net Gain', align: 'text-right' },
   { key: 'gain_pct', label: '% Chg', align: 'text-right' },
-  { key: 'since_reference', label: 'Since Reference', align: 'text-right' },
+  { key: 'since_reference', label: 'Since Reference (%)', align: 'text-right' },
+  { key: 'since_reference_amount', label: 'Since Reference ($)', align: 'text-right' },
 ];
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const memberName = (m: WorkspaceMemberLite) => m.displayName || m.email.split('@')[0];
@@ -225,7 +226,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   };
 
   // ---- Column sorting ----
-  type SortField = 'symbol' | 'quantity' | 'buy_price' | 'current_price' | 'live_price' | 'daily_change' | 'since_previous_load' | 'invested' | 'current_value' | 'gain' | 'gain_pct' | 'since_reference';
+  type SortField = 'symbol' | 'quantity' | 'buy_price' | 'current_price' | 'live_price' | 'daily_change' | 'since_previous_load' | 'invested' | 'current_value' | 'gain' | 'gain_pct' | 'since_reference' | 'since_reference_amount';
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const toggleSort = (field: SortField) => {
@@ -351,6 +352,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
           }
           return h.reference_price != null && Number(h.reference_price) !== 0 ? ((current - Number(h.reference_price)) / Number(h.reference_price)) * 100 : -Infinity;
         }
+        case 'since_reference_amount': {
+          const qty = Number(h.quantity);
+          if (selectedReferenceDate !== 'latest') {
+            const basePrice = getPriceAtOrBefore(h.id, selectedReferenceDate);
+            return basePrice != null ? (current - basePrice) * qty : -Infinity;
+          }
+          return h.reference_price != null ? (current - Number(h.reference_price)) * qty : -Infinity;
+        }
         default: return 0;
       }
     };
@@ -444,6 +453,20 @@ export default function PortfolioView(props: PortfolioViewProps) {
     const ref = Number(h.reference_price);
     if (ref === 0) return null;
     return ((current - ref) / ref) * 100;
+  };
+
+  // Same reference baseline as the percentage version (respects the Reference Load Date
+  // dropdown), just expressed as a rupee amount for this holding instead of a percentage.
+  const getSinceReferenceAmount = (h: any): number | null => {
+    const current = Number(h.live_price ?? h.current_price ?? h.buy_price);
+    const qty = Number(h.quantity);
+    if (selectedReferenceDate !== 'latest') {
+      const basePrice = getPriceAtOrBefore(h.id, selectedReferenceDate);
+      if (basePrice == null) return null;
+      return (current - basePrice) * qty;
+    }
+    if (h.reference_price == null) return null;
+    return (current - Number(h.reference_price)) * qty;
   };
 
 
@@ -1296,7 +1319,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       )}
                       {([
                         { key: 'symbol', label: 'Instrument', align: 'text-left' as const },
-                        ...visibleColumns.map(c => ({ key: c.key, label: c.key === 'since_reference' ? (selectedReferenceDate === 'latest' ? 'Since Reference' : `Since ${selectedReferenceDate}`) : c.label, align: c.align })),
+                        ...visibleColumns.map(c => {
+                          let label = c.label;
+                          if (c.key === 'since_reference') label = selectedReferenceDate === 'latest' ? 'Since Reference (%)' : `Since ${selectedReferenceDate} (%)`;
+                          if (c.key === 'since_reference_amount') label = selectedReferenceDate === 'latest' ? 'Since Reference ($)' : `Since ${selectedReferenceDate} ($)`;
+                          return { key: c.key, label, align: c.align };
+                        }),
                       ]).map(({ key: field, label, align }) => (
                         <th
                           key={field}
@@ -1466,6 +1494,20 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                     )}
                                   </td>
                                 );
+                              case 'since_reference_amount': {
+                                const sinceRefAmount = getSinceReferenceAmount(h);
+                                return (
+                                  <td key="since_reference_amount" className="p-2.5 text-right">
+                                    {sinceRefAmount !== null ? (
+                                      <span className={`font-bold ${sinceRefAmount >= 0 ? 'text-emerald-600' : 'text-rose-500'}`} title={selectedReferenceDate !== 'latest' ? `Price on/before ${selectedReferenceDate} used as baseline` : `Reference: ₹${Number(h.reference_price).toFixed(2)} on ${h.reference_date}`}>
+                                        {sinceRefAmount >= 0 ? '+' : ''}{fmt(sinceRefAmount)}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-300 dark:text-slate-700">—</span>
+                                    )}
+                                  </td>
+                                );
+                              }
                               default:
                                 return null;
                             }
