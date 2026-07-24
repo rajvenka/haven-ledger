@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   LayoutDashboard, 
@@ -78,6 +78,7 @@ export default function App() {
     activeWorkspaceId,
     activeWorkspace,
     switchWorkspace,
+    updateWorkspaceLandingTab,
     createWorkspace,
     setWorkspaceMode,
     addFamilyMember,
@@ -209,7 +210,15 @@ export default function App() {
     return hash.includes('type=invite') || hash.includes('type=recovery');
   });
 
-  const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'configure' | 'account' | 'history' | 'ai'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'configure' | 'account' | 'history' | 'ai' | 'income' | 'rewards' | 'portfolio' | 'investment_plan' | 'reports' | 'admin_users'>('summary');
+  const lastLandingWorkspaceId = React.useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeWorkspaceId) return;
+    if (lastLandingWorkspaceId.current === activeWorkspaceId) return;
+    lastLandingWorkspaceId.current = activeWorkspaceId;
+    const preferred = activeWorkspace?.landingTab;
+    if (preferred) setActiveTab(preferred as any);
+  }, [activeWorkspaceId, activeWorkspace?.landingTab]);
   const [settingsSubTab, setSettingsSubTab] = useState<'preferences' | 'team'>('preferences');
   const [isAgentOpen, setIsAgentOpen] = useState(false);
   const [isFamilyChatOpen, setIsFamilyChatOpen] = useState(false);
@@ -1435,6 +1444,8 @@ export default function App() {
                 onRestoreFromBackup={restoreFromBackup}
                 onStartWhatsAppVerification={startWhatsAppVerification}
                 onUpdateDisplayName={updateDisplayName}
+                currentLandingTab={activeWorkspace?.landingTab}
+                onUpdateLandingTab={updateWorkspaceLandingTab}
                 accessPlans={accessPlans}
                 myUpgradeRequest={myUpgradeRequest}
                 onRequestUpgrade={requestUpgrade}

@@ -141,7 +141,7 @@ export function usePaymentState() {
   const refreshWorkspaces = useCallback(async (uid: string, preferredActiveId?: string | null) => {
     const { data: memberships } = await supabase
       .from('workspace_members')
-      .select('workspace_id, role, access_level, enabled_features, workspaces(id, name, type, invite_code, owner_id, income_mode, monthly_income)')
+      .select('workspace_id, role, access_level, enabled_features, landing_tab, workspaces(id, name, type, invite_code, owner_id, income_mode, monthly_income)')
       .eq('user_id', uid);
 
     const list: Workspace[] = (memberships ?? []).map((m: any) => ({
@@ -155,6 +155,7 @@ export function usePaymentState() {
       monthlyIncome: m.workspaces?.monthly_income ?? '',
       accessLevel: (m.access_level ?? 'full') as 'full' | 'limited',
       enabledFeatures: m.enabled_features ?? ['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'whatsapp', 'portfolio'],
+      landingTab: m.landing_tab ?? null,
     }));
     setWorkspaces(list);
 
@@ -300,6 +301,15 @@ export function usePaymentState() {
   }, [user, reloadData, refreshWorkspaces, loadFamilyMessages, activeWorkspaceId]);
 
   // ---------- Workspace management ----------
+
+  // Which page shows first when this workspace becomes active - a personal preference per
+  // workspace membership, not a workspace-wide setting.
+  const updateWorkspaceLandingTab = async (tab: string | null) => {
+    if (!user || !activeWorkspaceId) return;
+    const { error } = await supabase.from('workspace_members').update({ landing_tab: tab }).eq('workspace_id', activeWorkspaceId).eq('user_id', user.id);
+    if (error) throw error;
+    await refreshWorkspaces(user.id, activeWorkspaceId);
+  };
 
   const switchWorkspace = async (workspaceId: string) => {
     if (!user) return;
@@ -1535,7 +1545,7 @@ export function usePaymentState() {
     user, userProfile, familyMembers, viewMode, setViewMode,
     signUp, signIn, signInWithGoogle, resetPassword, updatePassword, updateDisplayName, acceptPrivacyPolicy, logOut,
     // Workspace model
-    workspaces, activeWorkspaceId, activeWorkspace, switchWorkspace, createWorkspace, setWorkspaceMode,
+    workspaces, activeWorkspaceId, activeWorkspace, switchWorkspace, createWorkspace, setWorkspaceMode, updateWorkspaceLandingTab,
     renameWorkspace, deleteWorkspace,
     incomeSources, addIncomeSource, deleteIncomeSource, incomeMode, updateIncomeMode, monthlyIncome, updateMonthlyIncome,
     workspaceBackups, createBackupNow, restoreFromBackup,

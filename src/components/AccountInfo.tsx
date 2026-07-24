@@ -37,6 +37,8 @@ interface AccountInfoProps {
   onAddBulkPayments?: (payments: Omit<RecurringPayment, 'id'>[]) => Promise<void>;
   onStartWhatsAppVerification?: (phone: string) => Promise<string>;
   onUpdateDisplayName?: (name: string) => Promise<void>;
+  currentLandingTab?: string | null;
+  onUpdateLandingTab?: (tab: string | null) => Promise<void>;
   onDisconnectWhatsApp?: () => Promise<void>;
   accessPlans?: { id: string; name: string; description?: string; features: string[]; isSystem: boolean }[];
   myUpgradeRequest?: { id: string; planName: string; status: string } | null;
@@ -93,6 +95,8 @@ export default function AccountInfo({
   onAddBulkPayments,
   onStartWhatsAppVerification,
   onUpdateDisplayName,
+  currentLandingTab,
+  onUpdateLandingTab,
   onDisconnectWhatsApp,
   accessPlans = [],
   myUpgradeRequest,
@@ -218,6 +222,8 @@ export default function AccountInfo({
   const [savingDisplayName, setSavingDisplayName] = useState(false);
   const [displayNameError, setDisplayNameError] = useState<string | null>(null);
   const [displayNameSaved, setDisplayNameSaved] = useState(false);
+  const [landingTabSaving, setLandingTabSaving] = useState(false);
+  const [landingTabSaved, setLandingTabSaved] = useState(false);
   const [respondingInvId, setRespondingInvId] = useState<string | null>(null);
   const [isRenamingWorkspace, setIsRenamingWorkspace] = useState(false);
   const [workspaceRenameValue, setWorkspaceRenameValue] = useState('');
@@ -1159,6 +1165,43 @@ export default function AccountInfo({
             </form>
             {displayNameError && <p className="text-[10px] text-rose-500 font-semibold">{displayNameError}</p>}
             {displayNameSaved && <p className="text-[10px] text-emerald-500 font-semibold">Saved.</p>}
+          </div>
+
+          {/* Workspace Landing Page */}
+          <div className="bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5 shrink-0">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Landing Page for This Workspace</span>
+            <p className="text-[10px] text-slate-400">Which page opens first when you switch into {activeWorkspace?.name || 'this workspace'}. Only affects you, not other members.</p>
+            <div className="flex gap-2">
+              <select
+                value={currentLandingTab ?? ''}
+                onChange={async (e) => {
+                  const value = e.target.value || null;
+                  setLandingTabSaving(true);
+                  setLandingTabSaved(false);
+                  try {
+                    await onUpdateLandingTab?.(value);
+                    setLandingTabSaved(true);
+                    setTimeout(() => setLandingTabSaved(false), 2500);
+                  } finally {
+                    setLandingTabSaving(false);
+                  }
+                }}
+                disabled={landingTabSaving}
+                className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+              >
+                <option value="">Dashboard (default)</option>
+                <option value="expenses">Expenses</option>
+                <option value="income">Income</option>
+                <option value="configure">Manage Bills</option>
+                <option value="history">Payment History</option>
+                <option value="rewards">Membership Hub</option>
+                <option value="ai">AI Insights</option>
+                <option value="portfolio">Portfolio</option>
+                <option value="investment_plan">Investment Plan</option>
+                <option value="reports">Reports</option>
+              </select>
+            </div>
+            {landingTabSaved && <p className="text-[10px] text-emerald-500 font-semibold">Saved.</p>}
           </div>
 
           {/* My Plan */}

@@ -86,6 +86,7 @@ export interface Workspace {
   monthlyIncome?: string;
   accessLevel?: 'full' | 'limited';
   enabledFeatures?: string[];
+  landingTab?: string | null;
 }
 
 export interface RewardPerk {
