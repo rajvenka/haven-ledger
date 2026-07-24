@@ -1339,7 +1339,7 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
-  const addPortfolioContribution = async (memberUserId: string, amount: number, contributionDate: string, notes?: string, contributionType: 'one_off' | 'recurring' = 'one_off') => {
+  const addPortfolioContribution = async (memberUserId: string, amount: number, contributionDate: string, notes?: string, contributionType: 'one_off' | 'recurring' | 'initial' = 'one_off') => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_contributions').insert({
       workspace_id: activeWorkspaceId, member_user_id: memberUserId, amount, contribution_date: contributionDate, notes: notes ?? null, contribution_type: contributionType,

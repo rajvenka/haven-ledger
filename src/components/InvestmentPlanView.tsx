@@ -17,7 +17,7 @@ interface InvestmentPlanViewProps {
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
   deletePortfolioSplit: (id: string) => Promise<void>;
   portfolioContributions: any[];
-  addPortfolioContribution: (memberUserId: string, amount: number, date: string, notes?: string, contributionType?: 'one_off' | 'recurring') => Promise<void>;
+  addPortfolioContribution: (memberUserId: string, amount: number, date: string, notes?: string, contributionType?: 'one_off' | 'recurring' | 'initial') => Promise<void>;
   updatePortfolioContribution: (id: string, updates: { amount?: number; contributionDate?: string; notes?: string }) => Promise<void>;
   deletePortfolioContribution: (id: string) => Promise<void>;
   portfolioWithdrawals: any[];
@@ -35,6 +35,7 @@ interface InvestmentPlanViewProps {
 const fmt = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const memberName = (m: WorkspaceMemberLite) => m.displayName || m.email.split('@')[0];
+const contribTypeLabel = (c: any) => c.contribution_type === 'recurring' ? 'Plan' : c.contribution_type === 'initial' ? 'Initial' : 'One-off';
 
 type PlanTab = 'overview' | 'contributions' | 'settings';
 
@@ -77,6 +78,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const [cAmount, setCAmount] = useState('');
   const [cDate, setCDate] = useState(todayStr());
   const [cNotes, setCNotes] = useState('');
+  const [cType, setCType] = useState<'one_off' | 'initial'>('one_off');
   const [editingContributionId, setEditingContributionId] = useState<string | null>(null);
   const [editContributionAmount, setEditContributionAmount] = useState('');
   const [editContributionDate, setEditContributionDate] = useState('');
@@ -90,8 +92,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
     e.preventDefault();
     if (!cMemberId || !cAmount) return;
     await runAction(async () => {
-      await addPortfolioContribution(cMemberId, parseFloat(cAmount), cDate, cNotes.trim() || undefined);
-      setCAmount(''); setCNotes(''); setIsAddingContribution(false);
+      await addPortfolioContribution(cMemberId, parseFloat(cAmount), cDate, cNotes.trim() || undefined, cType);
+      setCAmount(''); setCNotes(''); setCType('one_off'); setIsAddingContribution(false);
     });
   };
 
@@ -104,7 +106,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
       const m = workspaceMembers.find(x => x.uid === c.member_user_id);
       if (m) members.add(memberName(m));
     });
-    return { types: ['Plan', 'One-off'], members: Array.from(members).sort() };
+    return { types: ['Plan', 'One-off', 'Initial'], members: Array.from(members).sort() };
   }, [portfolioContributions, workspaceMembers]);
 
   const toggleContribFilter = (value: string) => {
@@ -124,7 +126,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
     const selectedTypes = contribFilterOptions.types.filter(t => contribFilters.has(t));
     const selectedMembers = contribFilterOptions.members.filter(m => contribFilters.has(m));
     let list = portfolioContributions.filter(c => {
-      const typeLabel = c.contribution_type === 'recurring' ? 'Plan' : 'One-off';
+      const typeLabel = contribTypeLabel(c);
       const typeOk = selectedTypes.length === 0 || selectedTypes.includes(typeLabel);
       const m = workspaceMembers.find(x => x.uid === c.member_user_id);
       const memberOk = selectedMembers.length === 0 || (m && selectedMembers.includes(memberName(m)));
@@ -133,7 +135,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
     const valueFor = (c: any): string | number => {
       switch (contribSortField) {
         case 'name': { const m = workspaceMembers.find(x => x.uid === c.member_user_id); return m ? memberName(m) : ''; }
-        case 'type': return c.contribution_type === 'recurring' ? 'Plan' : 'One-off';
+        case 'type': return contribTypeLabel(c);
         case 'date': return c.contribution_date;
         case 'notes': return c.notes || '';
         case 'amount': return Number(c.amount);
@@ -461,6 +463,10 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
               </select>
               <input type="number" value={cAmount} onChange={(e) => setCAmount(e.target.value)} placeholder="Amount" className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
               <input type="date" value={cDate} onChange={(e) => setCDate(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+              <select value={cType} onChange={(e) => setCType(e.target.value as any)} className="col-span-3 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
+                <option value="one_off">One-off Payment</option>
+                <option value="initial">Initial Investment</option>
+              </select>
               <textarea value={cNotes} onChange={(e) => setCNotes(e.target.value)} placeholder="Notes (optional) - e.g. bonus deposit, salary top-up" rows={2} className="col-span-3 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs resize-none" />
               <button type="submit" className="col-span-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer">Add</button>
             </form>
@@ -468,9 +474,16 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
 
           <div className="flex items-center gap-1.5 flex-wrap">
             <button onClick={() => setContribFilters(new Set())} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${contribFilters.size === 0 ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
-            {contribFilterOptions.types.map(t => (
-              <button key={t} onClick={() => toggleContribFilter(t)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${contribFilters.has(t) ? 'bg-amber-500 text-white' : 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400'}`}>{t}</button>
-            ))}
+            {contribFilterOptions.types.map(t => {
+              const colorClass = t === 'Plan'
+                ? (contribFilters.has(t) ? 'bg-amber-500 text-white' : 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400')
+                : t === 'Initial'
+                ? (contribFilters.has(t) ? 'bg-purple-500 text-white' : 'bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400')
+                : (contribFilters.has(t) ? 'bg-slate-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500');
+              return (
+                <button key={t} onClick={() => toggleContribFilter(t)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${colorClass}`}>{t}</button>
+              );
+            })}
             {contribFilterOptions.members.map(m => (
               <button key={m} onClick={() => toggleContribFilter(m)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${contribFilters.has(m) ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}>{m}</button>
             ))}
@@ -513,7 +526,9 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                   <td className="p-2 text-slate-700 dark:text-slate-300 font-semibold">{m ? memberName(m) : 'Former member'}</td>
                   <td className="p-2">
                     {c.contribution_type === 'recurring' ? (
-                      <span className="text-[8px] font-black uppercase px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">Plan</span>
+                      <span className="text-[8px] font-black uppercase px-1.5 py-0.5 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 rounded-full">Plan</span>
+                    ) : c.contribution_type === 'initial' ? (
+                      <span className="text-[8px] font-black uppercase px-1.5 py-0.5 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 rounded-full">Initial</span>
                     ) : (
                       <span className="text-[8px] font-black uppercase px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">One-off</span>
                     )}
@@ -562,7 +577,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
 
             if (contribGroupBy === 'type') {
               const plans = filteredSortedContributions.filter(c => c.contribution_type === 'recurring');
-              const oneOffs = filteredSortedContributions.filter(c => c.contribution_type !== 'recurring');
+              const initials = filteredSortedContributions.filter(c => c.contribution_type === 'initial');
+              const oneOffs = filteredSortedContributions.filter(c => c.contribution_type !== 'recurring' && c.contribution_type !== 'initial');
               return (
                 <div className="overflow-x-auto space-y-4">
                   {plans.length > 0 && (
@@ -571,6 +587,15 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                       <table className="w-full text-xs min-w-[480px] mt-1">
                         <thead>{headerRow}</thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-900">{plans.map(renderRow)}</tbody>
+                      </table>
+                    </div>
+                  )}
+                  {initials.length > 0 && (
+                    <div>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Initial ({initials.length})</span>
+                      <table className="w-full text-xs min-w-[480px] mt-1">
+                        <thead>{headerRow}</thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-900">{initials.map(renderRow)}</tbody>
                       </table>
                     </div>
                   )}

@@ -45,7 +45,7 @@ interface PortfolioViewProps {
   takePortfolioSnapshot: (date: string, groups: { label: string; invested: number; current: number }[]) => Promise<void>;
   deletePortfolioSnapshotBatch: (date: string) => Promise<void>;
   portfolioContributions: any[];
-  addPortfolioContribution: (memberUserId: string, amount: number, date: string, notes?: string, contributionType?: 'one_off' | 'recurring') => Promise<void>;
+  addPortfolioContribution: (memberUserId: string, amount: number, date: string, notes?: string, contributionType?: 'one_off' | 'recurring' | 'initial') => Promise<void>;
   updatePortfolioContribution: (id: string, updates: { amount?: number; contributionDate?: string }) => Promise<void>;
   deletePortfolioContribution: (id: string) => Promise<void>;
   portfolioWithdrawals: any[];
