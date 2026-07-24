@@ -1754,7 +1754,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       const gain = soldValue - invested;
                       const gainPct = invested > 0 ? (gain / invested) * 100 : 0;
                       return (
-                        <tr key={h.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
+                        <React.Fragment key={h.id}>
+                        <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
                           <td className="p-2.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="relative max-w-[140px]">
@@ -1765,6 +1766,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                   </div>
                                 )}
                               </span>
+                              <button
+                                onClick={() => setEditingSoldTickerId(prev => (prev === h.id ? null : h.id))}
+                                title="Set ticker for live price refresh"
+                                className="text-slate-300 hover:text-indigo-500 cursor-pointer"
+                              >
+                                <ChevronDown className={`w-3 h-3 transition-transform ${editingSoldTickerId === h.id ? 'rotate-180' : ''}`} />
+                              </button>
                               <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{h.broker}</span>
                               {h.holding_type === 'mutual_fund' && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 rounded-full">MF</span>}
                               {h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
@@ -1798,33 +1806,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                 <span className={`font-bold ${sinceSoldPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{sinceSoldPct >= 0 ? '+' : ''}{sinceSoldPct.toFixed(2)}%</span>
                               ) : <span className="text-slate-300 dark:text-slate-700">—</span>;
                             })() : h.broker === 'Groww' && !h.ticker ? (
-                              editingSoldTickerId === h.id ? (
-                                <div className="flex items-center justify-end gap-1">
-                                  <input
-                                    autoFocus
-                                    type="text"
-                                    value={soldTickerInput}
-                                    onChange={(e) => setSoldTickerInput(e.target.value.toUpperCase())}
-                                    placeholder="e.g. RELIANCE"
-                                    className="w-20 px-1.5 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[10px]"
-                                  />
-                                  <button
-                                    onClick={() => runAction(async () => {
-                                      await updatePortfolioHolding(h.id, { ticker: soldTickerInput.trim() || null });
-                                      setEditingSoldTickerId(null);
-                                    })}
-                                    className="p-1 bg-indigo-600 text-white rounded-md cursor-pointer"
-                                  ><CheckCircle2 className="w-3 h-3" /></button>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => { setEditingSoldTickerId(h.id); setSoldTickerInput(''); }}
-                                  className="text-[9px] text-rose-400 hover:text-rose-500 cursor-pointer"
-                                  title="Set a ticker so this can be refreshed"
-                                >
-                                  + add ticker
-                                </button>
-                              )
+                              <span className="text-[9px] text-rose-400" title="No ticker set - tap the arrow next to the name to add one">no ticker</span>
                             ) : (
                               <span className="text-slate-300 dark:text-slate-700">—</span>
                             )}
@@ -1833,6 +1815,34 @@ export default function PortfolioView(props: PortfolioViewProps) {
                             {!isReadOnly && <button onClick={() => runAction(() => deletePortfolioHolding(h.id))} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>}
                           </td>
                         </tr>
+                        {editingSoldTickerId === h.id && (
+                          <tr>
+                            <td colSpan={11} className="p-3 bg-slate-50 dark:bg-slate-900">
+                              <div className="max-w-xs">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Ticker (for live price refresh)</label>
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    autoFocus
+                                    type="text"
+                                    value={soldTickerInput}
+                                    onChange={(e) => setSoldTickerInput(e.target.value.toUpperCase())}
+                                    placeholder={h.ticker || 'e.g. RELIANCE'}
+                                    className="flex-1 px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-xs"
+                                  />
+                                  <button
+                                    onClick={() => runAction(async () => {
+                                      await updatePortfolioHolding(h.id, { ticker: soldTickerInput.trim() || null });
+                                      setEditingSoldTickerId(null);
+                                    })}
+                                    className="p-1.5 bg-indigo-600 text-white rounded-md cursor-pointer"
+                                  ><CheckCircle2 className="w-3.5 h-3.5" /></button>
+                                </div>
+                                {h.ticker && <p className="text-[9px] text-slate-400 mt-1">Currently: {h.ticker}</p>}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
