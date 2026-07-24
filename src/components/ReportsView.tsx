@@ -13,6 +13,7 @@ interface ReportsViewProps {
   workspaceMembers: WorkspaceMemberLite[];
   isReadOnly?: boolean;
   portfolioHoldings: any[];
+  portfolioPriceHistory: any[];
   portfolioContributions: any[];
   portfolioWithdrawals: any[];
   portfolioDividends: any[];
@@ -104,7 +105,7 @@ function DetailBucket({ label, count, totalLabel, isOpen, onToggle, children }: 
 export default function ReportsView(props: ReportsViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly,
-    portfolioHoldings, portfolioContributions, portfolioWithdrawals,
+    portfolioHoldings, portfolioPriceHistory, portfolioContributions, portfolioWithdrawals,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
     portfolioSplits, portfolioCashBalances, portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
@@ -113,6 +114,16 @@ export default function ReportsView(props: ReportsViewProps) {
   const [reportTab, setReportTab] = useState<ReportTab>('overview');
   const [drillPath, setDrillPath] = useState<string[]>([]);
   const [insightsAssetFilter, setInsightsAssetFilter] = useState<'all' | 'stock' | 'mutual_fund'>('all');
+
+  // Finds the most recent recorded price at or before a given date, for the 30-day
+  // classification comparison - falls back to null if no price history exists that far
+  // back (e.g. never re-uploaded/refreshed since before that date).
+  const getPriceAtOrBefore = (holdingId: string, date: string): number | null => {
+    const rows = portfolioPriceHistory.filter((p: any) => p.holding_id === holdingId && p.recorded_date <= date);
+    if (rows.length === 0) return null;
+    const latest = rows.reduce((a: any, b: any) => (a.recorded_date > b.recorded_date ? a : b));
+    return Number(latest.price);
+  };
   const [expandedInsightCards, setExpandedInsightCards] = useState<Set<string>>(new Set());
   const [snapshotMessage, setSnapshotMessage] = useState<string | null>(null);
   const [expandedActivityBuckets, setExpandedActivityBuckets] = useState<Set<string>>(new Set());
@@ -511,8 +522,76 @@ export default function ReportsView(props: ReportsViewProps) {
         });
 
 
+        // Classification Performance - compares Own Stock / Rajavel Stock / Rajavel SME / RAM
+        // / Unclassified / Mutual Fund side by side across three windows. Uses all active
+        // holdings regardless of the Stocks/MF toggle above, since Mutual Fund is meant to
+        // be one of the classifications being compared, not filtered out by it.
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+        const classificationMap = new Map<string, { invested: number; current: number; refValue: number; refBase: number; d30Value: number; d30Base: number }>();
+        activeHoldings.forEach(h => {
+          const classification = h.holding_type === 'mutual_fund' ? 'Mutual Fund' : (h.source || 'Unclassified');
+          const qty = Number(h.quantity);
+          const current = Number(h.live_price ?? h.current_price ?? h.buy_price);
+          const invested = Number(h.buy_price) * qty;
+          const currentValue = current * qty;
+          const prev = classificationMap.get(classification) || { invested: 0, current: 0, refValue: 0, refBase: 0, d30Value: 0, d30Base: 0 };
+          prev.invested += invested;
+          prev.current += currentValue;
+          if (h.reference_price != null) {
+            prev.refValue += currentValue;
+            prev.refBase += Number(h.reference_price) * qty;
+          }
+          const d30Price = getPriceAtOrBefore(h.id, thirtyDaysAgo);
+          if (d30Price != null) {
+            prev.d30Value += currentValue;
+            prev.d30Base += d30Price * qty;
+          }
+          classificationMap.set(classification, prev);
+        });
+        const classificationRows = Array.from(classificationMap.entries())
+          .map(([name, v]) => ({
+            name,
+            inceptionPct: v.invested > 0 ? ((v.current - v.invested) / v.invested) * 100 : null,
+            refPct: v.refBase > 0 ? ((v.refValue - v.refBase) / v.refBase) * 100 : null,
+            d30Pct: v.d30Base > 0 ? ((v.d30Value - v.d30Base) / v.d30Base) * 100 : null,
+          }))
+          .sort((a, b) => (b.inceptionPct ?? -999) - (a.inceptionPct ?? -999));
+
         return (
           <>
+          <div className="apple-card p-4 space-y-2">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Classification Performance</span>
+            <p className="text-[9px] text-slate-400">Own Stock, Rajavel Stock, Rajavel SME, RAM, and Mutual Fund compared side by side. Last 30 Days and Since Reference Load need price history to have been captured that far back - shows a dash otherwise.</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs min-w-[420px]">
+                <thead>
+                  <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                    <th className="p-2 text-left">Classification</th>
+                    <th className="p-2 text-right">Since Inception</th>
+                    <th className="p-2 text-right">Last 30 Days</th>
+                    <th className="p-2 text-right">Since Ref. Load</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-900">
+                  {classificationRows.map(row => (
+                    <tr key={row.name}>
+                      <td className="p-2 font-semibold text-slate-700 dark:text-slate-300">{row.name}</td>
+                      {[row.inceptionPct, row.d30Pct, row.refPct].map((pct, i) => (
+                        <td key={i} className="p-2 text-right">
+                          {pct !== null ? (
+                            <span className={`font-bold ${pct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{pct >= 0 ? '+' : ''}{pct.toFixed(2)}%</span>
+                          ) : (
+                            <span className="text-slate-300 dark:text-slate-700">—</span>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           <div className="flex gap-1.5">
             {(['all', 'stock', 'mutual_fund'] as const).map(f => (
               <button

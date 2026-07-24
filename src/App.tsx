@@ -1650,6 +1650,7 @@ export default function App() {
                 workspaceMembers={contributorMembers}
                 isReadOnly={isReadOnly}
                 portfolioHoldings={portfolioHoldings}
+                portfolioPriceHistory={portfolioPriceHistory}
                 portfolioContributions={portfolioContributions}
                 portfolioWithdrawals={portfolioWithdrawals}
                 portfolioDividends={portfolioDividends}
