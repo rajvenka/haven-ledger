@@ -27,16 +27,17 @@ export default async function handler(req: any, res: any) {
             { headers: { "User-Agent": "Mozilla/5.0" } }
           );
           if (!resp.ok) {
-            return { symbol, exchange, price: null, error: `Yahoo returned ${resp.status}` };
+            return { symbol, exchange, price: null, previousClose: null, error: `Yahoo returned ${resp.status}` };
           }
           const data = await resp.json();
           const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+          const previousClose = data?.chart?.result?.[0]?.meta?.chartPreviousClose ?? data?.chart?.result?.[0]?.meta?.previousClose;
           if (typeof price !== "number") {
-            return { symbol, exchange, price: null, error: "No price found for this symbol" };
+            return { symbol, exchange, price: null, previousClose: null, error: "No price found for this symbol" };
           }
-          return { symbol, exchange, price, error: null };
+          return { symbol, exchange, price, previousClose: typeof previousClose === "number" ? previousClose : null, error: null };
         } catch (err: any) {
-          return { symbol, exchange, price: null, error: err?.message || "Fetch failed" };
+          return { symbol, exchange, price: null, previousClose: null, error: err?.message || "Fetch failed" };
         }
       })
     );

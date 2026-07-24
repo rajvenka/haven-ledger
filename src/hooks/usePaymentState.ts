@@ -1256,8 +1256,12 @@ export function usePaymentState() {
 
   // Live-refreshed price, kept entirely separate from current_price (the file-sourced LTP) -
   // this was the source of a real corruption bug where the two would overwrite each other.
-  const updatePortfolioHoldingLivePrice = async (id: string, price: number) => {
-    const { error } = await supabase.from('portfolio_holdings').update({ live_price: price, live_price_updated_at: new Date().toISOString() }).eq('id', id);
+  // previousClose (from Yahoo's own prior-close reference) powers the Daily Change headline
+  // metric, distinct from Since Upload which compares against the file-sourced LTP instead.
+  const updatePortfolioHoldingLivePrice = async (id: string, price: number, previousClose?: number | null) => {
+    const row: any = { live_price: price, live_price_updated_at: new Date().toISOString() };
+    if (previousClose !== undefined) row.previous_close = previousClose;
+    const { error } = await supabase.from('portfolio_holdings').update(row).eq('id', id);
     if (error) throw error;
     await loadPortfolioDetails();
   };

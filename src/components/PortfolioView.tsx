@@ -36,7 +36,7 @@ interface PortfolioViewProps {
   reconcilePortfolioHoldingQuantity: (id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced') => Promise<void>;
   bulkHistoricalImport: (snapshots: { date: string; holdings: any[] }[]) => Promise<{ newCount: number; updatedCount: number; soldCount: number; skippedStaleCount: number; priceHistoryCount: number; stockCount: number }>;
   updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
-  updatePortfolioHoldingLivePrice: (id: string, price: number) => Promise<void>;
+  updatePortfolioHoldingLivePrice: (id: string, price: number, previousClose?: number | null) => Promise<void>;
   deletePortfolioHolding: (id: string) => Promise<void>;
   bulkTagPortfolioHoldings: (holdingIds: string[], source: string) => Promise<void>;
   bulkDeletePortfolioHoldings: (holdingIds: string[]) => Promise<void>;
@@ -613,7 +613,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         const holding = refreshable.find(h => h.ticker === r.symbol && h.exchange === r.exchange);
         if (!holding) continue;
         if (r.price != null) {
-          await updatePortfolioHoldingLivePrice(holding.id, r.price);
+          await updatePortfolioHoldingLivePrice(holding.id, r.price, r.previousClose ?? null);
           succeeded++;
         } else {
           failed++;
@@ -754,6 +754,15 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const totalFees = portfolioFees.reduce((s, f) => s + Number(f.amount), 0);
   const totalInvestedAllTime = totalInvestedActive + soldHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
   const netGain = (balanceCash + currentValueActive) - netContributed;
+
+  // Daily Change compares Live Price against Yahoo's own previous-close reference - only
+  // counts holdings that actually have both values (i.e. have been live-refreshed at least
+  // once). Since Previous Load compares Live Price against the file-sourced LTP instead,
+  // showing movement since your last broker upload rather than since yesterday's market close.
+  const holdingsWithDailyChange = activeHoldings.filter(h => h.live_price != null && h.previous_close != null);
+  const dailyChange = holdingsWithDailyChange.reduce((s, h) => s + (Number(h.live_price) - Number(h.previous_close)) * Number(h.quantity), 0);
+  const holdingsWithLoadChange = activeHoldings.filter(h => h.live_price != null);
+  const sincePreviousLoadChange = holdingsWithLoadChange.reduce((s, h) => s + (Number(h.live_price) - Number(h.current_price ?? h.buy_price)) * Number(h.quantity), 0);
   const returnPct = netContributed > 0 ? (netGain / netContributed) * 100 : 0;
 
   return (
@@ -853,6 +862,37 @@ export default function PortfolioView(props: PortfolioViewProps) {
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Net Gain (P&L, all-in)</span>
           <span className={`text-base font-black ${netGain >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>{fmt(netGain)}</span>
           <span className="text-[9px] text-slate-400 block mt-0.5">cash + stock value vs. contributed</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="apple-card p-4">
+          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Daily Change</span>
+          {holdingsWithDailyChange.length > 0 ? (
+            <>
+              <span className={`text-base font-black flex items-center gap-1 ${dailyChange >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                {dailyChange >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                {fmt(Math.abs(dailyChange))}
+              </span>
+              <span className="text-[9px] text-slate-400 block mt-0.5">vs. previous close ({holdingsWithDailyChange.length} of {activeHoldings.length})</span>
+            </>
+          ) : (
+            <span className="text-sm text-slate-300 dark:text-slate-700">— refresh prices to see this</span>
+          )}
+        </div>
+        <div className="apple-card p-4">
+          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Change Since Previous Load</span>
+          {holdingsWithLoadChange.length > 0 ? (
+            <>
+              <span className={`text-base font-black flex items-center gap-1 ${sincePreviousLoadChange >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                {sincePreviousLoadChange >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                {fmt(Math.abs(sincePreviousLoadChange))}
+              </span>
+              <span className="text-[9px] text-slate-400 block mt-0.5">live price vs. LTP ({holdingsWithLoadChange.length} of {activeHoldings.length})</span>
+            </>
+          ) : (
+            <span className="text-sm text-slate-300 dark:text-slate-700">— refresh prices to see this</span>
+          )}
         </div>
       </div>
 
