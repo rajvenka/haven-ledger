@@ -1348,10 +1348,11 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
-  const updatePortfolioContribution = async (id: string, updates: { amount?: number; contributionDate?: string }) => {
+  const updatePortfolioContribution = async (id: string, updates: { amount?: number; contributionDate?: string; notes?: string }) => {
     const row: any = {};
     if (updates.amount !== undefined) row.amount = updates.amount;
     if (updates.contributionDate !== undefined) row.contribution_date = updates.contributionDate;
+    if (updates.notes !== undefined) row.notes = updates.notes;
     const { error } = await supabase.from('portfolio_contributions').update(row).eq('id', id);
     if (error) throw error;
     await loadPortfolioDetails();

@@ -18,7 +18,7 @@ interface InvestmentPlanViewProps {
   deletePortfolioSplit: (id: string) => Promise<void>;
   portfolioContributions: any[];
   addPortfolioContribution: (memberUserId: string, amount: number, date: string, notes?: string, contributionType?: 'one_off' | 'recurring') => Promise<void>;
-  updatePortfolioContribution: (id: string, updates: { amount?: number; contributionDate?: string }) => Promise<void>;
+  updatePortfolioContribution: (id: string, updates: { amount?: number; contributionDate?: string; notes?: string }) => Promise<void>;
   deletePortfolioContribution: (id: string) => Promise<void>;
   portfolioWithdrawals: any[];
   addPortfolioWithdrawal: (memberUserId: string, amount: number, date: string, notes?: string) => Promise<void>;
@@ -80,6 +80,10 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const [editingContributionId, setEditingContributionId] = useState<string | null>(null);
   const [editContributionAmount, setEditContributionAmount] = useState('');
   const [editContributionDate, setEditContributionDate] = useState('');
+  const [editContributionNotes, setEditContributionNotes] = useState('');
+  const [contribFilters, setContribFilters] = useState<Set<string>>(new Set());
+  const [contribSort, setContribSort] = useState<'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'>('date_desc');
+  const [contribGroupBy, setContribGroupBy] = useState<'none' | 'type'>('none');
 
   const handleAddContribution = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,6 +93,45 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
       setCAmount(''); setCNotes(''); setIsAddingContribution(false);
     });
   };
+
+  // Filter pills work like Holdings: type tags (Plan/One-off) + member name tags, both
+  // toggleable together. Sort is a simple date/amount toggle since this is a flat list,
+  // not a big table. Group by type shows Plan and One-off as separate sub-lists.
+  const contribFilterOptions = useMemo(() => {
+    const members = new Set<string>();
+    portfolioContributions.forEach(c => {
+      const m = workspaceMembers.find(x => x.uid === c.member_user_id);
+      if (m) members.add(memberName(m));
+    });
+    return { types: ['Plan', 'One-off'], members: Array.from(members).sort() };
+  }, [portfolioContributions, workspaceMembers]);
+
+  const toggleContribFilter = (value: string) => {
+    setContribFilters(prev => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value); else next.add(value);
+      return next;
+    });
+  };
+
+  const filteredSortedContributions = useMemo(() => {
+    const selectedTypes = contribFilterOptions.types.filter(t => contribFilters.has(t));
+    const selectedMembers = contribFilterOptions.members.filter(m => contribFilters.has(m));
+    let list = portfolioContributions.filter(c => {
+      const typeLabel = c.contribution_type === 'recurring' ? 'Plan' : 'One-off';
+      const typeOk = selectedTypes.length === 0 || selectedTypes.includes(typeLabel);
+      const m = workspaceMembers.find(x => x.uid === c.member_user_id);
+      const memberOk = selectedMembers.length === 0 || (m && selectedMembers.includes(memberName(m)));
+      return typeOk && memberOk;
+    });
+    list = [...list].sort((a, b) => {
+      if (contribSort === 'date_desc') return b.contribution_date.localeCompare(a.contribution_date);
+      if (contribSort === 'date_asc') return a.contribution_date.localeCompare(b.contribution_date);
+      if (contribSort === 'amount_desc') return Number(b.amount) - Number(a.amount);
+      return Number(a.amount) - Number(b.amount);
+    });
+    return list;
+  }, [portfolioContributions, contribFilters, contribFilterOptions, contribSort, workspaceMembers]);
 
   const [isAddingWithdrawal, setIsAddingWithdrawal] = useState(false);
   const [wMemberId, setWMemberId] = useState('');
@@ -406,27 +449,53 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
               <button type="submit" className="col-span-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer">Add</button>
             </form>
           )}
-          <div className="divide-y divide-slate-100 dark:divide-slate-900">
-            {portfolioContributions.length === 0 ? (
-              <p className="text-center text-xs text-slate-400 py-4">No contributions logged yet.</p>
-            ) : portfolioContributions.map(c => {
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button onClick={() => setContribFilters(new Set())} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${contribFilters.size === 0 ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
+            {contribFilterOptions.types.map(t => (
+              <button key={t} onClick={() => toggleContribFilter(t)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${contribFilters.has(t) ? 'bg-amber-500 text-white' : 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400'}`}>{t}</button>
+            ))}
+            {contribFilterOptions.members.map(m => (
+              <button key={m} onClick={() => toggleContribFilter(m)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${contribFilters.has(m) ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}>{m}</button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <select value={contribSort} onChange={(e) => setContribSort(e.target.value as any)} className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[10px]">
+              <option value="date_desc">Newest first</option>
+              <option value="date_asc">Oldest first</option>
+              <option value="amount_desc">Amount: high to low</option>
+              <option value="amount_asc">Amount: low to high</option>
+            </select>
+            <button
+              onClick={() => setContribGroupBy(prev => (prev === 'type' ? 'none' : 'type'))}
+              className={`px-2.5 py-1 rounded-md text-[10px] font-bold cursor-pointer ${contribGroupBy === 'type' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+            >
+              Group by Type
+            </button>
+          </div>
+
+          {(() => {
+            const renderRow = (c: any) => {
               const m = workspaceMembers.find(x => x.uid === c.member_user_id);
               const isEditing = editingContributionId === c.id;
               return (
-                <div key={c.id} className="py-2 flex items-center justify-between text-xs gap-2">
+                <div key={c.id} className="py-2 flex items-center justify-between text-xs gap-2 border-b border-slate-100 dark:border-slate-900 last:border-0">
                   {isEditing ? (
-                    <>
-                      <input type="date" value={editContributionDate} onChange={(e) => setEditContributionDate(e.target.value)} className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px]" />
-                      <input type="number" value={editContributionAmount} onChange={(e) => setEditContributionAmount(e.target.value)} className="w-20 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px]" />
-                      <button
-                        onClick={() => runAction(async () => {
-                          await updatePortfolioContribution(c.id, { amount: parseFloat(editContributionAmount), contributionDate: editContributionDate });
-                          setEditingContributionId(null);
-                        })}
-                        className="p-1 bg-indigo-600 text-white rounded-md cursor-pointer"
-                      ><CheckCircle2 className="w-3 h-3" /></button>
-                      <button onClick={() => setEditingContributionId(null)} className="p-1 text-slate-400 cursor-pointer"><X className="w-3 h-3" /></button>
-                    </>
+                    <div className="flex-1 space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <input type="date" value={editContributionDate} onChange={(e) => setEditContributionDate(e.target.value)} className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px]" />
+                        <input type="number" value={editContributionAmount} onChange={(e) => setEditContributionAmount(e.target.value)} className="w-20 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px]" />
+                        <button
+                          onClick={() => runAction(async () => {
+                            await updatePortfolioContribution(c.id, { amount: parseFloat(editContributionAmount), contributionDate: editContributionDate, notes: editContributionNotes.trim() });
+                            setEditingContributionId(null);
+                          })}
+                          className="p-1 bg-indigo-600 text-white rounded-md cursor-pointer shrink-0"
+                        ><CheckCircle2 className="w-3 h-3" /></button>
+                        <button onClick={() => setEditingContributionId(null)} className="p-1 text-slate-400 cursor-pointer shrink-0"><X className="w-3 h-3" /></button>
+                      </div>
+                      <textarea value={editContributionNotes} onChange={(e) => setEditContributionNotes(e.target.value)} placeholder="Notes (optional)" rows={2} className="w-full px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px] resize-none" />
+                    </div>
                   ) : (
                     <>
                       <span className="text-slate-600 dark:text-slate-300 min-w-0">
@@ -438,11 +507,11 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                         </span>
                         {c.notes && <span className="text-[10px] text-slate-400 italic block">{c.notes}</span>}
                       </span>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         <span className="font-bold text-slate-900 dark:text-white">{fmt(Number(c.amount))}</span>
                         {!isReadOnly && (
                           <button
-                            onClick={() => { setEditingContributionId(c.id); setEditContributionAmount(String(c.amount)); setEditContributionDate(c.contribution_date); }}
+                            onClick={() => { setEditingContributionId(c.id); setEditContributionAmount(String(c.amount)); setEditContributionDate(c.contribution_date); setEditContributionNotes(c.notes || ''); }}
                             className="text-slate-300 hover:text-indigo-500 cursor-pointer"
                           ><Edit2 className="w-3 h-3" /></button>
                         )}
@@ -452,8 +521,35 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                   )}
                 </div>
               );
-            })}
-          </div>
+            };
+
+            if (filteredSortedContributions.length === 0) {
+              return <p className="text-center text-xs text-slate-400 py-4">No contributions match{contribFilters.size > 0 ? ' this filter' : ' yet'}.</p>;
+            }
+
+            if (contribGroupBy === 'type') {
+              const plans = filteredSortedContributions.filter(c => c.contribution_type === 'recurring');
+              const oneOffs = filteredSortedContributions.filter(c => c.contribution_type !== 'recurring');
+              return (
+                <div className="space-y-3">
+                  {plans.length > 0 && (
+                    <div>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Plan ({plans.length})</span>
+                      <div>{plans.map(renderRow)}</div>
+                    </div>
+                  )}
+                  {oneOffs.length > 0 && (
+                    <div>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">One-off ({oneOffs.length})</span>
+                      <div>{oneOffs.map(renderRow)}</div>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            return <div>{filteredSortedContributions.map(renderRow)}</div>;
+          })()}
         </div>
 
         <div className="apple-card p-4 space-y-3">
