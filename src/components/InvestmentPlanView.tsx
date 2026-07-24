@@ -381,7 +381,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
               const m = workspaceMembers.find(x => x.uid === plan.member_user_id);
               const period = getPeriodBounds(plan.frequency);
               const transferredThisPeriod = portfolioContributions
-                .filter(c => c.member_user_id === plan.member_user_id)
+                .filter(c => c.member_user_id === plan.member_user_id && c.contribution_type === 'recurring')
                 .filter(c => { const d = new Date(c.contribution_date); return d >= period.start && d <= period.end; })
                 .reduce((s, c) => s + Number(c.amount), 0);
               const remaining = Math.max(0, Number(plan.expected_amount) - transferredThisPeriod);
