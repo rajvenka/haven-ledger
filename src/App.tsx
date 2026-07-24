@@ -1560,6 +1560,7 @@ export default function App() {
                 workspaceName={activeWorkspace?.name}
                 workspaceMembers={familyMembers}
                 isReadOnly={isReadOnly}
+                currentUserId={user?.id}
                 portfolioSplits={portfolioSplits}
                 addPortfolioSplit={addPortfolioSplit}
                 deletePortfolioSplit={deletePortfolioSplit}

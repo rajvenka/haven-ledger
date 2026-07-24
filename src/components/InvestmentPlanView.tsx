@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Trash2, Users, Wallet, Edit2, CheckCircle2, X, ClipboardList, Banknote } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Trash2, Users, Wallet, Edit2, CheckCircle2, X, ClipboardList, Banknote, AlertTriangle } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface WorkspaceMemberLite {
@@ -12,6 +12,7 @@ interface InvestmentPlanViewProps {
   workspaceName?: string;
   workspaceMembers: WorkspaceMemberLite[];
   isReadOnly?: boolean;
+  currentUserId?: string;
   portfolioSplits: any[];
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
   deletePortfolioSplit: (id: string) => Promise<void>;
@@ -37,7 +38,7 @@ const memberName = (m: WorkspaceMemberLite) => m.displayName || m.email.split('@
 
 export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const {
-    workspaceName, workspaceMembers, isReadOnly,
+    workspaceName, workspaceMembers, isReadOnly, currentUserId,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
@@ -136,6 +137,32 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
     };
   };
 
+  // My own contribution reminder - due within 3 days (or already overdue) and not yet
+  // transferred for the current period. Computed live whenever the page loads, no backend
+  // job involved - only shows for the logged-in person's own plan(s).
+  const myContributionReminder = useMemo(() => {
+    if (!currentUserId) return null;
+    const myPlans = portfolioRecurringPlans.filter(p => p.active && p.member_user_id === currentUserId);
+    for (const plan of myPlans) {
+      const period = getPeriodBounds(plan.frequency);
+      const dueDate = plan.frequency === 'monthly' && plan.day_of_month
+        ? new Date(period.start.getFullYear(), period.start.getMonth(), Number(plan.day_of_month))
+        : period.end;
+      const daysUntilDue = Math.ceil((dueDate.getTime() - Date.now()) / 86400000);
+      if (daysUntilDue > 3) continue;
+
+      const transferredThisPeriod = portfolioContributions
+        .filter(c => c.member_user_id === currentUserId && c.contribution_type === 'recurring')
+        .filter(c => { const d = new Date(c.contribution_date); return d >= period.start && d <= period.end; })
+        .reduce((s, c) => s + Number(c.amount), 0);
+      const remaining = Math.max(0, Number(plan.expected_amount) - transferredThisPeriod);
+      if (remaining === 0) continue;
+
+      return { plan, remaining, daysUntilDue, dueDate };
+    }
+    return null;
+  }, [currentUserId, portfolioRecurringPlans, portfolioContributions]);
+
   const markTransferred = async (memberUserId: string, amount: number) => {
     await runAction(async () => {
       await addPortfolioContribution(memberUserId, amount, todayStr(), 'Recurring plan transfer', 'recurring');
@@ -151,6 +178,30 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
 
       {formError && (
         <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 rounded-xl text-[11px] text-rose-600 dark:text-rose-400 font-semibold">{formError}</div>
+      )}
+
+      {myContributionReminder && (
+        <div className={`p-3.5 rounded-xl border flex items-center gap-3 ${myContributionReminder.daysUntilDue < 0 ? 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900' : 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900'}`}>
+          <AlertTriangle className={`w-5 h-5 shrink-0 ${myContributionReminder.daysUntilDue < 0 ? 'text-rose-500' : 'text-amber-500'}`} />
+          <div className="flex-1 min-w-0">
+            <p className={`text-xs font-bold ${myContributionReminder.daysUntilDue < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-amber-700 dark:text-amber-400'}`}>
+              {myContributionReminder.daysUntilDue < 0
+                ? `Your contribution is overdue by ${Math.abs(myContributionReminder.daysUntilDue)} day${Math.abs(myContributionReminder.daysUntilDue) !== 1 ? 's' : ''}`
+                : myContributionReminder.daysUntilDue === 0
+                ? 'Your contribution is due today'
+                : `Your contribution is due in ${myContributionReminder.daysUntilDue} day${myContributionReminder.daysUntilDue !== 1 ? 's' : ''}`}
+            </p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400">{fmt(myContributionReminder.remaining)} remaining for this {myContributionReminder.plan.frequency} period</p>
+          </div>
+          {!isReadOnly && (
+            <button
+              onClick={() => runAction(() => markTransferred(currentUserId!, myContributionReminder.remaining))}
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer shrink-0"
+            >
+              Mark Transferred
+            </button>
+          )}
+        </div>
       )}
 
       {portfolioContributions.length > 0 && (() => {
