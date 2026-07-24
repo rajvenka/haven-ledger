@@ -36,6 +36,7 @@ interface PortfolioViewProps {
   reconcilePortfolioHoldingQuantity: (id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced') => Promise<void>;
   bulkHistoricalImport: (snapshots: { date: string; holdings: any[] }[]) => Promise<{ newCount: number; updatedCount: number; soldCount: number; skippedStaleCount: number; priceHistoryCount: number; stockCount: number }>;
   updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
+  sellPortfolioHolding: (id: string, params: { quantity: number; soldPrice: number; soldDate: string }) => Promise<void>;
   updatePortfolioHoldingLivePrice: (id: string, price: number, previousClose?: number | null) => Promise<void>;
   deletePortfolioHolding: (id: string) => Promise<void>;
   bulkTagPortfolioHoldings: (holdingIds: string[], source: string) => Promise<void>;
@@ -84,7 +85,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly, isDataLoading, columnPrefs, onUpdateColumnPrefs,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances,
-    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, updatePortfolioHoldingLivePrice, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
+    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
@@ -735,11 +736,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setEditTicker(h.ticker || (h.broker === 'Zerodha' ? h.symbol : ''));
   };
 
-  const confirmSell = async () => {
+  const [sellQuantity, setSellQuantity] = useState('');
+
+  const confirmSell = async (fullQuantity: number) => {
     if (!sellingId || !sellPrice) return;
+    const qty = sellQuantity.trim() === '' ? fullQuantity : parseFloat(sellQuantity);
     await runAction(async () => {
-      await updatePortfolioHolding(sellingId, { status: 'sold', soldPrice: parseFloat(sellPrice), soldDate: sellDate });
-      setSellingId(null); setSellPrice('');
+      await sellPortfolioHolding(sellingId, { quantity: qty, soldPrice: parseFloat(sellPrice), soldDate: sellDate });
+      setSellingId(null); setSellPrice(''); setSellQuantity('');
     });
   };
 
@@ -1556,12 +1560,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
                             <div className="flex items-center justify-end gap-1">
                               {!isReadOnly && (sellingId === h.id ? (
                                 <div className="flex items-center gap-1">
+                                  <input type="number" value={sellQuantity} onChange={(e) => setSellQuantity(e.target.value)} placeholder={String(h.quantity)} title="Quantity to sell (defaults to full holding)" className="w-14 px-1.5 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[10px]" />
                                   <input type="number" value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} placeholder="Sell price" className="w-16 px-1.5 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[10px]" />
-                                  <button onClick={confirmSell} className="p-1 bg-rose-500 text-white rounded-md cursor-pointer"><CheckCircle2 className="w-3 h-3" /></button>
-                                  <button onClick={() => setSellingId(null)} className="p-1 text-slate-400 cursor-pointer"><X className="w-3 h-3" /></button>
+                                  <button onClick={() => confirmSell(Number(h.quantity))} className="p-1 bg-rose-500 text-white rounded-md cursor-pointer"><CheckCircle2 className="w-3 h-3" /></button>
+                                  <button onClick={() => { setSellingId(null); setSellQuantity(''); }} className="p-1 text-slate-400 cursor-pointer"><X className="w-3 h-3" /></button>
                                 </div>
                               ) : (
-                                <button onClick={() => { setSellingId(h.id); setSellPrice(String(currentPriceNum)); }} className="px-2 py-1 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 text-[9px] font-black uppercase rounded-md cursor-pointer">Sell</button>
+                                <button onClick={() => { setSellingId(h.id); setSellPrice(String(currentPriceNum)); setSellQuantity(''); }} className="px-2 py-1 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 text-[9px] font-black uppercase rounded-md cursor-pointer">Sell</button>
                               ))}
                               {!isReadOnly && (
                                 <button onClick={() => runAction(() => deletePortfolioHolding(h.id))} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>

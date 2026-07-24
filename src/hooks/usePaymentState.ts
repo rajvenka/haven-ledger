@@ -1254,7 +1254,42 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
-  // Live-refreshed price, kept entirely separate from current_price (the file-sourced LTP) -
+  // Selling less than the full quantity splits into two rows: a new sold row for the
+  // quantity actually sold, and the original row stays active with the remainder. Selling
+  // the full quantity just marks the existing row sold, same as before - no split needed.
+  const sellPortfolioHolding = async (id: string, params: { quantity: number; soldPrice: number; soldDate: string }) => {
+    const { data: existing, error: fetchErr } = await supabase.from('portfolio_holdings').select('*').eq('id', id).maybeSingle();
+    if (fetchErr) throw fetchErr;
+    if (!existing) throw new Error('Holding not found.');
+    const fullQty = Number(existing.quantity);
+    const sellQty = params.quantity;
+    if (sellQty <= 0 || sellQty > fullQty) throw new Error('Enter a quantity between 0 and the current holding.');
+
+    if (sellQty >= fullQty) {
+      const { error } = await supabase.from('portfolio_holdings').update({
+        status: 'sold', sold_price: params.soldPrice, sold_date: params.soldDate,
+      }).eq('id', id);
+      if (error) throw error;
+    } else {
+      const soldRow = { ...existing };
+      delete soldRow.id;
+      soldRow.quantity = sellQty;
+      soldRow.status = 'sold';
+      soldRow.sold_price = params.soldPrice;
+      soldRow.sold_date = params.soldDate;
+      soldRow.live_price = null;
+      soldRow.live_price_updated_at = null;
+      soldRow.previous_close = null;
+      const { error: insertErr } = await supabase.from('portfolio_holdings').insert(soldRow);
+      if (insertErr) throw insertErr;
+
+      const { error: updateErr } = await supabase.from('portfolio_holdings').update({ quantity: fullQty - sellQty }).eq('id', id);
+      if (updateErr) throw updateErr;
+    }
+    await loadPortfolioDetails();
+  };
+
+
   // this was the source of a real corruption bug where the two would overwrite each other.
   // previousClose (from Yahoo's own prior-close reference) powers the Daily Change headline
   // metric, distinct from Since Upload which compares against the file-sourced LTP instead.
@@ -1613,7 +1648,7 @@ export function usePaymentState() {
     accessPlans, createAccessPlan, updateAccessPlan, deleteAccessPlan,
     myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan, setSuperAdminStatus,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, portfolioDataLoading, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, updatePortfolioHoldingLivePrice, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
+    portfolioHoldings, portfolioDataLoading, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioPriceHistory,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
