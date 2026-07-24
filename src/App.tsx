@@ -574,6 +574,7 @@ export default function App() {
             {/* Menu Sections */}
             <div className="space-y-5">
               {/* SECTION: ANALYTICS & OVERVIEW */}
+              {(hasFeature('core') || hasFeature('ai')) && (
               <div className="space-y-1">
                 <span className="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 tracking-wider uppercase block text-left">
                   Overview & Stats
@@ -640,8 +641,10 @@ export default function App() {
                   )}
                 </nav>
               </div>
+              )}
 
               {/* SECTION: BILL MANAGEMENT */}
+              {(hasFeature('core') || hasFeature('income') || hasFeature('rewards')) && (
               <div className="space-y-1">
                 <span className="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 tracking-wider uppercase block text-left">
                   Payments & Bills
@@ -725,6 +728,7 @@ export default function App() {
                   )}
                 </nav>
               </div>
+              )}
 
               {/* SECTION: INVESTMENT */}
               {hasFeature('portfolio') && (
@@ -992,6 +996,7 @@ export default function App() {
                 {/* Menu Sections */}
                 <div className="space-y-6">
                   {/* SECTION: ANALYTICS & OVERVIEW */}
+                  {(hasFeature('core') || hasFeature('ai')) && (
                   <div className="space-y-1">
                     <span className="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 tracking-wider uppercase block text-left">
                       Overview & Stats
@@ -1064,8 +1069,10 @@ export default function App() {
                       )}
                     </nav>
                   </div>
+                  )}
 
                   {/* SECTION: BILL MANAGEMENT */}
+                  {(hasFeature('core') || hasFeature('income') || hasFeature('rewards')) && (
                   <div className="space-y-1">
                     <span className="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 tracking-wider uppercase block text-left">
                       Payments & Bills
@@ -1155,6 +1162,7 @@ export default function App() {
                       )}
                     </nav>
                   </div>
+                  )}
 
                   {/* SECTION: INVESTMENT */}
                   {hasFeature('portfolio') && (
