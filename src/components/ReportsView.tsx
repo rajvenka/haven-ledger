@@ -353,10 +353,12 @@ export default function ReportsView(props: ReportsViewProps) {
         })()}
 
         {activeHoldings.length > 0 && (() => {
-        // Classification Performance - compares Own Stock / Rajavel Stock / Rajavel SME / RAM
-        // / Unclassified / Mutual Fund side by side across three windows. Uses all active
-        // holdings regardless of the Stocks/MF toggle above, since Mutual Fund is meant to
-        // be one of the classifications being compared, not filtered out by it.
+        // Classification Performance - compares whatever source tags exist on holdings
+        // (Own Stock, Rajavel Stock, etc - fully dynamic, nothing hardcoded, new tags show
+        // up automatically) side by side across three windows, plus Mutual Fund as its own
+        // classification (only appears if any mutual fund holdings actually exist). Uses all
+        // active holdings regardless of the Stocks/MF toggle above, since Mutual Fund is
+        // meant to be one of the classifications being compared, not filtered out by it.
         const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
         const classificationMap = new Map<string, { invested: number; current: number; refValue: number; refBase: number; d30Value: number; d30Base: number }>();
         activeHoldings.forEach(h => {
@@ -398,7 +400,7 @@ export default function ReportsView(props: ReportsViewProps) {
           return (
           <div className="apple-card p-4 space-y-2">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Classification Performance</span>
-            <p className="text-[9px] text-slate-400">Own Stock, Rajavel Stock, Rajavel SME, RAM, and Mutual Fund compared side by side.</p>
+            <p className="text-[9px] text-slate-400">Compared side by side, based on whatever classifications your holdings are tagged with - anything untagged shows as Unclassified.</p>
             <div className="flex gap-1.5">
               {(['inception', 'd30', 'ref'] as const).map(m => (
                 <button
