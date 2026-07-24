@@ -109,6 +109,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [expandedQtyId, setExpandedQtyId] = useState<string | null>(null);
   const [expandedNameId, setExpandedNameId] = useState<string | null>(null);
   const [isConfirmingWipe, setIsConfirmingWipe] = useState(false);
+  const [showMoreActions, setShowMoreActions] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const [wipeConfirmText, setWipeConfirmText] = useState('');
   const [holdingsTab, setHoldingsTab] = useState<'active' | 'sold'>('active');
   const [editTargetType, setEditTargetType] = useState<'price' | 'percent'>('percent');
@@ -802,36 +804,46 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
       <div className="space-y-4">
           {!isReadOnly && (
-          <div className="flex justify-end gap-2 flex-wrap">
-            {activeHoldings.length > 0 && (
-              <button
-                onClick={refreshAllPrices}
-                disabled={refreshingPrices}
-                className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${refreshingPrices ? 'animate-spin' : ''}`} /> {refreshingPrices ? 'Refreshing…' : 'Refresh Prices'}
-              </button>
-            )}
-            {activeHoldings.length > 0 && (
-              <button
-                onClick={() => (isSelectingForTag ? exitSelectMode() : setIsSelectingForTag(true))}
-                className={`px-4 py-2 border rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer ${isSelectingForTag ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'}`}
-              >
-                <CheckCircle2 className="w-3.5 h-3.5" /> {isSelectingForTag ? 'Cancel Selection' : 'Select / Bulk Actions'}
-              </button>
-            )}
+          <div className="flex justify-end items-center gap-2 flex-wrap">
             <button
-              onClick={() => { setIsImporting(!isImporting); setImportPreview(null); setImportRawParsed(null); }}
-              className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              onClick={() => setShowMoreActions(!showMoreActions)}
+              className="px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer"
             >
-              <Upload className="w-3.5 h-3.5" /> Import from Broker
+              More <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMoreActions ? 'rotate-180' : ''}`} />
             </button>
-            <button
-              onClick={() => { setIsHistoricalMode(!isHistoricalMode); setHistoricalSnapshots([]); setHistoricalResult(null); }}
-              className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-            >
-              <Upload className="w-3.5 h-3.5" /> Backfill History
-            </button>
+            {showMoreActions && (
+              <>
+              {activeHoldings.length > 0 && (
+                <button
+                  onClick={refreshAllPrices}
+                  disabled={refreshingPrices}
+                  className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${refreshingPrices ? 'animate-spin' : ''}`} /> {refreshingPrices ? 'Refreshing…' : 'Refresh Prices'}
+                </button>
+              )}
+              {activeHoldings.length > 0 && (
+                <button
+                  onClick={() => (isSelectingForTag ? exitSelectMode() : setIsSelectingForTag(true))}
+                  className={`px-4 py-2 border rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer ${isSelectingForTag ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'}`}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" /> {isSelectingForTag ? 'Cancel Selection' : 'Select / Bulk Actions'}
+                </button>
+              )}
+              <button
+                onClick={() => { setIsImporting(!isImporting); setImportPreview(null); setImportRawParsed(null); }}
+                className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5" /> Import from Broker
+              </button>
+              <button
+                onClick={() => { setIsHistoricalMode(!isHistoricalMode); setHistoricalSnapshots([]); setHistoricalResult(null); }}
+                className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5" /> Backfill History
+              </button>
+              </>
+            )}
             <button onClick={() => setIsAddingHolding(!isAddingHolding)} className="apple-btn-primary px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5">
               <Plus className="w-3.5 h-3.5" /> Add Holding
             </button>
@@ -1080,20 +1092,30 @@ export default function PortfolioView(props: PortfolioViewProps) {
           )}
 
           {(filterOptions.combos.length > 1 || filterOptions.sources.length > 0 || filterOptions.priceMoves.length > 0) && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <button onClick={() => setHoldingFilters(new Set())} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.size === 0 ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
-              {filterOptions.combos.map(c => (
-                <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${brokerPillClass(c, holdingFilters.has(c))}`}>{c}</button>
-              ))}
-              {filterOptions.sources.map(s => (
-                <button key={s} onClick={() => toggleHoldingFilter(s)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(s) ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}>{s}</button>
-              ))}
-              {filterOptions.changes.map(c => (
-                <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(c) ? 'bg-amber-500 text-white' : 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400'}`}>{c}</button>
-              ))}
-              {filterOptions.priceMoves.map(p => (
-                <button key={p} onClick={() => toggleHoldingFilter(p)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(p) ? (p === 'Price Up (Live)' ? 'bg-emerald-600 text-white' : 'bg-rose-500 text-white') : (p === 'Price Up (Live)' ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400')}`}>{p}</button>
-              ))}
+            <div className="space-y-1.5">
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className="flex items-center gap-1 text-[10px] font-bold text-slate-500 dark:text-slate-400 cursor-pointer"
+              >
+                Filters{holdingFilters.size > 0 ? ` (${holdingFilters.size})` : ''} <ChevronDown className={`w-3 h-3 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+              </button>
+              {showFilters && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button onClick={() => setHoldingFilters(new Set())} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.size === 0 ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
+                {filterOptions.combos.map(c => (
+                  <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${brokerPillClass(c, holdingFilters.has(c))}`}>{c}</button>
+                ))}
+                {filterOptions.sources.map(s => (
+                  <button key={s} onClick={() => toggleHoldingFilter(s)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(s) ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}>{s}</button>
+                ))}
+                {filterOptions.changes.map(c => (
+                  <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(c) ? 'bg-amber-500 text-white' : 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400'}`}>{c}</button>
+                ))}
+                {filterOptions.priceMoves.map(p => (
+                  <button key={p} onClick={() => toggleHoldingFilter(p)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(p) ? (p === 'Price Up (Live)' ? 'bg-emerald-600 text-white' : 'bg-rose-500 text-white') : (p === 'Price Up (Live)' ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400')}`}>{p}</button>
+                ))}
+              </div>
+              )}
             </div>
           )}
 
@@ -1400,14 +1422,24 @@ export default function PortfolioView(props: PortfolioViewProps) {
       {holdingsTab === 'sold' && (
         <>
           {(soldFilterOptions.combos.length > 1 || soldFilterOptions.sources.length > 0) && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <button onClick={() => setSoldHoldingFilters(new Set())} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${soldHoldingFilters.size === 0 ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
-              {soldFilterOptions.combos.map(c => (
-                <button key={c} onClick={() => toggleSoldHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${brokerPillClass(c, soldHoldingFilters.has(c))}`}>{c}</button>
-              ))}
-              {soldFilterOptions.sources.map(s => (
-                <button key={s} onClick={() => toggleSoldHoldingFilter(s)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${soldHoldingFilters.has(s) ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}>{s}</button>
-              ))}
+            <div className="space-y-1.5">
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className="flex items-center gap-1 text-[10px] font-bold text-slate-500 dark:text-slate-400 cursor-pointer"
+              >
+                Filters{soldHoldingFilters.size > 0 ? ` (${soldHoldingFilters.size})` : ''} <ChevronDown className={`w-3 h-3 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+              </button>
+              {showFilters && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button onClick={() => setSoldHoldingFilters(new Set())} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${soldHoldingFilters.size === 0 ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
+                {soldFilterOptions.combos.map(c => (
+                  <button key={c} onClick={() => toggleSoldHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${brokerPillClass(c, soldHoldingFilters.has(c))}`}>{c}</button>
+                ))}
+                {soldFilterOptions.sources.map(s => (
+                  <button key={s} onClick={() => toggleSoldHoldingFilter(s)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${soldHoldingFilters.has(s) ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}>{s}</button>
+                ))}
+              </div>
+              )}
             </div>
           )}
 
