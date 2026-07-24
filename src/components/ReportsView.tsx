@@ -440,28 +440,28 @@ export default function ReportsView(props: ReportsViewProps) {
           const isOpen = expandedInsightCards.has(id);
           const chartData = items.map(h => ({ name: h.symbol.length > 10 ? h.symbol.slice(0, 10) + '…' : h.symbol, pct: h[pctKey] }));
           return (
-            <div className="apple-card p-4">
-              <button onClick={() => toggleCard(id)} className="flex items-center justify-between w-full cursor-pointer">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{title} <span className="text-slate-300 dark:text-slate-600 normal-case font-bold">({items.length})</span></span>
-                <ChevronLeft className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isOpen ? '-rotate-90' : 'rotate-180'}`} />
-              </button>
-              {isOpen && (
-                items.length === 0 ? (
-                  <p className="text-[11px] text-slate-300 dark:text-slate-700 py-2">None right now.</p>
-                ) : (
-                  <div className="mt-2 space-y-2">
-                    <div style={{ height: Math.max(60, items.length * 24) }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
-                          <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
-                          <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} width={70} />
-                          <Tooltip formatter={(v: number) => [`${v >= 0 ? '+' : ''}${v.toFixed(2)}%`, 'Change']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-                          <Bar dataKey="pct" radius={[0, 4, 4, 0]}>
-                            {chartData.map((d, i) => <Cell key={i} fill={d.pct >= 0 ? '#10b981' : '#f43f5e'} />)}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
+            <div className="apple-card p-4 space-y-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">{title} <span className="text-slate-300 dark:text-slate-600 normal-case font-bold">({items.length})</span></span>
+              {items.length === 0 ? (
+                <p className="text-[11px] text-slate-300 dark:text-slate-700 py-2">None right now.</p>
+              ) : (
+                <>
+                  <div style={{ height: Math.max(60, items.length * 24) }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
+                        <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} width={70} />
+                        <Tooltip formatter={(v: number) => [`${v >= 0 ? '+' : ''}${v.toFixed(2)}%`, 'Change']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                        <Bar dataKey="pct" radius={[0, 4, 4, 0]}>
+                          {chartData.map((d, i) => <Cell key={i} fill={d.pct >= 0 ? '#10b981' : '#f43f5e'} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <button onClick={() => toggleCard(id)} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
+                    {isOpen ? 'Hide details' : 'View details'} <ChevronLeft className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-90' : '-rotate-90'}`} />
+                  </button>
+                  {isOpen && (
                     <div className="divide-y divide-slate-100 dark:divide-slate-900">
                       {items.map(h => (
                         <div key={h.id} className="flex items-center justify-between text-[11px] py-1">
@@ -473,8 +473,8 @@ export default function ReportsView(props: ReportsViewProps) {
                         </div>
                       ))}
                     </div>
-                  </div>
-                )
+                  )}
+                </>
               )}
             </div>
           );
