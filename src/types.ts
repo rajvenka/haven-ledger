@@ -144,6 +144,7 @@ export interface UserProfile {
   familyNotificationsEnabled?: boolean;
   role?: 'view' | 'modify'; // Access level
   isFamilyHost?: boolean; // If this user is the host/owner of the current family group code
+  isPortfolioContributor?: boolean; // Silent viewers (false) are excluded from Investment Plan (Split, Contribution Log, Recurring Plan, Per-Person Share)
   Connected_To_Host_UUID?: string;
   inviteCode?: string;
 }

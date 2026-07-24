@@ -89,6 +89,7 @@ export default function App() {
     approveInvitation,
     declineInvitation,
     updateMemberRole,
+    updateMemberPortfolioContributor,
     removeFamilyMember,
     outgoingInvitations,
     cancelInvitation,
@@ -222,6 +223,11 @@ export default function App() {
   const isLimitedAccess = activeWorkspace?.accessLevel === 'limited';
   // A feature is available only if BOTH the workspace grants it AND the user's own
   // license plan includes it - the plan is always the hard ceiling, regardless of role.
+  // Silent viewers (isPortfolioContributor === false) are excluded from Investment Plan
+  // and Reports' contribution-related sections (Split, Contribution Log, Recurring Plan,
+  // Per-Person Share) - they can still view the portfolio itself, just not appear there.
+  const contributorMembers = familyMembers.filter(m => m.isPortfolioContributor !== false);
+
   const hasFeature = (feature: string) => {
     if (userProfile?.isSuperAdmin) return true;
     const workspaceGrants = !activeWorkspace?.enabledFeatures || activeWorkspace.enabledFeatures.includes(feature);
@@ -1471,6 +1477,7 @@ export default function App() {
                 onApproveInvitation={approveInvitation}
                 onDeclineInvitation={declineInvitation}
                 onUpdateMemberRole={updateMemberRole}
+                onUpdateMemberPortfolioContributor={updateMemberPortfolioContributor}
                 onRemoveFamilyMember={removeFamilyMember}
                 outgoingInvitations={outgoingInvitations}
                 onCancelInvitation={cancelInvitation}
@@ -1558,7 +1565,7 @@ export default function App() {
             ) : activeTab === 'investment_plan' ? (
               <InvestmentPlanView
                 workspaceName={activeWorkspace?.name}
-                workspaceMembers={familyMembers}
+                workspaceMembers={contributorMembers}
                 isReadOnly={isReadOnly}
                 currentUserId={user?.id}
                 portfolioSplits={portfolioSplits}
@@ -1582,7 +1589,7 @@ export default function App() {
             ) : activeTab === 'reports' ? (
               <ReportsView
                 workspaceName={activeWorkspace?.name}
-                workspaceMembers={familyMembers}
+                workspaceMembers={contributorMembers}
                 isReadOnly={isReadOnly}
                 portfolioHoldings={portfolioHoldings}
                 portfolioContributions={portfolioContributions}

@@ -166,11 +166,12 @@ export function usePaymentState() {
     if (nextActive) {
       const { data: members } = await supabase
         .from('workspace_members')
-        .select('role, profiles(id, email, display_name)')
+        .select('role, is_portfolio_contributor, profiles(id, email, display_name)')
         .eq('workspace_id', nextActive.id);
       setFamilyMembers((members ?? []).map((m: any) => ({
         uid: m.profiles.id, email: m.profiles.email, displayName: m.profiles.display_name,
         familyGroupId: nextActive.id, role: m.role === 'view' ? 'view' : 'modify', isFamilyHost: m.role === 'host',
+        isPortfolioContributor: m.is_portfolio_contributor ?? true,
       })));
     } else {
       setFamilyMembers([]);
@@ -452,6 +453,19 @@ export function usePaymentState() {
     setIsSyncing(true);
     try {
       const { error } = await supabase.from('workspace_members').update({ role }).eq('workspace_id', activeWorkspace.id).eq('user_id', memberUid);
+      if (error) throw error;
+      await refreshWorkspaces(user!.id, activeWorkspaceId);
+    } finally { setIsSyncing(false); }
+  };
+
+  // Whether this member participates in the Investment Plan's financial contribution
+  // tracking (Split, Contribution Log, Recurring Plan, Per-Person Share) or is a silent
+  // viewer who can see the portfolio without being part of that accounting.
+  const updateMemberPortfolioContributor = async (memberUid: string, isContributor: boolean) => {
+    if (!activeWorkspace || activeWorkspace.role !== 'host') throw new Error('Only the owner can change this.');
+    setIsSyncing(true);
+    try {
+      const { error } = await supabase.from('workspace_members').update({ is_portfolio_contributor: isContributor }).eq('workspace_id', activeWorkspace.id).eq('user_id', memberUid);
       if (error) throw error;
       await refreshWorkspaces(user!.id, activeWorkspaceId);
     } finally { setIsSyncing(false); }
@@ -1572,7 +1586,7 @@ export function usePaymentState() {
     incomeSources, addIncomeSource, deleteIncomeSource, incomeMode, updateIncomeMode, monthlyIncome, updateMonthlyIncome,
     workspaceBackups, createBackupNow, restoreFromBackup,
     addFamilyMember, joinFamilyGroup, leaveFamilyGroup,
-    incomingInvitations, approveInvitation, declineInvitation, updateMemberRole, removeFamilyMember,
+    incomingInvitations, approveInvitation, declineInvitation, updateMemberRole, updateMemberPortfolioContributor, removeFamilyMember,
     outgoingInvitations, cancelInvitation,
     isAuthLoading, familyRole, isReadOnly, inviteCode, regenerateInviteCode,
     payments, allPayments, history, allHistory, countries, rate, summaryCurrency, notifications, isLoaded, isSyncing,

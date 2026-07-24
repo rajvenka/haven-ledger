@@ -61,6 +61,7 @@ interface AccountInfoProps {
   onApproveInvitation?: (invitationId: string, role: 'view' | 'modify') => Promise<void>;
   onDeclineInvitation?: (invitationId: string) => Promise<void>;
   onUpdateMemberRole?: (memberUid: string, role: 'view' | 'modify') => Promise<void>;
+  onUpdateMemberPortfolioContributor?: (memberUid: string, isContributor: boolean) => Promise<void>;
   onRemoveFamilyMember?: (memberUid: string) => Promise<void>;
   outgoingInvitations?: { id: string; toEmail: string; proposedRole: string; createdAt: string }[];
   onCancelInvitation?: (invitationId: string) => Promise<void>;
@@ -120,6 +121,7 @@ export default function AccountInfo({
   onApproveInvitation,
   onDeclineInvitation,
   onUpdateMemberRole,
+  onUpdateMemberPortfolioContributor,
   onRemoveFamilyMember,
   outgoingInvitations = [],
   onCancelInvitation,
@@ -897,10 +899,19 @@ export default function AccountInfo({
                 <div key={m.uid} className="flex items-center justify-between gap-2 p-2 bg-slate-50 dark:bg-slate-900 rounded-lg">
                   <div className="min-w-0">
                     <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{m.displayName || m.email}</p>
-                    <p className="text-[10px] text-slate-500">{m.isFamilyHost ? 'Host' : m.role === 'view' ? 'View Only' : 'Can Edit'}</p>
+                    <p className="text-[10px] text-slate-500">{m.isFamilyHost ? 'Host' : m.role === 'view' ? 'View Only' : 'Can Edit'}{m.isPortfolioContributor === false ? ' · Silent viewer (portfolio)' : ''}</p>
                   </div>
                   {familyRole === 'host' && !m.isFamilyHost && (
-                    <div className="flex gap-1.5 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <label className="flex items-center gap-1 text-[9px] font-bold text-slate-500 cursor-pointer" title="Include in Investment Plan (Split, Contribution Log, Recurring Plan, Per-Person Share)">
+                        <input
+                          type="checkbox"
+                          checked={m.isPortfolioContributor !== false}
+                          onChange={(e) => onUpdateMemberPortfolioContributor?.(m.uid, e.target.checked)}
+                          className="w-3.5 h-3.5 cursor-pointer accent-indigo-600"
+                        />
+                        Contributor
+                      </label>
                       <select
                         value={m.role}
                         onChange={(e) => onUpdateMemberRole?.(m.uid, e.target.value as 'view' | 'modify')}
