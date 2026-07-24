@@ -508,7 +508,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
               onClick={() => setContribGroupBy(prev => (prev === 'type' ? 'none' : 'type'))}
               className={`px-2.5 py-1 rounded-md text-[10px] font-bold cursor-pointer ${contribGroupBy === 'type' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
             >
-              Group by Type
+              Type
             </button>
           </div>
 
