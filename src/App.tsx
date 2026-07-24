@@ -253,12 +253,18 @@ export default function App() {
   // Applies the saved landing-page preference when switching into a workspace - guards
   // against a stale preference pointing at a page the plan no longer grants (e.g. if
   // downgraded since the preference was set), falling back to Dashboard in that case.
+  // If no preference is set at all and the plan doesn't include 'core' (Dashboard/Expenses,
+  // e.g. Lite-Finance), lands on Portfolio instead of the default Dashboard, since that
+  // default would otherwise be an inaccessible page for that plan.
   useEffect(() => {
     if (!activeWorkspaceId) return;
     if (lastLandingWorkspaceId.current === activeWorkspaceId) return;
     lastLandingWorkspaceId.current = activeWorkspaceId;
     const preferred = activeWorkspace?.landingTab;
-    if (!preferred) return;
+    if (!preferred) {
+      if (!hasFeature('core') && hasFeature('portfolio')) setActiveTab('portfolio');
+      return;
+    }
     const requiredFeature: Record<string, string> = { income: 'income', rewards: 'rewards', ai: 'ai', portfolio: 'portfolio', investment_plan: 'portfolio', reports: 'portfolio' };
     const gate = requiredFeature[preferred];
     if (gate && !hasFeature(gate)) return;
@@ -573,6 +579,7 @@ export default function App() {
                   Overview & Stats
                 </span>
                 <nav className="flex flex-col gap-1 text-left">
+                  {hasFeature('core') && (
                   <button
                     id="tour-tab-summary-desktop"
                     onClick={() => setActiveTab('summary')}
@@ -590,7 +597,9 @@ export default function App() {
                       <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                     )}
                   </button>
+                  )}
 
+                  {hasFeature('core') && (
                   <button
                     id="tour-tab-expenses-desktop"
                     onClick={() => setActiveTab('expenses')}
@@ -608,6 +617,7 @@ export default function App() {
                       <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                     )}
                   </button>
+                  )}
 
                   {hasFeature('ai') && (
                   <button
@@ -637,6 +647,7 @@ export default function App() {
                   Payments & Bills
                 </span>
                 <nav className="flex flex-col gap-1 text-left">
+                  {hasFeature('core') && (
                   <button
                     onClick={() => setActiveTab('configure')}
                     className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
@@ -653,7 +664,9 @@ export default function App() {
                       <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                     )}
                   </button>
+                  )}
 
+                  {hasFeature('core') && (
                   <button
                     onClick={() => setActiveTab('history')}
                     className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
@@ -670,6 +683,7 @@ export default function App() {
                       <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                     )}
                   </button>
+                  )}
 
                   {hasFeature('income') && (
                   <button
@@ -1053,6 +1067,7 @@ export default function App() {
                       Payments & Bills
                     </span>
                     <nav className="flex flex-col gap-1 text-left">
+                      {hasFeature('core') && (
                       <button
                         onClick={() => {
                           setActiveTab('configure');
@@ -1072,7 +1087,9 @@ export default function App() {
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                         )}
                       </button>
+                      )}
 
+                      {hasFeature('core') && (
                       <button
                         onClick={() => {
                           setActiveTab('history');
@@ -1092,6 +1109,7 @@ export default function App() {
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                         )}
                       </button>
+                      )}
 
                       {hasFeature('income') && (
                       <button
@@ -1441,7 +1459,7 @@ export default function App() {
 
           {/* Dynamic page content body */}
           <main className="flex-1 overflow-hidden flex flex-col">
-            {activeTab === 'summary' ? (
+            {activeTab === 'summary' && hasFeature('core') ? (
               <Dashboard 
                 payments={payments}
                 history={history}
@@ -1453,7 +1471,7 @@ export default function App() {
                 monthlyIncomeEstimate={parseFloat(monthlyIncome) || 0}
                 incomeSources={incomeSources}
               />
-            ) : activeTab === 'expenses' ? (
+            ) : activeTab === 'expenses' && hasFeature('core') ? (
               <ExpensesView
                 payments={payments}
                 history={history}
@@ -1467,7 +1485,7 @@ export default function App() {
                 isReadOnly={userProfile?.role === 'view'}
                 currentUserUid={user?.uid}
               />
-            ) : activeTab === 'configure' ? (
+            ) : activeTab === 'configure' && hasFeature('core') ? (
               <ConfigurePayments 
                 payments={payments}
                 history={history}
@@ -1671,7 +1689,7 @@ export default function App() {
                 onSetSuperAdmin={setSuperAdminStatus}
                 currentUserId={user?.id}
               />
-            ) : (
+            ) : activeTab === 'history' && hasFeature('core') ? (
               <PaymentHistoryView 
                 history={history}
                 onDeleteHistoryEntry={deleteHistoryEntry}
@@ -1681,6 +1699,10 @@ export default function App() {
                 summaryCurrency={summaryCurrency}
                 countries={countries}
               />
+            ) : (
+              <div className="flex-1 flex items-center justify-center p-8 text-center">
+                <p className="text-sm text-slate-400">This page isn't available on your current plan.</p>
+              </div>
             )}
           </main>
 
@@ -1691,6 +1713,7 @@ export default function App() {
           >
             <nav className="pointer-events-auto bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border border-slate-200/50 dark:border-slate-800/40 py-2 px-3 flex justify-between items-center gap-1 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.08)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.4)] max-w-sm mx-auto">
               {/* Summary Tab button */}
+              {hasFeature('core') && (
               <button
                 id="tour-tab-summary-mobile"
                 onClick={() => setActiveTab('summary')}
@@ -1703,8 +1726,10 @@ export default function App() {
                 <LayoutDashboard className="w-4.5 h-4.5" />
                 <span className="text-[8px] uppercase tracking-wider font-extrabold">Summary</span>
               </button>
+              )}
 
               {/* Expenses Tab button */}
+              {hasFeature('core') && (
               <button
                 id="tour-tab-expenses-mobile"
                 onClick={() => setActiveTab('expenses')}
@@ -1717,8 +1742,10 @@ export default function App() {
                 <Globe className="w-4.5 h-4.5" />
                 <span className="text-[8px] uppercase tracking-wider font-extrabold">Expenses</span>
               </button>
+              )}
 
               {/* Configure Tab button */}
+              {hasFeature('core') && (
               <button
                 onClick={() => setActiveTab('configure')}
                 className={`flex flex-col items-center gap-0.5 py-1 px-1 flex-1 rounded-xl transition-all ${
@@ -1730,8 +1757,10 @@ export default function App() {
                 <Settings className="w-4.5 h-4.5" />
                 <span className="text-[8px] uppercase tracking-wider font-extrabold">Subs</span>
               </button>
+              )}
 
               {/* AI Insights Tab button */}
+              {hasFeature('ai') && (
               <button
                 id="tour-tab-ai-mobile"
                 onClick={() => setActiveTab('ai')}
@@ -1744,6 +1773,7 @@ export default function App() {
                 <BrainCircuit className="w-4.5 h-4.5" />
                 <span className="text-[8px] uppercase tracking-wider font-extrabold">AI</span>
               </button>
+              )}
 
               {/* Portfolio Tab button */}
               {hasFeature('portfolio') && (
@@ -1761,6 +1791,7 @@ export default function App() {
               )}
 
               {/* History Tab button */}
+              {hasFeature('core') && (
               <button
                 onClick={() => setActiveTab('history')}
                 className={`flex flex-col items-center gap-0.5 py-1 px-1 flex-1 rounded-xl transition-all ${
@@ -1772,6 +1803,7 @@ export default function App() {
                 <History className="w-4.5 h-4.5" />
                 <span className="text-[8px] uppercase tracking-wider font-extrabold">History</span>
               </button>
+              )}
             </nav>
           </div>
 

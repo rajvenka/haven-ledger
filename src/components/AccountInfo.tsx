@@ -1202,11 +1202,11 @@ export default function AccountInfo({
                 disabled={landingTabSaving}
                 className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
               >
-                <option value="">Dashboard (default)</option>
-                <option value="expenses">Expenses</option>
+                <option value="">{(!hasFeature || hasFeature('core')) ? 'Dashboard (default)' : 'Portfolio (default)'}</option>
+                {(!hasFeature || hasFeature('core')) && <option value="expenses">Expenses</option>}
                 {(!hasFeature || hasFeature('income')) && <option value="income">Income</option>}
-                <option value="configure">Manage Bills</option>
-                <option value="history">Payment History</option>
+                {(!hasFeature || hasFeature('core')) && <option value="configure">Manage Bills</option>}
+                {(!hasFeature || hasFeature('core')) && <option value="history">Payment History</option>}
                 {(!hasFeature || hasFeature('rewards')) && <option value="rewards">Membership Hub</option>}
                 {(!hasFeature || hasFeature('ai')) && <option value="ai">AI Insights</option>}
                 {(!hasFeature || hasFeature('portfolio')) && <option value="portfolio">Portfolio</option>}
