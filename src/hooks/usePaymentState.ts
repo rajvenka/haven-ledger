@@ -1411,11 +1411,11 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
-  const addPortfolioRecurringPlan = async (memberUserId: string, expectedAmount: number, frequency: 'monthly' | 'quarterly' | 'yearly', startDate: string, dayOfMonth?: number) => {
+  const addPortfolioRecurringPlan = async (memberUserId: string, expectedAmount: number, frequency: 'monthly' | 'quarterly' | 'yearly', startDate: string, dayOfMonth?: number, notes?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_recurring_plans').insert({
       workspace_id: activeWorkspaceId, member_user_id: memberUserId, expected_amount: expectedAmount,
-      frequency, start_date: startDate, day_of_month: dayOfMonth ?? null,
+      frequency, start_date: startDate, day_of_month: dayOfMonth ?? null, notes: notes ?? null,
     });
     if (error) throw error;
     await loadPortfolioDetails();

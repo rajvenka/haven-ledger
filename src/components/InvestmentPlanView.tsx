@@ -26,7 +26,7 @@ interface InvestmentPlanViewProps {
   setPortfolioCashBalance: (location: 'Zerodha' | 'Groww' | 'Bank' | 'Other', amount: number, asOfDate?: string, notes?: string) => Promise<void>;
   deletePortfolioCashBalance: (id: string) => Promise<void>;
   portfolioRecurringPlans: any[];
-  addPortfolioRecurringPlan: (memberUserId: string, amount: number, frequency: 'monthly' | 'quarterly' | 'yearly', startDate: string, dayOfMonth?: number) => Promise<void>;
+  addPortfolioRecurringPlan: (memberUserId: string, amount: number, frequency: 'monthly' | 'quarterly' | 'yearly', startDate: string, dayOfMonth?: number, notes?: string) => Promise<void>;
   updatePortfolioRecurringPlan: (id: string, updates: { active?: boolean; expectedAmount?: number }) => Promise<void>;
   deletePortfolioRecurringPlan: (id: string) => Promise<void>;
 }
@@ -72,6 +72,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const [cMemberId, setCMemberId] = useState('');
   const [cAmount, setCAmount] = useState('');
   const [cDate, setCDate] = useState(todayStr());
+  const [cNotes, setCNotes] = useState('');
   const [editingContributionId, setEditingContributionId] = useState<string | null>(null);
   const [editContributionAmount, setEditContributionAmount] = useState('');
   const [editContributionDate, setEditContributionDate] = useState('');
@@ -80,8 +81,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
     e.preventDefault();
     if (!cMemberId || !cAmount) return;
     await runAction(async () => {
-      await addPortfolioContribution(cMemberId, parseFloat(cAmount), cDate);
-      setCAmount(''); setIsAddingContribution(false);
+      await addPortfolioContribution(cMemberId, parseFloat(cAmount), cDate, cNotes.trim() || undefined);
+      setCAmount(''); setCNotes(''); setIsAddingContribution(false);
     });
   };
 
@@ -110,6 +111,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const [planFrequency, setPlanFrequency] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
   const [planStartDate, setPlanStartDate] = useState(todayStr());
   const [planDayOfMonth, setPlanDayOfMonth] = useState('1');
+  const [planNotes, setPlanNotes] = useState('');
 
   const getPeriodBounds = (frequency: 'monthly' | 'quarterly' | 'yearly', ref = new Date()) => {
     if (frequency === 'monthly') {
@@ -264,6 +266,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
             </select>
             <input type="number" value={cAmount} onChange={(e) => setCAmount(e.target.value)} placeholder="Amount" className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
             <input type="date" value={cDate} onChange={(e) => setCDate(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+            <textarea value={cNotes} onChange={(e) => setCNotes(e.target.value)} placeholder="Notes (optional) - e.g. bonus deposit, salary top-up" rows={2} className="col-span-3 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs resize-none" />
             <button type="submit" className="col-span-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer">Add</button>
           </form>
         )}
@@ -290,11 +293,14 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                   </>
                 ) : (
                   <>
-                    <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
-                      {m ? memberName(m) : 'Former member'} · {c.contribution_date}
-                      {c.contribution_type === 'recurring' && (
-                        <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">Plan</span>
-                      )}
+                    <span className="text-slate-600 dark:text-slate-300 min-w-0">
+                      <span className="flex items-center gap-1.5">
+                        {m ? memberName(m) : 'Former member'} · {c.contribution_date}
+                        {c.contribution_type === 'recurring' && (
+                          <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">Plan</span>
+                        )}
+                      </span>
+                      {c.notes && <span className="text-[10px] text-slate-400 italic block">{c.notes}</span>}
                     </span>
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-slate-900 dark:text-white">{fmt(Number(c.amount))}</span>
@@ -451,8 +457,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
               e.preventDefault();
               if (!planMemberId || !planAmount) return;
               await runAction(async () => {
-                await addPortfolioRecurringPlan(planMemberId, parseFloat(planAmount), planFrequency, planStartDate, planFrequency === 'monthly' ? parseInt(planDayOfMonth) : undefined);
-                setPlanAmount(''); setIsAddingPlan(false);
+                await addPortfolioRecurringPlan(planMemberId, parseFloat(planAmount), planFrequency, planStartDate, planFrequency === 'monthly' ? parseInt(planDayOfMonth) : undefined, planNotes.trim() || undefined);
+                setPlanAmount(''); setPlanNotes(''); setIsAddingPlan(false);
               });
             }}
             className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-900"
@@ -471,6 +477,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
               <input type="number" min="1" max="31" value={planDayOfMonth} onChange={(e) => setPlanDayOfMonth(e.target.value)} placeholder="Day of month" className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
             )}
             <input type="date" value={planStartDate} onChange={(e) => setPlanStartDate(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs col-span-2" />
+            <textarea value={planNotes} onChange={(e) => setPlanNotes(e.target.value)} placeholder="Notes (optional)" rows={2} className="col-span-2 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs resize-none" />
             <button type="submit" className="col-span-2 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer">Save Plan</button>
           </form>
         )}
@@ -485,6 +492,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                 <div className="min-w-0">
                   <p className="text-xs font-bold text-slate-900 dark:text-white">{m ? memberName(m) : 'Former member'}</p>
                   <p className="text-[10px] text-slate-400">{fmt(Number(plan.expected_amount))} · {plan.frequency}{plan.day_of_month ? ` on day ${plan.day_of_month}` : ''} · from {plan.start_date}</p>
+                  {plan.notes && <p className="text-[10px] text-slate-400 italic mt-0.5">{plan.notes}</p>}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {!isReadOnly && (
