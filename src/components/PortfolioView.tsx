@@ -126,6 +126,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [expandedHoldingId, setExpandedHoldingId] = useState<string | null>(null);
   const [expandedQtyId, setExpandedQtyId] = useState<string | null>(null);
   const [expandedNameId, setExpandedNameId] = useState<string | null>(null);
+  const [editingSoldTickerId, setEditingSoldTickerId] = useState<string | null>(null);
+  const [soldTickerInput, setSoldTickerInput] = useState('');
   const [isConfirmingWipe, setIsConfirmingWipe] = useState(false);
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -427,6 +429,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         case 'gain': return (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity);
         case 'gain_pct': return ((Number(h.sold_price) - Number(h.buy_price)) / Number(h.buy_price)) * 100;
         case 'sold_date': return h.sold_date || '';
+        case 'since_sold': return h.live_price != null && Number(h.sold_price) !== 0 ? ((Number(h.live_price) - Number(h.sold_price)) / Number(h.sold_price)) * 100 : -Infinity;
         default: return 0;
       }
     };
@@ -619,8 +622,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
       // Only holdings with a real ticker set can be looked up - Zerodha's symbol is
       // always a valid ticker, Groww's file only gives a company name so it needs one
       // entered manually (via the expand panel) before it can be refreshed.
-      const refreshable = activeHoldings.filter(h => h.holding_type !== 'mutual_fund' && h.ticker);
-      const skippedNoTicker = activeHoldings.filter(h => h.holding_type !== 'mutual_fund' && !h.ticker).length;
+      // Sold holdings are included too (within the last year) so "Since Sold" can show
+      // what happened to the price after you exited, but not refreshed forever - a sale
+      // from years ago isn't worth an ongoing API call every time.
+      const oneYearAgo = Date.now() - 365 * 86400000;
+      const recentSold = soldHoldings.filter(h => h.sold_date && new Date(h.sold_date).getTime() >= oneYearAgo);
+      const refreshable = [...activeHoldings, ...recentSold].filter(h => h.holding_type !== 'mutual_fund' && h.ticker);
+      const skippedNoTicker = [...activeHoldings, ...recentSold].filter(h => h.holding_type !== 'mutual_fund' && !h.ticker).length;
       if (refreshable.length === 0) {
         setPriceRefreshSummary(skippedNoTicker > 0 ? `${skippedNoTicker} stock${skippedNoTicker !== 1 ? 's' : ''} need a ticker set before they can be refreshed.` : 'No stock holdings to refresh (mutual funds need manual NAV updates).');
         return;
@@ -1666,6 +1674,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         ['gain', 'Net Gain', 'text-right'],
                         ['gain_pct', '% Chg', 'text-right'],
                         ['sold_date', 'Sold Date', 'text-right'],
+                        ['since_sold', 'Since Sold', 'text-right'],
                       ] as [string, string, string][]).map(([field, label, align]) => (
                         <th
                           key={field}
@@ -1725,6 +1734,44 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           <td className={`p-2.5 text-right font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)}</td>
                           <td className={`p-2.5 text-right font-bold ${gainPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gainPct >= 0 ? '+' : ''}{gainPct.toFixed(2)}%</td>
                           <td className="p-2.5 text-right text-slate-400">{h.sold_date}</td>
+                          <td className="p-2.5 text-right">
+                            {h.live_price != null ? (() => {
+                              const sinceSoldPct = Number(h.sold_price) !== 0 ? ((Number(h.live_price) - Number(h.sold_price)) / Number(h.sold_price)) * 100 : null;
+                              return sinceSoldPct !== null ? (
+                                <span className={`font-bold ${sinceSoldPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{sinceSoldPct >= 0 ? '+' : ''}{sinceSoldPct.toFixed(2)}%</span>
+                              ) : <span className="text-slate-300 dark:text-slate-700">—</span>;
+                            })() : h.broker === 'Groww' && !h.ticker ? (
+                              editingSoldTickerId === h.id ? (
+                                <div className="flex items-center justify-end gap-1">
+                                  <input
+                                    autoFocus
+                                    type="text"
+                                    value={soldTickerInput}
+                                    onChange={(e) => setSoldTickerInput(e.target.value.toUpperCase())}
+                                    placeholder="e.g. RELIANCE"
+                                    className="w-20 px-1.5 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[10px]"
+                                  />
+                                  <button
+                                    onClick={() => runAction(async () => {
+                                      await updatePortfolioHolding(h.id, { ticker: soldTickerInput.trim() || null });
+                                      setEditingSoldTickerId(null);
+                                    })}
+                                    className="p-1 bg-indigo-600 text-white rounded-md cursor-pointer"
+                                  ><CheckCircle2 className="w-3 h-3" /></button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => { setEditingSoldTickerId(h.id); setSoldTickerInput(''); }}
+                                  className="text-[9px] text-rose-400 hover:text-rose-500 cursor-pointer"
+                                  title="Set a ticker so this can be refreshed"
+                                >
+                                  + add ticker
+                                </button>
+                              )
+                            ) : (
+                              <span className="text-slate-300 dark:text-slate-700">—</span>
+                            )}
+                          </td>
                           <td className="p-2.5 text-right">
                             {!isReadOnly && <button onClick={() => runAction(() => deletePortfolioHolding(h.id))} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>}
                           </td>
