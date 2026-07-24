@@ -645,16 +645,23 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
       let succeeded = 0;
       let failed = 0;
-      for (const r of results) {
-        const holding = refreshable.find(h => h.ticker === r.symbol && h.exchange === r.exchange);
-        if (!holding) continue;
+      const updatePromises: Promise<void>[] = [];
+      // Match results back to holdings by position, not by re-searching for the ticker -
+      // Promise.all preserves the order of the input array, and matching by ticker alone
+      // breaks when the same stock exists both actively held and sold (10 tickers in this
+      // workspace do), since .find() would always return the first match and the other
+      // copy's live_price would never get updated.
+      results.forEach((r: any, i: number) => {
+        const holding = refreshable[i];
+        if (!holding) return;
         if (r.price != null) {
-          await updatePortfolioHoldingLivePrice(holding.id, r.price, r.previousClose ?? null);
+          updatePromises.push(updatePortfolioHoldingLivePrice(holding.id, r.price, r.previousClose ?? null));
           succeeded++;
         } else {
           failed++;
         }
-      }
+      });
+      await Promise.all(updatePromises);
       const skipNote = skippedNoTicker > 0 ? ` · ${skippedNoTicker} skipped (no ticker set)` : '';
       setPriceRefreshSummary(
         failed === 0
