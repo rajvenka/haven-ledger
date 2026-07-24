@@ -115,6 +115,8 @@ export default function ReportsView(props: ReportsViewProps) {
   const [drillPath, setDrillPath] = useState<string[]>([]);
   const [insightsAssetFilter, setInsightsAssetFilter] = useState<'all' | 'stock' | 'mutual_fund'>('all');
   const [classificationMetric, setClassificationMetric] = useState<'inception' | 'd30' | 'ref'>('inception');
+  const [classificationView, setClassificationView] = useState<'active' | 'sold'>('active');
+  const [classificationSoldMetric, setClassificationSoldMetric] = useState<'realized' | 'sinceSold'>('realized');
 
   // Finds the most recent recorded price at or before a given date, for the 30-day
   // classification comparison - falls back to null if no price history exists that far
@@ -352,13 +354,15 @@ export default function ReportsView(props: ReportsViewProps) {
           );
         })()}
 
-        {activeHoldings.length > 0 && (() => {
+        {(activeHoldings.length > 0 || soldHoldings.length > 0) && (() => {
         // Classification Performance - compares whatever source tags exist on holdings
         // (Own Stock, Rajavel Stock, etc - fully dynamic, nothing hardcoded, new tags show
-        // up automatically) side by side across three windows, plus Mutual Fund as its own
-        // classification (only appears if any mutual fund holdings actually exist). Uses all
-        // active holdings regardless of the Stocks/MF toggle above, since Mutual Fund is
-        // meant to be one of the classifications being compared, not filtered out by it.
+        // up automatically) side by side, plus Mutual Fund as its own classification (only
+        // appears if any mutual fund holdings actually exist). Active and Sold get their own
+        // metric sets since "last 30 days" or "since reference load" don't mean anything
+        // coherent for something already sold - Sold instead gets Realized Gain (how the
+        // classification actually performed when cashed out) and Since Sold (whether selling
+        // turned out to be a good call, using the same Since Sold tracking built earlier).
         const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
         const classificationMap = new Map<string, { invested: number; current: number; refValue: number; refBase: number; d30Value: number; d30Base: number }>();
         activeHoldings.forEach(h => {
@@ -390,37 +394,91 @@ export default function ReportsView(props: ReportsViewProps) {
           }))
           .sort((a, b) => (b.inceptionPct ?? -999) - (a.inceptionPct ?? -999));
 
+        const soldClassificationMap = new Map<string, { invested: number; soldValue: number; sinceSoldValue: number; sinceSoldBase: number }>();
+        soldHoldings.forEach(h => {
+          const classification = h.holding_type === 'mutual_fund' ? 'Mutual Fund' : (h.source || 'Unclassified');
+          const qty = Number(h.quantity);
+          const invested = Number(h.buy_price) * qty;
+          const soldValue = Number(h.sold_price) * qty;
+          const prev = soldClassificationMap.get(classification) || { invested: 0, soldValue: 0, sinceSoldValue: 0, sinceSoldBase: 0 };
+          prev.invested += invested;
+          prev.soldValue += soldValue;
+          if (h.live_price != null) {
+            prev.sinceSoldValue += Number(h.live_price) * qty;
+            prev.sinceSoldBase += soldValue;
+          }
+          soldClassificationMap.set(classification, prev);
+        });
+        const soldClassificationRows = Array.from(soldClassificationMap.entries())
+          .map(([name, v]) => ({
+            name,
+            realizedPct: v.invested > 0 ? ((v.soldValue - v.invested) / v.invested) * 100 : null,
+            sinceSoldPct: v.sinceSoldBase > 0 ? ((v.sinceSoldValue - v.sinceSoldBase) / v.sinceSoldBase) * 100 : null,
+          }))
+          .sort((a, b) => (b.realizedPct ?? -999) - (a.realizedPct ?? -999));
+
         const metricLabels: Record<'inception' | 'd30' | 'ref', string> = { inception: 'Since Inception', d30: 'Last 30 Days', ref: 'Since Ref. Load' };
         const metricKey: Record<'inception' | 'd30' | 'ref', 'inceptionPct' | 'd30Pct' | 'refPct'> = { inception: 'inceptionPct', d30: 'd30Pct', ref: 'refPct' };
+        const soldMetricLabels: Record<'realized' | 'sinceSold', string> = { realized: 'Realized Gain', sinceSold: 'Since Sold' };
+        const soldMetricKey: Record<'realized' | 'sinceSold', 'realizedPct' | 'sinceSoldPct'> = { realized: 'realizedPct', sinceSold: 'sinceSoldPct' };
+
+        const isActiveView = classificationView === 'active';
         const activeMetricKey = metricKey[classificationMetric];
-        const classificationChartData = classificationRows
-          .filter(r => r[activeMetricKey] !== null)
-          .map(r => ({ name: r.name, pct: r[activeMetricKey] as number }));
+        const activeSoldMetricKey = soldMetricKey[classificationSoldMetric];
+        const classificationChartData = isActiveView
+          ? classificationRows.filter(r => r[activeMetricKey] !== null).map(r => ({ name: r.name, pct: r[activeMetricKey] as number }))
+          : soldClassificationRows.filter(r => r[activeSoldMetricKey] !== null).map(r => ({ name: r.name, pct: r[activeSoldMetricKey] as number }));
+        const currentMetricLabel = isActiveView ? metricLabels[classificationMetric] : soldMetricLabels[classificationSoldMetric];
 
           return (
           <div className="apple-card p-4 space-y-2">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Classification Performance</span>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Classification Performance</span>
+              <div className="flex gap-1.5">
+                {(['active', 'sold'] as const).map(v => (
+                  <button
+                    key={v}
+                    onClick={() => setClassificationView(v)}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer capitalize ${classificationView === v ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+            </div>
             <p className="text-[9px] text-slate-400">Compared side by side, based on whatever classifications your holdings are tagged with - anything untagged shows as Unclassified.</p>
             <div className="flex gap-1.5">
-              {(['inception', 'd30', 'ref'] as const).map(m => (
-                <button
-                  key={m}
-                  onClick={() => setClassificationMetric(m)}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer ${classificationMetric === m ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
-                >
-                  {metricLabels[m]}
-                </button>
-              ))}
+              {isActiveView ? (
+                (['inception', 'd30', 'ref'] as const).map(m => (
+                  <button
+                    key={m}
+                    onClick={() => setClassificationMetric(m)}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer ${classificationMetric === m ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+                  >
+                    {metricLabels[m]}
+                  </button>
+                ))
+              ) : (
+                (['realized', 'sinceSold'] as const).map(m => (
+                  <button
+                    key={m}
+                    onClick={() => setClassificationSoldMetric(m)}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer ${classificationSoldMetric === m ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+                  >
+                    {soldMetricLabels[m]}
+                  </button>
+                ))
+              )}
             </div>
             {classificationChartData.length === 0 ? (
-              <p className="text-[11px] text-slate-300 dark:text-slate-700 py-2">No classification has data for {metricLabels[classificationMetric]} yet.</p>
+              <p className="text-[11px] text-slate-300 dark:text-slate-700 py-2">No classification has data for {currentMetricLabel} yet{!isActiveView && classificationSoldMetric === 'sinceSold' ? ' - refresh prices on the Sold tab' : ''}.</p>
             ) : (
               <div style={{ height: Math.max(60, classificationChartData.length * 28) }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={classificationChartData} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
                     <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
                     <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={90} />
-                    <Tooltip formatter={(v: number) => [`${v >= 0 ? '+' : ''}${v.toFixed(2)}%`, metricLabels[classificationMetric]]} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                    <Tooltip formatter={(v: number) => [`${v >= 0 ? '+' : ''}${v.toFixed(2)}%`, currentMetricLabel]} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
                     <Bar dataKey="pct" radius={[0, 4, 4, 0]}>
                       {classificationChartData.map((d, i) => <Cell key={i} fill={d.pct >= 0 ? '#10b981' : '#f43f5e'} />)}
                     </Bar>
@@ -433,16 +491,25 @@ export default function ReportsView(props: ReportsViewProps) {
                 <thead>
                   <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
                     <th className="p-2 text-left">Classification</th>
-                    <th className="p-2 text-right">Since Inception</th>
-                    <th className="p-2 text-right">Last 30 Days</th>
-                    <th className="p-2 text-right">Since Ref. Load</th>
+                    {isActiveView ? (
+                      <>
+                        <th className="p-2 text-right">Since Inception</th>
+                        <th className="p-2 text-right">Last 30 Days</th>
+                        <th className="p-2 text-right">Since Ref. Load</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="p-2 text-right">Realized Gain</th>
+                        <th className="p-2 text-right">Since Sold</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-900">
-                  {classificationRows.map(row => (
+                  {(isActiveView ? classificationRows : soldClassificationRows).map((row: any) => (
                     <tr key={row.name}>
                       <td className="p-2 font-semibold text-slate-700 dark:text-slate-300">{row.name}</td>
-                      {[row.inceptionPct, row.d30Pct, row.refPct].map((pct, i) => (
+                      {(isActiveView ? [row.inceptionPct, row.d30Pct, row.refPct] : [row.realizedPct, row.sinceSoldPct]).map((pct: number | null, i: number) => (
                         <td key={i} className="p-2 text-right">
                           {pct !== null ? (
                             <span className={`font-bold ${pct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{pct >= 0 ? '+' : ''}{pct.toFixed(2)}%</span>
