@@ -133,6 +133,7 @@ export interface UserProfile {
   displayName?: string;
   familyGroupId: string;
   isSuperAdmin?: boolean;
+  hasCompletedTour?: boolean;
   whatsappPhone?: string;
   licensePlanId?: string;
   licensePlanName?: string;

@@ -125,6 +125,12 @@ export function usePaymentState() {
     await refreshWorkspaces(user.id, activeWorkspaceId);
   };
 
+  const markTourCompleted = async () => {
+    if (!user) return;
+    setUserProfile(prev => prev ? { ...prev, hasCompletedTour: true } : prev);
+    await supabase.from('profiles').update({ has_completed_tour: true }).eq('id', user.id);
+  };
+
   const updatePassword = async (password: string) => {
     const { error } = await supabase.auth.updateUser({ password });
     if (error) throw error;
@@ -204,6 +210,7 @@ export function usePaymentState() {
         setUserProfile({
           uid: profile.id, email: profile.email, displayName: profile.display_name, familyGroupId: '',
           isSuperAdmin: profile.is_super_admin ?? false,
+          hasCompletedTour: profile.has_completed_tour ?? false,
           whatsappPhone: profile.whatsapp_phone ?? undefined,
           licensePlanId: profile.license_plan_id ?? undefined,
           appNotificationsEnabled: profile.app_notifications_enabled, mobileNotificationsEnabled: profile.mobile_notifications_enabled,
@@ -1580,7 +1587,7 @@ export function usePaymentState() {
 
   return {
     user, userProfile, familyMembers, viewMode, setViewMode,
-    signUp, signIn, signInWithGoogle, resetPassword, updatePassword, updateDisplayName, acceptPrivacyPolicy, logOut,
+    signUp, signIn, signInWithGoogle, resetPassword, updatePassword, updateDisplayName, acceptPrivacyPolicy, logOut, markTourCompleted,
     // Workspace model
     workspaces, activeWorkspaceId, activeWorkspace, switchWorkspace, createWorkspace, setWorkspaceMode, updateWorkspaceLandingTab, updateWorkspaceColumnPrefs,
     renameWorkspace, deleteWorkspace,

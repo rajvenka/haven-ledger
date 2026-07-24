@@ -11,6 +11,7 @@ import {
   FileBarChart,
   ShieldCheck,
   Bell, 
+  Compass,
   X, 
   Check, 
   CheckCircle2,
@@ -58,6 +59,7 @@ import InvestmentPlanView from './components/InvestmentPlanView';
 import ReportsView from './components/ReportsView';
 import IncomeView from './components/IncomeView';
 import AdminUsersView from './components/AdminUsersView';
+import AppTour from './components/AppTour';
 
 export default function App() {
   const {
@@ -74,6 +76,7 @@ export default function App() {
     updateDisplayName,
     acceptPrivacyPolicy,
     logOut,
+    markTourCompleted,
     workspaces,
     activeWorkspaceId,
     activeWorkspace,
@@ -234,6 +237,17 @@ export default function App() {
     const planIncludes = userProfile?.licensePlanFeatures === undefined ? true : userProfile.licensePlanFeatures.includes(feature);
     return workspaceGrants && planIncludes;
   };
+
+  // Auto-starts the guided tour once for first-time users (has_completed_tour false),
+  // after their profile has actually loaded so we don't fire on a transient empty state.
+  const [showTour, setShowTour] = useState(false);
+  const hasAutoStartedTour = React.useRef(false);
+  useEffect(() => {
+    if (!isLoaded || !userProfile) return;
+    if (hasAutoStartedTour.current) return;
+    hasAutoStartedTour.current = true;
+    if (userProfile.hasCompletedTour === false) setShowTour(true);
+  }, [isLoaded, userProfile]);
 
   // Applies the saved landing-page preference when switching into a workspace - guards
   // against a stale preference pointing at a page the plan no longer grants (e.g. if
@@ -1366,6 +1380,15 @@ export default function App() {
                 )}
               </button>
 
+              {/* Header Action: Guided tour trigger */}
+              <button
+                onClick={() => setShowTour(true)}
+                className="p-2 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-full text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                title="Take the guided tour"
+              >
+                <Compass className="w-4.5 h-4.5" />
+              </button>
+
               {/* Header Action: Notification Center bell toggler */}
               <button 
                 onClick={() => {
@@ -2195,6 +2218,14 @@ export default function App() {
             onSwitchWorkspace={switchWorkspace}
             onCreateWorkspace={createWorkspace}
             canCreateBusiness={userProfile?.isSuperAdmin || userProfile?.canCreateBusiness}
+          />
+        )}
+
+        {showTour && (
+          <AppTour
+            onNavigate={(tab) => setActiveTab(tab as any)}
+            onFinish={() => { setShowTour(false); markTourCompleted(); }}
+            hasFeature={hasFeature}
           />
         )}
 
