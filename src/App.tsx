@@ -164,6 +164,7 @@ export default function App() {
     addPortfolioSplit,
     deletePortfolioSplit,
     portfolioHoldings,
+    portfolioDataLoading,
     portfolioPriceHistory,
     addPortfolioHolding,
     bulkAddPortfolioHoldings,
@@ -1508,6 +1509,7 @@ export default function App() {
                 workspaceName={activeWorkspace?.name}
                 workspaceMembers={familyMembers}
                 isReadOnly={isReadOnly}
+                isDataLoading={portfolioDataLoading}
                 portfolioSplits={portfolioSplits}
                 addPortfolioSplit={addPortfolioSplit}
                 deletePortfolioSplit={deletePortfolioSplit}

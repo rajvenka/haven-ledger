@@ -15,6 +15,7 @@ interface PortfolioViewProps {
   workspaceName?: string;
   workspaceMembers: WorkspaceMemberLite[];
   isReadOnly?: boolean;
+  isDataLoading?: boolean;
   portfolioSplits: any[];
   portfolioCashBalances: any[];
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
@@ -63,7 +64,7 @@ const memberName = (m: WorkspaceMemberLite) => m.displayName || m.email.split('@
 
 export default function PortfolioView(props: PortfolioViewProps) {
   const {
-    workspaceName, workspaceMembers, isReadOnly,
+    workspaceName, workspaceMembers, isReadOnly, isDataLoading,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances,
     portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, updatePortfolioHoldingLivePrice, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
@@ -707,6 +708,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
         <h2 className="text-lg font-bold text-slate-900 dark:text-white">{workspaceName ? `${workspaceName} Portfolio` : 'Portfolio'}</h2>
       </div>
 
+      {isDataLoading ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 py-24">
+          <RefreshCw className="w-6 h-6 text-indigo-500 animate-spin" />
+          <p className="text-xs text-slate-400">Loading your portfolio…</p>
+        </div>
+      ) : (
+      <>
       {formError && (
         <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 rounded-xl flex items-center justify-between gap-2">
           <span className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold">{formError}</span>
@@ -1549,6 +1557,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
               )}
             </div>
           )}
+      </>
+      )}
     </div>
   );
 }

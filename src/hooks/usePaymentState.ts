@@ -932,13 +932,16 @@ export function usePaymentState() {
   const [portfolioDividends, setPortfolioDividends] = useState<any[]>([]);
   const [portfolioFees, setPortfolioFees] = useState<any[]>([]);
   const [portfolioRecurringPlans, setPortfolioRecurringPlans] = useState<any[]>([]);
+  const [portfolioDataLoading, setPortfolioDataLoading] = useState(true);
 
   const loadPortfolioDetails = useCallback(async () => {
     if (!activeWorkspaceId) {
       setPortfolioHoldings([]); setPortfolioPriceHistory([]); setPortfolioSplits([]); setPortfolioContributions([]); setPortfolioWithdrawals([]);
       setPortfolioDividends([]); setPortfolioFees([]); setPortfolioRecurringPlans([]); setPortfolioCashBalances([]);
+      setPortfolioDataLoading(false);
       return;
     }
+    setPortfolioDataLoading(true);
     const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: cashBalances }] = await Promise.all([
       supabase.from('portfolio_holdings').select('*').eq('workspace_id', activeWorkspaceId).order('buy_date', { ascending: false }),
       supabase.from('portfolio_price_history').select('*').eq('workspace_id', activeWorkspaceId).order('recorded_date', { ascending: false }),
@@ -959,6 +962,7 @@ export function usePaymentState() {
     setPortfolioFees(fees ?? []);
     setPortfolioRecurringPlans(plans ?? []);
     setPortfolioCashBalances(cashBalances ?? []);
+    setPortfolioDataLoading(false);
   }, [activeWorkspaceId]);
 
   useEffect(() => { if (isLoaded) loadPortfolioDetails(); }, [isLoaded, loadPortfolioDetails]);
@@ -1565,7 +1569,7 @@ export function usePaymentState() {
     accessPlans, createAccessPlan, updateAccessPlan, deleteAccessPlan,
     myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan, setSuperAdminStatus,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, updatePortfolioHoldingLivePrice, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
+    portfolioHoldings, portfolioDataLoading, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, updatePortfolioHoldingLivePrice, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioPriceHistory,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
