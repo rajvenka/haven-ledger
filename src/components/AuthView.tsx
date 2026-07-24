@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Mail, Lock, User, Smartphone, ShieldCheck, AlertCircle, CheckCircle } from 'lucide-react';
+import { Mail, Lock, User, Smartphone, ShieldCheck, AlertCircle, CheckCircle, Receipt, TrendingUp, Users, FileBarChart } from 'lucide-react';
 import PrivacyPolicyModal from './PrivacyPolicyModal';
 
 interface AuthViewProps {
   onSignIn: (email: string, pass: string) => Promise<void>;
   onSignUp: (email: string, pass: string, name: string) => Promise<void>;
   onResetPassword: (email: string) => Promise<void>;
-  onSignInWithGoogle: () => Promise<void>;
+  onSignInWithGoogle?: () => Promise<void>;
   onAcceptPrivacy?: () => Promise<void>;
 }
 
-export default function AuthView({ onSignIn, onSignUp, onResetPassword, onSignInWithGoogle, onAcceptPrivacy }: AuthViewProps) {
+export default function AuthView({ onSignIn, onSignUp, onResetPassword, onAcceptPrivacy }: AuthViewProps) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [isResetMode, setIsResetMode] = useState(false);
   const [name, setName] = useState('');
@@ -22,19 +22,6 @@ export default function AuthView({ onSignIn, onSignUp, onResetPassword, onSignIn
   const [loading, setLoading] = useState(false);
   const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
-
-  const handleGoogleSignIn = async () => {
-    setError(null);
-    setSuccessMessage(null);
-    setLoading(true);
-    try {
-      await onSignInWithGoogle();
-    } catch (err: any) {
-      setError(err.message || 'Google sign-in is not enabled yet — use email & password below instead.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,14 +58,48 @@ export default function AuthView({ onSignIn, onSignUp, onResetPassword, onSignIn
     }
   };
 
+  const features = [
+    { icon: Receipt, title: 'Bills & Subscriptions', desc: 'Track recurring payments, get reminders, never miss a due date.' },
+    { icon: TrendingUp, title: 'Investment Portfolio', desc: 'Live prices, gains, classification performance, and drill-down reports.' },
+    { icon: Users, title: 'Family Sharing', desc: 'Collaborate with role-based access across your household.' },
+    { icon: FileBarChart, title: 'Deep Reports & Insights', desc: 'Understand exactly where your money goes and grows.' },
+  ];
+
   return (
-    <div className="flex-1 flex flex-col justify-center px-6 py-10 bg-slate-50 dark:bg-slate-900 select-none overflow-y-auto">
+    <div className="flex-1 flex flex-col lg:flex-row bg-slate-50 dark:bg-slate-900 select-none overflow-y-auto">
+
+      {/* Landing-style summary panel - full feature summary on desktop only, keeps the
+          sign-in page itself lightweight rather than cramming this onto small screens. */}
+      <div className="hidden lg:flex lg:w-1/2 flex-col justify-center px-16 py-10 bg-gradient-to-br from-indigo-600 to-indigo-800 text-white">
+        <div className="max-w-md">
+          <div className="w-12 h-12 bg-white/15 rounded-2xl flex items-center justify-center mb-5">
+            <Smartphone className="w-6 h-6 text-white" />
+          </div>
+          <h1 className="text-3xl font-black tracking-tight mb-2">Haven Vault</h1>
+          <p className="text-indigo-100 text-sm font-semibold mb-10">Your family's complete financial command center - bills, investments, and everything in between, in one place.</p>
+          <div className="space-y-6">
+            {features.map((f) => (
+              <div key={f.title} className="flex items-start gap-3.5">
+                <div className="w-9 h-9 bg-white/15 rounded-xl flex items-center justify-center shrink-0">
+                  <f.icon className="w-4.5 h-4.5 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold">{f.title}</p>
+                  <p className="text-[11px] text-indigo-100 leading-relaxed mt-0.5">{f.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 lg:w-1/2 flex flex-col justify-center px-6 py-10 max-w-lg mx-auto w-full">
 
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="text-center mb-8"
+        className="text-center mb-6 lg:hidden"
       >
         <div className="w-12 h-12 bg-indigo-600 rounded-2xl mx-auto flex items-center justify-center shadow-lg shadow-indigo-500/20 mb-3.5">
           <Smartphone className="w-6 h-6 text-white" />
@@ -90,6 +111,12 @@ export default function AuthView({ onSignIn, onSignUp, onResetPassword, onSignIn
         <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">
           Family Payment Auditor
         </p>
+        {/* Condensed feature chips - a taste of the full summary without bloating mobile */}
+        <div className="flex items-center justify-center gap-1.5 flex-wrap mt-3">
+          {['Bills', 'Investments', 'Family', 'Reports'].map(f => (
+            <span key={f} className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold rounded-full">{f}</span>
+          ))}
+        </div>
       </motion.div>
 
       <motion.div
@@ -210,30 +237,11 @@ export default function AuthView({ onSignIn, onSignUp, onResetPassword, onSignIn
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
-          <span className="text-[9px] font-bold text-slate-400 uppercase">Or</span>
-          <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
-        </div>
-
-        <button
-          type="button"
-          onClick={handleGoogleSignIn}
-          disabled={loading}
-          className="w-full py-3 bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800 disabled:opacity-50 text-slate-700 dark:text-slate-200 font-black text-xs rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-[0.98]"
-        >
-          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
-            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
-          </svg>
-          <span>Continue with Google</span>
-        </button>
       </motion.div>
 
       <div className="mt-6 flex items-center justify-center gap-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
         <ShieldCheck className="w-4 h-4 text-emerald-500" /> Secured by Supabase
+      </div>
       </div>
     </div>
   );
