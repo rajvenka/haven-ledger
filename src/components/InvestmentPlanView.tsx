@@ -82,7 +82,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const [editContributionDate, setEditContributionDate] = useState('');
   const [editContributionNotes, setEditContributionNotes] = useState('');
   const [contribFilters, setContribFilters] = useState<Set<string>>(new Set());
-  const [contribSort, setContribSort] = useState<'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'>('date_desc');
+  const [contribSortField, setContribSortField] = useState<'name' | 'type' | 'date' | 'notes' | 'amount'>('date');
+  const [contribSortDirection, setContribSortDirection] = useState<'asc' | 'desc'>('desc');
   const [contribGroupBy, setContribGroupBy] = useState<'none' | 'type'>('none');
 
   const handleAddContribution = async (e: React.FormEvent) => {
@@ -114,6 +115,11 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
     });
   };
 
+  const toggleContribSort = (field: 'name' | 'type' | 'date' | 'notes' | 'amount') => {
+    if (contribSortField === field) setContribSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    else { setContribSortField(field); setContribSortDirection('asc'); }
+  };
+
   const filteredSortedContributions = useMemo(() => {
     const selectedTypes = contribFilterOptions.types.filter(t => contribFilters.has(t));
     const selectedMembers = contribFilterOptions.members.filter(m => contribFilters.has(m));
@@ -124,14 +130,24 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
       const memberOk = selectedMembers.length === 0 || (m && selectedMembers.includes(memberName(m)));
       return typeOk && memberOk;
     });
+    const valueFor = (c: any): string | number => {
+      switch (contribSortField) {
+        case 'name': { const m = workspaceMembers.find(x => x.uid === c.member_user_id); return m ? memberName(m) : ''; }
+        case 'type': return c.contribution_type === 'recurring' ? 'Plan' : 'One-off';
+        case 'date': return c.contribution_date;
+        case 'notes': return c.notes || '';
+        case 'amount': return Number(c.amount);
+        default: return '';
+      }
+    };
     list = [...list].sort((a, b) => {
-      if (contribSort === 'date_desc') return b.contribution_date.localeCompare(a.contribution_date);
-      if (contribSort === 'date_asc') return a.contribution_date.localeCompare(b.contribution_date);
-      if (contribSort === 'amount_desc') return Number(b.amount) - Number(a.amount);
-      return Number(a.amount) - Number(b.amount);
+      const av = valueFor(a);
+      const bv = valueFor(b);
+      const cmp = typeof av === 'string' && typeof bv === 'string' ? av.localeCompare(bv) : (av as number) - (bv as number);
+      return contribSortDirection === 'asc' ? cmp : -cmp;
     });
     return list;
-  }, [portfolioContributions, contribFilters, contribFilterOptions, contribSort, workspaceMembers]);
+  }, [portfolioContributions, contribFilters, contribFilterOptions, contribSortField, contribSortDirection, workspaceMembers]);
 
   const [isAddingWithdrawal, setIsAddingWithdrawal] = useState(false);
   const [wMemberId, setWMemberId] = useState('');
@@ -460,12 +476,6 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <select value={contribSort} onChange={(e) => setContribSort(e.target.value as any)} className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[10px]">
-              <option value="date_desc">Newest first</option>
-              <option value="date_asc">Oldest first</option>
-              <option value="amount_desc">Amount: high to low</option>
-              <option value="amount_asc">Amount: low to high</option>
-            </select>
             <button
               onClick={() => setContribGroupBy(prev => (prev === 'type' ? 'none' : 'type'))}
               className={`px-2.5 py-1 rounded-md text-[10px] font-bold cursor-pointer ${contribGroupBy === 'type' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
@@ -475,80 +485,116 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           </div>
 
           {(() => {
-            const renderRow = (c: any) => {
-              const m = workspaceMembers.find(x => x.uid === c.member_user_id);
-              const isEditing = editingContributionId === c.id;
-              return (
-                <div key={c.id} className="py-2 flex items-center justify-between text-xs gap-2 border-b border-slate-100 dark:border-slate-900 last:border-0">
-                  {isEditing ? (
-                    <div className="flex-1 space-y-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <input type="date" value={editContributionDate} onChange={(e) => setEditContributionDate(e.target.value)} className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px]" />
-                        <input type="number" value={editContributionAmount} onChange={(e) => setEditContributionAmount(e.target.value)} className="w-20 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px]" />
-                        <button
-                          onClick={() => runAction(async () => {
-                            await updatePortfolioContribution(c.id, { amount: parseFloat(editContributionAmount), contributionDate: editContributionDate, notes: editContributionNotes.trim() });
-                            setEditingContributionId(null);
-                          })}
-                          className="p-1 bg-indigo-600 text-white rounded-md cursor-pointer shrink-0"
-                        ><CheckCircle2 className="w-3 h-3" /></button>
-                        <button onClick={() => setEditingContributionId(null)} className="p-1 text-slate-400 cursor-pointer shrink-0"><X className="w-3 h-3" /></button>
-                      </div>
-                      <textarea value={editContributionNotes} onChange={(e) => setEditContributionNotes(e.target.value)} placeholder="Notes (optional)" rows={2} className="w-full px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px] resize-none" />
+            const editRow = (c: any) => (
+              <tr key={c.id}>
+                <td colSpan={5} className="py-2">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <input type="date" value={editContributionDate} onChange={(e) => setEditContributionDate(e.target.value)} className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px]" />
+                      <input type="number" value={editContributionAmount} onChange={(e) => setEditContributionAmount(e.target.value)} className="w-20 px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px]" />
+                      <button
+                        onClick={() => runAction(async () => {
+                          await updatePortfolioContribution(c.id, { amount: parseFloat(editContributionAmount), contributionDate: editContributionDate, notes: editContributionNotes.trim() });
+                          setEditingContributionId(null);
+                        })}
+                        className="p-1 bg-indigo-600 text-white rounded-md cursor-pointer shrink-0"
+                      ><CheckCircle2 className="w-3 h-3" /></button>
+                      <button onClick={() => setEditingContributionId(null)} className="p-1 text-slate-400 cursor-pointer shrink-0"><X className="w-3 h-3" /></button>
                     </div>
-                  ) : (
-                    <>
-                      <span className="text-slate-600 dark:text-slate-300 min-w-0">
-                        <span className="flex items-center gap-1.5">
-                          {m ? memberName(m) : 'Former member'} · {c.contribution_date}
-                          {c.contribution_type === 'recurring' && (
-                            <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">Plan</span>
-                          )}
-                        </span>
-                        {c.notes && <span className="text-[10px] text-slate-400 italic block">{c.notes}</span>}
-                      </span>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="font-bold text-slate-900 dark:text-white">{fmt(Number(c.amount))}</span>
-                        {!isReadOnly && (
-                          <button
-                            onClick={() => { setEditingContributionId(c.id); setEditContributionAmount(String(c.amount)); setEditContributionDate(c.contribution_date); setEditContributionNotes(c.notes || ''); }}
-                            className="text-slate-300 hover:text-indigo-500 cursor-pointer"
-                          ><Edit2 className="w-3 h-3" /></button>
-                        )}
-                        {!isReadOnly && <button onClick={() => runAction(() => deletePortfolioContribution(c.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>}
-                      </div>
-                    </>
-                  )}
-                </div>
+                    <textarea value={editContributionNotes} onChange={(e) => setEditContributionNotes(e.target.value)} placeholder="Notes (optional)" rows={2} className="w-full px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[11px] resize-none" />
+                  </div>
+                </td>
+              </tr>
+            );
+            const dataRow = (c: any) => {
+              const m = workspaceMembers.find(x => x.uid === c.member_user_id);
+              return (
+                <tr key={c.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
+                  <td className="p-2 text-slate-700 dark:text-slate-300 font-semibold">{m ? memberName(m) : 'Former member'}</td>
+                  <td className="p-2">
+                    {c.contribution_type === 'recurring' ? (
+                      <span className="text-[8px] font-black uppercase px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">Plan</span>
+                    ) : (
+                      <span className="text-[8px] font-black uppercase px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">One-off</span>
+                    )}
+                  </td>
+                  <td className="p-2 text-slate-500">{c.contribution_date}</td>
+                  <td className="p-2 text-slate-400 italic truncate max-w-[120px]">{c.notes || '—'}</td>
+                  <td className="p-2 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <span className="font-bold text-slate-900 dark:text-white">{fmt(Number(c.amount))}</span>
+                      {!isReadOnly && (
+                        <button
+                          onClick={() => { setEditingContributionId(c.id); setEditContributionAmount(String(c.amount)); setEditContributionDate(c.contribution_date); setEditContributionNotes(c.notes || ''); }}
+                          className="text-slate-300 hover:text-indigo-500 cursor-pointer"
+                        ><Edit2 className="w-3 h-3" /></button>
+                      )}
+                      {!isReadOnly && <button onClick={() => runAction(() => deletePortfolioContribution(c.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>}
+                    </div>
+                  </td>
+                </tr>
               );
             };
+            const renderRow = (c: any) => (editingContributionId === c.id ? editRow(c) : dataRow(c));
 
             if (filteredSortedContributions.length === 0) {
               return <p className="text-center text-xs text-slate-400 py-4">No contributions match{contribFilters.size > 0 ? ' this filter' : ' yet'}.</p>;
             }
 
+            const headerRow = (
+              <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                {([
+                  ['name', 'Name', 'text-left'],
+                  ['type', 'Type', 'text-left'],
+                  ['date', 'Date', 'text-left'],
+                  ['notes', 'Notes', 'text-left'],
+                  ['amount', 'Amount', 'text-right'],
+                ] as [typeof contribSortField, string, string][]).map(([field, label, align]) => (
+                  <th key={field} onClick={() => toggleContribSort(field)} className={`p-2 ${align} cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-300`}>
+                    <span className="inline-flex items-center gap-0.5">
+                      {label}
+                      {contribSortField === field ? <span className="text-indigo-500">{contribSortDirection === 'asc' ? '↑' : '↓'}</span> : <span className="text-slate-300 dark:text-slate-600">↕</span>}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            );
+
             if (contribGroupBy === 'type') {
               const plans = filteredSortedContributions.filter(c => c.contribution_type === 'recurring');
               const oneOffs = filteredSortedContributions.filter(c => c.contribution_type !== 'recurring');
               return (
-                <div className="space-y-3">
+                <div className="overflow-x-auto space-y-4">
                   {plans.length > 0 && (
                     <div>
                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Plan ({plans.length})</span>
-                      <div>{plans.map(renderRow)}</div>
+                      <table className="w-full text-xs min-w-[480px] mt-1">
+                        <thead>{headerRow}</thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-900">{plans.map(renderRow)}</tbody>
+                      </table>
                     </div>
                   )}
                   {oneOffs.length > 0 && (
                     <div>
                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">One-off ({oneOffs.length})</span>
-                      <div>{oneOffs.map(renderRow)}</div>
+                      <table className="w-full text-xs min-w-[480px] mt-1">
+                        <thead>{headerRow}</thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-900">{oneOffs.map(renderRow)}</tbody>
+                      </table>
                     </div>
                   )}
                 </div>
               );
             }
 
-            return <div>{filteredSortedContributions.map(renderRow)}</div>;
+            return (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs min-w-[480px]">
+                  <thead>{headerRow}</thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-900">{filteredSortedContributions.map(renderRow)}</tbody>
+                </table>
+              </div>
+            );
           })()}
         </div>
 
