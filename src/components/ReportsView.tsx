@@ -84,6 +84,23 @@ function InsightCard({ title, items, pctKey, subFn, isOpen, onToggle, fmt }: {
   );
 }
 
+// Same reasoning as InsightCard: kept as a stable top-level component so toggling one
+// bucket's details doesn't redefine and remount every other bucket on the page.
+function DetailBucket({ label, count, totalLabel, isOpen, onToggle, children }: {
+  key?: React.Key; label: string; count: number; totalLabel: string; isOpen: boolean; onToggle: () => void; children: React.ReactNode;
+}) {
+  if (count === 0) return null;
+  return (
+    <div className="space-y-1">
+      <button onClick={onToggle} className="flex items-center gap-1 text-[9px] font-black text-slate-400 uppercase tracking-wider cursor-pointer">
+        {label} ({count}) · {totalLabel}
+        <ChevronLeft className={`w-2.5 h-2.5 transition-transform ${isOpen ? 'rotate-90' : '-rotate-90'}`} />
+      </button>
+      {isOpen && children}
+    </div>
+  );
+}
+
 export default function ReportsView(props: ReportsViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly,
@@ -97,6 +114,13 @@ export default function ReportsView(props: ReportsViewProps) {
   const [drillPath, setDrillPath] = useState<string[]>([]);
   const [insightsAssetFilter, setInsightsAssetFilter] = useState<'all' | 'stock' | 'mutual_fund'>('all');
   const [expandedInsightCards, setExpandedInsightCards] = useState<Set<string>>(new Set());
+  const [snapshotMessage, setSnapshotMessage] = useState<string | null>(null);
+  const [expandedActivityBuckets, setExpandedActivityBuckets] = useState<Set<string>>(new Set());
+  const toggleActivityBucket = (key: string) => setExpandedActivityBuckets(prev => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
   const [formError, setFormError] = useState<string | null>(null);
   const runAction = async (fn: () => Promise<any>) => {
     setFormError(null);
@@ -548,16 +572,15 @@ export default function ReportsView(props: ReportsViewProps) {
             { label: '1yr', invested: investedOf(last365), count: last365.length },
           ];
 
-          const bucket = (label: string, items: any[]) => items.length > 0 && (
-            <div key={label} className="space-y-1">
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{label} ({items.length}) · {fmt(investedOf(items))}</span>
+          const bucket = (label: string, items: any[]) => (
+            <DetailBucket key={label} label={label} count={items.length} totalLabel={fmt(investedOf(items))} isOpen={expandedActivityBuckets.has(`new-${label}`)} onToggle={() => toggleActivityBucket(`new-${label}`)}>
               {items.map(h => (
                 <div key={h.id} className="flex items-center justify-between text-xs py-1">
                   <span className="text-slate-600 dark:text-slate-300">{h.symbol} {h.source && <span className="text-[9px] text-slate-400">· {h.source}</span>}</span>
                   <span className="text-slate-400 text-[10px]">bought {h.buy_date}</span>
                 </div>
               ))}
-            </div>
+            </DetailBucket>
           );
           return (
             <div className="apple-card p-4 space-y-3">
@@ -619,9 +642,8 @@ export default function ReportsView(props: ReportsViewProps) {
             { label: '1yr', count: last365.length, gain: gainOf(last365) },
           ];
 
-          const bucket = (label: string, items: any[]) => items.length > 0 && (
-            <div key={label} className="space-y-1">
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{label} ({items.length}) · {fmt(soldValueOf(items))}</span>
+          const bucket = (label: string, items: any[]) => (
+            <DetailBucket key={label} label={label} count={items.length} totalLabel={fmt(soldValueOf(items))} isOpen={expandedActivityBuckets.has(`sold-${label}`)} onToggle={() => toggleActivityBucket(`sold-${label}`)}>
               {items.map(h => {
                 const gain = (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity);
                 return (
@@ -634,7 +656,7 @@ export default function ReportsView(props: ReportsViewProps) {
                   </div>
                 );
               })}
-            </div>
+            </DetailBucket>
           );
           return (
             <div className="apple-card p-4 space-y-3">
@@ -746,6 +768,8 @@ export default function ReportsView(props: ReportsViewProps) {
                   const totalCurrent = groups.reduce((s, g) => s + g.current, 0);
                   groups.push({ label: 'Total Asset Value', invested: totalInvested, current: totalCurrent });
                   await takePortfolioSnapshot(todayStr(), groups);
+                  setSnapshotMessage(`Snapshot saved for ${todayStr()}.`);
+                  setTimeout(() => setSnapshotMessage(null), 5000);
                 })}
                 className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
               >
@@ -753,6 +777,9 @@ export default function ReportsView(props: ReportsViewProps) {
               </button>
             )}
           </div>
+          {snapshotMessage && (
+            <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">{snapshotMessage}</p>
+          )}
           {(() => {
             const dates = Array.from(new Set(portfolioSnapshots.map(s => s.snapshot_date))).sort().reverse();
             if (dates.length < 2) {
@@ -869,12 +896,37 @@ export default function ReportsView(props: ReportsViewProps) {
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Gift className="w-3.5 h-3.5" /> Dividends</span>
             {!isReadOnly && <QuickAddDividend onAdd={addPortfolioDividend} />}
           </div>
-          {portfolioDividends.length === 0 ? <p className="text-[11px] text-slate-400">None recorded.</p> : portfolioDividends.map(d => (
-            <div key={d.id} className="flex items-center justify-between text-xs">
-              <span className="text-slate-600 dark:text-slate-300">{d.symbol} · {d.dividend_date}</span>
-              <div className="flex items-center gap-2"><span className="font-bold text-emerald-600">+{fmt(Number(d.amount))}</span>{!isReadOnly && <button onClick={() => runAction(() => deletePortfolioDividend(d.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>}</div>
-            </div>
-          ))}
+          {portfolioDividends.length === 0 ? <p className="text-[11px] text-slate-400">None recorded.</p> : (() => {
+            const monthMap = new Map<string, number>();
+            portfolioDividends.forEach(d => {
+              const key = d.dividend_date.slice(0, 7);
+              monthMap.set(key, (monthMap.get(key) || 0) + Number(d.amount));
+            });
+            const chartData = Array.from(monthMap.keys()).sort().map(m => ({ month: new Date(`${m}-01`).toLocaleString('default', { month: 'short', year: '2-digit' }), amount: monthMap.get(m)! }));
+            return (
+              <>
+                <div className="h-24">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                      <XAxis dataKey="month" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={(v: number) => [fmt(v), 'Dividends']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                      <Bar dataKey="amount" radius={[4, 4, 0, 0]} fill="#10b981" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <button onClick={() => toggleActivityBucket('dividends')} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
+                  {expandedActivityBuckets.has('dividends') ? 'Hide details' : 'View details'} <ChevronLeft className={`w-3 h-3 transition-transform ${expandedActivityBuckets.has('dividends') ? 'rotate-90' : '-rotate-90'}`} />
+                </button>
+                {expandedActivityBuckets.has('dividends') && portfolioDividends.map(d => (
+                  <div key={d.id} className="flex items-center justify-between text-xs">
+                    <span className="text-slate-600 dark:text-slate-300">{d.symbol} · {d.dividend_date}</span>
+                    <div className="flex items-center gap-2"><span className="font-bold text-emerald-600">+{fmt(Number(d.amount))}</span>{!isReadOnly && <button onClick={() => runAction(() => deletePortfolioDividend(d.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>}</div>
+                  </div>
+                ))}
+              </>
+            );
+          })()}
         </div>
 
         <div className="apple-card p-4 space-y-2">
@@ -882,12 +934,37 @@ export default function ReportsView(props: ReportsViewProps) {
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5" /> AMC & Fees</span>
             {!isReadOnly && <QuickAddFee onAdd={addPortfolioFee} />}
           </div>
-          {portfolioFees.length === 0 ? <p className="text-[11px] text-slate-400">None recorded.</p> : portfolioFees.map(f => (
-            <div key={f.id} className="flex items-center justify-between text-xs">
-              <span className="text-slate-600 dark:text-slate-300">{f.broker} · {f.fee_type} · {f.fee_date}</span>
-              <div className="flex items-center gap-2"><span className="font-bold text-rose-500">-{fmt(Number(f.amount))}</span>{!isReadOnly && <button onClick={() => runAction(() => deletePortfolioFee(f.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>}</div>
-            </div>
-          ))}
+          {portfolioFees.length === 0 ? <p className="text-[11px] text-slate-400">None recorded.</p> : (() => {
+            const monthMap = new Map<string, number>();
+            portfolioFees.forEach(f => {
+              const key = f.fee_date.slice(0, 7);
+              monthMap.set(key, (monthMap.get(key) || 0) + Number(f.amount));
+            });
+            const chartData = Array.from(monthMap.keys()).sort().map(m => ({ month: new Date(`${m}-01`).toLocaleString('default', { month: 'short', year: '2-digit' }), amount: monthMap.get(m)! }));
+            return (
+              <>
+                <div className="h-24">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                      <XAxis dataKey="month" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={(v: number) => [fmt(v), 'Fees']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                      <Bar dataKey="amount" radius={[4, 4, 0, 0]} fill="#f43f5e" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <button onClick={() => toggleActivityBucket('fees')} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
+                  {expandedActivityBuckets.has('fees') ? 'Hide details' : 'View details'} <ChevronLeft className={`w-3 h-3 transition-transform ${expandedActivityBuckets.has('fees') ? 'rotate-90' : '-rotate-90'}`} />
+                </button>
+                {expandedActivityBuckets.has('fees') && portfolioFees.map(f => (
+                  <div key={f.id} className="flex items-center justify-between text-xs">
+                    <span className="text-slate-600 dark:text-slate-300">{f.broker} · {f.fee_type} · {f.fee_date}</span>
+                    <div className="flex items-center gap-2"><span className="font-bold text-rose-500">-{fmt(Number(f.amount))}</span>{!isReadOnly && <button onClick={() => runAction(() => deletePortfolioFee(f.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>}</div>
+                  </div>
+                ))}
+              </>
+            );
+          })()}
         </div>
         </>
       )}
