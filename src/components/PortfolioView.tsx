@@ -1657,8 +1657,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
             const buyValue = filteredSoldHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
             const soldValue = filteredSoldHoldings.reduce((s, h) => s + Number(h.sold_price) * Number(h.quantity), 0);
             const pl = soldValue - buyValue;
+            const sinceSoldEligible = filteredSoldHoldings.filter(h => h.live_price != null);
+            const sinceSoldTotal = sinceSoldEligible.reduce((s, h) => s + (Number(h.live_price) - Number(h.sold_price)) * Number(h.quantity), 0);
             return (
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="apple-card p-3">
                   <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Buy Value</span>
                   <span className="text-sm font-black text-slate-900 dark:text-white">{fmt(buyValue)}</span>
@@ -1670,6 +1672,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <div className="apple-card p-3">
                   <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Profit/Loss</span>
                   <span className={`text-sm font-black ${pl >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{pl >= 0 ? '+' : ''}{fmt(pl)}</span>
+                </div>
+                <div className="apple-card p-3">
+                  <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Since Sold</span>
+                  {sinceSoldEligible.length > 0 ? (
+                    <span className={`text-sm font-black ${sinceSoldTotal >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{sinceSoldTotal >= 0 ? '+' : ''}{fmt(sinceSoldTotal)}</span>
+                  ) : (
+                    <span className="text-xs text-slate-300 dark:text-slate-700">— refresh prices</span>
+                  )}
                 </div>
               </div>
             );
