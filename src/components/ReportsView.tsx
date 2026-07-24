@@ -115,7 +115,6 @@ export default function ReportsView(props: ReportsViewProps) {
   const [drillPath, setDrillPath] = useState<string[]>([]);
   const [insightsAssetFilter, setInsightsAssetFilter] = useState<'all' | 'stock' | 'mutual_fund'>('all');
   const [classificationMetric, setClassificationMetric] = useState<'inception' | 'd30' | 'ref'>('inception');
-  const [showClassificationTable, setShowClassificationTable] = useState(false);
 
   // Finds the most recent recorded price at or before a given date, for the 30-day
   // classification comparison - falls back to null if no price history exists that far
@@ -427,39 +426,34 @@ export default function ReportsView(props: ReportsViewProps) {
                 </ResponsiveContainer>
               </div>
             )}
-            <button onClick={() => setShowClassificationTable(v => !v)} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
-              {showClassificationTable ? 'Hide full table' : 'View full table (all 3 windows)'} <ChevronLeft className={`w-3 h-3 transition-transform ${showClassificationTable ? 'rotate-90' : '-rotate-90'}`} />
-            </button>
-            {showClassificationTable && (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs min-w-[420px]">
-                  <thead>
-                    <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
-                      <th className="p-2 text-left">Classification</th>
-                      <th className="p-2 text-right">Since Inception</th>
-                      <th className="p-2 text-right">Last 30 Days</th>
-                      <th className="p-2 text-right">Since Ref. Load</th>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs min-w-[420px]">
+                <thead>
+                  <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                    <th className="p-2 text-left">Classification</th>
+                    <th className="p-2 text-right">Since Inception</th>
+                    <th className="p-2 text-right">Last 30 Days</th>
+                    <th className="p-2 text-right">Since Ref. Load</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-900">
+                  {classificationRows.map(row => (
+                    <tr key={row.name}>
+                      <td className="p-2 font-semibold text-slate-700 dark:text-slate-300">{row.name}</td>
+                      {[row.inceptionPct, row.d30Pct, row.refPct].map((pct, i) => (
+                        <td key={i} className="p-2 text-right">
+                          {pct !== null ? (
+                            <span className={`font-bold ${pct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{pct >= 0 ? '+' : ''}{pct.toFixed(2)}%</span>
+                          ) : (
+                            <span className="text-slate-300 dark:text-slate-700">—</span>
+                          )}
+                        </td>
+                      ))}
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-900">
-                    {classificationRows.map(row => (
-                      <tr key={row.name}>
-                        <td className="p-2 font-semibold text-slate-700 dark:text-slate-300">{row.name}</td>
-                        {[row.inceptionPct, row.d30Pct, row.refPct].map((pct, i) => (
-                          <td key={i} className="p-2 text-right">
-                            {pct !== null ? (
-                              <span className={`font-bold ${pct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{pct >= 0 ? '+' : ''}{pct.toFixed(2)}%</span>
-                            ) : (
-                              <span className="text-slate-300 dark:text-slate-700">—</span>
-                            )}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                  ))}
+                </tbody>
+              </table>
               </div>
-            )}
           </div>
 
 
