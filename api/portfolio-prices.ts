@@ -18,7 +18,7 @@ export default async function handler(req: any, res: any) {
     }
 
     const results = await Promise.all(
-      symbols.slice(0, 50).map(async ({ symbol, exchange }: { symbol: string; exchange: string }) => {
+      symbols.slice(0, 250).map(async ({ symbol, exchange }: { symbol: string; exchange: string }) => {
         const suffix = exchange === "BSE" ? ".BO" : ".NS";
         const yahooSymbol = `${symbol}${suffix}`;
         try {
