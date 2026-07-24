@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { RecurringPayment, PaymentHistory, AppNotification, Currency, UserProfile, CountryConfig, FamilyInvitation, RewardPerk, Workspace, IncomeSource } from '../types';
@@ -944,6 +944,7 @@ export function usePaymentState() {
   const [portfolioFees, setPortfolioFees] = useState<any[]>([]);
   const [portfolioRecurringPlans, setPortfolioRecurringPlans] = useState<any[]>([]);
   const [portfolioDataLoading, setPortfolioDataLoading] = useState(true);
+  const loadedPortfolioWorkspaces = useRef<Set<string>>(new Set());
 
   const loadPortfolioDetails = useCallback(async () => {
     if (!activeWorkspaceId) {
@@ -952,7 +953,12 @@ export function usePaymentState() {
       setPortfolioDataLoading(false);
       return;
     }
-    setPortfolioDataLoading(true);
+    // Only show the full-page spinner the first time this workspace's portfolio data loads -
+    // every mutation (price update, add holding, mark transferred, etc.) also calls this to
+    // refresh state, and showing the spinner on every one of those was causing a visible
+    // flicker during completely normal use, not just on initial load or workspace switch.
+    const isFirstLoadForWorkspace = !loadedPortfolioWorkspaces.current.has(activeWorkspaceId);
+    if (isFirstLoadForWorkspace) setPortfolioDataLoading(true);
     const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: cashBalances }] = await Promise.all([
       supabase.from('portfolio_holdings').select('*').eq('workspace_id', activeWorkspaceId).order('buy_date', { ascending: false }),
       supabase.from('portfolio_price_history').select('*').eq('workspace_id', activeWorkspaceId).order('recorded_date', { ascending: false }),
@@ -973,6 +979,7 @@ export function usePaymentState() {
     setPortfolioFees(fees ?? []);
     setPortfolioRecurringPlans(plans ?? []);
     setPortfolioCashBalances(cashBalances ?? []);
+    loadedPortfolioWorkspaces.current.add(activeWorkspaceId);
     setPortfolioDataLoading(false);
   }, [activeWorkspaceId]);
 
