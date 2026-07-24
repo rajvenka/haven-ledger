@@ -16,6 +16,17 @@ interface AppTourProps {
   hasFeature?: (feature: string) => boolean;
 }
 
+// Finds whichever variant (desktop sidebar vs mobile bottom-nav/drawer) is actually
+// rendered and visible right now - both exist in the DOM simultaneously (CSS-hidden by
+// breakpoint), so a plain getElementById could return the hidden one.
+function findVisibleTourTarget(tab: string): HTMLElement | null {
+  for (const suffix of ['desktop', 'mobile']) {
+    const el = document.getElementById(`tour-tab-${tab}-${suffix}`);
+    if (el && el.offsetParent !== null) return el;
+  }
+  return null;
+}
+
 export default function AppTour({ onNavigate, onOpenMobileMenu, onFinish, hasFeature }: AppTourProps) {
   const allSteps: (TourStep & { feature?: string })[] = [
     { tab: 'summary', icon: <LayoutDashboard className="w-6 h-6" />, title: 'Dashboard', description: 'Your home base - a quick summary of bills, spending, and what needs attention.' },
@@ -30,26 +41,48 @@ export default function AppTour({ onNavigate, onOpenMobileMenu, onFinish, hasFea
 
   const [stepIndex, setStepIndex] = useState(0);
   const [highlightRect, setHighlightRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  const [cardPos, setCardPos] = useState<{ top?: number; bottom?: number; left?: number; right?: number; centered: boolean }>({ centered: true });
   const step = steps[stepIndex];
   const isLast = stepIndex === steps.length - 1;
 
-  // Navigates to the step's page and finds its real nav element to draw a highlight ring
-  // around - a couple of animation frames give the drawer/DOM time to render before measuring.
   useEffect(() => {
     if (!step) return;
+    const isMobileViewport = window.innerWidth < 768;
     onNavigate(step.tab);
-    onOpenMobileMenu(!!step.needsMobileMenu);
+    onOpenMobileMenu(isMobileViewport && !!step.needsMobileMenu);
     setHighlightRect(null);
 
     let attempts = 0;
+    const CARD_WIDTH = 384; // max-w-sm
+    const CARD_HEIGHT = 260; // rough estimate for spacing decisions
+    const MARGIN = 16;
+
     const measure = () => {
-      const el = document.getElementById(`tour-tab-${step.tab}`);
+      const el = findVisibleTourTarget(step.tab);
       if (el) {
         const r = el.getBoundingClientRect();
         setHighlightRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+
+        const isSidebar = r.left < 300 && r.width < 300 && window.innerWidth >= 768;
+        if (isSidebar) {
+          // Desktop sidebar item: place the card just to the right of the sidebar,
+          // vertically near the highlighted row rather than stacking above/below it.
+          const top = Math.min(Math.max(r.top - 40, MARGIN), window.innerHeight - CARD_HEIGHT - MARGIN);
+          setCardPos({ top, left: 280, centered: false });
+        } else {
+          const spaceAbove = r.top;
+          const spaceBelow = window.innerHeight - (r.top + r.height);
+          if (spaceBelow >= CARD_HEIGHT || spaceBelow >= spaceAbove) {
+            setCardPos({ top: Math.min(r.top + r.height + MARGIN, window.innerHeight - CARD_HEIGHT - MARGIN), centered: true });
+          } else {
+            setCardPos({ top: Math.max(r.top - CARD_HEIGHT - MARGIN, MARGIN), centered: true });
+          }
+        }
       } else if (attempts < 15) {
         attempts++;
         requestAnimationFrame(measure);
+      } else {
+        setCardPos({ centered: true });
       }
     };
     requestAnimationFrame(() => requestAnimationFrame(measure));
@@ -65,8 +98,9 @@ export default function AppTour({ onNavigate, onOpenMobileMenu, onFinish, hasFea
 
   if (!step) return null;
 
-  // Card position: near the highlighted element when we have one, otherwise centered.
-  const cardIsBottom = !highlightRect || highlightRect.top > window.innerHeight / 2;
+  const cardStyle: React.CSSProperties = cardPos.centered
+    ? { top: cardPos.top, left: '50%', transform: 'translateX(-50%)' }
+    : { top: cardPos.top, left: cardPos.left };
 
   return (
     <div className="fixed inset-0 z-[60] pointer-events-none">
@@ -85,8 +119,11 @@ export default function AppTour({ onNavigate, onOpenMobileMenu, onFinish, hasFea
         />
       )}
 
-      <div className={`absolute left-0 right-0 flex justify-center px-4 pointer-events-none ${cardIsBottom ? 'bottom-24' : 'top-24'}`}>
-        <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden pointer-events-auto">
+      <div
+        className="absolute px-4 pointer-events-none transition-all duration-300"
+        style={highlightRect ? cardStyle : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
+      >
+        <div className="bg-white dark:bg-slate-900 rounded-2xl w-[calc(100vw-2rem)] max-w-sm shadow-2xl overflow-hidden pointer-events-auto">
           <div className="p-5 space-y-3">
             <div className="flex items-start justify-between">
               <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400">

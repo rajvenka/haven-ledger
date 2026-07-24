@@ -573,6 +573,7 @@ export default function App() {
                 </span>
                 <nav className="flex flex-col gap-1 text-left">
                   <button
+                    id="tour-tab-summary-desktop"
                     onClick={() => setActiveTab('summary')}
                     className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                       activeTab === 'summary'
@@ -590,6 +591,7 @@ export default function App() {
                   </button>
 
                   <button
+                    id="tour-tab-expenses-desktop"
                     onClick={() => setActiveTab('expenses')}
                     className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                       activeTab === 'expenses'
@@ -608,6 +610,7 @@ export default function App() {
 
                   {hasFeature('ai') && (
                   <button
+                    id="tour-tab-ai-desktop"
                     onClick={() => setActiveTab('ai')}
                     className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                       activeTab === 'ai'
@@ -669,6 +672,7 @@ export default function App() {
 
                   {hasFeature('income') && (
                   <button
+                    id="tour-tab-income-desktop"
                     onClick={() => setActiveTab('income')}
                     className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                       activeTab === 'income'
@@ -715,6 +719,7 @@ export default function App() {
                 </span>
                 <nav className="flex flex-col gap-1 text-left">
                   <button
+                    id="tour-tab-portfolio-desktop"
                     onClick={() => setActiveTab('portfolio')}
                     className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                       activeTab === 'portfolio'
@@ -732,6 +737,7 @@ export default function App() {
                   </button>
 
                   <button
+                    id="tour-tab-investment_plan-desktop"
                     onClick={() => setActiveTab('investment_plan')}
                     className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                       activeTab === 'investment_plan'
@@ -749,6 +755,7 @@ export default function App() {
                   </button>
 
                   <button
+                    id="tour-tab-reports-desktop"
                     onClick={() => setActiveTab('reports')}
                     className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                       activeTab === 'reports'
@@ -1087,7 +1094,7 @@ export default function App() {
 
                       {hasFeature('income') && (
                       <button
-                        id="tour-tab-income"
+                        id="tour-tab-income-mobile"
                         onClick={() => { setActiveTab('income'); setIsMobileMenuOpen(false); }}
                         className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                           activeTab === 'income'
@@ -1134,7 +1141,7 @@ export default function App() {
                     </span>
                     <nav className="flex flex-col gap-1 text-left">
                       <button
-                        id="tour-tab-portfolio"
+                        id="tour-tab-portfolio-mobile"
                         onClick={() => { setActiveTab('portfolio'); setIsMobileMenuOpen(false); }}
                         className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                           activeTab === 'portfolio'
@@ -1152,7 +1159,7 @@ export default function App() {
                       </button>
 
                       <button
-                        id="tour-tab-investment_plan"
+                        id="tour-tab-investment_plan-mobile"
                         onClick={() => { setActiveTab('investment_plan'); setIsMobileMenuOpen(false); }}
                         className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                           activeTab === 'investment_plan'
@@ -1170,7 +1177,7 @@ export default function App() {
                       </button>
 
                       <button
-                        id="tour-tab-reports"
+                        id="tour-tab-reports-mobile"
                         onClick={() => { setActiveTab('reports'); setIsMobileMenuOpen(false); }}
                         className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                           activeTab === 'reports'
@@ -1683,7 +1690,7 @@ export default function App() {
             <nav className="pointer-events-auto bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border border-slate-200/50 dark:border-slate-800/40 py-2 px-3 flex justify-between items-center gap-1 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.08)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.4)] max-w-sm mx-auto">
               {/* Summary Tab button */}
               <button
-                id="tour-tab-summary"
+                id="tour-tab-summary-mobile"
                 onClick={() => setActiveTab('summary')}
                 className={`flex flex-col items-center gap-0.5 py-1 px-1 flex-1 rounded-xl transition-all ${
                   activeTab === 'summary' 
@@ -1697,7 +1704,7 @@ export default function App() {
 
               {/* Expenses Tab button */}
               <button
-                id="tour-tab-expenses"
+                id="tour-tab-expenses-mobile"
                 onClick={() => setActiveTab('expenses')}
                 className={`flex flex-col items-center gap-0.5 py-1 px-1 flex-1 rounded-xl transition-all ${
                   activeTab === 'expenses' 
@@ -1724,7 +1731,7 @@ export default function App() {
 
               {/* AI Insights Tab button */}
               <button
-                id="tour-tab-ai"
+                id="tour-tab-ai-mobile"
                 onClick={() => setActiveTab('ai')}
                 className={`flex flex-col items-center gap-0.5 py-1 px-1 flex-1 rounded-xl transition-all ${
                   activeTab === 'ai' 
