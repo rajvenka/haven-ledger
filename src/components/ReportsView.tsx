@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trash2, Gift, Receipt, FileBarChart } from 'lucide-react';
+import { Trash2, Gift, Receipt, FileBarChart, ChevronLeft } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface WorkspaceMemberLite {
@@ -44,6 +44,7 @@ export default function ReportsView(props: ReportsViewProps) {
   } = props;
 
   const [reportTab, setReportTab] = useState<ReportTab>('overview');
+  const [drillPath, setDrillPath] = useState<string[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const runAction = async (fn: () => Promise<any>) => {
     setFormError(null);
@@ -145,6 +146,119 @@ export default function ReportsView(props: ReportsViewProps) {
                   ))}
                 </div>
               </div>
+            </div>
+          );
+        })()}
+
+        {(activeHoldings.length > 0 || portfolioCashBalances.length > 0) && (() => {
+          // Drill-down: Level 0 splits total investment into Stock/Mutual Fund/Cash, Level 1
+          // splits the selected category by broker (or by location for Cash, which has no
+          // broker concept), Level 2 splits the selected broker by source tag. Clicking a
+          // slice or bar drills in; the breadcrumb trail lets you step back out.
+          type DrillDatum = { name: string; value: number };
+          let drillData: DrillDatum[] = [];
+          let levelLabel = '';
+
+          if (drillPath.length === 0) {
+            const byCategory = new Map<string, number>();
+            activeHoldings.forEach(h => {
+              const key = h.holding_type === 'mutual_fund' ? 'Mutual Fund' : 'Stock';
+              const value = Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity);
+              byCategory.set(key, (byCategory.get(key) || 0) + value);
+            });
+            const cashTotal = portfolioCashBalances.reduce((s: number, c: any) => s + Number(c.amount), 0);
+            if (cashTotal > 0) byCategory.set('Cash', cashTotal);
+            drillData = Array.from(byCategory.entries()).map(([name, value]) => ({ name, value }));
+            levelLabel = 'Investment';
+          } else if (drillPath.length === 1) {
+            const category = drillPath[0];
+            levelLabel = category;
+            if (category === 'Cash') {
+              const byLocation = new Map<string, number>();
+              portfolioCashBalances.forEach((c: any) => byLocation.set(c.location, (byLocation.get(c.location) || 0) + Number(c.amount)));
+              drillData = Array.from(byLocation.entries()).map(([name, value]) => ({ name, value })).filter(d => d.value > 0);
+            } else {
+              const holdingType = category === 'Mutual Fund' ? 'mutual_fund' : 'stock';
+              const byBroker = new Map<string, number>();
+              activeHoldings.filter(h => (h.holding_type === 'mutual_fund' ? 'mutual_fund' : 'stock') === holdingType).forEach(h => {
+                const value = Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity);
+                byBroker.set(h.broker, (byBroker.get(h.broker) || 0) + value);
+              });
+              drillData = Array.from(byBroker.entries()).map(([name, value]) => ({ name, value }));
+            }
+          } else if (drillPath.length === 2) {
+            const [category, broker] = drillPath;
+            levelLabel = `${category} · ${broker}`;
+            const holdingType = category === 'Mutual Fund' ? 'mutual_fund' : 'stock';
+            const bySource = new Map<string, number>();
+            activeHoldings
+              .filter(h => (h.holding_type === 'mutual_fund' ? 'mutual_fund' : 'stock') === holdingType && h.broker === broker)
+              .forEach(h => {
+                const key = h.source || 'Untagged';
+                const value = Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity);
+                bySource.set(key, (bySource.get(key) || 0) + value);
+              });
+            drillData = Array.from(bySource.entries()).map(([name, value]) => ({ name, value }));
+          }
+
+          drillData.sort((a, b) => b.value - a.value);
+          const canDrillFurther = drillPath.length < 2;
+          const colors = ['#6366f1', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'];
+
+          return (
+            <div className="apple-card p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Investment Breakdown · {levelLabel}</span>
+                {drillPath.length > 0 && (
+                  <button onClick={() => setDrillPath(prev => prev.slice(0, -1))} className="flex items-center gap-0.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
+                    <ChevronLeft className="w-3 h-3" /> Back
+                  </button>
+                )}
+              </div>
+              {drillData.length === 0 ? (
+                <p className="text-center text-xs text-slate-400 py-6">Nothing to show at this level.</p>
+              ) : (
+                <div className="flex items-center gap-4">
+                  <div className="w-32 h-32 shrink-0">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={drillData}
+                          dataKey="value"
+                          nameKey="name"
+                          innerRadius="55%"
+                          outerRadius="100%"
+                          paddingAngle={2}
+                          onClick={(d: any) => canDrillFurther && setDrillPath(prev => [...prev, d.name])}
+                          cursor={canDrillFurther ? 'pointer' : 'default'}
+                        >
+                          {drillData.map((_, i) => <Cell key={i} fill={colors[i % colors.length]} />)}
+                        </Pie>
+                        <Tooltip formatter={(v: number) => fmt(v)} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex-1 space-y-1 max-h-32 overflow-y-auto">
+                    {drillData.map((d, i) => (
+                      <button
+                        key={d.name}
+                        onClick={() => canDrillFurther && setDrillPath(prev => [...prev, d.name])}
+                        disabled={!canDrillFurther}
+                        className={`flex items-center justify-between text-[11px] w-full text-left ${canDrillFurther ? 'cursor-pointer hover:opacity-70' : ''}`}
+                      >
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: colors[i % colors.length] }} />
+                          <span className="text-slate-600 dark:text-slate-300 truncate">{d.name}</span>
+                        </span>
+                        <span className="font-bold text-slate-900 dark:text-white shrink-0 ml-2">{fmt(d.value)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {canDrillFurther && drillData.length > 0 && (
+                <p className="text-[9px] text-slate-400">Tap a slice or row to drill in{drillPath.length === 0 ? ' by broker' : ' by source tag'}.</p>
+              )}
             </div>
           );
         })()}
