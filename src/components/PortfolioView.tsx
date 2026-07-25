@@ -604,10 +604,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
   type ImportClassification = { status: 'new' } | { status: 'unchanged'; existing: any } | { status: 'qty_changed'; existing: any; direction: 'increased' | 'reduced' };
 
-  const classifyImportRow = (parsed: ParsedHolding): ImportClassification => {
+  const classifyImportRow = (parsed: ParsedHolding, targetPortfolioId?: string): ImportClassification => {
     const existing = portfolioHoldings.find(h => {
       if (h.status !== 'active') return false;
       if (h.broker !== parsed.broker) return false; // same stock via a different broker is a separate, legitimate holding
+      // Same stock already held in a different portfolio should still count as new for
+      // this import target - "already imported" is scoped per-portfolio, otherwise a
+      // stock present in Portfolio 1 would never be importable into Portfolio 2.
+      if (portfolioMode === 'multiple' && (h.portfolio_id ?? null) !== (targetPortfolioId ?? null)) return false;
       if (parsed.isin && h.isin) return h.isin === parsed.isin;
       // Groww MF: the same fund name can appear more than once under different folios
       // (e.g. one External, one bought via the app) - folio number is what's actually unique.
@@ -688,20 +692,23 @@ export default function PortfolioView(props: PortfolioViewProps) {
     }
   };
 
-  // Recompute the preview whenever the raw parse changes
+  // Recompute the preview whenever the raw parse changes, or the target portfolio changes -
+  // switching portfolios should re-check what's already there for that specific one.
   useEffect(() => {
     if (!importRawParsed) { setImportPreview(null); return; }
+    const targetPortfolioId = portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined;
     const fresh: ParsedHolding[] = [];
     const qtyChanged: { parsed: ParsedHolding; existing: any; direction: 'increased' | 'reduced' }[] = [];
     let unchanged = 0;
     importRawParsed.forEach(h => {
-      const c = classifyImportRow(h);
+      const c = classifyImportRow(h, targetPortfolioId);
       if (c.status === 'new') fresh.push(h);
       else if (c.status === 'qty_changed') qtyChanged.push({ parsed: h, existing: c.existing, direction: c.direction });
       else unchanged++;
     });
     setImportPreview({ fresh, qtyChanged, unchanged });
-  }, [importRawParsed]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importRawParsed, importPortfolioId, portfolioMode]);
 
   const confirmImport = async () => {
     if (!importPreview || (importPreview.fresh.length === 0 && importPreview.qtyChanged.length === 0)) return;
@@ -1222,6 +1229,16 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
               {importPreview && (
                 <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-900">
+                  {portfolioMode === 'multiple' && (
+                    <select
+                      value={importPortfolioId || defaultPortfolioId}
+                      onChange={(e) => setImportPortfolioId(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+                      title="Which portfolio these imported holdings belong to - switching this rechecks what's already there for that portfolio"
+                    >
+                      {portfolios.map((p: any) => <option key={p.id} value={p.id}>Import into: {p.name} ({p.currency})</option>)}
+                    </select>
+                  )}
                   <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
                     {importPreview.fresh.length} new holding{importPreview.fresh.length !== 1 ? 's' : ''} found
                     {importPreview.qtyChanged.length > 0 && ` · ${importPreview.qtyChanged.length} with a changed quantity`}
@@ -1267,16 +1284,6 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
                         />
                       </div>
-                      {portfolioMode === 'multiple' && (
-                        <select
-                          value={importPortfolioId || defaultPortfolioId}
-                          onChange={(e) => setImportPortfolioId(e.target.value)}
-                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
-                          title="Which portfolio these imported holdings belong to"
-                        >
-                          {portfolios.map((p: any) => <option key={p.id} value={p.id}>Import into: {p.name} ({p.currency})</option>)}
-                        </select>
-                      )}
                       <input
                         type="text"
                         list="source-suggestions"
