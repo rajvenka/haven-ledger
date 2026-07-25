@@ -243,7 +243,7 @@ export default function AccountInfo({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userProfile?.licensePlanFeatures?.join(',')]);
   const toggleFeature = (f: string) => setFamilyFeatures(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
-  const FEATURE_META: Record<string, string> = { income: 'Income', rewards: 'Membership Hub', ai: 'AI Insights', team: 'Family Sharing / Team', chat: 'Family Chat', agent: 'AI Agent', whatsapp: 'WhatsApp', portfolio: 'Investment / Portfolio' };
+  const FEATURE_META: Record<string, string> = { income: 'Income', rewards: 'Membership Hub', ai: 'AI Insights', team: 'Workspace Config / Team', chat: 'Family Chat', agent: 'AI Agent', whatsapp: 'WhatsApp', portfolio: 'Investment / Portfolio' };
   const [joinGroupId, setJoinGroupId] = useState('');
   const [copied, setCopied] = useState(false);
   const [familyError, setFamilyError] = useState<string | null>(null);
@@ -479,7 +479,7 @@ export default function AccountInfo({
                     <div className="flex-1 min-w-0 space-y-0.5">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                          Family Combined Scope
+                          Workspace Combined Scope
                         </span>
                         {viewMode === 'family-combined' && (
                           <span className="w-2 h-2 rounded-full bg-indigo-600 dark:bg-indigo-500 flex items-center justify-center">
@@ -489,7 +489,7 @@ export default function AccountInfo({
                       </div>
                       {showInstructions && (
                         <p className="text-[9.5px] text-slate-455 dark:text-slate-550 font-semibold leading-relaxed">
-                          Consolidates all family-member and personal payments in a single unified ledger.
+                          Consolidates all workspace-member and personal payments in a single unified ledger.
                         </p>
                       )}
                       <div className="flex items-center gap-1.5 pt-0.5">
@@ -524,7 +524,7 @@ export default function AccountInfo({
                     <div className="flex-1 min-w-0 space-y-0.5">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                          Family Members Only
+                          Workspace Members Only
                         </span>
                         {viewMode === 'family-only' && (
                           <span className="w-2 h-2 rounded-full bg-indigo-600 dark:bg-indigo-500 flex items-center justify-center">
@@ -556,7 +556,7 @@ export default function AccountInfo({
                     <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-wider">
                       <span className="text-slate-400 dark:text-slate-550">Cost Allocation Breakdown</span>
                       <span className="text-indigo-600 dark:text-indigo-400">
-                        {personalPercentReal.toFixed(0)}% Personal / {familyPercentReal.toFixed(0)}% Family
+                        {personalPercentReal.toFixed(0)}% Personal / {familyPercentReal.toFixed(0)}% Workspace
                       </span>
                     </div>
                     <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-900 overflow-hidden flex">
@@ -661,7 +661,7 @@ export default function AccountInfo({
           {(familyRole === 'host' || !familyRole) && (
             <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
               <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                <Users className="w-4 h-4 text-indigo-500" /> Your Family Invite Code
+                <Users className="w-4 h-4 text-indigo-500" /> Your Workspace Invite Code
               </h4>
 
               {!inviteCode ? (
@@ -671,7 +671,7 @@ export default function AccountInfo({
                     onClick={async () => { setFamilyError(null); try { await onCreateFamily?.(); } catch (e: any) { setFamilyError(e.message); } }}
                     className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer"
                   >
-                    Create My Family
+                    Create My Workspace
                   </button>
                 </div>
               ) : (
@@ -727,7 +727,7 @@ export default function AccountInfo({
                   <div className="flex gap-1">
                     <button type="button" onClick={() => setFamilyFeatures(myAvailableFeatures)} className="text-[9px] font-bold text-indigo-500 cursor-pointer">Match My Plan</button>
                     <span className="text-[9px] text-slate-300">·</span>
-                    <button type="button" onClick={() => setFamilyFeatures([])} className="text-[9px] font-bold text-indigo-500 cursor-pointer">Light (Bills Only)</button>
+                    <button type="button" onClick={() => setFamilyFeatures(myAvailableFeatures.includes('core') ? ['core'] : [])} className="text-[9px] font-bold text-indigo-500 cursor-pointer">Bills Only</button>
                   </div>
                 </div>
                 <p className="text-[9px] text-slate-400 -mt-1">You can only share features included in your own plan ({userProfile?.licensePlanName || 'Light'}).</p>
@@ -801,7 +801,7 @@ export default function AccountInfo({
           {familyRole !== 'host' && (
             <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
               <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                <UserPlus className="w-4 h-4 text-indigo-500" /> Join a Family
+                <UserPlus className="w-4 h-4 text-indigo-500" /> Join a Workspace
               </h4>
               <form
                 onSubmit={async (e) => {
@@ -893,7 +893,7 @@ export default function AccountInfo({
           {familyMembers.length > 0 && (
             <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5">
               <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                <Users className="w-4 h-4 text-indigo-500" /> Family Members ({familyMembers.length})
+                <Users className="w-4 h-4 text-indigo-500" /> Workspace Members ({familyMembers.length})
               </h4>
               {familyMembers.map(m => (
                 <div key={m.uid} className="flex items-center justify-between gap-2 p-2 bg-slate-50 dark:bg-slate-900 rounded-lg">
@@ -935,7 +935,7 @@ export default function AccountInfo({
               onClick={() => onLeaveFamilyGroup?.()}
               className="w-full py-2.5 bg-red-50 dark:bg-red-950/20 hover:bg-red-100 dark:hover:bg-red-950/40 text-red-600 dark:text-red-400 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer"
             >
-              Leave Family
+              Leave Workspace
             </button>
           )}
 
@@ -1142,7 +1142,7 @@ export default function AccountInfo({
           {/* Preferred Name */}
           <div className="bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5 shrink-0">
             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Preferred Name</span>
-            <p className="text-[10px] text-slate-400">Shown to others in Family Sharing, Portfolio, and anywhere your name appears.</p>
+            <p className="text-[10px] text-slate-400">Shown to others in Workspace Config, Portfolio, and anywhere your name appears.</p>
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
@@ -1266,7 +1266,7 @@ export default function AccountInfo({
                       </div>
                       {['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'whatsapp', 'portfolio'].map(f => {
                         const included = plan.features.includes(f);
-                        const labels: Record<string, string> = { income: 'Income', rewards: 'Membership Hub', ai: 'AI Insights', team: 'Family Sharing', chat: 'Family Chat', agent: 'AI Agent', whatsapp: 'WhatsApp' };
+                        const labels: Record<string, string> = { income: 'Income', rewards: 'Membership Hub', ai: 'AI Insights', team: 'Workspace Config', chat: 'Family Chat', agent: 'AI Agent', whatsapp: 'WhatsApp' };
                         return (
                           <div key={f} className={`flex items-center gap-1.5 text-[10px] ${included ? 'text-slate-600 dark:text-slate-300' : 'text-slate-300 dark:text-slate-700 line-through'}`}>
                             {included ? <Check className="w-3 h-3 text-emerald-500 shrink-0" /> : <X className="w-3 h-3 text-slate-300 dark:text-slate-700 shrink-0" />}
