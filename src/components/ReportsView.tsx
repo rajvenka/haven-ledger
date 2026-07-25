@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trash2, Gift, Receipt, FileBarChart, ChevronLeft } from 'lucide-react';
+import { Trash2, Gift, Receipt, FileBarChart, ChevronLeft, TrendingUp, TrendingDown } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface WorkspaceMemberLite {
@@ -1040,30 +1040,103 @@ export default function ReportsView(props: ReportsViewProps) {
         </div>
       )}
 
-      {reportTab === 'summary' && (
+      {reportTab === 'summary' && (() => {
+        const plComponents = [
+          { name: 'Unrealized', value: unrealizedGain },
+          { name: 'Realized', value: realizedGain },
+          { name: 'Dividends', value: totalDividends },
+          { name: 'Fees', value: -totalFees },
+        ].filter(c => c.value !== 0);
+        const deployedPct = netContributed > 0 ? Math.min(100, (totalInvestedAllTime / netContributed) * 100) : 0;
+        const valuePct = totalInvestedAllTime > 0 ? Math.min(100, (currentValueActive / totalInvestedAllTime) * 100) : 0;
+
+        return (
         <>
-        <div className="apple-card p-4 space-y-2 text-xs">
-          <div className="flex justify-between"><span className="text-slate-500">Total Contributed (cash in)</span><span className="font-bold text-slate-900 dark:text-white">{fmt(totalContributed)}</span></div>
-          <div className="flex justify-between"><span className="text-slate-500">Total Withdrawn (cash out)</span><span className="font-bold text-rose-500">-{fmt(totalWithdrawn)}</span></div>
-          <div className="flex justify-between"><span className="text-slate-500">Net Contributed (Total Investment)</span><span className="font-bold text-slate-900 dark:text-white">{fmt(netContributed)}</span></div>
-          <div className="flex justify-between"><span className="text-slate-500">Capital Deployed (cost basis, incl. reinvested)</span><span className="font-bold text-slate-900 dark:text-white">{fmt(totalInvestedAllTime)}</span></div>
-          <div className="flex justify-between"><span className="text-slate-500">Current Value of Active Holdings</span><span className="font-bold text-slate-900 dark:text-white">{fmt(currentValueActive)}</span></div>
-          <div className="flex justify-between"><span className="text-slate-500">Unrealized Gain/Loss</span><span className={`font-bold ${unrealizedGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{fmt(unrealizedGain)}</span></div>
-          <div className="flex justify-between"><span className="text-slate-500">Realized Gain/Loss (sold)</span><span className={`font-bold ${realizedGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{fmt(realizedGain)}</span></div>
-          <div className="flex justify-between"><span className="text-slate-500">Dividends Received</span><span className="font-bold text-emerald-600">+{fmt(totalDividends)}</span></div>
-          <div className="flex justify-between"><span className="text-slate-500">Fees Paid (AMC etc)</span><span className="font-bold text-rose-500">-{fmt(totalFees)}</span></div>
-          <div className="flex justify-between pt-2 border-t border-slate-100 dark:border-slate-900 text-sm">
-            <span className="font-black text-slate-900 dark:text-white">Net Gain (P&L, all-in)</span>
-            <span className={`font-black ${netGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{fmt(netGain)}</span>
+        {/* Hero: the one number that matters, up front and unmissable */}
+        <div className={`apple-card p-5 text-center space-y-1 ${netGain >= 0 ? 'bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/20 dark:to-slate-950' : 'bg-gradient-to-br from-rose-50 to-white dark:from-rose-950/20 dark:to-slate-950'}`}>
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Net Gain (P&L, all-in)</span>
+          <div className={`flex items-center justify-center gap-2 text-3xl font-black ${netGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+            {netGain >= 0 ? <TrendingUp className="w-7 h-7" /> : <TrendingDown className="w-7 h-7" />}
+            {fmt(Math.abs(netGain))}
           </div>
-          <div className="flex justify-between text-sm">
-            <span className="font-black text-slate-900 dark:text-white">Return % (vs. total investment)</span>
-            <span className={`font-black ${returnPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}%</span>
+          <span className={`text-sm font-bold ${returnPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{returnPct >= 0 ? '+' : ''}{returnPct.toFixed(2)}% vs. total investment</span>
+        </div>
+
+        {/* Money flow: contributed -> deployed -> current value, as a visual progression */}
+        <div className="apple-card p-4 space-y-3">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Money Flow</span>
+          <div className="space-y-2.5">
+            <div>
+              <div className="flex justify-between text-[10px] mb-1"><span className="text-slate-500 font-semibold">Net Contributed</span><span className="font-bold text-slate-900 dark:text-white">{fmt(netContributed)}</span></div>
+              <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden"><div className="h-full bg-slate-400 dark:bg-slate-500 rounded-full" style={{ width: '100%' }} /></div>
+            </div>
+            <div>
+              <div className="flex justify-between text-[10px] mb-1"><span className="text-slate-500 font-semibold">Capital Deployed</span><span className="font-bold text-slate-900 dark:text-white">{fmt(totalInvestedAllTime)}</span></div>
+              <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden"><div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${deployedPct}%` }} /></div>
+            </div>
+            <div>
+              <div className="flex justify-between text-[10px] mb-1"><span className="text-slate-500 font-semibold">Current Value of Active Holdings</span><span className="font-bold text-slate-900 dark:text-white">{fmt(currentValueActive)}</span></div>
+              <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden"><div className={`h-full rounded-full transition-all ${valuePct >= 100 ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${Math.min(100, valuePct)}%` }} /></div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 pt-1 text-[10px]">
+            <div className="flex justify-between"><span className="text-slate-400">Cash in</span><span className="font-bold text-slate-700 dark:text-slate-300">{fmt(totalContributed)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">Cash out</span><span className="font-bold text-rose-500">-{fmt(totalWithdrawn)}</span></div>
           </div>
         </div>
 
-        <div className="apple-card p-4 space-y-2">
+        {/* What's driving the gain - a chart makes it obvious at a glance which pieces help vs hurt */}
+        {plComponents.length > 0 && (
+          <div className="apple-card p-4 space-y-2">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">What's Driving It</span>
+            <div style={{ height: Math.max(80, plComponents.length * 32) }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={plComponents} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
+                  <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 100000).toFixed(1)}L`} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={70} />
+                  <Tooltip formatter={(v: number) => [fmt(v), '']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                  <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                    {plComponents.map((d, i) => <Cell key={i} fill={d.value >= 0 ? '#10b981' : '#f43f5e'} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* Full numbers, always available for anyone who wants the precise breakdown */}
+        <details className="apple-card p-4 space-y-2 group">
+          <summary className="text-[10px] font-black text-slate-400 uppercase tracking-wider cursor-pointer list-none flex items-center justify-between">
+            Full Breakdown
+            <ChevronLeft className="w-3.5 h-3.5 -rotate-90 group-open:rotate-90 transition-transform" />
+          </summary>
+          <div className="space-y-2 text-xs pt-2">
+            <div className="flex justify-between"><span className="text-slate-500">Total Contributed (cash in)</span><span className="font-bold text-slate-900 dark:text-white">{fmt(totalContributed)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Total Withdrawn (cash out)</span><span className="font-bold text-rose-500">-{fmt(totalWithdrawn)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Net Contributed (Total Investment)</span><span className="font-bold text-slate-900 dark:text-white">{fmt(netContributed)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Capital Deployed (cost basis, incl. reinvested)</span><span className="font-bold text-slate-900 dark:text-white">{fmt(totalInvestedAllTime)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Current Value of Active Holdings</span><span className="font-bold text-slate-900 dark:text-white">{fmt(currentValueActive)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Unrealized Gain/Loss</span><span className={`font-bold ${unrealizedGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{fmt(unrealizedGain)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Realized Gain/Loss (sold)</span><span className={`font-bold ${realizedGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{fmt(realizedGain)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Dividends Received</span><span className="font-bold text-emerald-600">+{fmt(totalDividends)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Fees Paid (AMC etc)</span><span className="font-bold text-rose-500">-{fmt(totalFees)}</span></div>
+          </div>
+        </details>
+
+        <div className="apple-card p-4 space-y-3">
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Per-Person Share (based on today's split)</span>
+          {currentSplits.filter(s => s.percent > 0).length > 0 && (
+            <div className="h-32">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={currentSplits.filter(s => s.percent > 0).map(s => ({ name: memberName(s.member), value: s.percent }))} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="100%" paddingAngle={2}>
+                    {currentSplits.filter(s => s.percent > 0).map((_, i) => <Cell key={i} fill={['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'][i % 5]} />)}
+                  </Pie>
+                  <Tooltip formatter={(v: number) => [`${v}%`, 'Split']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
           {currentSplits.map(({ member, percent }) => {
             const contributed = portfolioContributions.filter(c => c.member_user_id === member.uid).reduce((s, c) => s + Number(c.amount), 0);
             const withdrawn = portfolioWithdrawals.filter(w => w.member_user_id === member.uid).reduce((s, w) => s + Number(w.amount), 0);
@@ -1156,7 +1229,8 @@ export default function ReportsView(props: ReportsViewProps) {
           })()}
         </div>
         </>
-      )}
+        );
+      })()}
     </div>
   );
 }
