@@ -83,15 +83,17 @@ const fmtCur = (n: number, currency: string = 'INR') => {
   return `${meta.symbol}${n.toLocaleString(meta.locale, { maximumFractionDigits: 2 })}`;
 };
 // Converts an amount from its own currency into the workspace's base currency using
-// workspace_currency_rates (base-currency-relative: rate_to_base means "1 base currency
-// = rate_to_base units of this currency"). Falls back to the raw amount unconverted if no
-// rate has been set yet, rather than silently hiding data - better to show something
-// clearly than nothing at all.
+// workspace_currency_rates. rate_to_base means "1 unit of this currency = rate_to_base
+// units of the base currency" (e.g. for USD with an INR base, 1 USD = 83 INR, so
+// rate_to_base = 83) - the more intuitive everyday direction to think in and enter,
+// rather than the reverse (how many dollars is one rupee). Falls back to the raw amount
+// unconverted if no rate has been set yet, rather than silently hiding data - better to
+// show something clearly than nothing at all.
 const convertToBase = (amount: number, fromCurrency: string, baseCurrency: string, rates: any[]): number => {
   if (fromCurrency === baseCurrency) return amount;
   const rate = rates.find((r: any) => r.currency === fromCurrency)?.rate_to_base;
   if (!rate) return amount;
-  return amount / rate;
+  return amount * rate;
 };
 const fmtQty = (n: number) => Number.isInteger(n) ? String(n) : n.toFixed(2);
 

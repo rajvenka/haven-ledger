@@ -808,18 +808,18 @@ export default function AccountInfo({
                         const existing = workspaceCurrencyRates.find(r => r.currency === currency);
                         return (
                           <div key={currency} className="flex items-center justify-between text-[11px]">
-                            <span className="text-slate-500">1 {activeWorkspace.baseCurrency} =</span>
+                            <span className="text-slate-500">1 {currency} =</span>
                             {editingRateCurrency === currency ? (
                               <div className="flex items-center gap-1">
                                 <input
                                   type="number"
-                                  step="0.0001"
+                                  step="0.01"
                                   value={rateInput}
                                   onChange={(e) => setRateInput(e.target.value)}
-                                  placeholder={`e.g. 0.018`}
+                                  placeholder="e.g. 83"
                                   className="w-20 px-1.5 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[10px]"
                                 />
-                                <span className="text-slate-400 text-[10px]">{currency}</span>
+                                <span className="text-slate-400 text-[10px]">{activeWorkspace.baseCurrency}</span>
                                 <button
                                   onClick={async () => {
                                     const val = parseFloat(rateInput);
@@ -839,7 +839,7 @@ export default function AccountInfo({
                                 onClick={() => { setEditingRateCurrency(currency); setRateInput(existing ? String(existing.rate_to_base) : ''); }}
                                 className="font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer"
                               >
-                                {existing ? `${existing.rate_to_base} ${currency}` : `Set rate →`}
+                                {existing ? `${existing.rate_to_base} ${activeWorkspace.baseCurrency}` : `Set rate →`}
                               </button>
                             )}
                           </div>
