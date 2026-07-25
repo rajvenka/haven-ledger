@@ -1,4 +1,5 @@
 import { parseBrokerFile, parseBrokerFileWithDate, BrokerTemplate, ParsedHolding } from '../utils/brokerImport';
+import * as XLSX from 'xlsx';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   TrendingUp, TrendingDown, Plus, Trash2, RefreshCw, Users, Wallet,
@@ -214,6 +215,33 @@ export default function PortfolioView(props: PortfolioViewProps) {
   // Exports exactly what's currently visible: respects the Column customizer's show/hide
   // and order, and whatever filter/sort is currently applied to the table.
   const exportActiveHoldingsCsv = () => {
+    const headers = ['Instrument', ...(portfolioMode === 'multiple' ? ['Portfolio'] : []), ...visibleColumns.map(c => c.label)];
+    const getValue = (col: typeof visibleColumns[0], h: any): string | number => {
+      switch (col.key) {
+        case 'quantity': return h.quantity;
+        case 'buy_price': return Number(h.buy_price).toFixed(2);
+        case 'current_price': return Number(h.current_price ?? h.buy_price).toFixed(2);
+        case 'live_price': return h.live_price != null ? Number(h.live_price).toFixed(2) : '';
+        case 'daily_change': return h.live_price != null && h.previous_close != null ? ((Number(h.live_price) - Number(h.previous_close)) * Number(h.quantity)).toFixed(2) : '';
+        case 'since_previous_load': return h.live_price != null ? ((Number(h.live_price) - Number(h.current_price ?? h.buy_price)) * Number(h.quantity)).toFixed(2) : '';
+        case 'invested': return (Number(h.buy_price) * Number(h.quantity)).toFixed(2);
+        case 'current_value': return (Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity)).toFixed(2);
+        case 'gain': return ((Number(h.live_price ?? h.current_price ?? h.buy_price) - Number(h.buy_price)) * Number(h.quantity)).toFixed(2);
+        case 'gain_pct': return Number(h.buy_price) > 0 ? (((Number(h.live_price ?? h.current_price ?? h.buy_price) - Number(h.buy_price)) / Number(h.buy_price)) * 100).toFixed(2) : '';
+        case 'since_reference': { const pct = getSinceReferencePct(h); return pct !== null ? pct.toFixed(2) : ''; }
+        case 'since_reference_amount': { const amt = getSinceReferenceAmount(h); return amt !== null ? amt.toFixed(2) : ''; }
+        default: return '';
+      }
+    };
+    const portfolioNameOf = (h: any) => portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned';
+    const rows = filteredActiveHoldings.map(h => [h.symbol, ...(portfolioMode === 'multiple' ? [portfolioNameOf(h)] : []), ...visibleColumns.map(col => getValue(col, h))]);
+    downloadCsv(`haven-vault-holdings-active-${todayStr()}.csv`, headers, rows);
+  };
+
+  // One sheet per portfolio - unlike CSV, XLSX genuinely supports this. Only useful (and
+  // only shown) when more than one portfolio is actually present in the current filtered
+  // set - a single-portfolio export doesn't need separate sheets.
+  const exportActiveHoldingsXlsx = () => {
     const headers = ['Instrument', ...visibleColumns.map(c => c.label)];
     const getValue = (col: typeof visibleColumns[0], h: any): string | number => {
       switch (col.key) {
@@ -232,12 +260,24 @@ export default function PortfolioView(props: PortfolioViewProps) {
         default: return '';
       }
     };
-    const rows = filteredActiveHoldings.map(h => [h.symbol, ...visibleColumns.map(col => getValue(col, h))]);
-    downloadCsv(`haven-vault-holdings-active-${todayStr()}.csv`, headers, rows);
+    const byPortfolio = new Map<string, any[]>();
+    filteredActiveHoldings.forEach(h => {
+      const name = portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned';
+      if (!byPortfolio.has(name)) byPortfolio.set(name, []);
+      byPortfolio.get(name)!.push(h);
+    });
+    const wb = XLSX.utils.book_new();
+    byPortfolio.forEach((holdings, name) => {
+      const rows = [headers, ...holdings.map(h => [h.symbol, ...visibleColumns.map(col => getValue(col, h))])];
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31)); // Excel sheet names cap at 31 chars
+    });
+    XLSX.writeFile(wb, `haven-vault-holdings-active-${todayStr()}.xlsx`);
   };
 
   const exportSoldHoldingsCsv = () => {
-    const headers = ['Instrument', 'Qty', 'Buy Price', 'Sold Price', 'Invested', 'Sold Value', 'Net Gain', '% Chg', 'Sold Date', 'Since Sold'];
+    const headers = ['Instrument', ...(portfolioMode === 'multiple' ? ['Portfolio'] : []), 'Qty', 'Buy Price', 'Sold Price', 'Invested', 'Sold Value', 'Net Gain', '% Chg', 'Sold Date', 'Since Sold'];
+    const portfolioNameOf = (h: any) => portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned';
     const rows = filteredSoldHoldings.map(h => {
       const invested = Number(h.buy_price) * Number(h.quantity);
       const soldValue = Number(h.sold_price) * Number(h.quantity);
@@ -245,12 +285,40 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const gainPct = invested > 0 ? (gain / invested) * 100 : null;
       const sinceSoldPct = h.live_price != null && Number(h.sold_price) !== 0 ? ((Number(h.live_price) - Number(h.sold_price)) / Number(h.sold_price)) * 100 : null;
       return [
-        h.symbol, h.quantity, Number(h.buy_price).toFixed(2), Number(h.sold_price).toFixed(2),
+        h.symbol, ...(portfolioMode === 'multiple' ? [portfolioNameOf(h)] : []), h.quantity, Number(h.buy_price).toFixed(2), Number(h.sold_price).toFixed(2),
         invested.toFixed(2), soldValue.toFixed(2), gain.toFixed(2), gainPct !== null ? gainPct.toFixed(2) : '',
         h.sold_date ?? '', sinceSoldPct !== null ? sinceSoldPct.toFixed(2) : '',
       ];
     });
     downloadCsv(`haven-vault-holdings-sold-${todayStr()}.csv`, headers, rows);
+  };
+
+  const exportSoldHoldingsXlsx = () => {
+    const headers = ['Instrument', 'Qty', 'Buy Price', 'Sold Price', 'Invested', 'Sold Value', 'Net Gain', '% Chg', 'Sold Date', 'Since Sold'];
+    const byPortfolio = new Map<string, any[]>();
+    filteredSoldHoldings.forEach(h => {
+      const name = portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned';
+      if (!byPortfolio.has(name)) byPortfolio.set(name, []);
+      byPortfolio.get(name)!.push(h);
+    });
+    const wb = XLSX.utils.book_new();
+    byPortfolio.forEach((holdings, name) => {
+      const dataRows = holdings.map(h => {
+        const invested = Number(h.buy_price) * Number(h.quantity);
+        const soldValue = Number(h.sold_price) * Number(h.quantity);
+        const gain = soldValue - invested;
+        const gainPct = invested > 0 ? (gain / invested) * 100 : null;
+        const sinceSoldPct = h.live_price != null && Number(h.sold_price) !== 0 ? ((Number(h.live_price) - Number(h.sold_price)) / Number(h.sold_price)) * 100 : null;
+        return [
+          h.symbol, h.quantity, Number(h.buy_price).toFixed(2), Number(h.sold_price).toFixed(2),
+          invested.toFixed(2), soldValue.toFixed(2), gain.toFixed(2), gainPct !== null ? gainPct.toFixed(2) : '',
+          h.sold_date ?? '', sinceSoldPct !== null ? sinceSoldPct.toFixed(2) : '',
+        ];
+      });
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+      XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
+    });
+    XLSX.writeFile(wb, `haven-vault-holdings-sold-${todayStr()}.xlsx`);
   };
 
 
@@ -1144,6 +1212,15 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <Download className="w-3.5 h-3.5" /> Export CSV
               </button>
             )}
+            {showMoreActions && portfolioMode === 'multiple' && new Set(filteredActiveHoldings.map(h => h.portfolio_id)).size > 1 && (
+              <button
+                onClick={exportActiveHoldingsXlsx}
+                className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                title="One sheet per portfolio"
+              >
+                <Download className="w-3.5 h-3.5" /> Export XLSX (by Portfolio)
+              </button>
+            )}
             {showMoreActions && (
               <button
                 onClick={() => { setIsImporting(!isImporting); setImportPreview(null); setImportRawParsed(null); setImportPortfolioConfirmed(false); }}
@@ -1923,6 +2000,15 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" /> Export CSV
+              </button>
+            )}
+            {portfolioMode === 'multiple' && new Set(filteredSoldHoldings.map(h => h.portfolio_id)).size > 1 && (
+              <button
+                onClick={exportSoldHoldingsXlsx}
+                className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                title="One sheet per portfolio"
+              >
+                <Download className="w-3.5 h-3.5" /> Export XLSX (by Portfolio)
               </button>
             )}
             {!isReadOnly && (
