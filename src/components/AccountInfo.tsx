@@ -19,6 +19,7 @@ import {
   Bell,
   History,
   Edit,
+  Edit2,
   Eye,
   EyeOff,
   Sparkles,
@@ -242,6 +243,8 @@ export default function AccountInfo({
   const [chosenBaseCurrency, setChosenBaseCurrency] = useState('INR');
   const [switchingPortfolioMode, setSwitchingPortfolioMode] = useState(false);
   const [newPortfolioName, setNewPortfolioName] = useState('');
+  const [renamingPortfolioId, setRenamingPortfolioId] = useState<string | null>(null);
+  const [renamePortfolioInput, setRenamePortfolioInput] = useState('');
   const [newPortfolioCurrency, setNewPortfolioCurrency] = useState('INR');
   const [addingPortfolio, setAddingPortfolio] = useState(false);
   const [portfolioError, setPortfolioError] = useState<string | null>(null);
@@ -703,17 +706,56 @@ export default function AccountInfo({
                   <div className="space-y-1.5">
                     {portfolios.map(p => (
                       <div key={p.id} className="flex items-center justify-between px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 rounded-lg text-xs">
-                        <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                          {p.name} <span className="text-[9px] text-slate-400 font-bold">{p.currency}</span>
-                          {p.is_default && <span className="text-[8px] px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-full font-black uppercase">Default</span>}
-                        </span>
-                        {familyRole === 'host' && !p.is_default && (
-                          <button
-                            onClick={async () => { try { await onDeletePortfolio?.(p.id); } catch (err: any) { setPortfolioError(err.message); } }}
-                            className="text-slate-300 hover:text-rose-500 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                        {renamingPortfolioId === p.id ? (
+                          <div className="flex items-center gap-1.5 flex-1">
+                            <input
+                              type="text"
+                              value={renamePortfolioInput}
+                              onChange={(e) => setRenamePortfolioInput(e.target.value)}
+                              autoFocus
+                              className="flex-1 px-2 py-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                            />
+                            <button
+                              onClick={async () => {
+                                if (!renamePortfolioInput.trim()) return;
+                                try {
+                                  await onUpdatePortfolio?.(p.id, { name: renamePortfolioInput.trim() });
+                                  setRenamingPortfolioId(null);
+                                } catch (err: any) {
+                                  setPortfolioError(err.message);
+                                }
+                              }}
+                              className="p-1 bg-indigo-600 text-white rounded-md cursor-pointer shrink-0"
+                            ><Check className="w-3 h-3" /></button>
+                            <button onClick={() => setRenamingPortfolioId(null)} className="p-1 text-slate-400 cursor-pointer shrink-0"><X className="w-3 h-3" /></button>
+                          </div>
+                        ) : (
+                          <>
+                            <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                              {p.name} <span className="text-[9px] text-slate-400 font-bold">{p.currency}</span>
+                              {p.is_default && <span className="text-[8px] px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-full font-black uppercase">Default</span>}
+                            </span>
+                            {familyRole === 'host' && (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => { setRenamingPortfolioId(p.id); setRenamePortfolioInput(p.name); }}
+                                  className="text-slate-300 hover:text-indigo-500 cursor-pointer"
+                                  title="Rename portfolio"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                {!p.is_default && (
+                                  <button
+                                    onClick={async () => { try { await onDeletePortfolio?.(p.id); } catch (err: any) { setPortfolioError(err.message); } }}
+                                    className="text-slate-300 hover:text-rose-500 cursor-pointer"
+                                    title="Delete portfolio"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     ))}
