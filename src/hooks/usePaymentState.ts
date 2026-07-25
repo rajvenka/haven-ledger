@@ -1133,7 +1133,8 @@ export function usePaymentState() {
   // date becomes the current state (price, quantity, reference) - all via the same "latest date
   // wins" reference logic as a normal update.
   const bulkHistoricalImport = async (
-    snapshots: { date: string; holdings: { broker: string; holdingType: 'stock' | 'mutual_fund'; symbol: string; isin?: string; folioNumber?: string; exchange: string; quantity: number; buyPrice: number; currentPrice?: number; source?: string }[] }[]
+    snapshots: { date: string; holdings: { broker: string; holdingType: 'stock' | 'mutual_fund'; symbol: string; isin?: string; folioNumber?: string; exchange: string; quantity: number; buyPrice: number; currentPrice?: number; source?: string }[] }[],
+    portfolioId?: string
   ) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const sorted = [...snapshots].sort((a, b) => a.date.localeCompare(b.date));
@@ -1161,7 +1162,7 @@ export function usePaymentState() {
     let existingMaxKnownDate: string | null = null;
     for (const broker of brokersInBatch) {
       const dates = portfolioHoldings
-        .filter(h => h.broker === broker)
+        .filter(h => h.broker === broker && (portfolioId === undefined || (h.portfolio_id ?? null) === (portfolioId ?? null)))
         .map(h => h.status === 'active' ? h.reference_date : h.sold_date)
         .filter(Boolean);
       const maxForBroker = dates.length > 0 ? dates.sort().reverse()[0] : null;
@@ -1186,6 +1187,7 @@ export function usePaymentState() {
       let holdingId: string;
       const existing = portfolioHoldings.find(h => {
         if (h.broker !== first.row.broker) return false;
+        if (portfolioId !== undefined && (h.portfolio_id ?? null) !== (portfolioId ?? null)) return false;
         if (first.row.isin && h.isin) return h.isin === first.row.isin;
         if (first.row.folioNumber && h.folio_number) return h.folio_number === first.row.folioNumber && h.symbol === first.row.symbol.toUpperCase();
         return h.symbol === first.row.symbol.toUpperCase() && h.holding_type === first.row.holdingType && !h.folio_number && !first.row.folioNumber;
@@ -1214,7 +1216,7 @@ export function usePaymentState() {
         holdingId = existing.id;
       } else {
         const { data: inserted, error } = await supabase.from('portfolio_holdings').insert({
-          workspace_id: activeWorkspaceId, created_by: user?.id ?? null,
+          workspace_id: activeWorkspaceId, created_by: user?.id ?? null, portfolio_id: portfolioId ?? null,
           holding_type: first.row.holdingType, broker: first.row.broker, symbol: first.row.symbol.toUpperCase(),
           isin: first.row.isin ?? null, folio_number: first.row.folioNumber ?? null, exchange: first.row.exchange,
           ticker: first.row.broker === 'Zerodha' ? first.row.symbol.toUpperCase() : null,

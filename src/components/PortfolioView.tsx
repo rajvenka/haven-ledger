@@ -38,7 +38,7 @@ interface PortfolioViewProps {
   workspaceCurrencyRates?: any[];
   baseCurrency?: string;
   reconcilePortfolioHoldingQuantity: (id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced') => Promise<void>;
-  bulkHistoricalImport: (snapshots: { date: string; holdings: any[] }[]) => Promise<{ newCount: number; updatedCount: number; soldCount: number; skippedStaleCount: number; priceHistoryCount: number; stockCount: number }>;
+  bulkHistoricalImport: (snapshots: { date: string; holdings: any[] }[], portfolioId?: string) => Promise<{ newCount: number; updatedCount: number; soldCount: number; skippedStaleCount: number; priceHistoryCount: number; stockCount: number }>;
   updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
   sellPortfolioHolding: (id: string, params: { quantity: number; soldPrice: number; soldDate: string }) => Promise<void>;
   updatePortfolioHoldingLivePrice: (id: string, price: number, previousClose?: number | null) => Promise<void>;
@@ -172,6 +172,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [hSource, setHSource] = useState('');
   const [hPortfolioId, setHPortfolioId] = useState('');
   const [importPortfolioId, setImportPortfolioId] = useState('');
+  const [importPortfolioConfirmed, setImportPortfolioConfirmed] = useState(false);
+  const [historicalPortfolioId, setHistoricalPortfolioId] = useState('');
+  const [historicalPortfolioConfirmed, setHistoricalPortfolioConfirmed] = useState(false);
   const defaultPortfolioId = portfolios.find((p: any) => p.is_default)?.id || portfolios[0]?.id || '';
   const [hCurrency, setHCurrency] = useState<'INR' | 'USD' | 'AUD'>('INR');
   const [showTargetPlan, setShowTargetPlan] = useState(false);
@@ -668,7 +671,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const result = await bulkHistoricalImport(historicalSnapshots.map(s => ({
         date: s.date,
         holdings: s.holdings.map(h => ({ broker: h.broker, holdingType: h.holdingType, symbol: h.symbol, isin: h.isin, folioNumber: h.folioNumber, exchange: h.exchange, quantity: h.quantity, buyPrice: h.buyPrice, currentPrice: h.currentPrice, source: h.source })),
-      })));
+      })), portfolioMode === 'multiple' ? (historicalPortfolioId || defaultPortfolioId || undefined) : undefined);
       setHistoricalResult(result);
       setHistoricalSnapshots([]);
     });
@@ -1143,7 +1146,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             )}
             {showMoreActions && (
               <button
-                onClick={() => { setIsImporting(!isImporting); setImportPreview(null); setImportRawParsed(null); }}
+                onClick={() => { setIsImporting(!isImporting); setImportPreview(null); setImportRawParsed(null); setImportPortfolioConfirmed(false); }}
                 className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
               >
                 <Upload className="w-3.5 h-3.5" /> Import from Broker
@@ -1151,7 +1154,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             )}
             {showMoreActions && (
               <button
-                onClick={() => { setIsHistoricalMode(!isHistoricalMode); setHistoricalSnapshots([]); setHistoricalResult(null); }}
+                onClick={() => { setIsHistoricalMode(!isHistoricalMode); setHistoricalSnapshots([]); setHistoricalResult(null); setHistoricalPortfolioConfirmed(false); }}
                 className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
               >
                 <Upload className="w-3.5 h-3.5" /> Backfill History
@@ -1208,6 +1211,33 @@ export default function PortfolioView(props: PortfolioViewProps) {
           {isImporting && (
             <div className="apple-card p-4 space-y-3">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Import Holdings File</span>
+
+              {portfolioMode === 'multiple' && !importPortfolioConfirmed ? (
+                <>
+                  <p className="text-[10px] text-slate-400">Step 1 of 2 - which portfolio should this file go into?</p>
+                  <select
+                    value={importPortfolioId || defaultPortfolioId}
+                    onChange={(e) => setImportPortfolioId(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+                  >
+                    {portfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.currency})</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setImportPortfolioConfirmed(true)}
+                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black uppercase tracking-wider rounded-lg cursor-pointer"
+                  >
+                    Next: Choose File
+                  </button>
+                </>
+              ) : (
+              <>
+              {portfolioMode === 'multiple' && (
+                <div className="flex items-center justify-between bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900 rounded-lg px-3 py-2">
+                  <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-400">Step 2 of 2 - importing into: {portfolios.find((p: any) => p.id === (importPortfolioId || defaultPortfolioId))?.name}</span>
+                  <button type="button" onClick={() => setImportPortfolioConfirmed(false)} className="text-[9px] font-bold text-indigo-500 hover:text-indigo-600 cursor-pointer shrink-0">Change</button>
+                </div>
+              )}
               <div className="flex gap-1.5 flex-wrap">
                 <button type="button" onClick={() => { setImportTemplate('zerodha'); setImportPreview(null); setImportRawParsed(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'zerodha' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Zerodha (Stocks + MF)</button>
                 <button type="button" onClick={() => { setImportTemplate('groww_stocks'); setImportPreview(null); setImportRawParsed(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'groww_stocks' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Stocks</button>
@@ -1229,16 +1259,6 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
               {importPreview && (
                 <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-900">
-                  {portfolioMode === 'multiple' && (
-                    <select
-                      value={importPortfolioId || defaultPortfolioId}
-                      onChange={(e) => setImportPortfolioId(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
-                      title="Which portfolio these imported holdings belong to - switching this rechecks what's already there for that portfolio"
-                    >
-                      {portfolios.map((p: any) => <option key={p.id} value={p.id}>Import into: {p.name} ({p.currency})</option>)}
-                    </select>
-                  )}
                   <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
                     {importPreview.fresh.length} new holding{importPreview.fresh.length !== 1 ? 's' : ''} found
                     {importPreview.qtyChanged.length > 0 && ` · ${importPreview.qtyChanged.length} with a changed quantity`}
@@ -1305,12 +1325,41 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   )}
                 </div>
               )}
+              </>
+              )}
             </div>
           )}
 
           {isHistoricalMode && (
             <div className="apple-card p-4 space-y-3">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Backfill Historical Prices</span>
+
+              {portfolioMode === 'multiple' && !historicalPortfolioConfirmed ? (
+                <>
+                  <p className="text-[10px] text-slate-400">Step 1 of 2 - which portfolio do these files belong to?</p>
+                  <select
+                    value={historicalPortfolioId || defaultPortfolioId}
+                    onChange={(e) => setHistoricalPortfolioId(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+                  >
+                    {portfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.currency})</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setHistoricalPortfolioConfirmed(true)}
+                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black uppercase tracking-wider rounded-lg cursor-pointer"
+                  >
+                    Next: Choose Files
+                  </button>
+                </>
+              ) : (
+              <>
+              {portfolioMode === 'multiple' && (
+                <div className="flex items-center justify-between bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900 rounded-lg px-3 py-2">
+                  <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-400">Step 2 of 2 - importing into: {portfolios.find((p: any) => p.id === (historicalPortfolioId || defaultPortfolioId))?.name}</span>
+                  <button type="button" onClick={() => setHistoricalPortfolioConfirmed(false)} className="text-[9px] font-bold text-indigo-500 hover:text-indigo-600 cursor-pointer shrink-0">Change</button>
+                </div>
+              )}
               <p className="text-[9px] text-slate-400">Select several dated exports from the same broker at once (e.g. one file per month). Each file's date is detected automatically, and the whole timeline is processed together - the earliest file sets when a stock was first known, every date becomes a price point for the trend charts, the latest file becomes the current price, and any stock present in an earlier file but missing from the latest one is automatically marked Sold (it's no longer in your portfolio).</p>              <div className="flex gap-1.5 flex-wrap">
                 <button type="button" onClick={() => { setHistoricalTemplate('zerodha'); setHistoricalSnapshots([]); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${historicalTemplate === 'zerodha' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Zerodha (Stocks + MF)</button>
                 <button type="button" onClick={() => { setHistoricalTemplate('groww_stocks'); setHistoricalSnapshots([]); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${historicalTemplate === 'groww_stocks' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Stocks</button>
@@ -1351,6 +1400,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
                   Done: {historicalResult.stockCount} stocks processed, {historicalResult.newCount} newly added, {historicalResult.updatedCount} quantity updated, {historicalResult.soldCount} marked sold (missing from latest known date), {historicalResult.skippedStaleCount > 0 && `${historicalResult.skippedStaleCount} skipped (older than data already on file), `}{historicalResult.priceHistoryCount} price points recorded.
                 </p>
+              )}
+              </>
               )}
             </div>
           )}
