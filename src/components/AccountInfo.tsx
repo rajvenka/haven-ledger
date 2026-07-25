@@ -224,6 +224,7 @@ export default function AccountInfo({
   const [familyEmail, setFamilyEmail] = useState('');
   const [familyEmailRole, setFamilyEmailRole] = useState<'view' | 'modify'>('modify');
   const [inviteStep, setInviteStep] = useState<1 | 2 | 3>(1);
+  const [accessChoice, setAccessChoice] = useState<'same' | 'custom' | null>(null);
   const [invitationError, setInvitationError] = useState<string | null>(null);
   const [displayNameInput, setDisplayNameInput] = useState(userProfile?.displayName || '');
   const [savingDisplayName, setSavingDisplayName] = useState(false);
@@ -239,14 +240,17 @@ export default function AccountInfo({
   const ALL_FEATURES = ['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'whatsapp', 'portfolio'];
   const myAvailableFeatures = userProfile?.isSuperAdmin ? ALL_FEATURES : (userProfile?.licensePlanFeatures ?? ALL_FEATURES);
   const hasWhatsApp = userProfile?.isSuperAdmin || (userProfile?.licensePlanFeatures ?? []).includes('whatsapp');
-  const [familyFeatures, setFamilyFeatures] = useState<string[]>(myAvailableFeatures);
+  const [familyFeatures, setFamilyFeatures] = useState<string[]>([]);
 
   useEffect(() => {
-    setFamilyFeatures(myAvailableFeatures);
+    // Nothing pre-selected by default - the inviter explicitly picks what to grant rather
+    // than starting from a copy of their own plan, which could otherwise be granted by
+    // accident without a deliberate choice.
+    setFamilyFeatures([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userProfile?.licensePlanFeatures?.join(',')]);
   const toggleFeature = (f: string) => setFamilyFeatures(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
-  const FEATURE_META: Record<string, string> = { income: 'Income', rewards: 'Membership Hub', ai: 'AI Insights', team: 'Workspace Config / Team', chat: 'Family Chat', agent: 'AI Agent', whatsapp: 'WhatsApp', portfolio: 'Investment / Portfolio' };
+  const FEATURE_META: Record<string, string> = { income: 'Income', rewards: 'Membership', ai: 'AI Insights', team: 'Workspace Config', chat: 'Family Chat', agent: 'AI Agent', whatsapp: 'WhatsApp', portfolio: 'Finance' };
   const [joinGroupId, setJoinGroupId] = useState('');
   const [copied, setCopied] = useState(false);
   const [familyError, setFamilyError] = useState<string | null>(null);
@@ -276,6 +280,7 @@ export default function AccountInfo({
       setFamilySuccess(`Successfully sent workspace invitation to "${familyEmail}"!`);
       setFamilyEmail('');
       setInviteStep(1);
+      setAccessChoice(null);
     } catch (err: any) {
       setFamilyError(err.message || 'Failed to send invitation.');
     } finally {
@@ -766,38 +771,54 @@ export default function AccountInfo({
                       <p className="text-[10px] text-slate-400">Step 2 of 3 - what can {familyEmail} see?</p>
                       <button type="button" onClick={() => setInviteStep(1)} className="text-[9px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer shrink-0">← Back</button>
                     </div>
-                    {/* Two curated presets plus the individual toggles, all in one place -
-                        deliberately not listing every access plan by name here (that list
-                        would include ones like Lite-Finance meant for direct plan assignment,
-                        not a quick invite shortcut, which was just confusing in this context). */}
-                    <div className="flex gap-1.5">
-                      <button type="button" onClick={() => setFamilyFeatures(myAvailableFeatures)} className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full text-[9px] font-black uppercase tracking-wide cursor-pointer">Match My Workspace Access</button>
-                      <button type="button" onClick={() => setFamilyFeatures(myAvailableFeatures.includes('core') ? ['core'] : [])} className="px-2.5 py-1 bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800 rounded-full text-[9px] font-black uppercase tracking-wide cursor-pointer">Bills Only</button>
+
+                    <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Same access as yours?</p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setAccessChoice('same'); setFamilyFeatures(myAvailableFeatures); }}
+                        className={`flex-1 py-2 rounded-lg text-[11px] font-black uppercase tracking-wide cursor-pointer transition-all ${accessChoice === 'same' ? 'bg-indigo-600 text-white' : 'bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800'}`}
+                      >
+                        Yes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setAccessChoice('custom'); setFamilyFeatures([]); }}
+                        className={`flex-1 py-2 rounded-lg text-[11px] font-black uppercase tracking-wide cursor-pointer transition-all ${accessChoice === 'custom' ? 'bg-indigo-600 text-white' : 'bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800'}`}
+                      >
+                        Choose Own
+                      </button>
                     </div>
-                    <p className="text-[9px] text-slate-400">You can only share features included in your own plan ({userProfile?.licensePlanName || 'Light'}).</p>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {ALL_FEATURES.map(f => {
-                        const locked = !myAvailableFeatures.includes(f);
-                        return (
-                        <button
-                          key={f}
-                          type="button"
-                          disabled={locked}
-                          onClick={() => toggleFeature(f)}
-                          title={locked ? "Not included in your own plan" : undefined}
-                          className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all text-left ${locked ? 'bg-slate-50 dark:bg-slate-900 text-slate-300 dark:text-slate-700 border border-slate-100 dark:border-slate-800 cursor-not-allowed opacity-60' : familyFeatures.includes(f) ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900 cursor-pointer' : 'bg-slate-50 dark:bg-slate-900 text-slate-400 border border-slate-100 dark:border-slate-800 cursor-pointer'}`}
-                        >
-                          {familyFeatures.includes(f) && !locked ? <Check className="w-3 h-3 shrink-0" /> : <span className="w-3 h-3 shrink-0" />}
-                          {FEATURE_META[f]}
-                        </button>
-                        );
-                      })}
-                    </div>
-                    <p className="text-[9px] text-slate-400">Dashboard, Expenses, Manage Bills, and Payment History are always included. Pick which extras this person can see.</p>
+
+                    {accessChoice === 'custom' && (
+                      <>
+                        <p className="text-[9px] text-slate-400">Pick exactly what {familyEmail} can see. You can only share features included in your own plan ({userProfile?.licensePlanName || 'Light'}).</p>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {ALL_FEATURES.map(f => {
+                            const locked = !myAvailableFeatures.includes(f);
+                            return (
+                            <button
+                              key={f}
+                              type="button"
+                              disabled={locked}
+                              onClick={() => toggleFeature(f)}
+                              title={locked ? "Not included in your own plan" : undefined}
+                              className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all text-left ${locked ? 'bg-slate-50 dark:bg-slate-900 text-slate-300 dark:text-slate-700 border border-slate-100 dark:border-slate-800 cursor-not-allowed opacity-60' : familyFeatures.includes(f) ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900 cursor-pointer' : 'bg-slate-50 dark:bg-slate-900 text-slate-400 border border-slate-100 dark:border-slate-800 cursor-pointer'}`}
+                            >
+                              {familyFeatures.includes(f) && !locked ? <Check className="w-3 h-3 shrink-0" /> : <span className="w-3 h-3 shrink-0" />}
+                              {FEATURE_META[f]}
+                            </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                    <p className="text-[9px] text-slate-400">Dashboard, Expenses, Manage Bills, and Payment History are always included{accessChoice === 'custom' ? ' - pick which extras this person can see above' : ''}.</p>
                     <button
                       type="button"
                       onClick={() => setInviteStep(3)}
-                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer"
+                      disabled={!accessChoice}
+                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer"
                     >
                       Next
                     </button>
@@ -1336,7 +1357,7 @@ export default function AccountInfo({
                       </div>
                       {['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'whatsapp', 'portfolio'].map(f => {
                         const included = plan.features.includes(f);
-                        const labels: Record<string, string> = { income: 'Income', rewards: 'Membership Hub', ai: 'AI Insights', team: 'Workspace Config', chat: 'Family Chat', agent: 'AI Agent', whatsapp: 'WhatsApp' };
+                        const labels: Record<string, string> = { income: 'Income', rewards: 'Membership', ai: 'AI Insights', team: 'Workspace Config', chat: 'Family Chat', agent: 'AI Agent', whatsapp: 'WhatsApp' };
                         return (
                           <div key={f} className={`flex items-center gap-1.5 text-[10px] ${included ? 'text-slate-600 dark:text-slate-300' : 'text-slate-300 dark:text-slate-700 line-through'}`}>
                             {included ? <Check className="w-3 h-3 text-emerald-500 shrink-0" /> : <X className="w-3 h-3 text-slate-300 dark:text-slate-700 shrink-0" />}
