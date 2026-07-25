@@ -922,6 +922,19 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
       {holdingsTab === 'active' && (
         <>
+      {portfolioMode === 'multiple' && filterOptions.portfolioNames.length > 1 && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button
+            onClick={() => setHoldingFilters(prev => { const next = new Set(prev); filterOptions.portfolioNames.forEach(p => next.delete(p)); return next; })}
+            className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${filterOptions.portfolioNames.every(p => !holdingFilters.has(p)) ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}
+          >
+            All
+          </button>
+          {filterOptions.portfolioNames.map(p => (
+            <button key={p} onClick={() => toggleHoldingFilter(p)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(p) ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}>{p}</button>
+          ))}
+        </div>
+      )}
       {availableReferenceDates.length > 0 && (
         <div className="flex items-center gap-2">
           <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 shrink-0">Reference Load Date</label>
@@ -1433,20 +1446,6 @@ export default function PortfolioView(props: PortfolioViewProps) {
               </div>
             );
           })()}
-
-          {portfolioMode === 'multiple' && filterOptions.portfolioNames.length > 1 && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <button
-                onClick={() => setHoldingFilters(prev => { const next = new Set(prev); filterOptions.portfolioNames.forEach(p => next.delete(p)); return next; })}
-                className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${filterOptions.portfolioNames.every(p => !holdingFilters.has(p)) ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}
-              >
-                All
-              </button>
-              {filterOptions.portfolioNames.map(p => (
-                <button key={p} onClick={() => toggleHoldingFilter(p)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(p) ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}>{p}</button>
-              ))}
-            </div>
-          )}
 
           <div>
             <div className="flex items-center justify-between">
