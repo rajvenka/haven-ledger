@@ -34,6 +34,15 @@ interface ReportsViewProps {
 }
 
 const fmt = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+const CURRENCY_META: Record<string, { symbol: string; locale: string }> = {
+  INR: { symbol: '₹', locale: 'en-IN' }, USD: { symbol: '$', locale: 'en-US' }, AUD: { symbol: 'A$', locale: 'en-AU' },
+  EUR: { symbol: '€', locale: 'en-IE' }, GBP: { symbol: '£', locale: 'en-GB' }, SGD: { symbol: 'S$', locale: 'en-SG' },
+  AED: { symbol: 'AED ', locale: 'en-AE' }, CAD: { symbol: 'C$', locale: 'en-CA' },
+};
+const fmtCur = (n: number, currency: string = 'INR') => {
+  const meta = CURRENCY_META[currency] || { symbol: `${currency} `, locale: 'en-US' };
+  return `${meta.symbol}${n.toLocaleString(meta.locale, { maximumFractionDigits: 2 })}`;
+};
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const memberName = (m: WorkspaceMemberLite) => m.displayName || m.email.split('@')[0];
 
@@ -250,6 +259,7 @@ export default function ReportsView(props: ReportsViewProps) {
       {reportTab === 'overview' && (
         <>
         {activeHoldings.length > 0 && (() => {
+          const fmt = (n: number) => fmtCur(n, reportDisplayCurrency);
           const bySource = new Map<string, number>();
           activeHoldings.forEach(h => {
             const key = h.source || 'Untagged';
@@ -289,6 +299,7 @@ export default function ReportsView(props: ReportsViewProps) {
         })()}
 
         {(activeHoldings.length > 0 || portfolioCashBalances.length > 0) && (() => {
+          const fmt = (n: number) => fmtCur(n, reportDisplayCurrency);
           // Drill-down: Level 0 splits total investment into Stock/Mutual Fund/Cash, Level 1
           // splits the selected category by broker (or by location for Cash, which has no
           // broker concept), Level 2 splits the selected broker by source tag. Clicking a
@@ -1088,6 +1099,11 @@ export default function ReportsView(props: ReportsViewProps) {
       )}
 
       {reportTab === 'summary' && (() => {
+        // Shadows the module-level fmt within this tab only, so every number already
+        // written as fmt(...) below automatically becomes currency-aware for whichever
+        // portfolio (or combined base currency) is currently selected, without needing to
+        // touch each individual call site.
+        const fmt = (n: number) => fmtCur(n, reportDisplayCurrency);
         const plComponents = [
           { name: 'Unrealized', value: unrealizedGain },
           { name: 'Realized', value: realizedGain },
