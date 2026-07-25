@@ -798,13 +798,13 @@ export default function App() {
               </div>
               )}
 
-              {/* SECTION: NETWORK & TEAMS */}
-              {(hasFeature('team') || incomingInvitations.length > 0) && (
+              {/* SECTION: SETTINGS & PREFERENCES */}
               <div className="space-y-1">
                 <span className="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 tracking-wider uppercase block text-left">
-                  Network & Teams
+                  Settings
                 </span>
                 <nav className="flex flex-col gap-1 text-left">
+                  {(hasFeature('team') || incomingInvitations.length > 0) && (
                   <button
                     onClick={() => {
                       setActiveTab('account');
@@ -818,22 +818,14 @@ export default function App() {
                   >
                     <div className="flex items-center gap-2">
                       <Users className="w-4 h-4 shrink-0 opacity-80" />
-                      <span>{activeWorkspace?.type === 'business' ? 'Team' : 'Family Sharing'}</span>
+                      <span>Workspace Configuration</span>
                     </div>
                     {activeTab === 'account' && settingsSubTab === 'members' && (
                       <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                     )}
                   </button>
-                </nav>
-              </div>
-              )}
+                  )}
 
-              {/* SECTION: SETTINGS & PREFERENCES */}
-              <div className="space-y-1">
-                <span className="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 tracking-wider uppercase block text-left">
-                  Settings
-                </span>
-                <nav className="flex flex-col gap-1 text-left">
                   <button
                     onClick={() => {
                       setActiveTab('account');
@@ -1232,13 +1224,13 @@ export default function App() {
                   </div>
                   )}
 
-                  {/* SECTION: NETWORK & TEAMS */}
-                  {(hasFeature('team') || incomingInvitations.length > 0) && (
+                  {/* SECTION: SETTINGS */}
                   <div className="space-y-1">
                     <span className="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 tracking-wider uppercase block text-left">
-                      Network & Teams
+                      Settings
                     </span>
                     <nav className="flex flex-col gap-1 text-left">
+                      {(hasFeature('team') || incomingInvitations.length > 0) && (
                       <button
                         onClick={() => {
                           setActiveTab('account');
@@ -1253,22 +1245,13 @@ export default function App() {
                       >
                         <div className="flex items-center gap-2.5">
                           <Users className="w-4.5 h-4.5 shrink-0 opacity-80" />
-                          <span>{activeWorkspace?.type === 'business' ? 'Team' : 'Family Sharing'}</span>
+                          <span>Workspace Configuration</span>
                         </div>
                         {activeTab === 'account' && settingsSubTab === 'members' && (
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                         )}
                       </button>
-                    </nav>
-                  </div>
-                  )}
-
-                  {/* SECTION: SETTINGS */}
-                  <div className="space-y-1">
-                    <span className="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 tracking-wider uppercase block text-left">
-                      Settings
-                    </span>
-                    <nav className="flex flex-col gap-1 text-left">
+                      )}
                       <button
                         onClick={() => {
                           setActiveTab('account');
