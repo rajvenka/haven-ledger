@@ -28,7 +28,9 @@ import {
   Trash2,
   ShieldCheck,
   X,
-  ChevronDown
+  ChevronDown,
+  Home,
+  Briefcase
 } from 'lucide-react';
 import { RecurringPayment, Currency, UserProfile, CountryConfig, FamilyInvitation } from '../types';
 
@@ -587,7 +589,16 @@ export default function AccountInfo({
             <div className="bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900 rounded-xl p-3 flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-indigo-500 shrink-0" />
               <span className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">
-                {familyRole === 'host' ? 'You are the host of this family.' : familyRole === 'modify' ? 'You can view and edit this family\'s data.' : 'You have view-only access to this family.'}
+                {familyRole === 'host' ? 'You are the host of this workspace.' : familyRole === 'modify' ? 'You can view and edit this workspace\'s data.' : 'You have view-only access to this workspace.'}
+              </span>
+            </div>
+          )}
+
+          {activeWorkspace && (
+            <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex items-center gap-2">
+              {activeWorkspace.type === 'business' ? <Briefcase className="w-4 h-4 text-slate-500 shrink-0" /> : <Home className="w-4 h-4 text-slate-500 shrink-0" />}
+              <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                Type: {activeWorkspace.type === 'business' ? 'Business' : 'Family'}
               </span>
             </div>
           )}
