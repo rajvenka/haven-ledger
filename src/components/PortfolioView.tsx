@@ -363,6 +363,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     const sources = new Set<string>();
     const changes = new Set<string>();
     const priceMoves = new Set<string>();
+    const portfolioNames = new Set<string>();
     let hasUnclassified = false;
     activeHoldings.forEach(h => {
       combos.add(`${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`);
@@ -370,11 +371,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
       if (h.change_flag && CHANGE_FLAG_LABELS[h.change_flag]) changes.add(CHANGE_FLAG_LABELS[h.change_flag]);
       const moveLabel = getSinceUploadLabel(h);
       if (moveLabel) priceMoves.add(moveLabel);
+      if (portfolioMode === 'multiple') portfolioNames.add(portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned');
     });
     const sortedSources = Array.from(sources).sort();
     if (hasUnclassified) sortedSources.push(UNCLASSIFIED_LABEL);
-    return { combos: Array.from(combos).sort(), sources: sortedSources, changes: Array.from(changes).sort(), priceMoves: Array.from(priceMoves).sort() };
-  }, [activeHoldings]);
+    return { combos: Array.from(combos).sort(), sources: sortedSources, changes: Array.from(changes).sort(), priceMoves: Array.from(priceMoves).sort(), portfolioNames: Array.from(portfolioNames).sort() };
+  }, [activeHoldings, portfolioMode, portfolios]);
 
   const toggleHoldingFilter = (value: string) => {
     setHoldingFilters(prev => {
@@ -391,6 +393,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const selectedSources = filterOptions.sources.filter(s => holdingFilters.has(s));
       const selectedChanges = filterOptions.changes.filter(c => holdingFilters.has(c));
       const selectedPriceMoves = filterOptions.priceMoves.filter(p => holdingFilters.has(p));
+      const selectedPortfolios = filterOptions.portfolioNames.filter(p => holdingFilters.has(p));
       list = activeHoldings.filter(h => {
         const combo = `${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`;
         const comboOk = selectedCombos.length === 0 || selectedCombos.includes(combo);
@@ -399,7 +402,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
         const changeOk = selectedChanges.length === 0 || (changeLabel && selectedChanges.includes(changeLabel));
         const moveLabel = getSinceUploadLabel(h);
         const priceMoveOk = selectedPriceMoves.length === 0 || (moveLabel && selectedPriceMoves.includes(moveLabel));
-        return comboOk && sourceOk && changeOk && priceMoveOk;
+        const portfolioName = portfolioMode === 'multiple' ? (portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned') : null;
+        const portfolioOk = selectedPortfolios.length === 0 || (portfolioName && selectedPortfolios.includes(portfolioName));
+        return comboOk && sourceOk && changeOk && priceMoveOk && portfolioOk;
       });
     }
     if (!sortField) return list;
@@ -1429,6 +1434,20 @@ export default function PortfolioView(props: PortfolioViewProps) {
             );
           })()}
 
+          {portfolioMode === 'multiple' && filterOptions.portfolioNames.length > 1 && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                onClick={() => setHoldingFilters(prev => { const next = new Set(prev); filterOptions.portfolioNames.forEach(p => next.delete(p)); return next; })}
+                className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${filterOptions.portfolioNames.every(p => !holdingFilters.has(p)) ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}
+              >
+                All
+              </button>
+              {filterOptions.portfolioNames.map(p => (
+                <button key={p} onClick={() => toggleHoldingFilter(p)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(p) ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}>{p}</button>
+              ))}
+            </div>
+          )}
+
           <div>
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Active ({filteredActiveHoldings.length}{holdingFilters.size > 0 ? ` of ${activeHoldings.length}` : ''})</span>
@@ -1532,6 +1551,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                 <ChevronDown className={`w-3 h-3 transition-transform ${expandedHoldingId === h.id ? 'rotate-180' : ''}`} />
                               </button>
                               <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{h.broker}</span>
+                              {portfolioMode === 'multiple' && (
+                                <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-500 dark:text-indigo-400 rounded-full">
+                                  {portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned'}
+                                </span>
+                              )}
                               {!isReadOnly ? (
                                 <button
                                   onClick={() => runAction(() => updatePortfolioHolding(h.id, { holdingType: h.holding_type === 'mutual_fund' ? 'stock' : 'mutual_fund' }))}
@@ -1886,6 +1910,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                 <ChevronDown className={`w-3 h-3 transition-transform ${editingSoldTickerId === h.id ? 'rotate-180' : ''}`} />
                               </button>
                               <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{h.broker}</span>
+                              {portfolioMode === 'multiple' && (
+                                <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-500 dark:text-indigo-400 rounded-full">
+                                  {portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned'}
+                                </span>
+                              )}
                               {h.holding_type === 'mutual_fund' && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 rounded-full">MF</span>}
                               {h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
                             </div>
