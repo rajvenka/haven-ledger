@@ -1073,13 +1073,13 @@ export function usePaymentState() {
 
   const addPortfolioHolding = async (holding: {
     holdingType?: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; notes?: string;
-    source?: string; currency?: 'INR' | 'USD' | 'AUD';
+    source?: string; currency?: 'INR' | 'USD' | 'AUD'; portfolioId?: string;
     targetType?: 'price' | 'percent'; targetPrice?: number; targetPercent?: number;
     holdType?: 'days' | 'date'; holdDays?: number; holdUntilDate?: string;
   }) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { data: inserted, error } = await supabase.from('portfolio_holdings').insert({
-      workspace_id: activeWorkspaceId, created_by: user?.id ?? null,
+      workspace_id: activeWorkspaceId, created_by: user?.id ?? null, portfolio_id: holding.portfolioId ?? null,
       holding_type: holding.holdingType ?? 'stock', broker: holding.broker, symbol: holding.symbol.toUpperCase(), isin: holding.isin ?? null, exchange: holding.exchange,
       ticker: holding.broker === 'Zerodha' ? holding.symbol.toUpperCase() : null,
       quantity: holding.quantity, buy_price: holding.buyPrice, buy_date: holding.buyDate, currency: holding.currency ?? 'INR',
@@ -1100,11 +1100,11 @@ export function usePaymentState() {
   // Bulk import from a broker file - inserts many holdings in one request, then refreshes once.
   const bulkAddPortfolioHoldings = async (holdings: {
     holdingType: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; folioNumber?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string;
-  }[]) => {
+  }[], portfolioId?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     if (holdings.length === 0) return;
     const rows = holdings.map(h => ({
-      workspace_id: activeWorkspaceId, created_by: user?.id ?? null,
+      workspace_id: activeWorkspaceId, created_by: user?.id ?? null, portfolio_id: portfolioId ?? null,
       holding_type: h.holdingType, broker: h.broker, symbol: h.symbol.toUpperCase(), isin: h.isin ?? null, folio_number: h.folioNumber ?? null, exchange: h.exchange,
       ticker: h.broker === 'Zerodha' ? h.symbol.toUpperCase() : null,
       quantity: h.quantity, buy_price: h.buyPrice, buy_date: h.buyDate,

@@ -26,13 +26,15 @@ interface PortfolioViewProps {
   portfolioPriceHistory: any[];
   addPortfolioHolding: (h: {
     holdingType?: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; notes?: string;
-    source?: string; currency?: 'INR' | 'USD' | 'AUD';
+    source?: string; currency?: 'INR' | 'USD' | 'AUD'; portfolioId?: string;
     targetType?: 'price' | 'percent'; targetPrice?: number; targetPercent?: number;
     holdType?: 'days' | 'date'; holdDays?: number; holdUntilDate?: string;
   }) => Promise<void>;
   bulkAddPortfolioHoldings: (holdings: {
     holdingType: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string;
-  }[]) => Promise<void>;
+  }[], portfolioId?: string) => Promise<void>;
+  portfolios?: any[];
+  portfolioMode?: 'single' | 'multiple';
   reconcilePortfolioHoldingQuantity: (id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced') => Promise<void>;
   bulkHistoricalImport: (snapshots: { date: string; holdings: any[] }[]) => Promise<{ newCount: number; updatedCount: number; soldCount: number; skippedStaleCount: number; priceHistoryCount: number; stockCount: number }>;
   updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
@@ -106,7 +108,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly, isDataLoading, columnPrefs, onUpdateColumnPrefs,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances,
-    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
+    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, portfolios = [], portfolioMode = 'single',
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
@@ -136,6 +138,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [hPrice, setHPrice] = useState('');
   const [hDate, setHDate] = useState(todayStr());
   const [hSource, setHSource] = useState('');
+  const [hPortfolioId, setHPortfolioId] = useState('');
+  const [importPortfolioId, setImportPortfolioId] = useState('');
+  const defaultPortfolioId = portfolios.find((p: any) => p.is_default)?.id || portfolios[0]?.id || '';
   const [hCurrency, setHCurrency] = useState<'INR' | 'USD' | 'AUD'>('INR');
   const [showTargetPlan, setShowTargetPlan] = useState(false);
   const [hTargetType, setHTargetType] = useState<'price' | 'percent'>('percent');
@@ -666,7 +671,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
             holdingType: h.holdingType, broker: h.broker, symbol: h.symbol, isin: h.isin, folioNumber: h.folioNumber, exchange: h.exchange,
             quantity: h.quantity, buyPrice: h.buyPrice, buyDate: importBuyDate, currentPrice: h.currentPrice,
             source: h.source || importSourceTag.trim() || undefined,
-          }))
+          })),
+          portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined
         );
       }
       for (const { parsed, existing, direction } of importPreview.qtyChanged) {
@@ -768,6 +774,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         holdingType: hHoldingType, broker: hBroker, symbol: hSymbol, exchange: hExchange, quantity: parseFloat(hQty), buyPrice: parseFloat(hPrice), buyDate: hDate,
         source: hSource.trim() || undefined,
         currency: hCurrency,
+        portfolioId: portfolioMode === 'multiple' ? (hPortfolioId || defaultPortfolioId || undefined) : undefined,
         targetType: showTargetPlan && hTargetValue ? hTargetType : undefined,
         targetPrice: showTargetPlan && hTargetType === 'price' && hTargetValue ? parseFloat(hTargetValue) : undefined,
         targetPercent: showTargetPlan && hTargetType === 'percent' && hTargetValue ? parseFloat(hTargetValue) : undefined,
@@ -1187,6 +1194,16 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
                         />
                       </div>
+                      {portfolioMode === 'multiple' && (
+                        <select
+                          value={importPortfolioId || defaultPortfolioId}
+                          onChange={(e) => setImportPortfolioId(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+                          title="Which portfolio these imported holdings belong to"
+                        >
+                          {portfolios.map((p: any) => <option key={p.id} value={p.id}>Import into: {p.name} ({p.currency})</option>)}
+                        </select>
+                      )}
                       <input
                         type="text"
                         list="source-suggestions"
@@ -1282,6 +1299,16 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   <option value="USD">$ USD</option>
                   <option value="AUD">A$ AUD</option>
                 </select>
+                {portfolioMode === 'multiple' && (
+                  <select
+                    value={hPortfolioId || defaultPortfolioId}
+                    onChange={(e) => setHPortfolioId(e.target.value)}
+                    className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+                    title="Which portfolio this holding belongs to"
+                  >
+                    {portfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.currency})</option>)}
+                  </select>
+                )}
                 <input
                   type="text"
                   list="source-suggestions"

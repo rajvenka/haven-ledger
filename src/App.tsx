@@ -1598,6 +1598,8 @@ export default function App() {
                 isDataLoading={portfolioDataLoading}
                 columnPrefs={activeWorkspace?.columnPrefs}
                 onUpdateColumnPrefs={updateWorkspaceColumnPrefs}
+                portfolios={portfolios}
+                portfolioMode={activeWorkspace?.portfolioMode}
                 portfolioSplits={portfolioSplits}
                 addPortfolioSplit={addPortfolioSplit}
                 deletePortfolioSplit={deletePortfolioSplit}

@@ -641,7 +641,7 @@ export default function AccountInfo({
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     Single Portfolio - the way it works today, one combined set of holdings for this workspace. No change unless you switch below.
                   </p>
-                  {familyRole === 'host' && (
+                  {familyRole === 'host' && (!hasFeature || hasFeature('multi_portfolio')) && (
                     confirmingMultiPortfolio ? (
                       <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg p-3 space-y-2">
                         <p className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold">
@@ -678,6 +678,12 @@ export default function AccountInfo({
                         Switch to Multiple Portfolio →
                       </button>
                     )
+                  )}
+                  {familyRole === 'host' && hasFeature && !hasFeature('multi_portfolio') && (
+                    <div className="bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900 rounded-lg p-2.5 flex items-center gap-2">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                      <p className="text-[10px] text-indigo-700 dark:text-indigo-400 font-semibold">Multiple Portfolio is a Pro Max feature. Request an upgrade in your plan settings to unlock it.</p>
+                    </div>
                   )}
                 </>
               ) : (
