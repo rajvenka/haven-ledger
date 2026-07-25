@@ -1553,6 +1553,18 @@ export function usePaymentState() {
     return data;
   };
 
+  // Onboards a brand-new person to the platform with a specific license plan already
+  // decided, rather than the usual two-step "invite now, remember to bump their plan
+  // later" - writes a pending assignment keyed by email first (consumed one-time by the
+  // handle_new_user trigger the moment they actually sign up), then sends the real invite
+  // email via the same admin-invite-user function used for plain invites.
+  const onboardUserWithPlan = async (email: string, planId: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    const { error: pendingErr } = await supabase.from('pending_plan_assignments').upsert({ email: cleanEmail, plan_id: planId, created_by: user?.id }, { onConflict: 'email' });
+    if (pendingErr) throw pendingErr;
+    return inviteNewUser(cleanEmail);
+  };
+
   // ---------- WhatsApp linking ----------
   const startWhatsAppVerification = async (phone: string) => {
     if (!user) throw new Error('Not signed in.');
@@ -1654,7 +1666,7 @@ export function usePaymentState() {
     deleteHistoryEntry, updateHistoryStatus, clearHistory, saveRate, saveSummaryCurrency,
     addCountry, updateCountry, deleteCountry,
     triggerNotification, dismissNotification, markAllNotificationsRead, clearNotifications,
-    checkPaymentReminders, requestNotificationPermission, resetToDefaults, fetchAllUsersForAdmin, inviteNewUser,
+    checkPaymentReminders, requestNotificationPermission, resetToDefaults, fetchAllUsersForAdmin, inviteNewUser, onboardUserWithPlan,
     startWhatsAppVerification, disconnectWhatsApp,
     accessPlans, createAccessPlan, updateAccessPlan, deleteAccessPlan,
     myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan, setSuperAdminStatus,

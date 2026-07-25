@@ -154,6 +154,7 @@ export default function App() {
     resetToDefaults,
     fetchAllUsersForAdmin,
     inviteNewUser,
+    onboardUserWithPlan,
     startWhatsAppVerification,
     disconnectWhatsApp,
     accessPlans,
@@ -1689,6 +1690,7 @@ export default function App() {
               <AdminUsersView
                 fetchAllUsersForAdmin={fetchAllUsersForAdmin}
                 inviteNewUser={inviteNewUser}
+                onOnboardUserWithPlan={onboardUserWithPlan}
                 accessPlans={accessPlans}
                 onCreatePlan={createAccessPlan}
                 onUpdatePlan={updateAccessPlan}

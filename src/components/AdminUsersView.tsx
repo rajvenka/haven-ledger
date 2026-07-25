@@ -34,6 +34,7 @@ interface AccessPlan {
 interface AdminUsersViewProps {
   fetchAllUsersForAdmin: () => Promise<AdminUser[]>;
   inviteNewUser: (email: string) => Promise<any>;
+  onOnboardUserWithPlan?: (email: string, planId: string) => Promise<any>;
   accessPlans?: AccessPlan[];
   onCreatePlan?: (name: string, features: string[], description?: string, canCreateBusiness?: boolean) => Promise<void>;
   onUpdatePlan?: (id: string, updates: { name?: string; description?: string; features?: string[]; canCreateBusiness?: boolean }) => Promise<void>;
@@ -48,11 +49,13 @@ interface AdminUsersViewProps {
 const ALL_PLAN_FEATURES = ['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'whatsapp', 'portfolio'];
 const PLAN_FEATURE_LABELS: Record<string, string> = { income: 'Income', rewards: 'Membership Hub', ai: 'AI Insights', team: 'Team', chat: 'Chat', agent: 'AI Agent', whatsapp: 'WhatsApp', portfolio: 'Investment / Portfolio' };
 
-export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, accessPlans = [], onCreatePlan, onUpdatePlan, onDeletePlan, fetchPendingUpgradeRequests, onResolveUpgradeRequest, onSetUserPlan, onSetSuperAdmin, currentUserId }: AdminUsersViewProps) {
+export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, onOnboardUserWithPlan, accessPlans = [], onCreatePlan, onUpdatePlan, onDeletePlan, fetchPendingUpgradeRequests, onResolveUpgradeRequest, onSetUserPlan, onSetSuperAdmin, currentUserId }: AdminUsersViewProps) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [onboardStep, setOnboardStep] = useState<1 | 2 | 3>(1);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [onboardPlanId, setOnboardPlanId] = useState('');
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
@@ -168,16 +171,18 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
 
   useEffect(() => { load(); }, []);
 
-  const handleInvite = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleConfirmOnboard = async () => {
     setInviteError(null);
     setInviteSuccess(null);
-    if (!inviteEmail.trim()) return;
+    if (!inviteEmail.trim() || !onboardPlanId) return;
     setInviteBusy(true);
     try {
-      await inviteNewUser(inviteEmail.trim().toLowerCase());
-      setInviteSuccess(`Invite sent to ${inviteEmail.trim()} — they'll get an email to set their password.`);
+      await onOnboardUserWithPlan?.(inviteEmail.trim().toLowerCase(), onboardPlanId);
+      const planName = accessPlans.find(p => p.id === onboardPlanId)?.name || 'their plan';
+      setInviteSuccess(`Invite sent to ${inviteEmail.trim()} — they'll get an email to set their password, and land with ${planName} already assigned.`);
       setInviteEmail('');
+      setOnboardPlanId('');
+      setOnboardStep(1);
       await load();
     } catch (err: any) {
       setInviteError(err.message || 'Failed to send invite.');
@@ -208,33 +213,205 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
       </div>
 
       <div className="apple-card p-4 space-y-2.5">
-        <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
-          <UserPlus className="w-3.5 h-3.5" /> Invite New User
-        </span>
-        <form onSubmit={handleInvite} className="flex gap-2">
-          <input
-            type="email"
-            value={inviteEmail}
-            onChange={(e) => setInviteEmail(e.target.value)}
-            placeholder="name@email.com"
-            className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
-          />
-          <button
-            type="submit"
-            disabled={inviteBusy || !inviteEmail.trim()}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase tracking-wider rounded-lg cursor-pointer"
-          >
-            {inviteBusy ? 'Sending…' : 'Send Invite'}
-          </button>
-        </form>
-        {inviteError && <p className="text-[10px] text-red-500 font-semibold">{inviteError}</p>}
+        <div className="flex items-center gap-1.5 mb-1">
+          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black ${onboardStep === 1 ? 'bg-indigo-600 text-white' : 'bg-emerald-500 text-white'}`}>{onboardStep === 1 ? '1' : <Check className="w-3 h-3" />}</span>
+          <span className={`text-[9px] font-bold uppercase tracking-wide ${onboardStep === 1 ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400'}`}>Email</span>
+          <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
+          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black ${onboardStep === 2 ? 'bg-indigo-600 text-white' : onboardStep > 2 ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>{onboardStep > 2 ? <Check className="w-3 h-3" /> : '2'}</span>
+          <span className={`text-[9px] font-bold uppercase tracking-wide ${onboardStep === 2 ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400'}`}>Plan</span>
+          <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
+          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black ${onboardStep === 3 ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>3</span>
+          <span className={`text-[9px] font-bold uppercase tracking-wide ${onboardStep === 3 ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400'}`}>Confirm</span>
+        </div>
+
+        {onboardStep === 1 && (
+          <>
+            <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+              <UserPlus className="w-3.5 h-3.5" /> Onboard New User
+            </span>
+            <p className="text-[10px] text-slate-400">Step 1 of 3 - who are you onboarding?</p>
+            <input
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="name@email.com"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+            />
+            <button
+              type="button"
+              onClick={() => { if (inviteEmail.trim()) setOnboardStep(2); }}
+              disabled={!inviteEmail.trim()}
+              className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] font-black uppercase tracking-wider rounded-lg cursor-pointer"
+            >
+              Next: Choose Plan
+            </button>
+          </>
+        )}
+
+        {onboardStep === 2 && (
+          <>
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] text-slate-400">Step 2 of 3 - which plan should {inviteEmail} land with?</p>
+              <button type="button" onClick={() => setOnboardStep(1)} className="text-[9px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer shrink-0">← Back</button>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {accessPlans.map(plan => (
+                <button
+                  key={plan.id}
+                  type="button"
+                  onClick={() => setOnboardPlanId(plan.id)}
+                  className={`px-2.5 py-2 rounded-lg text-[10px] font-bold text-left cursor-pointer transition-all ${onboardPlanId === plan.id ? 'bg-indigo-600 text-white' : 'bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800'}`}
+                >
+                  {plan.name}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => { if (onboardPlanId) setOnboardStep(3); }}
+              disabled={!onboardPlanId}
+              className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] font-black uppercase tracking-wider rounded-lg cursor-pointer"
+            >
+              Next: Confirm
+            </button>
+          </>
+        )}
+
+        {onboardStep === 3 && (
+          <>
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] text-slate-400">Step 3 of 3 - review and send</p>
+              <button type="button" onClick={() => setOnboardStep(2)} className="text-[9px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer shrink-0">← Back</button>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-900 rounded-xl p-3 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 text-[10px] font-bold uppercase">Email</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200 truncate ml-2">{inviteEmail}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 text-[10px] font-bold uppercase">Plan</span>
+                <span className="font-bold text-indigo-600 dark:text-indigo-400">{accessPlans.find(p => p.id === onboardPlanId)?.name}</span>
+              </div>
+            </div>
+            {inviteError && <p className="text-[10px] text-red-500 font-semibold">{inviteError}</p>}
+            <button
+              type="button"
+              onClick={handleConfirmOnboard}
+              disabled={inviteBusy}
+              className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase tracking-wider rounded-lg cursor-pointer"
+            >
+              {inviteBusy ? 'Sending…' : 'Send Invite'}
+            </button>
+            <p className="text-[9px] text-slate-400">Creates the account, sends them a real email to set their own password, and assigns the plan above the moment they sign up - no separate follow-up step needed.</p>
+          </>
+        )}
+
         {inviteSuccess && (
           <p className="text-[10px] text-emerald-500 font-semibold flex items-center gap-1">
             <Check className="w-3 h-3" /> {inviteSuccess}
           </p>
         )}
-        <p className="text-[9px] text-slate-400">Creates the account and emails them a link to set their own password — they won't need a workspace invite code separately unless you want them in a specific workspace.</p>
       </div>
+
+      {error && (
+        <div className="apple-card p-4 text-rose-500 text-xs font-semibold">{error}</div>
+      )}
+
+      {pendingRequests.length > 0 && (
+        <div className="apple-card p-4 space-y-2.5">
+          <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Pending Upgrade Requests ({pendingRequests.length})</span>
+          {pendingRequests.map(req => (
+            <div key={req.id} className="flex items-center justify-between p-2.5 bg-amber-50 dark:bg-amber-950/20 rounded-lg">
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{req.userName || req.userEmail}</p>
+                <p className="text-[10px] text-slate-500">Requesting <span className="font-bold">{req.requestedPlanName}</span></p>
+              </div>
+              <div className="flex gap-1.5 shrink-0">
+                <button
+                  onClick={() => handleResolve(req, true)}
+                  disabled={resolvingId === req.id}
+                  className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-[10px] font-black rounded-lg cursor-pointer"
+                >
+                  Approve
+                </button>
+                <button
+                  onClick={() => handleResolve(req, false)}
+                  disabled={resolvingId === req.id}
+                  className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 disabled:opacity-50 text-[10px] font-black rounded-lg cursor-pointer"
+                >
+                  Deny
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="apple-card p-10 flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : (
+        <div className="apple-card overflow-hidden">
+          {/* Header row */}
+          <div className="hidden md:grid grid-cols-[minmax(0,1.6fr)_minmax(0,1.4fr)_100px_minmax(0,1.4fr)_130px] gap-3 px-4 py-2 bg-slate-50 dark:bg-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
+            <span>User</span>
+            <span>Email</span>
+            <span>Joined</span>
+            <span>Workspace(s)</span>
+            <span>Plan</span>
+          </div>
+          <div className="divide-y divide-slate-100 dark:divide-slate-900">
+            {users.map(u => (
+              <div key={u.id} className="grid grid-cols-1 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1.4fr)_100px_minmax(0,1.4fr)_130px] gap-1.5 md:gap-3 items-center px-4 py-2.5 text-left">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-6 h-6 rounded-full bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black text-[10px] uppercase shrink-0">
+                    {(u.displayName || u.email).charAt(0)}
+                  </div>
+                  <span className="text-xs font-bold text-slate-900 dark:text-white truncate">{u.displayName || u.email.split('@')[0]}</span>
+                  {u.isSuperAdmin && (
+                    <span className="px-1.5 py-0.5 bg-indigo-600 text-white text-[8px] font-black uppercase tracking-wider rounded-full shrink-0">Admin</span>
+                  )}
+                  {u.id !== currentUserId && (
+                    <button
+                      onClick={() => handleToggleSuperAdmin(u)}
+                      disabled={togglingAdminFor === u.id}
+                      title={u.isSuperAdmin ? 'Remove super admin' : 'Make super admin'}
+                      className={`p-1 rounded-md shrink-0 cursor-pointer disabled:opacity-40 ${u.isSuperAdmin ? 'text-indigo-500 hover:text-slate-400' : 'text-slate-300 hover:text-indigo-500'}`}
+                    >
+                      <ShieldCheck className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+                <span className="text-[10px] text-slate-400 truncate">{u.email}</span>
+                <span className="text-[10px] text-slate-400 md:text-center">{new Date(u.createdAt).toLocaleDateString()}</span>
+                <div className="flex flex-wrap gap-x-2 gap-y-0.5 min-w-0">
+                  {u.workspaces.length === 0 ? (
+                    <span className="text-[10px] text-slate-350 dark:text-slate-600">—</span>
+                  ) : (
+                    u.workspaces.map(ws => (
+                      <span key={ws.id} className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 truncate">
+                        {ws.type === 'business' ? <Briefcase className="w-2.5 h-2.5 shrink-0" /> : <Home className="w-2.5 h-2.5 shrink-0" />}
+                        {ws.name} · {ws.role}
+                      </span>
+                    ))
+                  )}
+                </div>
+                <select
+                  value={u.licensePlanId || ''}
+                  onChange={(e) => handleSetPlan(u.id, e.target.value)}
+                  disabled={changingPlanFor === u.id}
+                  className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer disabled:opacity-50 w-full md:w-auto"
+                >
+                  {accessPlans.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Manage Access Plans */}
       <div className="apple-card p-4 space-y-2.5">
@@ -351,105 +528,6 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, a
         )}
       </div>
 
-      {error && (
-        <div className="apple-card p-4 text-rose-500 text-xs font-semibold">{error}</div>
-      )}
-
-      {pendingRequests.length > 0 && (
-        <div className="apple-card p-4 space-y-2.5">
-          <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Pending Upgrade Requests ({pendingRequests.length})</span>
-          {pendingRequests.map(req => (
-            <div key={req.id} className="flex items-center justify-between p-2.5 bg-amber-50 dark:bg-amber-950/20 rounded-lg">
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{req.userName || req.userEmail}</p>
-                <p className="text-[10px] text-slate-500">Requesting <span className="font-bold">{req.requestedPlanName}</span></p>
-              </div>
-              <div className="flex gap-1.5 shrink-0">
-                <button
-                  onClick={() => handleResolve(req, true)}
-                  disabled={resolvingId === req.id}
-                  className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-[10px] font-black rounded-lg cursor-pointer"
-                >
-                  Approve
-                </button>
-                <button
-                  onClick={() => handleResolve(req, false)}
-                  disabled={resolvingId === req.id}
-                  className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 disabled:opacity-50 text-[10px] font-black rounded-lg cursor-pointer"
-                >
-                  Deny
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="apple-card p-10 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-        </div>
-      ) : (
-        <div className="apple-card overflow-hidden">
-          {/* Header row */}
-          <div className="hidden md:grid grid-cols-[minmax(0,1.6fr)_minmax(0,1.4fr)_100px_minmax(0,1.4fr)_130px] gap-3 px-4 py-2 bg-slate-50 dark:bg-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
-            <span>User</span>
-            <span>Email</span>
-            <span>Joined</span>
-            <span>Workspace(s)</span>
-            <span>Plan</span>
-          </div>
-          <div className="divide-y divide-slate-100 dark:divide-slate-900">
-            {users.map(u => (
-              <div key={u.id} className="grid grid-cols-1 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1.4fr)_100px_minmax(0,1.4fr)_130px] gap-1.5 md:gap-3 items-center px-4 py-2.5 text-left">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-6 h-6 rounded-full bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black text-[10px] uppercase shrink-0">
-                    {(u.displayName || u.email).charAt(0)}
-                  </div>
-                  <span className="text-xs font-bold text-slate-900 dark:text-white truncate">{u.displayName || u.email.split('@')[0]}</span>
-                  {u.isSuperAdmin && (
-                    <span className="px-1.5 py-0.5 bg-indigo-600 text-white text-[8px] font-black uppercase tracking-wider rounded-full shrink-0">Admin</span>
-                  )}
-                  {u.id !== currentUserId && (
-                    <button
-                      onClick={() => handleToggleSuperAdmin(u)}
-                      disabled={togglingAdminFor === u.id}
-                      title={u.isSuperAdmin ? 'Remove super admin' : 'Make super admin'}
-                      className={`p-1 rounded-md shrink-0 cursor-pointer disabled:opacity-40 ${u.isSuperAdmin ? 'text-indigo-500 hover:text-slate-400' : 'text-slate-300 hover:text-indigo-500'}`}
-                    >
-                      <ShieldCheck className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-                <span className="text-[10px] text-slate-400 truncate">{u.email}</span>
-                <span className="text-[10px] text-slate-400 md:text-center">{new Date(u.createdAt).toLocaleDateString()}</span>
-                <div className="flex flex-wrap gap-x-2 gap-y-0.5 min-w-0">
-                  {u.workspaces.length === 0 ? (
-                    <span className="text-[10px] text-slate-350 dark:text-slate-600">—</span>
-                  ) : (
-                    u.workspaces.map(ws => (
-                      <span key={ws.id} className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 truncate">
-                        {ws.type === 'business' ? <Briefcase className="w-2.5 h-2.5 shrink-0" /> : <Home className="w-2.5 h-2.5 shrink-0" />}
-                        {ws.name} · {ws.role}
-                      </span>
-                    ))
-                  )}
-                </div>
-                <select
-                  value={u.licensePlanId || ''}
-                  onChange={(e) => handleSetPlan(u.id, e.target.value)}
-                  disabled={changingPlanFor === u.id}
-                  className="px-2 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer disabled:opacity-50 w-full md:w-auto"
-                >
-                  {accessPlans.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
