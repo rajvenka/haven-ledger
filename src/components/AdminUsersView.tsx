@@ -46,8 +46,8 @@ interface AdminUsersViewProps {
   currentUserId?: string;
 }
 
-const ALL_PLAN_FEATURES = ['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'whatsapp', 'portfolio'];
-const PLAN_FEATURE_LABELS: Record<string, string> = { income: 'Income', rewards: 'Membership Hub', ai: 'AI Insights', team: 'Team', chat: 'Chat', agent: 'AI Agent', whatsapp: 'WhatsApp', portfolio: 'Investment / Portfolio' };
+const ALL_PLAN_FEATURES = ['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'whatsapp', 'portfolio', 'multi_portfolio'];
+const PLAN_FEATURE_LABELS: Record<string, string> = { income: 'Income', rewards: 'Membership Hub', ai: 'AI Insights', team: 'Team', chat: 'Chat', agent: 'AI Agent', whatsapp: 'WhatsApp', portfolio: 'Investment / Portfolio', multi_portfolio: 'Multiple Portfolio' };
 
 export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, onOnboardUserWithPlan, accessPlans = [], onCreatePlan, onUpdatePlan, onDeletePlan, fetchPendingUpgradeRequests, onResolveUpgradeRequest, onSetUserPlan, onSetSuperAdmin, currentUserId }: AdminUsersViewProps) {
   const [users, setUsers] = useState<AdminUser[]>([]);
