@@ -147,7 +147,7 @@ export function usePaymentState() {
   const refreshWorkspaces = useCallback(async (uid: string, preferredActiveId?: string | null) => {
     const { data: memberships } = await supabase
       .from('workspace_members')
-      .select('workspace_id, role, access_level, enabled_features, landing_tab, portfolio_column_prefs, dismissed_reminder_key, workspaces(id, name, type, invite_code, owner_id, income_mode, monthly_income)')
+      .select('workspace_id, role, access_level, enabled_features, landing_tab, portfolio_column_prefs, dismissed_reminder_key, workspaces(id, name, type, invite_code, owner_id, income_mode, monthly_income, portfolio_mode, base_currency)')
       .eq('user_id', uid);
 
     const list: Workspace[] = (memberships ?? []).map((m: any) => ({
@@ -164,6 +164,8 @@ export function usePaymentState() {
       landingTab: m.landing_tab ?? null,
       columnPrefs: m.portfolio_column_prefs ?? null,
       dismissedReminderKey: m.dismissed_reminder_key ?? null,
+      portfolioMode: (m.workspaces?.portfolio_mode ?? 'single') as 'single' | 'multiple',
+      baseCurrency: m.workspaces?.base_currency ?? 'INR',
     }));
     setWorkspaces(list);
 
@@ -339,6 +341,52 @@ export function usePaymentState() {
     const { error } = await supabase.rpc('dismiss_contribution_reminder', { p_workspace_id: activeWorkspaceId, p_key: key });
     if (error) throw error;
     await refreshWorkspaces(user.id, activeWorkspaceId);
+  };
+
+  // One-time, irreversible-by-design switch: creates a real "Default Portfolio" and
+  // backfills every existing row's portfolio_id to point at it, via the DB function so it
+  // happens atomically. Single-portfolio workspaces never call this and are completely
+  // unaffected - portfolio_id stays null for them forever, treated as the one implicit portfolio.
+  const switchToMultiPortfolio = async () => {
+    if (!activeWorkspaceId) return;
+    const { error } = await supabase.rpc('switch_workspace_to_multi_portfolio', { p_workspace_id: activeWorkspaceId });
+    if (error) throw error;
+    if (user) await refreshWorkspaces(user.id, activeWorkspaceId);
+    await loadPortfolioDetails();
+  };
+
+  const createPortfolio = async (name: string, currency: string) => {
+    if (!activeWorkspaceId) return;
+    const { error } = await supabase.from('portfolios').insert({ workspace_id: activeWorkspaceId, name, currency });
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
+  const updatePortfolio = async (id: string, updates: { name?: string; currency?: string; is_default?: boolean }) => {
+    const { error } = await supabase.from('portfolios').update(updates).eq('id', id);
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
+  // Refuses to delete a portfolio that still has any holdings, contributions, or other
+  // data filed under it - the person needs to move or clear that data first, rather than
+  // silently orphaning real financial records.
+  const deletePortfolio = async (id: string) => {
+    const { count } = await supabase.from('portfolio_holdings').select('id', { count: 'exact', head: true }).eq('portfolio_id', id);
+    if (count && count > 0) throw new Error(`This portfolio still has ${count} holding${count !== 1 ? 's' : ''}. Move or delete them first.`);
+    const { error } = await supabase.from('portfolios').delete().eq('id', id);
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
+  const upsertCurrencyRate = async (currency: string, rateToBase: number) => {
+    if (!user || !activeWorkspaceId) return;
+    const { error } = await supabase.from('workspace_currency_rates').upsert(
+      { workspace_id: activeWorkspaceId, currency, rate_to_base: rateToBase, updated_by: user.id, updated_at: new Date().toISOString() },
+      { onConflict: 'workspace_id,currency' }
+    );
+    if (error) throw error;
+    await loadPortfolioDetails();
   };
 
   const switchWorkspace = async (workspaceId: string) => {
@@ -975,13 +1023,15 @@ export function usePaymentState() {
   const [portfolioDividends, setPortfolioDividends] = useState<any[]>([]);
   const [portfolioFees, setPortfolioFees] = useState<any[]>([]);
   const [portfolioRecurringPlans, setPortfolioRecurringPlans] = useState<any[]>([]);
+  const [portfolios, setPortfolios] = useState<any[]>([]);
+  const [workspaceCurrencyRates, setWorkspaceCurrencyRates] = useState<any[]>([]);
   const [portfolioDataLoading, setPortfolioDataLoading] = useState(true);
   const loadedPortfolioWorkspaces = useRef<Set<string>>(new Set());
 
   const loadPortfolioDetails = useCallback(async () => {
     if (!activeWorkspaceId) {
       setPortfolioHoldings([]); setPortfolioPriceHistory([]); setPortfolioSplits([]); setPortfolioContributions([]); setPortfolioWithdrawals([]);
-      setPortfolioDividends([]); setPortfolioFees([]); setPortfolioRecurringPlans([]); setPortfolioCashBalances([]);
+      setPortfolioDividends([]); setPortfolioFees([]); setPortfolioRecurringPlans([]); setPortfolioCashBalances([]); setPortfolios([]); setWorkspaceCurrencyRates([]);
       setPortfolioDataLoading(false);
       return;
     }
@@ -991,7 +1041,7 @@ export function usePaymentState() {
     // flicker during completely normal use, not just on initial load or workspace switch.
     const isFirstLoadForWorkspace = !loadedPortfolioWorkspaces.current.has(activeWorkspaceId);
     if (isFirstLoadForWorkspace) setPortfolioDataLoading(true);
-    const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: cashBalances }] = await Promise.all([
+    const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: cashBalances }, { data: portfoliosData }, { data: currencyRatesData }] = await Promise.all([
       supabase.from('portfolio_holdings').select('*').eq('workspace_id', activeWorkspaceId).order('buy_date', { ascending: false }),
       supabase.from('portfolio_price_history').select('*').eq('workspace_id', activeWorkspaceId).order('recorded_date', { ascending: false }),
       supabase.from('portfolio_splits').select('*').eq('workspace_id', activeWorkspaceId).order('effective_from'),
@@ -1001,6 +1051,8 @@ export function usePaymentState() {
       supabase.from('portfolio_fees').select('*').eq('workspace_id', activeWorkspaceId).order('fee_date', { ascending: false }),
       supabase.from('portfolio_recurring_plans').select('*').eq('workspace_id', activeWorkspaceId).order('created_at'),
       supabase.from('portfolio_cash_balances').select('*').eq('workspace_id', activeWorkspaceId).order('location'),
+      supabase.from('portfolios').select('*').eq('workspace_id', activeWorkspaceId).order('created_at'),
+      supabase.from('workspace_currency_rates').select('*').eq('workspace_id', activeWorkspaceId),
     ]);
     setPortfolioHoldings(holdings ?? []);
     setPortfolioPriceHistory(priceHistory ?? []);
@@ -1011,6 +1063,8 @@ export function usePaymentState() {
     setPortfolioFees(fees ?? []);
     setPortfolioRecurringPlans(plans ?? []);
     setPortfolioCashBalances(cashBalances ?? []);
+    setPortfolios(portfoliosData ?? []);
+    setWorkspaceCurrencyRates(currencyRatesData ?? []);
     loadedPortfolioWorkspaces.current.add(activeWorkspaceId);
     setPortfolioDataLoading(false);
   }, [activeWorkspaceId]);
@@ -1652,6 +1706,7 @@ export function usePaymentState() {
     signUp, signIn, signInWithGoogle, resetPassword, updatePassword, updateDisplayName, acceptPrivacyPolicy, logOut, markTourCompleted,
     // Workspace model
     workspaces, activeWorkspaceId, activeWorkspace, switchWorkspace, createWorkspace, setWorkspaceMode, updateWorkspaceLandingTab, updateWorkspaceColumnPrefs, dismissContributionReminder,
+    portfolios, workspaceCurrencyRates, switchToMultiPortfolio, createPortfolio, updatePortfolio, deletePortfolio, upsertCurrencyRate,
     renameWorkspace, deleteWorkspace,
     incomeSources, addIncomeSource, deleteIncomeSource, incomeMode, updateIncomeMode, monthlyIncome, updateMonthlyIncome,
     workspaceBackups, createBackupNow, restoreFromBackup,

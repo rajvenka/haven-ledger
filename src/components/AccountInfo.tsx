@@ -39,6 +39,13 @@ interface AccountInfoProps {
   onAddBulkPayments?: (payments: Omit<RecurringPayment, 'id'>[]) => Promise<void>;
   onStartWhatsAppVerification?: (phone: string) => Promise<string>;
   onUpdateDisplayName?: (name: string) => Promise<void>;
+  portfolios?: any[];
+  onSwitchToMultiPortfolio?: () => Promise<void>;
+  onCreatePortfolio?: (name: string, currency: string) => Promise<void>;
+  onUpdatePortfolio?: (id: string, updates: { name?: string; currency?: string; is_default?: boolean }) => Promise<void>;
+  onDeletePortfolio?: (id: string) => Promise<void>;
+  workspaceCurrencyRates?: any[];
+  onUpsertCurrencyRate?: (currency: string, rateToBase: number) => Promise<void>;
   currentLandingTab?: string | null;
   onUpdateLandingTab?: (tab: string | null) => Promise<void>;
   hasFeature?: (feature: string) => boolean;
@@ -54,7 +61,7 @@ interface AccountInfoProps {
   isReadOnly?: boolean;
   onAddFamilyMember: (email: string, role?: 'view' | 'modify', accessLevel?: 'full' | 'limited', features?: string[]) => Promise<void>;
   onCreateFamily?: () => Promise<void>;
-  activeWorkspace?: { id: string; name: string; type: 'family' | 'business'; role: string; isOwner: boolean } | null;
+  activeWorkspace?: { id: string; name: string; type: 'family' | 'business'; role: string; isOwner: boolean; portfolioMode?: 'single' | 'multiple'; baseCurrency?: string } | null;
   onRenameWorkspace?: (id: string, name: string) => Promise<void>;
   onDeleteWorkspace?: (id: string) => Promise<void>;
   onJoinFamilyGroup: (code: string) => Promise<void>;
@@ -99,6 +106,13 @@ export default function AccountInfo({
   onAddBulkPayments,
   onStartWhatsAppVerification,
   onUpdateDisplayName,
+  portfolios = [],
+  onSwitchToMultiPortfolio,
+  onCreatePortfolio,
+  onUpdatePortfolio,
+  onDeletePortfolio,
+  workspaceCurrencyRates = [],
+  onUpsertCurrencyRate,
   currentLandingTab,
   onUpdateLandingTab,
   hasFeature,
@@ -224,6 +238,14 @@ export default function AccountInfo({
   const [familyEmail, setFamilyEmail] = useState('');
   const [familyEmailRole, setFamilyEmailRole] = useState<'view' | 'modify'>('modify');
   const [inviteStep, setInviteStep] = useState<1 | 2 | 3>(1);
+  const [confirmingMultiPortfolio, setConfirmingMultiPortfolio] = useState(false);
+  const [switchingPortfolioMode, setSwitchingPortfolioMode] = useState(false);
+  const [newPortfolioName, setNewPortfolioName] = useState('');
+  const [newPortfolioCurrency, setNewPortfolioCurrency] = useState('INR');
+  const [addingPortfolio, setAddingPortfolio] = useState(false);
+  const [portfolioError, setPortfolioError] = useState<string | null>(null);
+  const [editingRateCurrency, setEditingRateCurrency] = useState<string | null>(null);
+  const [rateInput, setRateInput] = useState('');
   const [accessChoice, setAccessChoice] = useState<'same' | 'custom' | null>(null);
   const [invitationError, setInvitationError] = useState<string | null>(null);
   const [displayNameInput, setDisplayNameInput] = useState(userProfile?.displayName || '');
@@ -605,6 +627,170 @@ export default function AccountInfo({
               <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
                 Type: {activeWorkspace.type === 'business' ? 'Business' : 'Family'}
               </span>
+            </div>
+          )}
+
+          {activeWorkspace && (
+            <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+              <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                <Layers className="w-4 h-4 text-indigo-500" /> Portfolio Mode
+              </h4>
+
+              {activeWorkspace.portfolioMode !== 'multiple' ? (
+                <>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Single Portfolio - the way it works today, one combined set of holdings for this workspace. No change unless you switch below.
+                  </p>
+                  {familyRole === 'host' && (
+                    confirmingMultiPortfolio ? (
+                      <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg p-3 space-y-2">
+                        <p className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold">
+                          This creates a "Default Portfolio" containing everything you have today, then unlocks separate portfolios (e.g. one per currency) alongside it. This can't be undone once switched.
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={async () => {
+                              setSwitchingPortfolioMode(true);
+                              try {
+                                await onSwitchToMultiPortfolio?.();
+                                setConfirmingMultiPortfolio(false);
+                              } catch (err: any) {
+                                setPortfolioError(err.message || 'Failed to switch.');
+                              } finally {
+                                setSwitchingPortfolioMode(false);
+                              }
+                            }}
+                            disabled={switchingPortfolioMode}
+                            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
+                          >
+                            {switchingPortfolioMode ? 'Switching…' : 'Yes, Switch to Multiple'}
+                          </button>
+                          <button onClick={() => setConfirmingMultiPortfolio(false)} className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmingMultiPortfolio(true)}
+                        className="text-[10px] font-bold text-indigo-500 hover:text-indigo-600 cursor-pointer"
+                      >
+                        Switch to Multiple Portfolio →
+                      </button>
+                    )
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Multiple Portfolio - manage separate portfolios below (e.g. one per currency).</p>
+                  <div className="space-y-1.5">
+                    {portfolios.map(p => (
+                      <div key={p.id} className="flex items-center justify-between px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 rounded-lg text-xs">
+                        <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                          {p.name} <span className="text-[9px] text-slate-400 font-bold">{p.currency}</span>
+                          {p.is_default && <span className="text-[8px] px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-full font-black uppercase">Default</span>}
+                        </span>
+                        {familyRole === 'host' && !p.is_default && (
+                          <button
+                            onClick={async () => { try { await onDeletePortfolio?.(p.id); } catch (err: any) { setPortfolioError(err.message); } }}
+                            className="text-slate-300 hover:text-rose-500 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {familyRole === 'host' && (
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={newPortfolioName}
+                        onChange={(e) => setNewPortfolioName(e.target.value)}
+                        placeholder="e.g. US Portfolio"
+                        className="flex-1 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px]"
+                      />
+                      <select
+                        value={newPortfolioCurrency}
+                        onChange={(e) => setNewPortfolioCurrency(e.target.value)}
+                        className="px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-semibold"
+                      >
+                        {['INR', 'USD', 'AUD', 'EUR', 'GBP', 'SGD', 'AED', 'CAD'].map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                      <button
+                        onClick={async () => {
+                          if (!newPortfolioName.trim()) return;
+                          setAddingPortfolio(true);
+                          setPortfolioError(null);
+                          try {
+                            await onCreatePortfolio?.(newPortfolioName.trim(), newPortfolioCurrency);
+                            setNewPortfolioName('');
+                          } catch (err: any) {
+                            setPortfolioError(err.message || 'Failed to add portfolio.');
+                          } finally {
+                            setAddingPortfolio(false);
+                          }
+                        }}
+                        disabled={addingPortfolio || !newPortfolioName.trim()}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
+                      >
+                        + Add
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Exchange rates only matter once more than one currency is actually in
+                      play - stays hidden otherwise so single-currency multi-portfolio setups
+                      never see this at all. */}
+                  {new Set(portfolios.map(p => p.currency)).size > 1 && (
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-900 space-y-1.5">
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Exchange Rates (relative to {activeWorkspace.baseCurrency})</span>
+                      {Array.from(new Set(portfolios.map(p => p.currency))).filter(c => c !== activeWorkspace.baseCurrency).map(currency => {
+                        const existing = workspaceCurrencyRates.find(r => r.currency === currency);
+                        return (
+                          <div key={currency} className="flex items-center justify-between text-[11px]">
+                            <span className="text-slate-500">1 {activeWorkspace.baseCurrency} =</span>
+                            {editingRateCurrency === currency ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  step="0.0001"
+                                  value={rateInput}
+                                  onChange={(e) => setRateInput(e.target.value)}
+                                  placeholder={`e.g. 0.018`}
+                                  className="w-20 px-1.5 py-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-[10px]"
+                                />
+                                <span className="text-slate-400 text-[10px]">{currency}</span>
+                                <button
+                                  onClick={async () => {
+                                    const val = parseFloat(rateInput);
+                                    if (!val || val <= 0) return;
+                                    try {
+                                      await onUpsertCurrencyRate?.(currency, val);
+                                      setEditingRateCurrency(null);
+                                    } catch (err: any) {
+                                      setPortfolioError(err.message);
+                                    }
+                                  }}
+                                  className="p-1 bg-indigo-600 text-white rounded-md cursor-pointer"
+                                ><Check className="w-3 h-3" /></button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => { setEditingRateCurrency(currency); setRateInput(existing ? String(existing.rate_to_base) : ''); }}
+                                className="font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer"
+                              >
+                                {existing ? `${existing.rate_to_base} ${currency}` : `Set rate →`}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+              {portfolioError && <p className="text-[10px] text-red-500 font-semibold">{portfolioError}</p>}
             </div>
           )}
 

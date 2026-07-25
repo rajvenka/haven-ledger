@@ -84,6 +84,7 @@ export default function App() {
     updateWorkspaceLandingTab,
     updateWorkspaceColumnPrefs,
     dismissContributionReminder,
+    portfolios, workspaceCurrencyRates, switchToMultiPortfolio, createPortfolio, updatePortfolio, deletePortfolio, upsertCurrencyRate,
     createWorkspace,
     setWorkspaceMode,
     addFamilyMember,
@@ -1517,6 +1518,13 @@ export default function App() {
                 isReadOnly={isReadOnly}
                 onAddFamilyMember={addFamilyMember}
                 onAddBulkPayments={addBulkPayments}
+                portfolios={portfolios}
+                onSwitchToMultiPortfolio={switchToMultiPortfolio}
+                onCreatePortfolio={createPortfolio}
+                onUpdatePortfolio={updatePortfolio}
+                onDeletePortfolio={deletePortfolio}
+                workspaceCurrencyRates={workspaceCurrencyRates}
+                onUpsertCurrencyRate={upsertCurrencyRate}
                 workspaceBackups={workspaceBackups}
                 onRestoreFromBackup={restoreFromBackup}
                 onStartWhatsAppVerification={startWhatsAppVerification}

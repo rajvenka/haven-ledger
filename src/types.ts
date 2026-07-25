@@ -89,6 +89,8 @@ export interface Workspace {
   landingTab?: string | null;
   columnPrefs?: { key: string; visible: boolean }[] | null;
   dismissedReminderKey?: string | null;
+  portfolioMode?: 'single' | 'multiple';
+  baseCurrency?: string;
 }
 
 export interface RewardPerk {
