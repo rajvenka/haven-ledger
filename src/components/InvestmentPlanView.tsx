@@ -30,10 +30,10 @@ interface InvestmentPlanViewProps {
   addPortfolioWithdrawal: (memberUserId: string, amount: number, date: string, notes?: string) => Promise<void>;
   deletePortfolioWithdrawal: (id: string) => Promise<void>;
   portfolioCashBalances: any[];
-  setPortfolioCashBalance: (location: 'Zerodha' | 'Groww' | 'Bank' | 'Other', amount: number, asOfDate?: string, notes?: string) => Promise<void>;
+  setPortfolioCashBalance: (location: 'Zerodha' | 'Groww' | 'Bank' | 'Other', amount: number, asOfDate?: string, notes?: string, portfolioId?: string) => Promise<void>;
   deletePortfolioCashBalance: (id: string) => Promise<void>;
   portfolioRecurringPlans: any[];
-  addPortfolioRecurringPlan: (memberUserId: string, amount: number, frequency: 'monthly' | 'quarterly' | 'yearly', startDate: string, dayOfMonth?: number, notes?: string) => Promise<void>;
+  addPortfolioRecurringPlan: (memberUserId: string, amount: number, frequency: 'monthly' | 'quarterly' | 'yearly', startDate: string, dayOfMonth?: number, notes?: string, portfolioId?: string) => Promise<void>;
   updatePortfolioRecurringPlan: (id: string, updates: { active?: boolean; expectedAmount?: number }) => Promise<void>;
   deletePortfolioRecurringPlan: (id: string) => Promise<void>;
 }
@@ -206,6 +206,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const [planStartDate, setPlanStartDate] = useState(todayStr());
   const [planDayOfMonth, setPlanDayOfMonth] = useState('1');
   const [planNotes, setPlanNotes] = useState('');
+  const [planPortfolioId, setPlanPortfolioId] = useState('');
 
   const getPeriodBounds = (frequency: 'monthly' | 'quarterly' | 'yearly', ref = new Date()) => {
     if (frequency === 'monthly') {
@@ -261,9 +262,9 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
     return null;
   }, [currentUserId, portfolioRecurringPlans, portfolioContributions, dismissedReminderKey]);
 
-  const markTransferred = async (memberUserId: string, amount: number) => {
+  const markTransferred = async (memberUserId: string, amount: number, portfolioId?: string) => {
     await runAction(async () => {
-      await addPortfolioContribution(memberUserId, amount, todayStr(), 'Recurring plan transfer', 'recurring');
+      await addPortfolioContribution(memberUserId, amount, todayStr(), 'Recurring plan transfer', 'recurring', portfolioId);
     });
   };
 
@@ -319,7 +320,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           </div>
           {!isReadOnly && (
             <button
-              onClick={() => runAction(() => markTransferred(currentUserId!, myContributionReminder.remaining))}
+              onClick={() => runAction(() => markTransferred(currentUserId!, myContributionReminder.remaining, myContributionReminder.plan.portfolio_id))}
               className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer shrink-0"
             >
               Mark Transferred
@@ -429,7 +430,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                       <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase rounded-full shrink-0">Transferred</span>
                     ) : !isReadOnly ? (
                       <button
-                        onClick={() => markTransferred(plan.member_user_id, remaining)}
+                        onClick={() => markTransferred(plan.member_user_id, remaining, plan.portfolio_id)}
                         className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer shrink-0"
                       >
                         Mark {fmt(remaining)} Transferred
@@ -457,7 +458,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                 e.preventDefault();
                 if (!planMemberId || !planAmount) return;
                 await runAction(async () => {
-                  await addPortfolioRecurringPlan(planMemberId, parseFloat(planAmount), planFrequency, planStartDate, planFrequency === 'monthly' ? parseInt(planDayOfMonth) : undefined, planNotes.trim() || undefined);
+                  await addPortfolioRecurringPlan(planMemberId, parseFloat(planAmount), planFrequency, planStartDate, planFrequency === 'monthly' ? parseInt(planDayOfMonth) : undefined, planNotes.trim() || undefined, portfolioMode === 'multiple' ? (planPortfolioId || defaultPlanPortfolioId || undefined) : undefined);
                   setPlanAmount(''); setPlanNotes(''); setIsAddingPlan(false);
                 });
               }}
@@ -477,6 +478,16 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                 <input type="number" min="1" max="31" value={planDayOfMonth} onChange={(e) => setPlanDayOfMonth(e.target.value)} placeholder="Day of month" className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
               )}
               <input type="date" value={planStartDate} onChange={(e) => setPlanStartDate(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs col-span-2" />
+              {portfolioMode === 'multiple' && (
+                <select
+                  value={planPortfolioId || defaultPlanPortfolioId}
+                  onChange={(e) => setPlanPortfolioId(e.target.value)}
+                  className="col-span-2 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+                  title="Which portfolio this recurring plan is for"
+                >
+                  {allPortfolios.map((p: any) => <option key={p.id} value={p.id}>For: {p.name} ({p.currency})</option>)}
+                </select>
+              )}
               <textarea value={planNotes} onChange={(e) => setPlanNotes(e.target.value)} placeholder="Notes (optional)" rows={2} className="col-span-2 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs resize-none" />
               <button type="submit" className="col-span-2 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer">Save Plan</button>
             </form>
@@ -784,10 +795,19 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
 
         <div className="apple-card p-4 space-y-3">
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Banknote className="w-3.5 h-3.5" /> Cash Balance</span>
-          <p className="text-[9px] text-slate-400">Uninvested cash sitting in each location - contributed but not yet deployed into holdings.</p>
+          <p className="text-[9px] text-slate-400">
+            Uninvested cash sitting in each location - contributed but not yet deployed into holdings.
+            {portfolioMode === 'multiple' && selectedPlanPortfolios.size !== 1 && ' Select a single portfolio above to edit its cash balances.'}
+          </p>
           <div className="grid grid-cols-2 gap-2">
             {CASH_LOCATIONS.map(loc => {
-              const existing = portfolioCashBalances.find((c: any) => c.location === loc);
+              // Editing cash requires a single portfolio selected at the page level (the
+              // All/Port1/Port2 row above) - editing "All" would be ambiguous about which
+              // portfolio's cash to actually update, so editing is disabled until narrowed
+              // to exactly one, same principle as the currency-aware headline cards.
+              const activeCashPortfolioId = portfolioMode === 'multiple' ? selectedPlanPortfolioIds?.[0] : undefined;
+              const canEditCash = portfolioMode !== 'multiple' || (selectedPlanPortfolioIds?.length === 1);
+              const existing = portfolioCashBalances.find((c: any) => c.location === loc && (portfolioMode !== 'multiple' || c.portfolio_id === activeCashPortfolioId));
               const isEditing = editingCashLocation === loc;
               return (
                 <div key={loc} className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg">
@@ -803,7 +823,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                       />
                       <button
                         onClick={() => runAction(async () => {
-                          await setPortfolioCashBalance(loc, parseFloat(cashAmountInput) || 0);
+                          await setPortfolioCashBalance(loc, parseFloat(cashAmountInput) || 0, undefined, undefined, activeCashPortfolioId);
                           setEditingCashLocation(null);
                         })}
                         className="p-1.5 bg-indigo-600 text-white rounded-md cursor-pointer shrink-0"
@@ -813,7 +833,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                   ) : (
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-black text-slate-900 dark:text-white">{fmt(Number(existing?.amount ?? 0))}</span>
-                      {!isReadOnly && (
+                      {!isReadOnly && canEditCash && (
                         <button
                           onClick={() => { setEditingCashLocation(loc); setCashAmountInput(String(existing?.amount ?? '')); }}
                           className="text-slate-300 hover:text-indigo-500 cursor-pointer"

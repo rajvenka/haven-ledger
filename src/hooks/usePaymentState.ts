@@ -1492,11 +1492,11 @@ export function usePaymentState() {
 
   // One row per location - upserts on (workspace_id, location), so setting it again just
   // updates the current balance rather than creating a growing log.
-  const setPortfolioCashBalance = async (location: 'Zerodha' | 'Groww' | 'Bank' | 'Other', amount: number, asOfDate?: string, notes?: string) => {
+  const setPortfolioCashBalance = async (location: 'Zerodha' | 'Groww' | 'Bank' | 'Other', amount: number, asOfDate?: string, notes?: string, portfolioId?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_cash_balances').upsert({
-      workspace_id: activeWorkspaceId, location, amount, as_of_date: asOfDate ?? new Date().toISOString().slice(0, 10), notes: notes ?? null, updated_at: new Date().toISOString(),
-    }, { onConflict: 'workspace_id,location' });
+      workspace_id: activeWorkspaceId, location, amount, as_of_date: asOfDate ?? new Date().toISOString().slice(0, 10), notes: notes ?? null, updated_at: new Date().toISOString(), portfolio_id: portfolioId ?? null,
+    }, { onConflict: portfolioId ? 'workspace_id,location,portfolio_id' : 'workspace_id,location' });
     if (error) throw error;
     await loadPortfolioDetails();
   };
@@ -1537,11 +1537,11 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
-  const addPortfolioRecurringPlan = async (memberUserId: string, expectedAmount: number, frequency: 'monthly' | 'quarterly' | 'yearly', startDate: string, dayOfMonth?: number, notes?: string) => {
+  const addPortfolioRecurringPlan = async (memberUserId: string, expectedAmount: number, frequency: 'monthly' | 'quarterly' | 'yearly', startDate: string, dayOfMonth?: number, notes?: string, portfolioId?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_recurring_plans').insert({
       workspace_id: activeWorkspaceId, member_user_id: memberUserId, expected_amount: expectedAmount,
-      frequency, start_date: startDate, day_of_month: dayOfMonth ?? null, notes: notes ?? null,
+      frequency, start_date: startDate, day_of_month: dayOfMonth ?? null, notes: notes ?? null, portfolio_id: portfolioId ?? null,
     });
     if (error) throw error;
     await loadPortfolioDetails();

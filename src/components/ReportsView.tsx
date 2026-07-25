@@ -52,11 +52,15 @@ type ReportTab = 'overview' | 'insights' | 'activity' | 'movement' | 'summary';
 // defined inside the render body, every state update (e.g. toggling one card's details)
 // redefined this as a new function, which made React unmount and remount every card
 // instead of just re-rendering the one that changed, causing all charts to visibly reload.
-function InsightCard({ title, items, pctKey, subFn, isOpen, onToggle, fmt }: {
+function InsightCard({ title, items, pctKey, subFn, isOpen, onToggle, fmt, valueKey }: {
   title: string; items: any[]; pctKey: '_gainPct' | '_sinceSoldPct'; subFn?: (h: any) => string;
-  isOpen: boolean; onToggle: () => void; fmt: (n: number) => string;
+  isOpen: boolean; onToggle: () => void; fmt: (n: number) => string; valueKey?: string;
 }) {
-  const chartData = items.map(h => ({ name: h.symbol.length > 10 ? h.symbol.slice(0, 10) + '…' : h.symbol, pct: h[pctKey] }));
+  // valueKey switches the card from percentage display to an absolute currency amount -
+  // used for Top 5 Holdings (by value), where the point is the holding's actual size, not
+  // its gain/loss. Everything else about the card (chart, details list) stays the same shape.
+  const dataKey = valueKey ?? pctKey;
+  const chartData = items.map(h => ({ name: h.symbol.length > 10 ? h.symbol.slice(0, 10) + '…' : h.symbol, pct: h[dataKey] }));
   return (
     <div className="apple-card p-4 space-y-2">
       <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">{title} <span className="text-slate-300 dark:text-slate-600 normal-case font-bold">({items.length})</span></span>
@@ -67,11 +71,11 @@ function InsightCard({ title, items, pctKey, subFn, isOpen, onToggle, fmt }: {
           <div style={{ height: Math.max(60, items.length * 24) }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
-                <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
+                <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => valueKey ? fmt(v) : `${v}%`} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} width={70} />
-                <Tooltip formatter={(v: number) => [`${v >= 0 ? '+' : ''}${v.toFixed(2)}%`, 'Change']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                <Tooltip formatter={(v: number) => [valueKey ? fmt(v) : `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`, valueKey ? 'Value' : 'Change']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
                 <Bar dataKey="pct" radius={[0, 4, 4, 0]}>
-                  {chartData.map((d, i) => <Cell key={i} fill={d.pct >= 0 ? '#10b981' : '#f43f5e'} />)}
+                  {chartData.map((d, i) => <Cell key={i} fill={valueKey ? '#6366f1' : (d.pct >= 0 ? '#10b981' : '#f43f5e')} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -87,7 +91,11 @@ function InsightCard({ title, items, pctKey, subFn, isOpen, onToggle, fmt }: {
                     <span className="text-slate-700 dark:text-slate-300 font-semibold truncate block">{h.symbol}</span>
                     {subFn && <span className="text-[9px] text-slate-400">{subFn(h)}</span>}
                   </span>
-                  <span className={`font-bold shrink-0 ml-2 ${h[pctKey] >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{h[pctKey] >= 0 ? '+' : ''}{h[pctKey].toFixed(2)}%</span>
+                  {valueKey ? (
+                    <span className="font-bold shrink-0 ml-2 text-slate-900 dark:text-white">{fmt(h[dataKey])}</span>
+                  ) : (
+                    <span className={`font-bold shrink-0 ml-2 ${h[pctKey] >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{h[pctKey] >= 0 ? '+' : ''}{h[pctKey].toFixed(2)}%</span>
+                  )}
                 </div>
               ))}
             </div>
@@ -773,7 +781,7 @@ export default function ReportsView(props: ReportsViewProps) {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <InsightCard title="Top 5 Holdings (by value)" items={topHoldings} pctKey="_gainPct" subFn={(h) => fmt(h._value)} isOpen={expandedInsightCards.has("top-holdings")} onToggle={() => toggleCard("top-holdings")} fmt={fmt} />
+            <InsightCard title="Top 5 Holdings (by value)" items={topHoldings} pctKey="_gainPct" valueKey="_value" subFn={(h) => `${h._gainPct >= 0 ? '+' : ''}${h._gainPct.toFixed(2)}% gain`} isOpen={expandedInsightCards.has("top-holdings")} onToggle={() => toggleCard("top-holdings")} fmt={fmt} />
             <InsightCard title="Top 5 Winners" items={topWinners} pctKey="_gainPct" isOpen={expandedInsightCards.has("top-winners")} onToggle={() => toggleCard("top-winners")} fmt={fmt} />
             <InsightCard title="Top 5 Losers" items={topLosers} pctKey="_gainPct" isOpen={expandedInsightCards.has("top-losers")} onToggle={() => toggleCard("top-losers")} fmt={fmt} />
             <InsightCard title="Big Movers Up (10%+)" items={moversUp} pctKey="_gainPct" isOpen={expandedInsightCards.has("movers-up")} onToggle={() => toggleCard("movers-up")} fmt={fmt} />
