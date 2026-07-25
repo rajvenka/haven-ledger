@@ -577,6 +577,45 @@ export default function App() {
               canCreateBusiness={userProfile?.isSuperAdmin || userProfile?.canCreateBusiness}
             />
 
+            {/* Theme toggle, guided tour, and notifications - desktop equivalent of the
+                mobile header's action row, which lives in a md:hidden block and so was
+                never reachable at all from the desktop sidebar layout. */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => {
+                  const nextTheme = theme === 'light' ? 'dark' : 'light';
+                  setTheme(nextTheme);
+                  localStorage.setItem('pm_theme', nextTheme);
+                }}
+                title={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
+                className="p-2 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-full text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+              >
+                {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={() => setShowTour(true)}
+                className="p-2 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-full text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                title="Take the guided tour"
+              >
+                <Compass className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => {
+                  setIsNotifDrawerOpen(true);
+                  markAllNotificationsRead();
+                }}
+                className="p-2 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-full text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 relative transition-colors cursor-pointer"
+                title="Notifications"
+              >
+                <Bell className="w-4 h-4" />
+                {unreadNotifCount > 0 && (
+                  <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-rose-500 border-2 border-white dark:border-slate-950 rounded-full flex items-center justify-center text-[7px] font-black text-white">
+                    {unreadNotifCount}
+                  </span>
+                )}
+              </button>
+            </div>
+
             {/* Menu Sections */}
             <div className="space-y-5">
               {/* SECTION: ANALYTICS & OVERVIEW */}
