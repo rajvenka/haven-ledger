@@ -347,9 +347,9 @@ export function usePaymentState() {
   // backfills every existing row's portfolio_id to point at it, via the DB function so it
   // happens atomically. Single-portfolio workspaces never call this and are completely
   // unaffected - portfolio_id stays null for them forever, treated as the one implicit portfolio.
-  const switchToMultiPortfolio = async () => {
+  const switchToMultiPortfolio = async (baseCurrency?: string) => {
     if (!activeWorkspaceId) return;
-    const { error } = await supabase.rpc('switch_workspace_to_multi_portfolio', { p_workspace_id: activeWorkspaceId });
+    const { error } = await supabase.rpc('switch_workspace_to_multi_portfolio', { p_workspace_id: activeWorkspaceId, p_base_currency: baseCurrency ?? null });
     if (error) throw error;
     if (user) await refreshWorkspaces(user.id, activeWorkspaceId);
     await loadPortfolioDetails();
@@ -1450,10 +1450,10 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
-  const addPortfolioContribution = async (memberUserId: string, amount: number, contributionDate: string, notes?: string, contributionType: 'one_off' | 'recurring' | 'initial' = 'one_off') => {
+  const addPortfolioContribution = async (memberUserId: string, amount: number, contributionDate: string, notes?: string, contributionType: 'one_off' | 'recurring' | 'initial' = 'one_off', portfolioId?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_contributions').insert({
-      workspace_id: activeWorkspaceId, member_user_id: memberUserId, amount, contribution_date: contributionDate, notes: notes ?? null, contribution_type: contributionType,
+      workspace_id: activeWorkspaceId, member_user_id: memberUserId, amount, contribution_date: contributionDate, notes: notes ?? null, contribution_type: contributionType, portfolio_id: portfolioId ?? null,
     });
     if (error) throw error;
     await loadPortfolioDetails();

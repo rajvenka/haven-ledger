@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Trash2, Gift, Receipt, FileBarChart, ChevronLeft, TrendingUp, TrendingDown } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
@@ -12,6 +12,10 @@ interface ReportsViewProps {
   workspaceName?: string;
   workspaceMembers: WorkspaceMemberLite[];
   isReadOnly?: boolean;
+  portfolios?: any[];
+  portfolioMode?: 'single' | 'multiple';
+  workspaceCurrencyRates?: any[];
+  baseCurrency?: string;
   portfolioHoldings: any[];
   portfolioPriceHistory: any[];
   portfolioContributions: any[];
@@ -105,7 +109,8 @@ function DetailBucket({ label, count, totalLabel, isOpen, onToggle, children }: 
 export default function ReportsView(props: ReportsViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly,
-    portfolioHoldings, portfolioPriceHistory, portfolioContributions, portfolioWithdrawals,
+    portfolios: allPortfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
+    portfolioHoldings: allPortfolioHoldings, portfolioPriceHistory, portfolioContributions: allPortfolioContributions, portfolioWithdrawals: allPortfolioWithdrawals,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
     portfolioSplits, portfolioCashBalances, portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
@@ -145,6 +150,28 @@ export default function ReportsView(props: ReportsViewProps) {
       setFormError(err?.message || 'Something went wrong. Please try again.');
     }
   };
+
+  const [selectedReportPortfolios, setSelectedReportPortfolios] = useState<Set<string>>(new Set());
+  const reportPortfolioNames = useMemo(() => {
+    if (portfolioMode !== 'multiple') return [];
+    const names = new Set<string>();
+    allPortfolioHoldings.forEach((h: any) => names.add(allPortfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned'));
+    return Array.from(names).sort();
+  }, [allPortfolioHoldings, allPortfolios, portfolioMode]);
+  const selectedPortfolioIds = useMemo(() => {
+    if (selectedReportPortfolios.size === 0) return null;
+    return allPortfolios.filter((p: any) => selectedReportPortfolios.has(p.name)).map((p: any) => p.id);
+  }, [selectedReportPortfolios, allPortfolios]);
+  // Filtering happens once, right here, rather than in every individual metric below - every
+  // report calculation downstream automatically respects the portfolio selection this way.
+  const portfolioHoldings = selectedPortfolioIds ? allPortfolioHoldings.filter((h: any) => selectedPortfolioIds.includes(h.portfolio_id)) : allPortfolioHoldings;
+  const portfolioContributions = selectedPortfolioIds ? allPortfolioContributions.filter((c: any) => selectedPortfolioIds.includes(c.portfolio_id)) : allPortfolioContributions;
+  const portfolioWithdrawals = selectedPortfolioIds ? allPortfolioWithdrawals.filter((w: any) => selectedPortfolioIds.includes(w.portfolio_id)) : allPortfolioWithdrawals;
+  const reportDisplayCurrency = (() => {
+    if (portfolioMode !== 'multiple') return baseCurrency;
+    const selectedPortfolioObjs = allPortfolios.filter((p: any) => selectedReportPortfolios.has(p.name));
+    return selectedPortfolioObjs.length === 1 ? selectedPortfolioObjs[0].currency : baseCurrency;
+  })();
 
   const activeHoldings = portfolioHoldings.filter(h => h.status === 'active');
   const soldHoldings = portfolioHoldings.filter(h => h.status === 'sold');
@@ -186,6 +213,26 @@ export default function ReportsView(props: ReportsViewProps) {
 
       {formError && (
         <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 rounded-xl text-[11px] text-rose-600 dark:text-rose-400 font-semibold">{formError}</div>
+      )}
+
+      {portfolioMode === 'multiple' && reportPortfolioNames.length > 1 && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button
+            onClick={() => setSelectedReportPortfolios(new Set())}
+            className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${selectedReportPortfolios.size === 0 ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}
+          >
+            All
+          </button>
+          {reportPortfolioNames.map(p => (
+            <button
+              key={p}
+              onClick={() => setSelectedReportPortfolios(prev => { const next = new Set(prev); if (next.has(p)) next.delete(p); else next.add(p); return next; })}
+              className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${selectedReportPortfolios.has(p) ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
       )}
 
       <div className="flex gap-1.5 flex-wrap">

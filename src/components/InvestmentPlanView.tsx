@@ -13,13 +13,17 @@ interface InvestmentPlanViewProps {
   workspaceMembers: WorkspaceMemberLite[];
   isReadOnly?: boolean;
   currentUserId?: string;
+  portfolios?: any[];
+  portfolioMode?: 'single' | 'multiple';
+  workspaceCurrencyRates?: any[];
+  baseCurrency?: string;
   dismissedReminderKey?: string | null;
   onDismissContributionReminder?: (key: string) => Promise<void>;
   portfolioSplits: any[];
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
   deletePortfolioSplit: (id: string) => Promise<void>;
   portfolioContributions: any[];
-  addPortfolioContribution: (memberUserId: string, amount: number, date: string, notes?: string, contributionType?: 'one_off' | 'recurring' | 'initial') => Promise<void>;
+  addPortfolioContribution: (memberUserId: string, amount: number, date: string, notes?: string, contributionType?: 'one_off' | 'recurring' | 'initial', portfolioId?: string) => Promise<void>;
   updatePortfolioContribution: (id: string, updates: { amount?: number; contributionDate?: string; notes?: string }) => Promise<void>;
   deletePortfolioContribution: (id: string) => Promise<void>;
   portfolioWithdrawals: any[];
@@ -44,12 +48,32 @@ type PlanTab = 'overview' | 'contributions' | 'settings';
 export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly, currentUserId, dismissedReminderKey, onDismissContributionReminder,
+    portfolios: allPortfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
-    portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
-    portfolioCashBalances, setPortfolioCashBalance, deletePortfolioCashBalance,
-    portfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,
+    portfolioContributions: allPortfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
+    portfolioWithdrawals: allPortfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
+    portfolioCashBalances: allPortfolioCashBalances, setPortfolioCashBalance, deletePortfolioCashBalance,
+    portfolioRecurringPlans: allPortfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,
   } = props;
+
+  const [selectedPlanPortfolios, setSelectedPlanPortfolios] = useState<Set<string>>(new Set());
+  const planPortfolioNames = useMemo(() => {
+    if (portfolioMode !== 'multiple') return [];
+    const names = new Set<string>();
+    allPortfolioContributions.forEach((c: any) => names.add(allPortfolios.find((p: any) => p.id === c.portfolio_id)?.name || 'Unassigned'));
+    allPortfolioRecurringPlans.forEach((p: any) => names.add(allPortfolios.find((pp: any) => pp.id === p.portfolio_id)?.name || 'Unassigned'));
+    return Array.from(names).sort();
+  }, [allPortfolioContributions, allPortfolioRecurringPlans, allPortfolios, portfolioMode]);
+  const selectedPlanPortfolioIds = useMemo(() => {
+    if (selectedPlanPortfolios.size === 0) return null;
+    return allPortfolios.filter((p: any) => selectedPlanPortfolios.has(p.name)).map((p: any) => p.id);
+  }, [selectedPlanPortfolios, allPortfolios]);
+  // Same pattern as Reports: filtered once here, so every metric downstream automatically
+  // respects the portfolio selection without needing to be touched individually.
+  const portfolioContributions = selectedPlanPortfolioIds ? allPortfolioContributions.filter((c: any) => selectedPlanPortfolioIds.includes(c.portfolio_id)) : allPortfolioContributions;
+  const portfolioWithdrawals = selectedPlanPortfolioIds ? allPortfolioWithdrawals.filter((w: any) => selectedPlanPortfolioIds.includes(w.portfolio_id)) : allPortfolioWithdrawals;
+  const portfolioCashBalances = selectedPlanPortfolioIds ? allPortfolioCashBalances.filter((c: any) => selectedPlanPortfolioIds.includes(c.portfolio_id)) : allPortfolioCashBalances;
+  const portfolioRecurringPlans = selectedPlanPortfolioIds ? allPortfolioRecurringPlans.filter((p: any) => selectedPlanPortfolioIds.includes(p.portfolio_id)) : allPortfolioRecurringPlans;
 
   const [planTab, setPlanTab] = useState<PlanTab>('overview');
   const [formError, setFormError] = useState<string | null>(null);
@@ -81,6 +105,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const [cDate, setCDate] = useState(todayStr());
   const [cNotes, setCNotes] = useState('');
   const [cType, setCType] = useState<'one_off' | 'initial'>('one_off');
+  const [cPortfolioId, setCPortfolioId] = useState('');
   const [editingContributionId, setEditingContributionId] = useState<string | null>(null);
   const [editContributionAmount, setEditContributionAmount] = useState('');
   const [editContributionDate, setEditContributionDate] = useState('');
@@ -90,11 +115,13 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const [contribSortDirection, setContribSortDirection] = useState<'asc' | 'desc'>('desc');
   const [contribGroupBy, setContribGroupBy] = useState<'none' | 'type'>('none');
 
+  const defaultPlanPortfolioId = allPortfolios.find((p: any) => p.is_default)?.id || allPortfolios[0]?.id || '';
+
   const handleAddContribution = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!cMemberId || !cAmount) return;
     await runAction(async () => {
-      await addPortfolioContribution(cMemberId, parseFloat(cAmount), cDate, cNotes.trim() || undefined, cType);
+      await addPortfolioContribution(cMemberId, parseFloat(cAmount), cDate, cNotes.trim() || undefined, cType, portfolioMode === 'multiple' ? (cPortfolioId || defaultPlanPortfolioId || undefined) : undefined);
       setCAmount(''); setCNotes(''); setCType('one_off'); setIsAddingContribution(false);
     });
   };
@@ -252,6 +279,26 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
         <ClipboardList className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
         <h2 className="text-lg font-bold text-slate-900 dark:text-white">{workspaceName ? `${workspaceName} Investment Plan` : 'Investment Plan'}</h2>
       </div>
+
+      {portfolioMode === 'multiple' && planPortfolioNames.length > 1 && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button
+            onClick={() => setSelectedPlanPortfolios(new Set())}
+            className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${selectedPlanPortfolios.size === 0 ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}
+          >
+            All
+          </button>
+          {planPortfolioNames.map(p => (
+            <button
+              key={p}
+              onClick={() => setSelectedPlanPortfolios(prev => { const next = new Set(prev); if (next.has(p)) next.delete(p); else next.add(p); return next; })}
+              className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${selectedPlanPortfolios.has(p) ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      )}
 
       {formError && (
         <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 rounded-xl text-[11px] text-rose-600 dark:text-rose-400 font-semibold">{formError}</div>
@@ -478,8 +525,18 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                 <option value="">Who</option>
                 {workspaceMembers.map(m => <option key={m.uid} value={m.uid}>{memberName(m)}</option>)}
               </select>
-              <input type="number" value={cAmount} onChange={(e) => setCAmount(e.target.value)} placeholder="Amount" className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+              <input type="number" value={cAmount} onChange={(e) => setCAmount(e.target.value)} placeholder={portfolioMode === 'multiple' ? `Amount (${allPortfolios.find((p: any) => p.id === (cPortfolioId || defaultPlanPortfolioId))?.currency || baseCurrency})` : 'Amount'} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
               <input type="date" value={cDate} onChange={(e) => setCDate(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+              {portfolioMode === 'multiple' && (
+                <select
+                  value={cPortfolioId || defaultPlanPortfolioId}
+                  onChange={(e) => setCPortfolioId(e.target.value)}
+                  className="col-span-3 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+                  title="Which portfolio this contribution is for"
+                >
+                  {allPortfolios.map((p: any) => <option key={p.id} value={p.id}>For: {p.name} ({p.currency})</option>)}
+                </select>
+              )}
               <select value={cType} onChange={(e) => setCType(e.target.value as any)} className="col-span-3 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
                 <option value="one_off">One-off Payment</option>
                 <option value="initial">Initial Investment</option>

@@ -35,6 +35,8 @@ interface PortfolioViewProps {
   }[], portfolioId?: string) => Promise<void>;
   portfolios?: any[];
   portfolioMode?: 'single' | 'multiple';
+  workspaceCurrencyRates?: any[];
+  baseCurrency?: string;
   reconcilePortfolioHoldingQuantity: (id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced') => Promise<void>;
   bulkHistoricalImport: (snapshots: { date: string; holdings: any[] }[]) => Promise<{ newCount: number; updatedCount: number; soldCount: number; skippedStaleCount: number; priceHistoryCount: number; stockCount: number }>;
   updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
@@ -63,6 +65,34 @@ interface PortfolioViewProps {
 }
 
 const fmt = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+// Currency-aware formatter for multi-portfolio mode - single-portfolio workspaces never
+// call this, fmt() above stays exactly as it always has for them.
+const CURRENCY_META: Record<string, { symbol: string; locale: string }> = {
+  INR: { symbol: '₹', locale: 'en-IN' },
+  USD: { symbol: '$', locale: 'en-US' },
+  AUD: { symbol: 'A$', locale: 'en-AU' },
+  EUR: { symbol: '€', locale: 'en-IE' },
+  GBP: { symbol: '£', locale: 'en-GB' },
+  SGD: { symbol: 'S$', locale: 'en-SG' },
+  AED: { symbol: 'AED ', locale: 'en-AE' },
+  CAD: { symbol: 'C$', locale: 'en-CA' },
+};
+const fmtCur = (n: number, currency: string = 'INR') => {
+  const meta = CURRENCY_META[currency] || { symbol: `${currency} `, locale: 'en-US' };
+  return `${meta.symbol}${n.toLocaleString(meta.locale, { maximumFractionDigits: 2 })}`;
+};
+// Converts an amount from its own currency into the workspace's base currency using
+// workspace_currency_rates (base-currency-relative: rate_to_base means "1 base currency
+// = rate_to_base units of this currency"). Falls back to the raw amount unconverted if no
+// rate has been set yet, rather than silently hiding data - better to show something
+// clearly than nothing at all.
+const convertToBase = (amount: number, fromCurrency: string, baseCurrency: string, rates: any[]): number => {
+  if (fromCurrency === baseCurrency) return amount;
+  const rate = rates.find((r: any) => r.currency === fromCurrency)?.rate_to_base;
+  if (!rate) return amount;
+  return amount / rate;
+};
 const fmtQty = (n: number) => Number.isInteger(n) ? String(n) : n.toFixed(2);
 
 // Generic CSV export - takes column headers and row objects keyed by header, handles
@@ -108,7 +138,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly, isDataLoading, columnPrefs, onUpdateColumnPrefs,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances,
-    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, portfolios = [], portfolioMode = 'single',
+    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
@@ -458,15 +488,17 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const soldFilterOptions = useMemo(() => {
     const combos = new Set<string>();
     const sources = new Set<string>();
+    const portfolioNames = new Set<string>();
     let hasUnclassified = false;
     soldHoldings.forEach(h => {
       combos.add(`${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`);
       if (h.source) sources.add(h.source); else hasUnclassified = true;
+      if (portfolioMode === 'multiple') portfolioNames.add(portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned');
     });
     const sortedSources = Array.from(sources).sort();
     if (hasUnclassified) sortedSources.push(UNCLASSIFIED_LABEL);
-    return { combos: Array.from(combos).sort(), sources: sortedSources };
-  }, [soldHoldings]);
+    return { combos: Array.from(combos).sort(), sources: sortedSources, portfolioNames: Array.from(portfolioNames).sort() };
+  }, [soldHoldings, portfolioMode, portfolios]);
 
   const toggleSoldHoldingFilter = (value: string) => {
     setSoldHoldingFilters(prev => {
@@ -486,11 +518,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
     if (soldHoldingFilters.size > 0) {
       const selectedCombos = soldFilterOptions.combos.filter(c => soldHoldingFilters.has(c));
       const selectedSources = soldFilterOptions.sources.filter(s => soldHoldingFilters.has(s));
+      const selectedPortfolios = soldFilterOptions.portfolioNames.filter(p => soldHoldingFilters.has(p));
       list = soldHoldings.filter(h => {
         const combo = `${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`;
         const comboOk = selectedCombos.length === 0 || selectedCombos.includes(combo);
         const sourceOk = selectedSources.length === 0 || (h.source ? selectedSources.includes(h.source) : selectedSources.includes(UNCLASSIFIED_LABEL));
-        return comboOk && sourceOk;
+        const portfolioName = portfolioMode === 'multiple' ? (portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned') : null;
+        const portfolioOk = selectedPortfolios.length === 0 || (portfolioName && selectedPortfolios.includes(portfolioName));
+        return comboOk && sourceOk && portfolioOk;
       });
     }
     if (!soldSortField) return list;
@@ -1300,13 +1335,19 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <button type="button" onClick={() => setHHoldingType('mutual_fund')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${hHoldingType === 'mutual_fund' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Mutual Fund</button>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
-                <select value={hBroker} onChange={(e) => setHBroker(e.target.value as any)} className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
-                  <option>Zerodha</option><option>Groww</option><option>Other</option>
-                </select>
+                <input type="text" list="broker-suggestions" value={hBroker} onChange={(e) => setHBroker(e.target.value as any)} placeholder="Broker" className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                <datalist id="broker-suggestions">
+                  <option>Zerodha</option><option>Groww</option>
+                  {Array.from(new Set(portfolioHoldings.map(h => h.broker).filter(b => b && b !== 'Zerodha' && b !== 'Groww'))).map(b => <option key={b} value={b} />)}
+                </datalist>
                 {hHoldingType === 'stock' ? (
-                  <select value={hExchange} onChange={(e) => setHExchange(e.target.value as any)} className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
-                    <option>NSE</option><option>BSE</option>
-                  </select>
+                  <>
+                    <input type="text" list="exchange-suggestions" value={hExchange} onChange={(e) => setHExchange(e.target.value as any)} placeholder="Exchange e.g. NSE, NASDAQ" className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                    <datalist id="exchange-suggestions">
+                      <option>NSE</option><option>BSE</option><option>NASDAQ</option><option>NYSE</option><option>ASX</option><option>LSE</option><option>TSX</option>
+                      {Array.from(new Set(portfolioHoldings.map(h => h.exchange).filter(e => e && !['NSE', 'BSE', 'NASDAQ', 'NYSE', 'ASX', 'LSE', 'TSX'].includes(e)))).map(e => <option key={e} value={e} />)}
+                    </datalist>
+                  </>
                 ) : <div />}
                 <input type="text" value={hSymbol} onChange={(e) => setHSymbol(e.target.value)} placeholder={hHoldingType === 'stock' ? 'Symbol e.g. TCS' : 'Fund name'} className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
                 <input type="number" value={hQty} onChange={(e) => setHQty(e.target.value)} placeholder={hHoldingType === 'stock' ? 'Quantity' : 'Units'} className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
@@ -1401,27 +1442,39 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
           {holdingFilters.size > 0 && (() => {
             const filterLabel = Array.from(holdingFilters).join(' + ');
-            const subInvested = filteredActiveHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
-            const subCurrent = filteredActiveHoldings.reduce((s, h) => s + Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity), 0);
+            // Currency-aware: if exactly one portfolio is selected, show its own currency
+            // with no conversion needed (all its holdings share that currency). Otherwise
+            // (All, or several portfolios spanning currencies), convert everything into the
+            // workspace's base currency before summing, using the saved exchange rates.
+            const selectedPortfolioNames = filterOptions.portfolioNames.filter(p => holdingFilters.has(p));
+            const singlePortfolioSelected = portfolioMode === 'multiple' && selectedPortfolioNames.length === 1
+              ? portfolios.find((p: any) => p.name === selectedPortfolioNames[0])
+              : null;
+            const subtotalCurrency = singlePortfolioSelected ? singlePortfolioSelected.currency : baseCurrency;
+            const holdingCurrency = (h: any) => portfolios.find((p: any) => p.id === h.portfolio_id)?.currency || h.currency || 'INR';
+            const conv = (h: any, val: number) => (portfolioMode === 'multiple' && !singlePortfolioSelected) ? convertToBase(val, holdingCurrency(h), subtotalCurrency, workspaceCurrencyRates) : val;
+            const fmtSub = (n: number) => portfolioMode === 'multiple' ? fmtCur(n, subtotalCurrency) : fmt(n);
+            const subInvested = filteredActiveHoldings.reduce((s, h) => s + conv(h, Number(h.buy_price) * Number(h.quantity)), 0);
+            const subCurrent = filteredActiveHoldings.reduce((s, h) => s + conv(h, Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity)), 0);
             const subGain = subCurrent - subInvested;
             const subGainPct = subInvested > 0 ? (subGain / subInvested) * 100 : 0;
             const subDailyEligible = filteredActiveHoldings.filter(h => h.live_price != null && h.previous_close != null);
-            const subDailyChange = subDailyEligible.reduce((s, h) => s + (Number(h.live_price) - Number(h.previous_close)) * Number(h.quantity), 0);
+            const subDailyChange = subDailyEligible.reduce((s, h) => s + conv(h, (Number(h.live_price) - Number(h.previous_close)) * Number(h.quantity)), 0);
             const subLoadEligible = filteredActiveHoldings.filter(h => h.live_price != null);
-            const subLoadChange = subLoadEligible.reduce((s, h) => s + (Number(h.live_price) - Number(h.current_price ?? h.buy_price)) * Number(h.quantity), 0);
+            const subLoadChange = subLoadEligible.reduce((s, h) => s + conv(h, (Number(h.live_price) - Number(h.current_price ?? h.buy_price)) * Number(h.quantity)), 0);
             return (
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="apple-card p-3 bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
                   <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{filterLabel}" Invested</span>
-                  <span className="text-sm font-black text-slate-900 dark:text-white">{fmt(subInvested)}</span>
+                  <span className="text-sm font-black text-slate-900 dark:text-white">{fmtSub(subInvested)}</span>
                 </div>
                 <div className="apple-card p-3 bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
                   <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{filterLabel}" Current Value</span>
-                  <span className="text-sm font-black text-slate-900 dark:text-white">{fmt(subCurrent)}</span>
+                  <span className="text-sm font-black text-slate-900 dark:text-white">{fmtSub(subCurrent)}</span>
                 </div>
                 <div className="apple-card p-3 bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
                   <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{filterLabel}" Net Gain</span>
-                  <span className={`text-sm font-black ${subGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{subGain >= 0 ? '+' : ''}{fmt(subGain)}</span>
+                  <span className={`text-sm font-black ${subGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{subGain >= 0 ? '+' : ''}{fmtSub(subGain)}</span>
                 </div>
                 <div className="apple-card p-3 bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
                   <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{filterLabel}" % Chg</span>
@@ -1430,7 +1483,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <div className="apple-card p-3 bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
                   <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{filterLabel}" Daily Change</span>
                   {subDailyEligible.length > 0 ? (
-                    <span className={`text-sm font-black ${subDailyChange >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{subDailyChange >= 0 ? '+' : ''}{fmt(subDailyChange)}</span>
+                    <span className={`text-sm font-black ${subDailyChange >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{subDailyChange >= 0 ? '+' : ''}{fmtSub(subDailyChange)}</span>
                   ) : (
                     <span className="text-xs text-slate-300 dark:text-slate-700">—</span>
                   )}
@@ -1438,7 +1491,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <div className="apple-card p-3 bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
                   <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">"{filterLabel}" Since Previous Load</span>
                   {subLoadEligible.length > 0 ? (
-                    <span className={`text-sm font-black ${subLoadChange >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{subLoadChange >= 0 ? '+' : ''}{fmt(subLoadChange)}</span>
+                    <span className={`text-sm font-black ${subLoadChange >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{subLoadChange >= 0 ? '+' : ''}{fmtSub(subLoadChange)}</span>
                   ) : (
                     <span className="text-xs text-slate-300 dark:text-slate-700">—</span>
                   )}
@@ -1772,6 +1825,19 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
       {holdingsTab === 'sold' && (
         <>
+          {portfolioMode === 'multiple' && soldFilterOptions.portfolioNames.length > 1 && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                onClick={() => setSoldHoldingFilters(prev => { const next = new Set(prev); soldFilterOptions.portfolioNames.forEach(p => next.delete(p)); return next; })}
+                className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${soldFilterOptions.portfolioNames.every(p => !soldHoldingFilters.has(p)) ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}
+              >
+                All
+              </button>
+              {soldFilterOptions.portfolioNames.map(p => (
+                <button key={p} onClick={() => toggleSoldHoldingFilter(p)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${soldHoldingFilters.has(p) ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}>{p}</button>
+              ))}
+            </div>
+          )}
           <div className="flex justify-end gap-2">
             {soldHoldings.length > 0 && (
               <button
@@ -1816,29 +1882,37 @@ export default function PortfolioView(props: PortfolioViewProps) {
           )}
 
           {(() => {
-            const buyValue = filteredSoldHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
-            const soldValue = filteredSoldHoldings.reduce((s, h) => s + Number(h.sold_price) * Number(h.quantity), 0);
+            const selectedSoldPortfolios = soldFilterOptions.portfolioNames.filter(p => soldHoldingFilters.has(p));
+            const singleSoldPortfolio = portfolioMode === 'multiple' && selectedSoldPortfolios.length === 1
+              ? portfolios.find((p: any) => p.name === selectedSoldPortfolios[0])
+              : null;
+            const soldDisplayCurrency = singleSoldPortfolio ? singleSoldPortfolio.currency : baseCurrency;
+            const soldHoldingCurrency = (h: any) => portfolios.find((p: any) => p.id === h.portfolio_id)?.currency || h.currency || 'INR';
+            const convSold = (h: any, val: number) => (portfolioMode === 'multiple' && !singleSoldPortfolio) ? convertToBase(val, soldHoldingCurrency(h), soldDisplayCurrency, workspaceCurrencyRates) : val;
+            const fmtSold = (n: number) => portfolioMode === 'multiple' ? fmtCur(n, soldDisplayCurrency) : fmt(n);
+            const buyValue = filteredSoldHoldings.reduce((s, h) => s + convSold(h, Number(h.buy_price) * Number(h.quantity)), 0);
+            const soldValue = filteredSoldHoldings.reduce((s, h) => s + convSold(h, Number(h.sold_price) * Number(h.quantity)), 0);
             const pl = soldValue - buyValue;
             const sinceSoldEligible = filteredSoldHoldings.filter(h => h.live_price != null);
-            const sinceSoldTotal = sinceSoldEligible.reduce((s, h) => s + (Number(h.live_price) - Number(h.sold_price)) * Number(h.quantity), 0);
+            const sinceSoldTotal = sinceSoldEligible.reduce((s, h) => s + convSold(h, (Number(h.live_price) - Number(h.sold_price)) * Number(h.quantity)), 0);
             return (
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="apple-card p-3">
                   <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Buy Value</span>
-                  <span className="text-sm font-black text-slate-900 dark:text-white">{fmt(buyValue)}</span>
+                  <span className="text-sm font-black text-slate-900 dark:text-white">{fmtSold(buyValue)}</span>
                 </div>
                 <div className="apple-card p-3">
                   <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Sold Value</span>
-                  <span className="text-sm font-black text-slate-900 dark:text-white">{fmt(soldValue)}</span>
+                  <span className="text-sm font-black text-slate-900 dark:text-white">{fmtSold(soldValue)}</span>
                 </div>
                 <div className="apple-card p-3">
                   <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Profit/Loss</span>
-                  <span className={`text-sm font-black ${pl >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{pl >= 0 ? '+' : ''}{fmt(pl)}</span>
+                  <span className={`text-sm font-black ${pl >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{pl >= 0 ? '+' : ''}{fmtSold(pl)}</span>
                 </div>
                 <div className="apple-card p-3">
                   <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Since Sold</span>
                   {sinceSoldEligible.length > 0 ? (
-                    <span className={`text-sm font-black ${sinceSoldTotal >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{sinceSoldTotal >= 0 ? '+' : ''}{fmt(sinceSoldTotal)}</span>
+                    <span className={`text-sm font-black ${sinceSoldTotal >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{sinceSoldTotal >= 0 ? '+' : ''}{fmtSold(sinceSoldTotal)}</span>
                   ) : (
                     <span className="text-xs text-slate-300 dark:text-slate-700">— refresh prices</span>
                   )}

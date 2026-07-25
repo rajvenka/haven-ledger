@@ -1600,6 +1600,8 @@ export default function App() {
                 onUpdateColumnPrefs={updateWorkspaceColumnPrefs}
                 portfolios={portfolios}
                 portfolioMode={activeWorkspace?.portfolioMode}
+                workspaceCurrencyRates={workspaceCurrencyRates}
+                baseCurrency={activeWorkspace?.baseCurrency}
                 portfolioSplits={portfolioSplits}
                 addPortfolioSplit={addPortfolioSplit}
                 deletePortfolioSplit={deletePortfolioSplit}
@@ -1640,6 +1642,10 @@ export default function App() {
                 workspaceMembers={contributorMembers}
                 isReadOnly={isReadOnly}
                 currentUserId={user?.id}
+                portfolios={portfolios}
+                portfolioMode={activeWorkspace?.portfolioMode}
+                workspaceCurrencyRates={workspaceCurrencyRates}
+                baseCurrency={activeWorkspace?.baseCurrency}
                 dismissedReminderKey={activeWorkspace?.dismissedReminderKey}
                 onDismissContributionReminder={dismissContributionReminder}
                 portfolioSplits={portfolioSplits}
@@ -1665,6 +1671,10 @@ export default function App() {
                 workspaceName={activeWorkspace?.name}
                 workspaceMembers={contributorMembers}
                 isReadOnly={isReadOnly}
+                portfolios={portfolios}
+                portfolioMode={activeWorkspace?.portfolioMode}
+                workspaceCurrencyRates={workspaceCurrencyRates}
+                baseCurrency={activeWorkspace?.baseCurrency}
                 portfolioHoldings={portfolioHoldings}
                 portfolioPriceHistory={portfolioPriceHistory}
                 portfolioContributions={portfolioContributions}

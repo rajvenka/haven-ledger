@@ -40,7 +40,7 @@ interface AccountInfoProps {
   onStartWhatsAppVerification?: (phone: string) => Promise<string>;
   onUpdateDisplayName?: (name: string) => Promise<void>;
   portfolios?: any[];
-  onSwitchToMultiPortfolio?: () => Promise<void>;
+  onSwitchToMultiPortfolio?: (baseCurrency: string) => Promise<void>;
   onCreatePortfolio?: (name: string, currency: string) => Promise<void>;
   onUpdatePortfolio?: (id: string, updates: { name?: string; currency?: string; is_default?: boolean }) => Promise<void>;
   onDeletePortfolio?: (id: string) => Promise<void>;
@@ -239,6 +239,7 @@ export default function AccountInfo({
   const [familyEmailRole, setFamilyEmailRole] = useState<'view' | 'modify'>('modify');
   const [inviteStep, setInviteStep] = useState<1 | 2 | 3>(1);
   const [confirmingMultiPortfolio, setConfirmingMultiPortfolio] = useState(false);
+  const [chosenBaseCurrency, setChosenBaseCurrency] = useState('INR');
   const [switchingPortfolioMode, setSwitchingPortfolioMode] = useState(false);
   const [newPortfolioName, setNewPortfolioName] = useState('');
   const [newPortfolioCurrency, setNewPortfolioCurrency] = useState('INR');
@@ -647,12 +648,22 @@ export default function AccountInfo({
                         <p className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold">
                           This creates a "Default Portfolio" containing everything you have today, then unlocks separate portfolios (e.g. one per currency) alongside it. This can't be undone once switched.
                         </p>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">Default currency (used for combined "All" totals):</span>
+                          <select
+                            value={chosenBaseCurrency}
+                            onChange={(e) => setChosenBaseCurrency(e.target.value)}
+                            className="px-2 py-1 bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900 rounded-md text-[10px] font-bold"
+                          >
+                            {['INR', 'USD', 'AUD', 'EUR', 'GBP', 'SGD', 'AED', 'CAD'].map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
                         <div className="flex gap-2">
                           <button
                             onClick={async () => {
                               setSwitchingPortfolioMode(true);
                               try {
-                                await onSwitchToMultiPortfolio?.();
+                                await onSwitchToMultiPortfolio?.(chosenBaseCurrency);
                                 setConfirmingMultiPortfolio(false);
                               } catch (err: any) {
                                 setPortfolioError(err.message || 'Failed to switch.');
