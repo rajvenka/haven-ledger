@@ -903,14 +903,32 @@ export default function PortfolioView(props: PortfolioViewProps) {
   }, [workspaceMembers, portfolioSplits]);
 
   // ---- Statement calculations ----
-  const totalContributed = portfolioContributions.reduce((s, c) => s + Number(c.amount), 0);
-  const totalWithdrawn = portfolioWithdrawals.reduce((s, w) => s + Number(w.amount), 0);
+  // Portfolio-aware: when a specific portfolio (or several) is selected via the All/Port1/
+  // Port2 row, these headline cards now filter down to match - previously only the "filtered
+  // subtotal" cards further down reacted to that selection, leaving the header showing
+  // unfiltered totals regardless of what was picked, which looked like the selector wasn't
+  // doing anything at the top level.
+  const selectedHeaderPortfolioNames = portfolioMode === 'multiple' ? filterOptions.portfolioNames.filter(p => holdingFilters.has(p)) : [];
+  const selectedHeaderPortfolioIds = selectedHeaderPortfolioNames.length > 0
+    ? portfolios.filter((p: any) => selectedHeaderPortfolioNames.includes(p.name)).map((p: any) => p.id)
+    : null;
+  const headerContributions = selectedHeaderPortfolioIds ? portfolioContributions.filter((c: any) => selectedHeaderPortfolioIds.includes(c.portfolio_id)) : portfolioContributions;
+  const headerWithdrawals = selectedHeaderPortfolioIds ? portfolioWithdrawals.filter((w: any) => selectedHeaderPortfolioIds.includes(w.portfolio_id)) : portfolioWithdrawals;
+  const headerCashBalances = selectedHeaderPortfolioIds ? portfolioCashBalances.filter((c: any) => selectedHeaderPortfolioIds.includes(c.portfolio_id)) : portfolioCashBalances;
+  const singleHeaderPortfolio = selectedHeaderPortfolioNames.length === 1 ? portfolios.find((p: any) => p.name === selectedHeaderPortfolioNames[0]) : null;
+  const headerDisplayCurrency = singleHeaderPortfolio ? singleHeaderPortfolio.currency : baseCurrency;
+  const headerHoldingCurrency = (h: any) => portfolios.find((p: any) => p.id === h.portfolio_id)?.currency || h.currency || 'INR';
+  const convHeader = (h: any, val: number) => (portfolioMode === 'multiple' && !singleHeaderPortfolio) ? convertToBase(val, headerHoldingCurrency(h), headerDisplayCurrency, workspaceCurrencyRates) : val;
+  const fmtHeader = (n: number) => portfolioMode === 'multiple' ? fmtCur(n, headerDisplayCurrency) : fmt(n);
+
+  const totalContributed = headerContributions.reduce((s: number, c: any) => s + Number(c.amount), 0);
+  const totalWithdrawn = headerWithdrawals.reduce((s: number, w: any) => s + Number(w.amount), 0);
   const netContributed = totalContributed - totalWithdrawn;
-  const totalInvestedActive = activeHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
-  const balanceCash = portfolioCashBalances.reduce((s: number, c: any) => s + Number(c.amount), 0);
+  const totalInvestedActive = filteredActiveHoldings.reduce((s, h) => s + convHeader(h, Number(h.buy_price) * Number(h.quantity)), 0);
+  const balanceCash = headerCashBalances.reduce((s: number, c: any) => s + Number(c.amount), 0);
   const totalStockInvestment = totalInvestedActive; // current cost basis of active stock + MF holdings
   const bookedProfitLoss = (balanceCash + totalStockInvestment) - netContributed;
-  const currentValueActive = activeHoldings.reduce((s, h) => s + Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity), 0);
+  const currentValueActive = filteredActiveHoldings.reduce((s, h) => s + convHeader(h, Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity)), 0);
   const unrealizedGain = currentValueActive - totalInvestedActive;
   const realizedGain = soldHoldings.reduce((s, h) => s + (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity), 0);
   const totalDividends = portfolioDividends.reduce((s, d) => s + Number(d.amount), 0);
@@ -991,25 +1009,25 @@ export default function PortfolioView(props: PortfolioViewProps) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="apple-card p-4">
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Total Investment</span>
-          <span className="text-base font-black text-slate-900 dark:text-white">{fmt(netContributed)}</span>
+          <span className="text-base font-black text-slate-900 dark:text-white">{fmtHeader(netContributed)}</span>
           <span className="text-[9px] text-slate-400 block mt-0.5">actual contributions, net of withdrawals</span>
         </div>
         <div className="apple-card p-4">
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Balance Cash</span>
-          <span className="text-base font-black text-slate-900 dark:text-white">{fmt(balanceCash)}</span>
+          <span className="text-base font-black text-slate-900 dark:text-white">{fmtHeader(balanceCash)}</span>
           <span className="text-[9px] text-slate-400 block mt-0.5">from Investment Plan</span>
         </div>
         <div className="apple-card p-4">
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Booked Profit/Loss</span>
           <span className={`text-base font-black flex items-center gap-1 ${bookedProfitLoss >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
             {bookedProfitLoss >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-            {fmt(Math.abs(bookedProfitLoss))}
+            {fmtHeader(Math.abs(bookedProfitLoss))}
           </span>
           <span className="text-[9px] text-slate-400 block mt-0.5">cash + stock value vs. contributed</span>
         </div>
         <div className="apple-card p-4">
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Total Stock Investment</span>
-          <span className="text-base font-black text-slate-900 dark:text-white">{fmt(totalStockInvestment)}</span>
+          <span className="text-base font-black text-slate-900 dark:text-white">{fmtHeader(totalStockInvestment)}</span>
           <span className="text-[9px] text-slate-400 block mt-0.5">stock & MF purchase value</span>
         </div>
       </div>
@@ -1017,7 +1035,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="apple-card p-4">
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Current Holdings Value</span>
-          <span className="text-base font-black text-slate-900 dark:text-white">{fmt(currentValueActive)}</span>
+          <span className="text-base font-black text-slate-900 dark:text-white">{fmtHeader(currentValueActive)}</span>
         </div>
         <div className="apple-card p-4">
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Return %</span>
@@ -1031,12 +1049,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Unrealized Gain</span>
           <span className={`text-base font-black flex items-center gap-1 ${unrealizedGain >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
             {unrealizedGain >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-            {fmt(Math.abs(unrealizedGain))}
+            {fmtHeader(Math.abs(unrealizedGain))}
           </span>
         </div>
         <div className="apple-card p-4">
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Net Gain (P&L, all-in)</span>
-          <span className={`text-base font-black ${netGain >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>{fmt(netGain)}</span>
+          <span className={`text-base font-black ${netGain >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>{fmtHeader(netGain)}</span>
           <span className="text-[9px] text-slate-400 block mt-0.5">cash + stock value vs. contributed</span>
         </div>
       </div>
