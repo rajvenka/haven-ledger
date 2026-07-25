@@ -221,6 +221,7 @@ export default function AccountInfo({
   // Family forms state
   const [familyEmail, setFamilyEmail] = useState('');
   const [familyEmailRole, setFamilyEmailRole] = useState<'view' | 'modify'>('modify');
+  const [inviteStep, setInviteStep] = useState<1 | 2>(1);
   const [invitationError, setInvitationError] = useState<string | null>(null);
   const [displayNameInput, setDisplayNameInput] = useState(userProfile?.displayName || '');
   const [savingDisplayName, setSavingDisplayName] = useState(false);
@@ -270,8 +271,9 @@ export default function AccountInfo({
     try {
       const accessLevel = familyFeatures.length >= ALL_FEATURES.length ? 'full' : 'limited';
       await onAddFamilyMember(familyEmail, familyEmailRole, accessLevel, familyFeatures);
-      setFamilySuccess(`Successfully sent family invitation to "${familyEmail}"!`);
+      setFamilySuccess(`Successfully sent workspace invitation to "${familyEmail}"!`);
       setFamilyEmail('');
+      setInviteStep(1);
     } catch (err: any) {
       setFamilyError(err.message || 'Failed to send invitation.');
     } finally {
@@ -696,75 +698,104 @@ export default function AccountInfo({
               </div>
               <p className="text-[10px] text-slate-500 dark:text-slate-400">Share this code with family members so they can join with either view-only or full edit access.</p>
 
-              {/* Invite by email (logs a pending invitation they'll see when signed in) */}
-              <form onSubmit={handleInviteMember} className="space-y-1.5 pt-1">
-                <div className="flex gap-2">
-                  <input
-                    type="email"
-                    value={familyEmail}
-                    onChange={(e) => setFamilyEmail(e.target.value)}
-                    placeholder="family@email.com"
-                    className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
-                  />
-                  <select
-                    value={familyEmailRole}
-                    onChange={(e) => setFamilyEmailRole(e.target.value as 'view' | 'modify')}
-                    className="px-2 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-semibold"
-                  >
-                    <option value="modify">Can Edit</option>
-                    <option value="view">View Only</option>
-                  </select>
-                  <button
-                    type="submit"
-                    disabled={familyLoading}
-                    className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    <UserPlus className="w-4 h-4" />
-                  </button>
+              {/* Invite by email (logs a pending invitation they'll see when signed in) -
+                  two clear steps rather than everything at once: who, then what access. */}
+              <form onSubmit={handleInviteMember} className="space-y-2 pt-1">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black ${inviteStep === 1 ? 'bg-indigo-600 text-white' : 'bg-emerald-500 text-white'}`}>{inviteStep === 1 ? '1' : <Check className="w-3 h-3" />}</span>
+                  <span className={`text-[9px] font-bold uppercase tracking-wide ${inviteStep === 1 ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400'}`}>Who</span>
+                  <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black ${inviteStep === 2 ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>2</span>
+                  <span className={`text-[9px] font-bold uppercase tracking-wide ${inviteStep === 2 ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400'}`}>Access</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">App Access</span>
-                  <div className="flex gap-1">
-                    <button type="button" onClick={() => setFamilyFeatures(myAvailableFeatures)} className="text-[9px] font-bold text-indigo-500 cursor-pointer">Match My Plan</button>
-                    <span className="text-[9px] text-slate-300">·</span>
-                    <button type="button" onClick={() => setFamilyFeatures(myAvailableFeatures.includes('core') ? ['core'] : [])} className="text-[9px] font-bold text-indigo-500 cursor-pointer">Bills Only</button>
-                  </div>
-                </div>
-                <p className="text-[9px] text-slate-400 -mt-1">You can only share features included in your own plan ({userProfile?.licensePlanName || 'Light'}).</p>
-                {accessPlans.filter(plan => plan.features.every(f => myAvailableFeatures.includes(f))).length > 0 && (
-                  <div className="flex gap-1.5 flex-wrap">
-                    {accessPlans.filter(plan => plan.features.every(f => myAvailableFeatures.includes(f))).map(plan => (
-                      <button
-                        key={plan.id}
-                        type="button"
-                        onClick={() => setFamilyFeatures(plan.features)}
-                        title={plan.description}
-                        className="px-2.5 py-1 bg-slate-50 dark:bg-slate-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-800 rounded-full text-[9px] font-black uppercase tracking-wide text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer transition-all"
+
+                {inviteStep === 1 ? (
+                  <>
+                    <p className="text-[10px] text-slate-400">Step 1 of 2 - who are you inviting?</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="email"
+                        value={familyEmail}
+                        onChange={(e) => setFamilyEmail(e.target.value)}
+                        placeholder="email@example.com"
+                        className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+                      />
+                      <select
+                        value={familyEmailRole}
+                        onChange={(e) => setFamilyEmailRole(e.target.value as 'view' | 'modify')}
+                        className="px-2 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-semibold"
                       >
-                        {plan.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div className="grid grid-cols-2 gap-1.5">
-                  {ALL_FEATURES.map(f => {
-                    const locked = !myAvailableFeatures.includes(f);
-                    return (
+                        <option value="modify">Can Edit</option>
+                        <option value="view">View Only</option>
+                      </select>
+                    </div>
                     <button
-                      key={f}
                       type="button"
-                      disabled={locked}
-                      onClick={() => toggleFeature(f)}
-                      title={locked ? "Not included in your own plan" : undefined}
-                      className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all text-left ${locked ? 'bg-slate-50 dark:bg-slate-900 text-slate-300 dark:text-slate-700 border border-slate-100 dark:border-slate-800 cursor-not-allowed opacity-60' : familyFeatures.includes(f) ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900 cursor-pointer' : 'bg-slate-50 dark:bg-slate-900 text-slate-400 border border-slate-100 dark:border-slate-800 cursor-pointer'}`}
+                      onClick={() => { if (familyEmail.trim()) setInviteStep(2); }}
+                      disabled={!familyEmail.trim()}
+                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer"
                     >
-                      {familyFeatures.includes(f) && !locked ? <Check className="w-3 h-3 shrink-0" /> : <span className="w-3 h-3 shrink-0" />}
-                      {FEATURE_META[f]}
+                      Next: Choose Access
                     </button>
-                    );
-                  })}
-                </div>
-                <p className="text-[9px] text-slate-400">Dashboard, Expenses, Manage Bills, and Payment History are always included. Pick which extras this person can see.</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] text-slate-400">Step 2 of 2 - what can {familyEmail} see?</p>
+                      <button type="button" onClick={() => setInviteStep(1)} className="text-[9px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer shrink-0">← Back</button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">App Access</span>
+                      <div className="flex gap-1">
+                        <button type="button" onClick={() => setFamilyFeatures(myAvailableFeatures)} className="text-[9px] font-bold text-indigo-500 cursor-pointer">Match My Plan</button>
+                        <span className="text-[9px] text-slate-300">·</span>
+                        <button type="button" onClick={() => setFamilyFeatures(myAvailableFeatures.includes('core') ? ['core'] : [])} className="text-[9px] font-bold text-indigo-500 cursor-pointer">Bills Only</button>
+                      </div>
+                    </div>
+                    <p className="text-[9px] text-slate-400 -mt-1">You can only share features included in your own plan ({userProfile?.licensePlanName || 'Light'}).</p>
+                    {accessPlans.filter(plan => plan.features.every(f => myAvailableFeatures.includes(f))).length > 0 && (
+                      <div className="flex gap-1.5 flex-wrap">
+                        {accessPlans.filter(plan => plan.features.every(f => myAvailableFeatures.includes(f))).map(plan => (
+                          <button
+                            key={plan.id}
+                            type="button"
+                            onClick={() => setFamilyFeatures(plan.features)}
+                            title={plan.description}
+                            className="px-2.5 py-1 bg-slate-50 dark:bg-slate-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-800 rounded-full text-[9px] font-black uppercase tracking-wide text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer transition-all"
+                          >
+                            {plan.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {ALL_FEATURES.map(f => {
+                        const locked = !myAvailableFeatures.includes(f);
+                        return (
+                        <button
+                          key={f}
+                          type="button"
+                          disabled={locked}
+                          onClick={() => toggleFeature(f)}
+                          title={locked ? "Not included in your own plan" : undefined}
+                          className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all text-left ${locked ? 'bg-slate-50 dark:bg-slate-900 text-slate-300 dark:text-slate-700 border border-slate-100 dark:border-slate-800 cursor-not-allowed opacity-60' : familyFeatures.includes(f) ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900 cursor-pointer' : 'bg-slate-50 dark:bg-slate-900 text-slate-400 border border-slate-100 dark:border-slate-800 cursor-pointer'}`}
+                        >
+                          {familyFeatures.includes(f) && !locked ? <Check className="w-3 h-3 shrink-0" /> : <span className="w-3 h-3 shrink-0" />}
+                          {FEATURE_META[f]}
+                        </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[9px] text-slate-400">Dashboard, Expenses, Manage Bills, and Payment History are always included. Pick which extras this person can see.</p>
+                    <button
+                      type="submit"
+                      disabled={familyLoading}
+                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <UserPlus className="w-4 h-4" /> {familyLoading ? 'Sending…' : 'Send Invite'}
+                    </button>
+                  </>
+                )}
               </form>
               </>
               )}
