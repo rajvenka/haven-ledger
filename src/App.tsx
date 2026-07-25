@@ -818,7 +818,7 @@ export default function App() {
                   >
                     <div className="flex items-center gap-2">
                       <Users className="w-4 h-4 shrink-0 opacity-80" />
-                      <span>Workspace Configuration</span>
+                      <span>Workspace Config</span>
                     </div>
                     {activeTab === 'account' && settingsSubTab === 'members' && (
                       <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
@@ -1245,7 +1245,7 @@ export default function App() {
                       >
                         <div className="flex items-center gap-2.5">
                           <Users className="w-4.5 h-4.5 shrink-0 opacity-80" />
-                          <span>Workspace Configuration</span>
+                          <span>Workspace Config</span>
                         </div>
                         {activeTab === 'account' && settingsSubTab === 'members' && (
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
