@@ -20,6 +20,7 @@ export default function WorkspaceSwitcher({ workspaces, activeWorkspace, onSwitc
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState<'family' | 'business'>('family');
   const [busy, setBusy] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   if (workspaces.length === 0) return null;
 
@@ -27,11 +28,14 @@ export default function WorkspaceSwitcher({ workspaces, activeWorkspace, onSwitc
     e.preventDefault();
     if (!newName.trim()) return;
     setBusy(true);
+    setCreateError(null);
     try {
       await onCreateNew(newName.trim(), newType);
       setIsCreating(false);
       setIsOpen(false);
       setNewName('');
+    } catch (err: any) {
+      setCreateError(err?.message || 'Failed to create workspace. Please try again.');
     } finally {
       setBusy(false);
     }
@@ -114,7 +118,7 @@ export default function WorkspaceSwitcher({ workspaces, activeWorkspace, onSwitc
 
             {!isCreating ? (
               <button
-                onClick={() => setIsCreating(true)}
+                onClick={() => { setIsCreating(true); setCreateError(null); }}
                 className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900 transition-all cursor-pointer text-indigo-600 dark:text-indigo-400"
               >
                 <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 bg-slate-100 dark:bg-slate-800">
@@ -146,6 +150,9 @@ export default function WorkspaceSwitcher({ workspaces, activeWorkspace, onSwitc
                 </div>
                 {!canCreateBusiness && (
                   <p className="text-[9px] text-slate-400">Business workspaces need a plan with that add-on — request one in Preferences.</p>
+                )}
+                {createError && (
+                  <p className="text-[9px] text-rose-500 font-semibold">{createError}</p>
                 )}
                 <button type="submit" disabled={busy || !newName.trim()} className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer">
                   {busy ? 'Creating…' : 'Create'}
