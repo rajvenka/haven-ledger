@@ -1,19 +1,22 @@
 import * as XLSX from 'xlsx';
 
 export interface ParsedHolding {
-  broker: 'Zerodha' | 'Groww';
+  broker: string;
   holdingType: 'stock' | 'mutual_fund';
   symbol: string;
   isin?: string;
   folioNumber?: string;
-  exchange: 'NSE' | 'BSE';
+  exchange: string;
   quantity: number;
   buyPrice: number;
   currentPrice: number;
   source?: string;
+  currency?: 'INR' | 'USD' | 'AUD' | 'EUR' | 'GBP' | 'SGD' | 'AED' | 'CAD';
 }
 
-export type BrokerTemplate = 'zerodha' | 'groww_stocks' | 'groww_mf';
+export type BrokerTemplate = 'zerodha' | 'groww_stocks' | 'groww_mf' | 'universal';
+export const UNIVERSAL_TEMPLATE_HEADERS = ['Broker', 'Holding Type', 'Symbol', 'ISIN', 'Exchange', 'Quantity', 'Buy Price', 'Current Price', 'Currency', 'Source', 'Folio Number'];
+export const UNIVERSAL_TEMPLATE_EXAMPLE_ROW = ['eToro', 'Stock', 'AAPL', '', 'NASDAQ', 10, 150.25, 175.50, 'USD', '', ''];
 
 // These files all have a few preamble rows (client name, summary figures) before
 // the actual data table starts, so we scan for the header row instead of assuming row 0.
@@ -84,6 +87,32 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
 
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+
+  if (template === 'universal') {
+    const headerIdx = findHeaderRowIndex(rows, 'Symbol');
+    if (headerIdx === -1) throw new Error("Couldn't find the 'Symbol' column - did you use the downloaded Universal Template?");
+    const records = rowsToObjects(rows, headerIdx);
+    const validCurrencies = ['INR', 'USD', 'AUD', 'EUR', 'GBP', 'SGD', 'AED', 'CAD'];
+    return records
+      .filter(r => r['Symbol'] && Number(r['Quantity']) > 0)
+      .map(r => {
+        const holdingTypeRaw = String(r['Holding Type'] ?? 'Stock').trim().toLowerCase();
+        const currencyRaw = String(r['Currency'] ?? 'INR').trim().toUpperCase();
+        return {
+          broker: String(r['Broker'] ?? 'Other').trim() || 'Other',
+          holdingType: holdingTypeRaw.startsWith('mutual') || holdingTypeRaw === 'mf' ? 'mutual_fund' as const : 'stock' as const,
+          symbol: String(r['Symbol']).trim(),
+          isin: r['ISIN'] ? String(r['ISIN']).trim() : undefined,
+          folioNumber: r['Folio Number'] ? String(r['Folio Number']).trim() : undefined,
+          exchange: String(r['Exchange'] ?? '').trim() || 'Other',
+          quantity: Number(r['Quantity']) || 0,
+          buyPrice: Number(r['Buy Price']) || 0,
+          currentPrice: r['Current Price'] != null && r['Current Price'] !== '' ? Number(r['Current Price']) : (Number(r['Buy Price']) || 0),
+          source: r['Source'] ? String(r['Source']).trim() : undefined,
+          currency: (validCurrencies.includes(currencyRaw) ? currencyRaw : 'INR') as ParsedHolding['currency'],
+        };
+      });
+  }
 
   if (template === 'groww_stocks') {
     const headerIdx = findHeaderRowIndex(rows, 'Stock Name');
@@ -160,4 +189,14 @@ export async function parseBrokerFileWithDate(file: File, template: BrokerTempla
   const fileDate = extractFileDate(file.name, workbook, template);
   const holdings = await parseBrokerFile(file, template);
   return { holdings, fileDate };
+}
+
+// Generates and downloads a blank starter file with the right columns, so people don't
+// have to guess the Universal Template's format - one example row shows the expected
+// shape, everything else is left empty for them to fill in.
+export function downloadUniversalTemplate() {
+  const ws = XLSX.utils.aoa_to_sheet([UNIVERSAL_TEMPLATE_HEADERS, UNIVERSAL_TEMPLATE_EXAMPLE_ROW]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Holdings');
+  XLSX.writeFile(wb, 'haven-vault-universal-template.xlsx');
 }

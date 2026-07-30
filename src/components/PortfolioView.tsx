@@ -1,4 +1,4 @@
-import { parseBrokerFile, parseBrokerFileWithDate, BrokerTemplate, ParsedHolding } from '../utils/brokerImport';
+import { parseBrokerFile, parseBrokerFileWithDate, BrokerTemplate, ParsedHolding, downloadUniversalTemplate } from '../utils/brokerImport';
 import * as XLSX from 'xlsx';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
@@ -32,7 +32,7 @@ interface PortfolioViewProps {
     holdType?: 'days' | 'date'; holdDays?: number; holdUntilDate?: string;
   }) => Promise<void>;
   bulkAddPortfolioHoldings: (holdings: {
-    holdingType: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string;
+    holdingType: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string; currency?: string;
   }[], portfolioId?: string) => Promise<void>;
   portfolios?: any[];
   portfolioMode?: 'single' | 'multiple';
@@ -790,7 +790,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
           importPreview.fresh.map(h => ({
             holdingType: h.holdingType, broker: h.broker, symbol: h.symbol, isin: h.isin, folioNumber: h.folioNumber, exchange: h.exchange,
             quantity: h.quantity, buyPrice: h.buyPrice, buyDate: importBuyDate, currentPrice: h.currentPrice,
-            source: h.source || importSourceTag.trim() || undefined,
+            source: h.source || importSourceTag.trim() || undefined, currency: h.currency,
           })),
           portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined
         );
@@ -1319,13 +1319,24 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <button type="button" onClick={() => { setImportTemplate('zerodha'); setImportPreview(null); setImportRawParsed(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'zerodha' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Zerodha (Stocks + MF)</button>
                 <button type="button" onClick={() => { setImportTemplate('groww_stocks'); setImportPreview(null); setImportRawParsed(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'groww_stocks' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Stocks</button>
                 <button type="button" onClick={() => { setImportTemplate('groww_mf'); setImportPreview(null); setImportRawParsed(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'groww_mf' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Mutual Funds</button>
+                <button type="button" onClick={() => { setImportTemplate('universal'); setImportPreview(null); setImportRawParsed(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'universal' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Universal Template</button>
               </div>
               <p className="text-[9px] text-slate-400">
                 {importTemplate === 'zerodha' && "Console → Holdings → Download as XLSX (stocks and mutual funds are both detected automatically)"}
                 {importTemplate === 'groww_stocks' && "Groww app → Reports → Stocks Holdings Statement (XLSX)"}
                 {importTemplate === 'groww_mf' && "Groww app → Reports → Mutual Funds Holdings Statement (XLSX)"}
+                {importTemplate === 'universal' && "For any broker without a dedicated import yet - fill in the template with your holdings, any currency."}
                 {' '}· Prices/quantities come from the file at export time. Already-imported holdings are automatically skipped.
               </p>
+              {importTemplate === 'universal' && (
+                <button
+                  type="button"
+                  onClick={() => downloadUniversalTemplate()}
+                  className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" /> Download blank template
+                </button>
+              )}
 
               <label className="flex flex-col items-center justify-center gap-2 px-4 py-6 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500 rounded-xl cursor-pointer transition-colors bg-slate-50/50 dark:bg-slate-900/50">
                 <Upload className="w-5 h-5 text-slate-400" />
@@ -1368,7 +1379,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               {h.holdingType === 'mutual_fund' && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 rounded-full">MF</span>}
                               {h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
                             </span>
-                            <span className="text-slate-400">{h.quantity} @ ₹{h.buyPrice.toFixed(2)}</span>
+                            <span className="text-slate-400">{h.quantity} @ {fmtCur(h.buyPrice, h.currency || 'INR')}</span>
                           </div>
                         ))}
                       </div>
