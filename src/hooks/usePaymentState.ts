@@ -1283,6 +1283,7 @@ export function usePaymentState() {
     holdingType?: 'stock' | 'mutual_fund'; source?: string; ticker?: string | null;
     targetType?: 'price' | 'percent' | null; targetPrice?: number | null; targetPercent?: number | null;
     holdType?: 'days' | 'date' | null; holdDays?: number | null; holdUntilDate?: string | null;
+    symbol?: string; broker?: string; exchange?: string; isin?: string | null; buyPrice?: number; buyDate?: string; currency?: string; portfolioId?: string | null;
   }) => {
     const row: any = {};
     if (updates.currentPrice !== undefined) { row.current_price = updates.currentPrice; row.current_price_updated_at = new Date().toISOString(); }
@@ -1300,6 +1301,14 @@ export function usePaymentState() {
     if (updates.holdType !== undefined) row.hold_type = updates.holdType;
     if (updates.holdDays !== undefined) row.hold_days = updates.holdDays;
     if (updates.holdUntilDate !== undefined) row.hold_until_date = updates.holdUntilDate;
+    if (updates.symbol !== undefined) row.symbol = updates.symbol.toUpperCase();
+    if (updates.broker !== undefined) row.broker = updates.broker;
+    if (updates.exchange !== undefined) row.exchange = updates.exchange;
+    if (updates.isin !== undefined) row.isin = updates.isin;
+    if (updates.buyPrice !== undefined) row.buy_price = updates.buyPrice;
+    if (updates.buyDate !== undefined) row.buy_date = updates.buyDate;
+    if (updates.currency !== undefined) row.currency = updates.currency;
+    if (updates.portfolioId !== undefined) row.portfolio_id = updates.portfolioId;
 
     // Reference price always tracks whichever capture is chronologically latest - a
     // backdated update (e.g. re-importing an older file) can never move it backwards.
@@ -1452,10 +1461,10 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
-  const addPortfolioContribution = async (memberUserId: string, amount: number, contributionDate: string, notes?: string, contributionType: 'one_off' | 'recurring' | 'initial' = 'one_off', portfolioId?: string) => {
+  const addPortfolioContribution = async (memberUserId: string, amount: number, contributionDate: string, notes?: string, contributionType: 'one_off' | 'recurring' | 'initial' = 'one_off', portfolioId?: string, appliesToPeriodStart?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_contributions').insert({
-      workspace_id: activeWorkspaceId, member_user_id: memberUserId, amount, contribution_date: contributionDate, notes: notes ?? null, contribution_type: contributionType, portfolio_id: portfolioId ?? null,
+      workspace_id: activeWorkspaceId, member_user_id: memberUserId, amount, contribution_date: contributionDate, notes: notes ?? null, contribution_type: contributionType, portfolio_id: portfolioId ?? null, applies_to_period_start: appliesToPeriodStart ?? null,
     });
     if (error) throw error;
     await loadPortfolioDetails();

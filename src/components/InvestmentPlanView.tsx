@@ -23,7 +23,7 @@ interface InvestmentPlanViewProps {
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
   deletePortfolioSplit: (id: string) => Promise<void>;
   portfolioContributions: any[];
-  addPortfolioContribution: (memberUserId: string, amount: number, date: string, notes?: string, contributionType?: 'one_off' | 'recurring' | 'initial', portfolioId?: string) => Promise<void>;
+  addPortfolioContribution: (memberUserId: string, amount: number, date: string, notes?: string, contributionType?: 'one_off' | 'recurring' | 'initial', portfolioId?: string, appliesToPeriodStart?: string) => Promise<void>;
   updatePortfolioContribution: (id: string, updates: { amount?: number; contributionDate?: string; notes?: string }) => Promise<void>;
   deletePortfolioContribution: (id: string) => Promise<void>;
   portfolioWithdrawals: any[];
@@ -104,7 +104,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const [cAmount, setCAmount] = useState('');
   const [cDate, setCDate] = useState(todayStr());
   const [cNotes, setCNotes] = useState('');
-  const [cType, setCType] = useState<'one_off' | 'initial'>('one_off');
+  const [cType, setCType] = useState<'one_off' | 'initial' | 'recurring'>('one_off');
+  const [cApplyToPeriod, setCApplyToPeriod] = useState<'current' | 'next'>('current');
   const [cPortfolioId, setCPortfolioId] = useState('');
   const [editingContributionId, setEditingContributionId] = useState<string | null>(null);
   const [editContributionAmount, setEditContributionAmount] = useState('');
@@ -120,9 +121,16 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const handleAddContribution = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!cMemberId || !cAmount) return;
+    // "Next period" is computed relative to today's month - this correctly matches whatever
+    // frequency the person's actual plan turns out to be (monthly/quarterly/yearly), since
+    // the reminder logic checks whether this date falls inside that plan's own period bounds,
+    // not the other way around.
+    const appliesToPeriodStart = cType === 'recurring' && cApplyToPeriod === 'next'
+      ? new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString().slice(0, 10)
+      : undefined;
     await runAction(async () => {
-      await addPortfolioContribution(cMemberId, parseFloat(cAmount), cDate, cNotes.trim() || undefined, cType, portfolioMode === 'multiple' ? (cPortfolioId || defaultPlanPortfolioId || undefined) : undefined);
-      setCAmount(''); setCNotes(''); setCType('one_off'); setIsAddingContribution(false);
+      await addPortfolioContribution(cMemberId, parseFloat(cAmount), cDate, cNotes.trim() || undefined, cType, portfolioMode === 'multiple' ? (cPortfolioId || defaultPlanPortfolioId || undefined) : undefined, appliesToPeriodStart);
+      setCAmount(''); setCNotes(''); setCType('one_off'); setCApplyToPeriod('current'); setIsAddingContribution(false);
     });
   };
 
@@ -249,7 +257,17 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
 
       const transferredThisPeriod = portfolioContributions
         .filter(c => c.member_user_id === currentUserId && c.contribution_type === 'recurring')
-        .filter(c => { const d = new Date(c.contribution_date); return d >= period.start && d <= period.end; })
+        .filter(c => {
+          // A contribution explicitly tagged for this period (e.g. paid early) counts here
+          // regardless of its actual transfer date. Otherwise, fall back to the original
+          // behavior: does the transfer date itself fall within this period's range.
+          if (c.applies_to_period_start) {
+            const tagged = new Date(c.applies_to_period_start);
+            return tagged >= period.start && tagged <= period.end;
+          }
+          const d = new Date(c.contribution_date);
+          return d >= period.start && d <= period.end;
+        })
         .reduce((s, c) => s + Number(c.amount), 0);
       const remaining = Math.max(0, Number(plan.expected_amount) - transferredThisPeriod);
       if (remaining === 0) continue;
@@ -551,7 +569,17 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
               <select value={cType} onChange={(e) => setCType(e.target.value as any)} className="col-span-3 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
                 <option value="one_off">One-off Payment</option>
                 <option value="initial">Initial Investment</option>
+                <option value="recurring">Recurring Plan Payment</option>
               </select>
+              {cType === 'recurring' && (
+                <div className="col-span-3 flex items-center gap-2">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase shrink-0">Counts toward:</span>
+                  <div className="flex gap-1.5">
+                    <button type="button" onClick={() => setCApplyToPeriod('current')} className={`px-2.5 py-1 rounded-full text-[10px] font-bold cursor-pointer ${cApplyToPeriod === 'current' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>This period</button>
+                    <button type="button" onClick={() => setCApplyToPeriod('next')} className={`px-2.5 py-1 rounded-full text-[10px] font-bold cursor-pointer ${cApplyToPeriod === 'next' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Next period (paying early)</button>
+                  </div>
+                </div>
+              )}
               <textarea value={cNotes} onChange={(e) => setCNotes(e.target.value)} placeholder="Notes (optional) - e.g. bonus deposit, salary top-up" rows={2} className="col-span-3 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs resize-none" />
               <button type="submit" className="col-span-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer">Add</button>
             </form>

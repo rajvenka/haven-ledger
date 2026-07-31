@@ -186,6 +186,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [hHoldUntilDate, setHHoldUntilDate] = useState('');
   const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
   const [sellingId, setSellingId] = useState<string | null>(null);
+  const [editingHoldingId, setEditingHoldingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<any>({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const [expandedHoldingId, setExpandedHoldingId] = useState<string | null>(null);
   const [expandedQtyId, setExpandedQtyId] = useState<string | null>(null);
   const [expandedNameId, setExpandedNameId] = useState<string | null>(null);
@@ -936,6 +940,42 @@ export default function PortfolioView(props: PortfolioViewProps) {
       await sellPortfolioHolding(sellingId, { quantity: qty, soldPrice: parseFloat(sellPrice), soldDate: sellDate });
       setSellingId(null); setSellPrice(''); setSellQuantity('');
     });
+  };
+
+  const openEditHolding = (h: any) => {
+    setEditingHoldingId(h.id);
+    setEditError(null);
+    setEditForm({
+      symbol: h.symbol, broker: h.broker, exchange: h.exchange, isin: h.isin ?? '',
+      quantity: String(h.quantity), buyPrice: String(h.buy_price), buyDate: h.buy_date,
+      currentPrice: h.current_price != null ? String(h.current_price) : '', currency: h.currency ?? 'INR',
+      holdingType: h.holding_type, source: h.source ?? '', portfolioId: h.portfolio_id ?? '',
+    });
+  };
+
+  const saveEditHolding = async () => {
+    if (!editingHoldingId) return;
+    if (!editForm.symbol?.trim()) { setEditError('Symbol is required.'); return; }
+    if (!editForm.broker?.trim()) { setEditError('Broker is required.'); return; }
+    if (!editForm.quantity || Number(editForm.quantity) <= 0) { setEditError('Quantity must be greater than 0.'); return; }
+    if (!editForm.buyPrice || Number(editForm.buyPrice) < 0) { setEditError('Buy price is required.'); return; }
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      await updatePortfolioHolding(editingHoldingId, {
+        symbol: editForm.symbol.trim(), broker: editForm.broker.trim(), exchange: editForm.exchange?.trim() || 'Other',
+        isin: editForm.isin?.trim() || null, quantity: Number(editForm.quantity), buyPrice: Number(editForm.buyPrice),
+        buyDate: editForm.buyDate, currency: editForm.currency, holdingType: editForm.holdingType,
+        source: editForm.source?.trim() || undefined,
+        portfolioId: portfolioMode === 'multiple' ? (editForm.portfolioId || null) : undefined,
+        ...(editForm.currentPrice !== '' ? { currentPrice: Number(editForm.currentPrice) } : {}),
+      });
+      setEditingHoldingId(null);
+    } catch (err: any) {
+      setEditError(err.message || 'Failed to save changes.');
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   // ---- Contributions & Split ----
@@ -1910,6 +1950,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                 <button onClick={() => { setSellingId(h.id); setSellPrice(String(currentPriceNum)); setSellQuantity(''); }} className="px-2 py-1 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 text-[9px] font-black uppercase rounded-md cursor-pointer">Sell</button>
                               ))}
                               {!isReadOnly && (
+                                <button onClick={() => openEditHolding(h)} className="p-1 text-slate-300 hover:text-indigo-500 cursor-pointer" title="Edit holding"><Edit2 className="w-3.5 h-3.5" /></button>
+                              )}
+                              {!isReadOnly && (
                                 <button onClick={() => runAction(() => deletePortfolioHolding(h.id))} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                               )}
                               <button
@@ -2312,6 +2355,96 @@ export default function PortfolioView(props: PortfolioViewProps) {
               </button>
               <button onClick={saveColumnCustomization} className="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase cursor-pointer">
                 Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingHoldingId && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={() => setEditingHoldingId(null)}>
+          <div className="bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Edit Holding</h3>
+              <button onClick={() => setEditingHoldingId(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="col-span-2">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Symbol</label>
+                  <input type="text" value={editForm.symbol ?? ''} onChange={(e) => setEditForm({ ...editForm, symbol: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Broker</label>
+                  <input type="text" list="edit-broker-suggestions" value={editForm.broker ?? ''} onChange={(e) => setEditForm({ ...editForm, broker: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                  <datalist id="edit-broker-suggestions">
+                    <option>Zerodha</option><option>Groww</option>
+                    {Array.from(new Set(portfolioHoldings.map(h => h.broker).filter(b => b && b !== 'Zerodha' && b !== 'Groww'))).map(b => <option key={b} value={b} />)}
+                  </datalist>
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Holding Type</label>
+                  <select value={editForm.holdingType ?? 'stock'} onChange={(e) => setEditForm({ ...editForm, holdingType: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
+                    <option value="stock">Stock</option>
+                    <option value="mutual_fund">Mutual Fund</option>
+                  </select>
+                </div>
+                {editForm.holdingType === 'stock' && (
+                  <div>
+                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Exchange</label>
+                    <input type="text" list="edit-exchange-suggestions" value={editForm.exchange ?? ''} onChange={(e) => setEditForm({ ...editForm, exchange: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                    <datalist id="edit-exchange-suggestions">
+                      <option>NSE</option><option>BSE</option><option>NASDAQ</option><option>NYSE</option><option>ASX</option><option>LSE</option><option>TSX</option>
+                    </datalist>
+                  </div>
+                )}
+                <div>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">ISIN (optional)</label>
+                  <input type="text" value={editForm.isin ?? ''} onChange={(e) => setEditForm({ ...editForm, isin: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Currency</label>
+                  <select value={editForm.currency ?? 'INR'} onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
+                    {['INR', 'USD', 'AUD', 'EUR', 'GBP', 'SGD', 'AED', 'CAD'].map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Quantity</label>
+                  <input type="number" value={editForm.quantity ?? ''} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Buy Price</label>
+                  <input type="number" value={editForm.buyPrice ?? ''} onChange={(e) => setEditForm({ ...editForm, buyPrice: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Buy Date</label>
+                  <input type="date" value={editForm.buyDate ?? ''} onChange={(e) => setEditForm({ ...editForm, buyDate: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Current Price (optional)</label>
+                  <input type="number" value={editForm.currentPrice ?? ''} onChange={(e) => setEditForm({ ...editForm, currentPrice: e.target.value })} placeholder="Leave blank to keep as-is" className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                </div>
+                {portfolioMode === 'multiple' && (
+                  <div className="col-span-2">
+                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Portfolio</label>
+                    <select value={editForm.portfolioId ?? ''} onChange={(e) => setEditForm({ ...editForm, portfolioId: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
+                      {portfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.currency})</option>)}
+                    </select>
+                  </div>
+                )}
+                <div className="col-span-2">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Source (optional)</label>
+                  <input type="text" list="source-suggestions" value={editForm.source ?? ''} onChange={(e) => setEditForm({ ...editForm, source: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                </div>
+              </div>
+              {editError && <p className="text-[10px] text-rose-500 font-semibold">{editError}</p>}
+            </div>
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex gap-2 shrink-0">
+              <button onClick={() => setEditingHoldingId(null)} className="flex-1 px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-black uppercase cursor-pointer">
+                Cancel
+              </button>
+              <button onClick={saveEditHolding} disabled={editSaving} className="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase cursor-pointer">
+                {editSaving ? 'Saving…' : 'Save Changes'}
               </button>
             </div>
           </div>

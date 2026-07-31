@@ -20,7 +20,10 @@ export default async function handler(req: any, res: any) {
     const results = await Promise.all(
       symbols.slice(0, 250).map(async ({ symbol, exchange }: { symbol: string; exchange: string }) => {
         const suffix = exchange === "BSE" ? ".BO" : ".NS";
-        const yahooSymbol = `${symbol}${suffix}`;
+        // Some symbols (particularly NSE SME-segment stocks) already carry their own exchange
+        // suffix from the broker's export - appending another one produced invalid lookups
+        // like "EFFWA-SM.NS.NS" instead of the real "EFFWA-SM.NS".
+        const yahooSymbol = /\.(NS|BO)$/i.test(symbol) ? symbol : `${symbol}${suffix}`;
         try {
           const resp = await fetch(
             `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}`,
