@@ -491,11 +491,17 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
               {portfolioRecurringPlans.filter(p => p.active).map(plan => {
                 const m = workspaceMembers.find(x => x.uid === plan.member_user_id);
                 const period = getPeriodBounds(plan.frequency);
-                const transferredThisPeriod = portfolioContributions
+                // Same cumulative model as myContributionReminder - was previously a separate,
+                // simpler per-period check that didn't know about carryforward, so an early
+                // payment made toward next month wasn't recognized here and the button still
+                // offered the full amount, letting people accidentally double-pay.
+                const periodsElapsed = periodsElapsedSince(new Date(plan.start_date), plan.frequency);
+                const cumulativeExpected = Number(plan.expected_amount) * periodsElapsed;
+                const cumulativePaid = portfolioContributions
                   .filter(c => c.member_user_id === plan.member_user_id && c.contribution_type === 'recurring')
-                  .filter(c => { const d = new Date(c.contribution_date); return d >= period.start && d <= period.end; })
                   .reduce((s, c) => s + Number(c.amount), 0);
-                const remaining = Math.max(0, Number(plan.expected_amount) - transferredThisPeriod);
+                const remaining = Math.max(0, cumulativeExpected - cumulativePaid);
+                const transferredThisPeriod = Math.max(0, Number(plan.expected_amount) - remaining);
                 const fulfilled = remaining === 0;
                 return (
                   <div key={plan.id} className="flex items-center justify-between gap-3 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg">
