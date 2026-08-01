@@ -106,6 +106,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const [cNotes, setCNotes] = useState('');
   const [cType, setCType] = useState<'one_off' | 'initial' | 'recurring'>('one_off');
   const [cApplyToPeriod, setCApplyToPeriod] = useState<'current' | 'next'>('current');
+  const [confirmingMarkTransferred, setConfirmingMarkTransferred] = useState(false);
   const [cPortfolioId, setCPortfolioId] = useState('');
   const [editingContributionId, setEditingContributionId] = useState<string | null>(null);
   const [editContributionAmount, setEditContributionAmount] = useState('');
@@ -290,7 +291,13 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
       const reminderKey = `${plan.id}-${period.label}`;
       if (dismissedReminderKey === reminderKey) continue;
 
-      return { plan, remaining, daysUntilDue, dueDate, reminderKey };
+      // Breakdown for display: how much of "remaining" is this period's own expected amount
+      // vs. a shortfall/credit carried in from before, so the person can see why the number
+      // isn't simply their usual monthly amount.
+      const periodExpected = Number(plan.expected_amount);
+      const carryForward = remaining - periodExpected; // positive = shortfall carried in, negative = credit carried in
+
+      return { plan, remaining, daysUntilDue, dueDate, reminderKey, periodExpected, carryForward, cumulativeExpected, cumulativePaid };
     }
     return null;
   }, [currentUserId, portfolioRecurringPlans, portfolioContributions, dismissedReminderKey]);
@@ -339,33 +346,70 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
       )}
 
       {myContributionReminder && (
-        <div className={`p-3.5 rounded-xl border flex items-center gap-3 ${myContributionReminder.daysUntilDue < 0 ? 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900' : 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900'}`}>
-          <AlertTriangle className={`w-5 h-5 shrink-0 ${myContributionReminder.daysUntilDue < 0 ? 'text-rose-500' : 'text-amber-500'}`} />
-          <div className="flex-1 min-w-0">
-            <p className={`text-xs font-bold ${myContributionReminder.daysUntilDue < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-amber-700 dark:text-amber-400'}`}>
-              {myContributionReminder.daysUntilDue < 0
-                ? `Your contribution is overdue by ${Math.abs(myContributionReminder.daysUntilDue)} day${Math.abs(myContributionReminder.daysUntilDue) !== 1 ? 's' : ''}`
-                : myContributionReminder.daysUntilDue === 0
-                ? 'Your contribution is due today'
-                : `Your contribution is due in ${myContributionReminder.daysUntilDue} day${myContributionReminder.daysUntilDue !== 1 ? 's' : ''}`}
-            </p>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400">{fmt(myContributionReminder.remaining)} remaining for this {myContributionReminder.plan.frequency} period</p>
-          </div>
-          {!isReadOnly && (
+        <div className={`p-3.5 rounded-xl border ${myContributionReminder.daysUntilDue < 0 ? 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900' : 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900'}`}>
+          <div className="flex items-center gap-3">
+            <AlertTriangle className={`w-5 h-5 shrink-0 ${myContributionReminder.daysUntilDue < 0 ? 'text-rose-500' : 'text-amber-500'}`} />
+            <div className="flex-1 min-w-0">
+              <p className={`text-xs font-bold ${myContributionReminder.daysUntilDue < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-amber-700 dark:text-amber-400'}`}>
+                {myContributionReminder.daysUntilDue < 0
+                  ? `Your contribution is overdue by ${Math.abs(myContributionReminder.daysUntilDue)} day${Math.abs(myContributionReminder.daysUntilDue) !== 1 ? 's' : ''}`
+                  : myContributionReminder.daysUntilDue === 0
+                  ? 'Your contribution is due today'
+                  : `Your contribution is due in ${myContributionReminder.daysUntilDue} day${myContributionReminder.daysUntilDue !== 1 ? 's' : ''}`}
+              </p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                {fmt(myContributionReminder.remaining)} remaining for this {myContributionReminder.plan.frequency} period
+                {myContributionReminder.carryForward !== 0 && (
+                  myContributionReminder.carryForward > 0
+                    ? ` (includes ${fmt(myContributionReminder.carryForward)} carried forward from a shortfall)`
+                    : ` (usual ${fmt(myContributionReminder.periodExpected)}, reduced by ${fmt(Math.abs(myContributionReminder.carryForward))} credit from an earlier overpayment)`
+                )}
+              </p>
+            </div>
+            {!isReadOnly && !confirmingMarkTransferred && (
+              <button
+                onClick={() => setConfirmingMarkTransferred(true)}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer shrink-0"
+              >
+                Mark Transferred
+              </button>
+            )}
             <button
-              onClick={() => runAction(() => markTransferred(currentUserId!, myContributionReminder.remaining, myContributionReminder.plan.portfolio_id))}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer shrink-0"
+              onClick={() => runAction(() => onDismissContributionReminder?.(myContributionReminder.reminderKey) ?? Promise.resolve())}
+              className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer shrink-0"
+              title="Dismiss for this period"
             >
-              Mark Transferred
-            </button>
-          )}
-          <button
-            onClick={() => runAction(() => onDismissContributionReminder?.(myContributionReminder.reminderKey) ?? Promise.resolve())}
-            className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer shrink-0"
-            title="Dismiss for this period"
-          >
             <X className="w-4 h-4" />
           </button>
+          </div>
+          {confirmingMarkTransferred && !isReadOnly && (
+            <div className="mt-3 pt-3 border-t border-amber-200/60 dark:border-amber-900/60 space-y-2">
+              <div className="text-[10px] text-slate-600 dark:text-slate-400 space-y-0.5">
+                <div className="flex justify-between"><span>Usual {myContributionReminder.plan.frequency} amount</span><span className="font-semibold">{fmt(myContributionReminder.periodExpected)}</span></div>
+                {myContributionReminder.carryForward > 0 && (
+                  <div className="flex justify-between text-rose-600 dark:text-rose-400"><span>+ Shortfall carried from before</span><span className="font-semibold">{fmt(myContributionReminder.carryForward)}</span></div>
+                )}
+                {myContributionReminder.carryForward < 0 && (
+                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400"><span>− Credit from an earlier overpayment</span><span className="font-semibold">{fmt(Math.abs(myContributionReminder.carryForward))}</span></div>
+                )}
+                <div className="flex justify-between font-black text-slate-800 dark:text-slate-200 pt-0.5 border-t border-slate-200 dark:border-slate-800"><span>Total to transfer now</span><span>{fmt(myContributionReminder.remaining)}</span></div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => runAction(async () => {
+                    await markTransferred(currentUserId!, myContributionReminder.remaining, myContributionReminder.plan.portfolio_id);
+                    setConfirmingMarkTransferred(false);
+                  })}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
+                >
+                  Confirm {fmt(myContributionReminder.remaining)} Transferred
+                </button>
+                <button onClick={() => setConfirmingMarkTransferred(false)} className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
