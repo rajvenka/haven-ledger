@@ -239,6 +239,24 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
     };
   };
 
+  // Counts how many full periods have elapsed from the plan's start date up to and
+  // including the reference date's period - used to compute a running cumulative expected
+  // amount, which is what makes over/under-payment naturally carry forward without an
+  // explicit per-period balance ledger. E.g. paying $1500 against a $1000/month plan when
+  // cumulative expected is $1000 leaves $500 credit that reduces next month's number
+  // automatically, since next month's cumulative expected grows but paid doesn't.
+  const periodsElapsedSince = (startDate: Date, frequency: 'monthly' | 'quarterly' | 'yearly', ref = new Date()) => {
+    if (frequency === 'monthly') {
+      return Math.max(1, (ref.getFullYear() - startDate.getFullYear()) * 12 + (ref.getMonth() - startDate.getMonth()) + 1);
+    }
+    if (frequency === 'quarterly') {
+      const startQ = Math.floor(startDate.getMonth() / 3);
+      const refQ = Math.floor(ref.getMonth() / 3);
+      return Math.max(1, (ref.getFullYear() - startDate.getFullYear()) * 4 + (refQ - startQ) + 1);
+    }
+    return Math.max(1, ref.getFullYear() - startDate.getFullYear() + 1);
+  };
+
   // My own contribution reminder - due within 3 days (or already overdue) and not yet
   // transferred for the current period. Computed live whenever the page loads, no backend
   // job involved - only shows for the logged-in person's own plan(s). Dismissing only hides
@@ -255,21 +273,18 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
       const daysUntilDue = Math.ceil((dueDate.getTime() - Date.now()) / 86400000);
       if (daysUntilDue > 3) continue;
 
-      const transferredThisPeriod = portfolioContributions
+      // Cumulative model: total expected across every period since the plan started, up to
+      // and including this one, versus every recurring contribution ever made against it -
+      // this is what makes over/under-payment carry forward naturally. Paying $1500 against
+      // a $1000/month plan leaves $500 credit, which reduces what's shown as due next month
+      // automatically, since cumulative expected keeps growing but the extra $500 was
+      // already paid. Underpaying compounds the same way in the other direction.
+      const periodsElapsed = periodsElapsedSince(new Date(plan.start_date), plan.frequency);
+      const cumulativeExpected = Number(plan.expected_amount) * periodsElapsed;
+      const cumulativePaid = portfolioContributions
         .filter(c => c.member_user_id === currentUserId && c.contribution_type === 'recurring')
-        .filter(c => {
-          // A contribution explicitly tagged for this period (e.g. paid early) counts here
-          // regardless of its actual transfer date. Otherwise, fall back to the original
-          // behavior: does the transfer date itself fall within this period's range.
-          if (c.applies_to_period_start) {
-            const tagged = new Date(c.applies_to_period_start);
-            return tagged >= period.start && tagged <= period.end;
-          }
-          const d = new Date(c.contribution_date);
-          return d >= period.start && d <= period.end;
-        })
         .reduce((s, c) => s + Number(c.amount), 0);
-      const remaining = Math.max(0, Number(plan.expected_amount) - transferredThisPeriod);
+      const remaining = Math.max(0, cumulativeExpected - cumulativePaid);
       if (remaining === 0) continue;
 
       const reminderKey = `${plan.id}-${period.label}`;
