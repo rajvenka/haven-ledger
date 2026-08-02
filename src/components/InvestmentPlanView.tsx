@@ -107,6 +107,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const [cType, setCType] = useState<'one_off' | 'initial' | 'recurring'>('one_off');
   const [cApplyToPeriod, setCApplyToPeriod] = useState<'current' | 'next'>('current');
   const [confirmingMarkTransferred, setConfirmingMarkTransferred] = useState(false);
+  const [confirmingTransferPlanId, setConfirmingTransferPlanId] = useState<string | null>(null);
   const [cPortfolioId, setCPortfolioId] = useState('');
   const [editingContributionId, setEditingContributionId] = useState<string | null>(null);
   const [editContributionAmount, setEditContributionAmount] = useState('');
@@ -503,23 +504,64 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                 const remaining = Math.max(0, cumulativeExpected - cumulativePaid);
                 const transferredThisPeriod = Math.max(0, Number(plan.expected_amount) - remaining);
                 const fulfilled = remaining === 0;
+                // The specific prior contributions that are why less than the full monthly
+                // amount is due now - anything recurring, dated before this period even
+                // started, is by definition an advance payment feeding the carryforward.
+                const advanceContributions = portfolioContributions.filter(c =>
+                  c.member_user_id === plan.member_user_id && c.contribution_type === 'recurring' && new Date(c.contribution_date) < period.start
+                );
+                const isConfirming = confirmingTransferPlanId === plan.id;
                 return (
-                  <div key={plan.id} className="flex items-center justify-between gap-3 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg">
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-900 dark:text-white">{m ? memberName(m) : 'Former member'}</p>
-                      <p className="text-[10px] text-slate-400">{period.label} · expected {fmt(Number(plan.expected_amount))}{transferredThisPeriod > 0 && !fulfilled ? ` · transferred ${fmt(transferredThisPeriod)} so far` : ''}</p>
+                  <div key={plan.id} className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 dark:text-white">{m ? memberName(m) : 'Former member'}</p>
+                        <p className="text-[10px] text-slate-400">{period.label} · expected {fmt(Number(plan.expected_amount))}{transferredThisPeriod > 0 && !fulfilled ? ` · ${fmt(transferredThisPeriod)} already covered by an advance` : ''}</p>
+                      </div>
+                      {fulfilled ? (
+                        <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase rounded-full shrink-0">Transferred</span>
+                      ) : !isReadOnly && !isConfirming ? (
+                        <button
+                          onClick={() => setConfirmingTransferPlanId(plan.id)}
+                          className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer shrink-0"
+                        >
+                          Mark {fmt(remaining)} Transferred
+                        </button>
+                      ) : isReadOnly ? (
+                        <span className="px-2.5 py-1 bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase rounded-full shrink-0">Pending</span>
+                      ) : null}
                     </div>
-                    {fulfilled ? (
-                      <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase rounded-full shrink-0">Transferred</span>
-                    ) : !isReadOnly ? (
-                      <button
-                        onClick={() => markTransferred(plan.member_user_id, remaining, plan.portfolio_id)}
-                        className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer shrink-0"
-                      >
-                        Mark {fmt(remaining)} Transferred
-                      </button>
-                    ) : (
-                      <span className="px-2.5 py-1 bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase rounded-full shrink-0">Pending</span>
+                    {isConfirming && (
+                      <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2">
+                        {advanceContributions.length > 0 && (
+                          <div className="space-y-1">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase">Already covered by:</span>
+                            {advanceContributions.map(c => (
+                              <div key={c.id} className="flex items-center justify-between text-[10px] px-2 py-1 bg-white dark:bg-slate-950 rounded">
+                                <span className="text-slate-500">{c.contribution_date}{c.notes ? ` · ${c.notes}` : ''}</span>
+                                <span className="font-semibold text-slate-700 dark:text-slate-300">{fmt(Number(c.amount))}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="text-[10px] text-slate-600 dark:text-slate-400 flex justify-between font-black pt-1 border-t border-slate-200 dark:border-slate-800">
+                          <span>Balance to transfer now</span><span>{fmt(remaining)}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => runAction(async () => {
+                              await markTransferred(plan.member_user_id, remaining, plan.portfolio_id);
+                              setConfirmingTransferPlanId(null);
+                            })}
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
+                          >
+                            Confirm {fmt(remaining)} Transferred
+                          </button>
+                          <button onClick={() => setConfirmingTransferPlanId(null)} className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </div>
                 );
