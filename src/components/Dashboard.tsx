@@ -145,7 +145,8 @@ export default function Dashboard({
   }, 0);
 
   // States
-  const [currentMonthFilter, setCurrentMonthFilter] = useState<'outstanding' | 'all'>('outstanding');
+  const [currentMonthFilter, setCurrentMonthFilter] = useState<'overdue' | 'outstanding' | 'all'>('outstanding');
+  const [showMonthTagFilters, setShowMonthTagFilters] = useState(false);
   const [monthTagFilters, setMonthTagFilters] = useState<Set<string>>(new Set());
   const toggleMonthTagFilter = (tag: string) => setMonthTagFilters(prev => { const next = new Set(prev); if (next.has(tag)) next.delete(tag); else next.add(tag); return next; });
   const [isHeroBreakdownOpen, setIsHeroBreakdownOpen] = useState(false);
@@ -661,6 +662,12 @@ export default function Dashboard({
               <div className="flex items-center gap-3">
                 <div className="filter-container apple-segmented-control shrink-0">
                   <button
+                    onClick={() => setCurrentMonthFilter('overdue')}
+                    className={currentMonthFilter === 'overdue' ? 'apple-segmented-btn-active' : 'apple-segmented-btn'}
+                  >
+                    Overdue
+                  </button>
+                  <button
                     onClick={() => setCurrentMonthFilter('outstanding')}
                     className={currentMonthFilter === 'outstanding' ? 'apple-segmented-btn-active' : 'apple-segmented-btn'}
                   >
@@ -683,7 +690,9 @@ export default function Dashboard({
 
             {isThisMonthExpanded && (
               (() => {
-                const statusFiltered = currentMonthFilter === 'outstanding' 
+                const statusFiltered = currentMonthFilter === 'overdue'
+                  ? currentMonthInstances.filter(ins => ins.status === 'overdue')
+                  : currentMonthFilter === 'outstanding' 
                   ? currentMonthInstances.filter(ins => ins.status !== 'paid')
                   : currentMonthInstances;
 
@@ -728,19 +737,29 @@ export default function Dashboard({
                 return (
                   <>
                   {tagGroups.length > 0 && (
-                    <div className="filter-container px-4 py-2.5 border-b border-slate-100 dark:border-slate-900 flex items-center gap-1.5 flex-wrap">
-                      {monthTagFilters.size > 0 && (
-                        <button onClick={() => setMonthTagFilters(new Set())} className="px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer bg-slate-900 dark:bg-white text-white dark:text-slate-950">All</button>
+                    <div className="filter-container px-4 py-2 border-b border-slate-100 dark:border-slate-900">
+                      <button
+                        onClick={() => setShowMonthTagFilters(v => !v)}
+                        className="flex items-center gap-1 text-[9px] font-bold text-slate-400 hover:text-indigo-500 cursor-pointer"
+                      >
+                        Filters{monthTagFilters.size > 0 ? ` (${monthTagFilters.size})` : ''} {showMonthTagFilters ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                      </button>
+                      {showMonthTagFilters && (
+                        <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                          {monthTagFilters.size > 0 && (
+                            <button onClick={() => setMonthTagFilters(new Set())} className="px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer bg-slate-900 dark:bg-white text-white dark:text-slate-950">All</button>
+                          )}
+                          {tagGroups.map(group => group.options.map(opt => (
+                            <button
+                              key={`${group.label}-${opt}`}
+                              onClick={() => toggleMonthTagFilter(opt)}
+                              className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${monthTagFilters.has(opt) ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+                            >
+                              {opt}
+                            </button>
+                          )))}
+                        </div>
                       )}
-                      {tagGroups.map(group => group.options.map(opt => (
-                        <button
-                          key={`${group.label}-${opt}`}
-                          onClick={() => toggleMonthTagFilter(opt)}
-                          className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${monthTagFilters.has(opt) ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
-                        >
-                          {opt}
-                        </button>
-                      )))}
                     </div>
                   )}
                   <div className="divide-y divide-slate-100 dark:divide-slate-900 max-h-[400px] overflow-y-auto no-scrollbar">
