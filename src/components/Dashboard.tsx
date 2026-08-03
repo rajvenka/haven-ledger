@@ -146,6 +146,8 @@ export default function Dashboard({
 
   // States
   const [currentMonthFilter, setCurrentMonthFilter] = useState<'outstanding' | 'all'>('outstanding');
+  const [monthTagFilters, setMonthTagFilters] = useState<Set<string>>(new Set());
+  const toggleMonthTagFilter = (tag: string) => setMonthTagFilters(prev => { const next = new Set(prev); if (next.has(tag)) next.delete(tag); else next.add(tag); return next; });
   const [isHeroBreakdownOpen, setIsHeroBreakdownOpen] = useState(false);
   const [isTrendExpanded, setIsTrendExpanded] = useState<boolean>(() => {
     const saved = localStorage.getItem('pm_is_trend_expanded');
@@ -681,9 +683,39 @@ export default function Dashboard({
 
             {isThisMonthExpanded && (
               (() => {
-                const displayedInstances = currentMonthFilter === 'outstanding' 
+                const statusFiltered = currentMonthFilter === 'outstanding' 
                   ? currentMonthInstances.filter(ins => ins.status !== 'paid')
                   : currentMonthInstances;
+
+                // Tag options derived straight from what's actually in this month's list, so
+                // the filter row never shows a category/payer with nothing to filter to.
+                const paymentMethodLabel = (pm?: 'manual' | 'direct_debit') => pm === 'direct_debit' ? 'Direct Debit' : 'Manual Payment';
+                const categorySet = new Set<string>();
+                const taggedForSet = new Set<string>();
+                const methodSet = new Set<string>();
+                statusFiltered.forEach(ins => {
+                  if (ins.category) categorySet.add(ins.category);
+                  const parent = payments.find(p => p.id === ins.paymentId);
+                  if (parent?.taggedFor) taggedForSet.add(parent.taggedFor);
+                  methodSet.add(paymentMethodLabel(parent?.paymentMethod));
+                });
+                const tagGroups: { label: string; options: string[] }[] = [
+                  { label: 'Type', options: Array.from(methodSet).sort() },
+                  { label: 'Category', options: Array.from(categorySet).sort() },
+                  { label: 'Tagged For', options: Array.from(taggedForSet).sort() },
+                ].filter(g => g.options.length > 1);
+
+                const displayedInstances = monthTagFilters.size === 0 ? statusFiltered : statusFiltered.filter(ins => {
+                  const parent = payments.find(p => p.id === ins.paymentId);
+                  const method = paymentMethodLabel(parent?.paymentMethod);
+                  const selectedCategories = categorySet.size ? Array.from(categorySet).filter(c => monthTagFilters.has(c)) : [];
+                  const selectedMethods = Array.from(methodSet).filter(x => monthTagFilters.has(x));
+                  const selectedTaggedFor = Array.from(taggedForSet).filter(x => monthTagFilters.has(x));
+                  const categoryOk = selectedCategories.length === 0 || selectedCategories.includes(ins.category);
+                  const methodOk = selectedMethods.length === 0 || selectedMethods.includes(method);
+                  const taggedOk = selectedTaggedFor.length === 0 || (parent?.taggedFor ? selectedTaggedFor.includes(parent.taggedFor) : false);
+                  return categoryOk && methodOk && taggedOk;
+                });
 
                 if (displayedInstances.length === 0) {
                   return (
@@ -694,6 +726,23 @@ export default function Dashboard({
                 }
 
                 return (
+                  <>
+                  {tagGroups.length > 0 && (
+                    <div className="filter-container px-4 py-2.5 border-b border-slate-100 dark:border-slate-900 flex items-center gap-1.5 flex-wrap">
+                      {monthTagFilters.size > 0 && (
+                        <button onClick={() => setMonthTagFilters(new Set())} className="px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer bg-slate-900 dark:bg-white text-white dark:text-slate-950">All</button>
+                      )}
+                      {tagGroups.map(group => group.options.map(opt => (
+                        <button
+                          key={`${group.label}-${opt}`}
+                          onClick={() => toggleMonthTagFilter(opt)}
+                          className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${monthTagFilters.has(opt) ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+                        >
+                          {opt}
+                        </button>
+                      )))}
+                    </div>
+                  )}
                   <div className="divide-y divide-slate-100 dark:divide-slate-900 max-h-[400px] overflow-y-auto no-scrollbar">
                     {displayedInstances.map((ins) => {
                       const daysLeft = getDaysUntilDueDateStr(ins.dueDate);
@@ -761,6 +810,7 @@ export default function Dashboard({
                       );
                     })}
                   </div>
+                  </>
                 );
               })()
             )}
