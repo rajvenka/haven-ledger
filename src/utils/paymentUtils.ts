@@ -533,7 +533,7 @@ export function getScheduledInstancesForRange(
           id: `${p.id}_${dueDateStr}`,
           paymentId: p.id,
           paymentName: p.name,
-          amount: p.amount,
+          amount: matchedH.amount,
           currency: p.currency,
           category: p.category,
           dueDate: dueDateStr,

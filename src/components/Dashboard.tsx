@@ -696,34 +696,19 @@ export default function Dashboard({
                   ? currentMonthInstances.filter(ins => ins.status !== 'paid')
                   : currentMonthInstances;
 
-                // Tag options derived straight from what's actually in this month's list, so
-                // the filter row never shows a category/payer with nothing to filter to.
-                const paymentMethodLabel = (pm?: 'manual' | 'direct_debit') => pm === 'direct_debit' ? 'Direct Debit' : 'Manual Payment';
+                // Category only, kept simple - filtering by payment method and tagged-for
+                // turned out to be more filter options than useful for a bill list.
                 const categorySet = new Set<string>();
-                const taggedForSet = new Set<string>();
-                const methodSet = new Set<string>();
                 statusFiltered.forEach(ins => {
                   if (ins.category) categorySet.add(ins.category);
-                  const parent = payments.find(p => p.id === ins.paymentId);
-                  if (parent?.taggedFor) taggedForSet.add(parent.taggedFor);
-                  methodSet.add(paymentMethodLabel(parent?.paymentMethod));
                 });
                 const tagGroups: { label: string; options: string[] }[] = [
-                  { label: 'Type', options: Array.from(methodSet).sort() },
                   { label: 'Category', options: Array.from(categorySet).sort() },
-                  { label: 'Tagged For', options: Array.from(taggedForSet).sort() },
                 ].filter(g => g.options.length > 1);
 
                 const displayedInstances = monthTagFilters.size === 0 ? statusFiltered : statusFiltered.filter(ins => {
-                  const parent = payments.find(p => p.id === ins.paymentId);
-                  const method = paymentMethodLabel(parent?.paymentMethod);
-                  const selectedCategories = categorySet.size ? Array.from(categorySet).filter(c => monthTagFilters.has(c)) : [];
-                  const selectedMethods = Array.from(methodSet).filter(x => monthTagFilters.has(x));
-                  const selectedTaggedFor = Array.from(taggedForSet).filter(x => monthTagFilters.has(x));
-                  const categoryOk = selectedCategories.length === 0 || selectedCategories.includes(ins.category);
-                  const methodOk = selectedMethods.length === 0 || selectedMethods.includes(method);
-                  const taggedOk = selectedTaggedFor.length === 0 || (parent?.taggedFor ? selectedTaggedFor.includes(parent.taggedFor) : false);
-                  return categoryOk && methodOk && taggedOk;
+                  const selectedCategories = Array.from(categorySet).filter(c => monthTagFilters.has(c));
+                  return selectedCategories.length === 0 || selectedCategories.includes(ins.category);
                 });
 
                 if (displayedInstances.length === 0) {
