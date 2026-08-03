@@ -1769,7 +1769,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             </form>
           )}
 
-          {(filterOptions.combos.length > 1 || filterOptions.sources.length > 0 || filterOptions.priceMoves.length > 0) && (
+          {(filterOptions.combos.length > 1 || filterOptions.sources.length > 0 || filterOptions.priceMoves.length > 0 || activeHoldings.some(h => h.price_lookup_failed)) && (
             <div className="flex items-center gap-1.5 flex-wrap">
               <button onClick={() => setHoldingFilters(new Set())} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.size === 0 ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
               {activeHoldings.some(h => h.price_lookup_failed) && (
