@@ -24,7 +24,7 @@ interface InvestmentPlanViewProps {
   deletePortfolioSplit: (id: string) => Promise<void>;
   portfolioContributions: any[];
   addPortfolioContribution: (memberUserId: string, amount: number, date: string, notes?: string, contributionType?: 'one_off' | 'recurring' | 'initial', portfolioId?: string, appliesToPeriodStart?: string) => Promise<void>;
-  updatePortfolioContribution: (id: string, updates: { amount?: number; contributionDate?: string; notes?: string }) => Promise<void>;
+  updatePortfolioContribution: (id: string, updates: { amount?: number; contributionDate?: string; notes?: string; contributionType?: 'one_off' | 'recurring' | 'initial' }) => Promise<void>;
   deletePortfolioContribution: (id: string) => Promise<void>;
   portfolioWithdrawals: any[];
   addPortfolioWithdrawal: (memberUserId: string, amount: number, date: string, notes?: string) => Promise<void>;
@@ -106,8 +106,9 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const [cNotes, setCNotes] = useState('');
   const [cType, setCType] = useState<'one_off' | 'initial' | 'recurring'>('one_off');
   const [cApplyToPeriod, setCApplyToPeriod] = useState<'current' | 'next'>('current');
-  const [confirmingMarkTransferred, setConfirmingMarkTransferred] = useState(false);
-  const [confirmingTransferPlanId, setConfirmingTransferPlanId] = useState<string | null>(null);
+  const [transferModalPlanId, setTransferModalPlanId] = useState<string | null>(null);
+  const [transferModalStep, setTransferModalStep] = useState<'breakdown' | 'ask' | 'link'>('breakdown');
+  const [linkingContributionId, setLinkingContributionId] = useState<string | null>(null);
   const [cPortfolioId, setCPortfolioId] = useState('');
   const [editingContributionId, setEditingContributionId] = useState<string | null>(null);
   const [editContributionAmount, setEditContributionAmount] = useState('');
@@ -309,6 +310,39 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
     });
   };
 
+  // Shared by the modal and both trigger points (personal reminder + Fund Transfer Status),
+  // so there's exactly one place computing this instead of two copies that can drift apart.
+  const computeTransferInfo = (plan: any) => {
+    const period = getPeriodBounds(plan.frequency);
+    const periodsElapsed = periodsElapsedSince(new Date(plan.start_date), plan.frequency);
+    const cumulativeExpected = Number(plan.expected_amount) * periodsElapsed;
+    const cumulativePaid = portfolioContributions
+      .filter(c => c.member_user_id === plan.member_user_id && c.contribution_type === 'recurring')
+      .reduce((s, c) => s + Number(c.amount), 0);
+    const remaining = Math.max(0, cumulativeExpected - cumulativePaid);
+    const periodExpected = Number(plan.expected_amount);
+    const carryForward = remaining - periodExpected;
+    const advanceContributions = portfolioContributions.filter(c =>
+      c.member_user_id === plan.member_user_id && c.contribution_type === 'recurring' && new Date(c.contribution_date) < period.start
+    );
+    return { period, remaining, periodExpected, carryForward, advanceContributions };
+  };
+
+  const openTransferModal = (plan: any) => {
+    const info = computeTransferInfo(plan);
+    setTransferModalPlanId(plan.id);
+    setLinkingContributionId(null);
+    // If the system already found a shortfall/credit from prior activity, go straight to
+    // the breakdown - no need to ask "have you already paid" when we can already see why
+    // the number differs. Only ask when nothing on record explains it, since that's exactly
+    // the case where a real payment could exist but isn't linked yet, risking a duplicate.
+    setTransferModalStep(info.carryForward !== 0 ? 'breakdown' : 'ask');
+  };
+
+  const linkableContributionsFor = (memberUserId: string) => portfolioContributions.filter(c =>
+    c.member_user_id === memberUserId && c.contribution_type !== 'recurring'
+  );
+
   const TABS: { key: PlanTab; label: string }[] = [
     { key: 'overview', label: 'Overview' },
     { key: 'contributions', label: 'Contributions' },
@@ -347,70 +381,40 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
       )}
 
       {myContributionReminder && (
-        <div className={`p-3.5 rounded-xl border ${myContributionReminder.daysUntilDue < 0 ? 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900' : 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900'}`}>
-          <div className="flex items-center gap-3">
-            <AlertTriangle className={`w-5 h-5 shrink-0 ${myContributionReminder.daysUntilDue < 0 ? 'text-rose-500' : 'text-amber-500'}`} />
-            <div className="flex-1 min-w-0">
-              <p className={`text-xs font-bold ${myContributionReminder.daysUntilDue < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-amber-700 dark:text-amber-400'}`}>
-                {myContributionReminder.daysUntilDue < 0
-                  ? `Your contribution is overdue by ${Math.abs(myContributionReminder.daysUntilDue)} day${Math.abs(myContributionReminder.daysUntilDue) !== 1 ? 's' : ''}`
-                  : myContributionReminder.daysUntilDue === 0
-                  ? 'Your contribution is due today'
-                  : `Your contribution is due in ${myContributionReminder.daysUntilDue} day${myContributionReminder.daysUntilDue !== 1 ? 's' : ''}`}
-              </p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                {fmt(myContributionReminder.remaining)} remaining for this {myContributionReminder.plan.frequency} period
-                {myContributionReminder.carryForward !== 0 && (
-                  myContributionReminder.carryForward > 0
-                    ? ` (includes ${fmt(myContributionReminder.carryForward)} carried forward from a shortfall)`
-                    : ` (usual ${fmt(myContributionReminder.periodExpected)}, reduced by ${fmt(Math.abs(myContributionReminder.carryForward))} credit from an earlier overpayment)`
-                )}
-              </p>
-            </div>
-            {!isReadOnly && !confirmingMarkTransferred && (
-              <button
-                onClick={() => setConfirmingMarkTransferred(true)}
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer shrink-0"
-              >
-                Mark Transferred
-              </button>
-            )}
+        <div className={`p-3.5 rounded-xl border flex items-center gap-3 ${myContributionReminder.daysUntilDue < 0 ? 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900' : 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900'}`}>
+          <AlertTriangle className={`w-5 h-5 shrink-0 ${myContributionReminder.daysUntilDue < 0 ? 'text-rose-500' : 'text-amber-500'}`} />
+          <div className="flex-1 min-w-0">
+            <p className={`text-xs font-bold ${myContributionReminder.daysUntilDue < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-amber-700 dark:text-amber-400'}`}>
+              {myContributionReminder.daysUntilDue < 0
+                ? `Your contribution is overdue by ${Math.abs(myContributionReminder.daysUntilDue)} day${Math.abs(myContributionReminder.daysUntilDue) !== 1 ? 's' : ''}`
+                : myContributionReminder.daysUntilDue === 0
+                ? 'Your contribution is due today'
+                : `Your contribution is due in ${myContributionReminder.daysUntilDue} day${myContributionReminder.daysUntilDue !== 1 ? 's' : ''}`}
+            </p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400">
+              {fmt(myContributionReminder.remaining)} remaining for this {myContributionReminder.plan.frequency} period
+              {myContributionReminder.carryForward !== 0 && (
+                myContributionReminder.carryForward > 0
+                  ? ` (includes ${fmt(myContributionReminder.carryForward)} carried forward from a shortfall)`
+                  : ` (usual ${fmt(myContributionReminder.periodExpected)}, reduced by ${fmt(Math.abs(myContributionReminder.carryForward))} credit from an earlier overpayment)`
+              )}
+            </p>
+          </div>
+          {!isReadOnly && (
             <button
-              onClick={() => runAction(() => onDismissContributionReminder?.(myContributionReminder.reminderKey) ?? Promise.resolve())}
-              className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer shrink-0"
-              title="Dismiss for this period"
+              onClick={() => openTransferModal(myContributionReminder.plan)}
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer shrink-0"
             >
+              Mark Transferred
+            </button>
+          )}
+          <button
+            onClick={() => runAction(() => onDismissContributionReminder?.(myContributionReminder.reminderKey) ?? Promise.resolve())}
+            className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer shrink-0"
+            title="Dismiss for this period"
+          >
             <X className="w-4 h-4" />
           </button>
-          </div>
-          {confirmingMarkTransferred && !isReadOnly && (
-            <div className="mt-3 pt-3 border-t border-amber-200/60 dark:border-amber-900/60 space-y-2">
-              <div className="text-[10px] text-slate-600 dark:text-slate-400 space-y-0.5">
-                <div className="flex justify-between"><span>Usual {myContributionReminder.plan.frequency} amount</span><span className="font-semibold">{fmt(myContributionReminder.periodExpected)}</span></div>
-                {myContributionReminder.carryForward > 0 && (
-                  <div className="flex justify-between text-rose-600 dark:text-rose-400"><span>+ Shortfall carried from before</span><span className="font-semibold">{fmt(myContributionReminder.carryForward)}</span></div>
-                )}
-                {myContributionReminder.carryForward < 0 && (
-                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400"><span>− Credit from an earlier overpayment</span><span className="font-semibold">{fmt(Math.abs(myContributionReminder.carryForward))}</span></div>
-                )}
-                <div className="flex justify-between font-black text-slate-800 dark:text-slate-200 pt-0.5 border-t border-slate-200 dark:border-slate-800"><span>Total to transfer now</span><span>{fmt(myContributionReminder.remaining)}</span></div>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => runAction(async () => {
-                    await markTransferred(currentUserId!, myContributionReminder.remaining, myContributionReminder.plan.portfolio_id);
-                    setConfirmingMarkTransferred(false);
-                  })}
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
-                >
-                  Confirm {fmt(myContributionReminder.remaining)} Transferred
-                </button>
-                <button onClick={() => setConfirmingMarkTransferred(false)} className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -491,77 +495,27 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
             <div className="space-y-2">
               {portfolioRecurringPlans.filter(p => p.active).map(plan => {
                 const m = workspaceMembers.find(x => x.uid === plan.member_user_id);
-                const period = getPeriodBounds(plan.frequency);
-                // Same cumulative model as myContributionReminder - was previously a separate,
-                // simpler per-period check that didn't know about carryforward, so an early
-                // payment made toward next month wasn't recognized here and the button still
-                // offered the full amount, letting people accidentally double-pay.
-                const periodsElapsed = periodsElapsedSince(new Date(plan.start_date), plan.frequency);
-                const cumulativeExpected = Number(plan.expected_amount) * periodsElapsed;
-                const cumulativePaid = portfolioContributions
-                  .filter(c => c.member_user_id === plan.member_user_id && c.contribution_type === 'recurring')
-                  .reduce((s, c) => s + Number(c.amount), 0);
-                const remaining = Math.max(0, cumulativeExpected - cumulativePaid);
-                const transferredThisPeriod = Math.max(0, Number(plan.expected_amount) - remaining);
-                const fulfilled = remaining === 0;
-                // The specific prior contributions that are why less than the full monthly
-                // amount is due now - anything recurring, dated before this period even
-                // started, is by definition an advance payment feeding the carryforward.
-                const advanceContributions = portfolioContributions.filter(c =>
-                  c.member_user_id === plan.member_user_id && c.contribution_type === 'recurring' && new Date(c.contribution_date) < period.start
-                );
-                const isConfirming = confirmingTransferPlanId === plan.id;
+                const { period, remaining, transferredThisPeriod, fulfilled } = (() => {
+                  const info = computeTransferInfo(plan);
+                  return { period: info.period, remaining: info.remaining, transferredThisPeriod: Math.max(0, info.periodExpected - info.remaining), fulfilled: info.remaining === 0 };
+                })();
                 return (
-                  <div key={plan.id} className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-900 dark:text-white">{m ? memberName(m) : 'Former member'}</p>
-                        <p className="text-[10px] text-slate-400">{period.label} · expected {fmt(Number(plan.expected_amount))}{transferredThisPeriod > 0 && !fulfilled ? ` · ${fmt(transferredThisPeriod)} already covered by an advance` : ''}</p>
-                      </div>
-                      {fulfilled ? (
-                        <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase rounded-full shrink-0">Transferred</span>
-                      ) : !isReadOnly && !isConfirming ? (
-                        <button
-                          onClick={() => setConfirmingTransferPlanId(plan.id)}
-                          className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer shrink-0"
-                        >
-                          Mark {fmt(remaining)} Transferred
-                        </button>
-                      ) : isReadOnly ? (
-                        <span className="px-2.5 py-1 bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase rounded-full shrink-0">Pending</span>
-                      ) : null}
+                  <div key={plan.id} className="flex items-center justify-between gap-3 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-900 dark:text-white">{m ? memberName(m) : 'Former member'}</p>
+                      <p className="text-[10px] text-slate-400">{period.label} · expected {fmt(Number(plan.expected_amount))}{transferredThisPeriod > 0 && !fulfilled ? ` · ${fmt(transferredThisPeriod)} already covered by an advance` : ''}</p>
                     </div>
-                    {isConfirming && (
-                      <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2">
-                        {advanceContributions.length > 0 && (
-                          <div className="space-y-1">
-                            <span className="text-[9px] font-bold text-slate-400 uppercase">Already covered by:</span>
-                            {advanceContributions.map(c => (
-                              <div key={c.id} className="flex items-center justify-between text-[10px] px-2 py-1 bg-white dark:bg-slate-950 rounded">
-                                <span className="text-slate-500">{c.contribution_date}{c.notes ? ` · ${c.notes}` : ''}</span>
-                                <span className="font-semibold text-slate-700 dark:text-slate-300">{fmt(Number(c.amount))}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        <div className="text-[10px] text-slate-600 dark:text-slate-400 flex justify-between font-black pt-1 border-t border-slate-200 dark:border-slate-800">
-                          <span>Balance to transfer now</span><span>{fmt(remaining)}</span>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => runAction(async () => {
-                              await markTransferred(plan.member_user_id, remaining, plan.portfolio_id);
-                              setConfirmingTransferPlanId(null);
-                            })}
-                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
-                          >
-                            Confirm {fmt(remaining)} Transferred
-                          </button>
-                          <button onClick={() => setConfirmingTransferPlanId(null)} className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
+                    {fulfilled ? (
+                      <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase rounded-full shrink-0">Transferred</span>
+                    ) : !isReadOnly ? (
+                      <button
+                        onClick={() => openTransferModal(plan)}
+                        className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer shrink-0"
+                      >
+                        Mark {fmt(remaining)} Transferred
+                      </button>
+                    ) : (
+                      <span className="px-2.5 py-1 bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase rounded-full shrink-0">Pending</span>
                     )}
                   </div>
                 );
@@ -988,6 +942,123 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
         </div>
         </>
       )}
+
+      {transferModalPlanId && (() => {
+        const plan = portfolioRecurringPlans.find((p: any) => p.id === transferModalPlanId);
+        if (!plan) return null;
+        const m = workspaceMembers.find(x => x.uid === plan.member_user_id);
+        const info = computeTransferInfo(plan);
+        const linkable = linkableContributionsFor(plan.member_user_id);
+        const closeModal = () => { setTransferModalPlanId(null); setLinkingContributionId(null); };
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={closeModal}>
+            <div className="bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md" onClick={(e) => e.stopPropagation()}>
+              <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">{m ? memberName(m) : 'Member'} · {info.period.label}</h3>
+                <button onClick={closeModal} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="p-4 space-y-3">
+                {transferModalStep === 'ask' && (
+                  <>
+                    <p className="text-xs text-slate-600 dark:text-slate-400">We don't see an earlier contribution covering this period yet. Has {m ? memberName(m) : 'this person'} already transferred the {fmt(info.periodExpected)} for {info.period.label}?</p>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() => setTransferModalStep('link')}
+                        className="w-full py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-xs font-black uppercase rounded-xl cursor-pointer"
+                      >
+                        Yes - link an existing contribution
+                      </button>
+                      <button
+                        onClick={() => runAction(async () => {
+                          await markTransferred(plan.member_user_id, info.remaining, plan.portfolio_id);
+                          closeModal();
+                        })}
+                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase rounded-xl cursor-pointer"
+                      >
+                        No - record a new {fmt(info.remaining)} transfer
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {transferModalStep === 'link' && (
+                  <>
+                    <p className="text-xs text-slate-600 dark:text-slate-400">Which contribution is this? Selecting one marks it as covering this plan, instead of recording a new, possibly duplicate transfer.</p>
+                    {linkable.length === 0 ? (
+                      <p className="text-[11px] text-slate-400 py-2">No other logged contributions found for {m ? memberName(m) : 'this person'} to link.</p>
+                    ) : (
+                      <div className="max-h-48 overflow-y-auto space-y-1.5">
+                        {linkable.map(c => (
+                          <button
+                            key={c.id}
+                            onClick={() => setLinkingContributionId(c.id)}
+                            className={`w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-xs cursor-pointer border ${linkingContributionId === c.id ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/20' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950'}`}
+                          >
+                            <span className="text-slate-600 dark:text-slate-400">{c.contribution_date}{c.notes ? ` · ${c.notes}` : ''}</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200 shrink-0 ml-2">{fmt(Number(c.amount))}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={() => runAction(async () => {
+                          if (!linkingContributionId) return;
+                          await updatePortfolioContribution(linkingContributionId, { contributionType: 'recurring' });
+                          closeModal();
+                        })}
+                        disabled={!linkingContributionId}
+                        className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer"
+                      >
+                        Link Selected
+                      </button>
+                      <button onClick={() => setTransferModalStep('ask')} className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-500 text-[11px] font-black uppercase rounded-lg cursor-pointer">
+                        Back
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {transferModalStep === 'breakdown' && (
+                  <>
+                    <div className="text-[11px] text-slate-600 dark:text-slate-400 space-y-1">
+                      <div className="flex justify-between"><span>Usual {plan.frequency} amount</span><span className="font-semibold">{fmt(info.periodExpected)}</span></div>
+                      {info.carryForward > 0 && (
+                        <div className="flex justify-between text-rose-600 dark:text-rose-400"><span>+ Shortfall carried from before</span><span className="font-semibold">{fmt(info.carryForward)}</span></div>
+                      )}
+                      {info.carryForward < 0 && (
+                        <div className="flex justify-between text-emerald-600 dark:text-emerald-400"><span>− Credit from an earlier overpayment</span><span className="font-semibold">{fmt(Math.abs(info.carryForward))}</span></div>
+                      )}
+                      {info.advanceContributions.length > 0 && (
+                        <div className="pt-1.5 space-y-1">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase">From:</span>
+                          {info.advanceContributions.map(c => (
+                            <div key={c.id} className="flex items-center justify-between px-2 py-1 bg-slate-50 dark:bg-slate-950 rounded text-[10px]">
+                              <span className="text-slate-500">{c.contribution_date}{c.notes ? ` · ${c.notes}` : ''}</span>
+                              <span className="font-semibold">{fmt(Number(c.amount))}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex justify-between font-black text-slate-800 dark:text-slate-200 pt-1 border-t border-slate-200 dark:border-slate-800"><span>Total to transfer now</span><span>{fmt(info.remaining)}</span></div>
+                    </div>
+                    <button
+                      onClick={() => runAction(async () => {
+                        await markTransferred(plan.member_user_id, info.remaining, plan.portfolio_id);
+                        closeModal();
+                      })}
+                      className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase rounded-xl cursor-pointer"
+                    >
+                      Confirm {fmt(info.remaining)} Transferred
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

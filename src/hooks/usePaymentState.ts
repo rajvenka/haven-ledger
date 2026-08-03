@@ -1470,11 +1470,12 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
-  const updatePortfolioContribution = async (id: string, updates: { amount?: number; contributionDate?: string; notes?: string }) => {
+  const updatePortfolioContribution = async (id: string, updates: { amount?: number; contributionDate?: string; notes?: string; contributionType?: 'one_off' | 'recurring' | 'initial' }) => {
     const row: any = {};
     if (updates.amount !== undefined) row.amount = updates.amount;
     if (updates.contributionDate !== undefined) row.contribution_date = updates.contributionDate;
     if (updates.notes !== undefined) row.notes = updates.notes;
+    if (updates.contributionType !== undefined) row.contribution_type = updates.contributionType;
     const { error } = await supabase.from('portfolio_contributions').update(row).eq('id', id);
     if (error) throw error;
     await loadPortfolioDetails();
