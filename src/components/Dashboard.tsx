@@ -148,6 +148,9 @@ export default function Dashboard({
   const [currentMonthFilter, setCurrentMonthFilter] = useState<'overdue' | 'outstanding' | 'all'>('outstanding');
   const [showMonthTagFilters, setShowMonthTagFilters] = useState(false);
   const [monthTagFilters, setMonthTagFilters] = useState<Set<string>>(new Set());
+  const [weekTagFilters, setWeekTagFilters] = useState<Set<string>>(new Set());
+  const [showWeekTagFilters, setShowWeekTagFilters] = useState(false);
+  const toggleWeekTagFilter = (tag: string) => setWeekTagFilters(prev => { const next = new Set(prev); if (next.has(tag)) next.delete(tag); else next.add(tag); return next; });
   const toggleMonthTagFilter = (tag: string) => setMonthTagFilters(prev => { const next = new Set(prev); if (next.has(tag)) next.delete(tag); else next.add(tag); return next; });
   const [isHeroBreakdownOpen, setIsHeroBreakdownOpen] = useState(false);
   const [isTrendExpanded, setIsTrendExpanded] = useState<boolean>(() => {
@@ -585,9 +588,42 @@ export default function Dashboard({
                   <CheckCircle2 className="w-7 h-7 text-emerald-500 mx-auto opacity-75" />
                   <p className="text-xs text-slate-400 font-medium mt-2">Awesome! No payments due in the next 7 days.</p>
                 </div>
-              ) : (
+              ) : (() => {
+                const weekCategorySet = new Set<string>();
+                dueNextWeek.forEach(ins => { if (ins.category) weekCategorySet.add(ins.category); });
+                const weekCategories = Array.from(weekCategorySet).sort();
+                const displayedWeek = weekTagFilters.size === 0 ? dueNextWeek : dueNextWeek.filter(ins => weekTagFilters.has(ins.category));
+
+                return (
+                  <>
+                  {weekCategories.length > 1 && (
+                    <div className="filter-container px-4 py-2 border-b border-slate-100 dark:border-slate-900">
+                      <button
+                        onClick={() => setShowWeekTagFilters(v => !v)}
+                        className="flex items-center gap-1 text-[9px] font-bold text-slate-400 hover:text-indigo-500 cursor-pointer"
+                      >
+                        Filters{weekTagFilters.size > 0 ? ` (${weekTagFilters.size})` : ''} {showWeekTagFilters ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                      </button>
+                      {showWeekTagFilters && (
+                        <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                          {weekTagFilters.size > 0 && (
+                            <button onClick={() => setWeekTagFilters(new Set())} className="px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer bg-slate-900 dark:bg-white text-white dark:text-slate-950">All</button>
+                          )}
+                          {weekCategories.map(opt => (
+                            <button
+                              key={opt}
+                              onClick={() => toggleWeekTagFilter(opt)}
+                              className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${weekTagFilters.has(opt) ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+                            >
+                              {opt}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 <div className="divide-y divide-slate-100 dark:divide-slate-900 max-h-[350px] overflow-y-auto no-scrollbar">
-                  {dueNextWeek.map((ins) => {
+                  {displayedWeek.map((ins) => {
                     const daysLeft = getDaysUntilDueDateStr(ins.dueDate);
                     const colorConfig = getCategoryColor(ins.category);
                     const parentPayment = payments.find(p => p.id === ins.paymentId);
@@ -640,7 +676,9 @@ export default function Dashboard({
                     );
                   })}
                 </div>
-              )
+                  </>
+                );
+              })()
             )}
           </div>
 

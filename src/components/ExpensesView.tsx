@@ -11,6 +11,8 @@ import {
   X,
   CreditCard,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   Info
 } from 'lucide-react';
 import { RecurringPayment, CountryConfig, PaymentHistory, CATEGORY_COLORS, getCategoryColor } from '../types';
@@ -50,6 +52,9 @@ export default function ExpensesView({
   };
   // Local active country tab selection
   const [activeTabCountryId, setActiveTabCountryId] = useState<string>('');
+  const [expenseTagFilters, setExpenseTagFilters] = useState<Set<string>>(new Set());
+  const [showExpenseTagFilters, setShowExpenseTagFilters] = useState(false);
+  const toggleExpenseTagFilter = (tag: string) => setExpenseTagFilters(prev => { const next = new Set(prev); if (next.has(tag)) next.delete(tag); else next.add(tag); return next; });
   
   React.useEffect(() => {
     if (defaultCurrency && !activeTabCountryId) {
@@ -482,9 +487,42 @@ export default function ExpensesView({
                   Click the add button above to configure a recurring payment in {isAllSelected ? (defaultCurrency || 'AUD') : activeCurrency}.
                 </p>
               </div>
-            ) : (
+            ) : (() => {
+              const expenseCategorySet = new Set<string>();
+              filteredPayments.forEach(p => { if (p.category) expenseCategorySet.add(p.category); });
+              const expenseCategories = Array.from(expenseCategorySet).sort();
+              const displayedExpensePayments = expenseTagFilters.size === 0 ? filteredPayments : filteredPayments.filter(p => expenseTagFilters.has(p.category));
+
+              return (
+              <>
+              {expenseCategories.length > 1 && (
+                <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-850/60">
+                  <button
+                    onClick={() => setShowExpenseTagFilters(v => !v)}
+                    className="flex items-center gap-1 text-[9px] font-bold text-slate-400 hover:text-indigo-500 cursor-pointer"
+                  >
+                    Filters{expenseTagFilters.size > 0 ? ` (${expenseTagFilters.size})` : ''} {showExpenseTagFilters ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  </button>
+                  {showExpenseTagFilters && (
+                    <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                      {expenseTagFilters.size > 0 && (
+                        <button onClick={() => setExpenseTagFilters(new Set())} className="px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer bg-slate-900 dark:bg-white text-white dark:text-slate-950">All</button>
+                      )}
+                      {expenseCategories.map(opt => (
+                        <button
+                          key={opt}
+                          onClick={() => toggleExpenseTagFilter(opt)}
+                          className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${expenseTagFilters.has(opt) ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="divide-y divide-slate-100 dark:divide-slate-900/60 overflow-y-auto flex-1 mt-1 pr-1">
-                 {filteredPayments.map((p) => {
+                 {displayedExpensePayments.map((p) => {
                   const days = getDaysUntilPayment(p, new Date(), history);
                   const isDueSoon = days >= 0 && days <= 7;
                   const colorConfig = getCategoryColor(p.category);
@@ -550,7 +588,9 @@ export default function ExpensesView({
                   );
                 })}
               </div>
-            )}
+              </>
+              );
+            })()}
           </div>
         </>
       )}
