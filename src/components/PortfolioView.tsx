@@ -358,6 +358,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [quoteSearchResults, setQuoteSearchResults] = useState<any[]>([]);
   const [quoteSearching, setQuoteSearching] = useState(false);
   const [quoteSearchError, setQuoteSearchError] = useState<string | null>(null);
+  const [copiedSymbol, setCopiedSymbol] = useState<string | null>(null);
+  const copySymbol = (symbol: string) => {
+    navigator.clipboard?.writeText(symbol);
+    setCopiedSymbol(symbol);
+    setTimeout(() => setCopiedSymbol(prev => (prev === symbol ? null : prev)), 2000);
+  };
   const runQuoteSearch = async () => {
     if (!quoteSearchQuery.trim()) return;
     setQuoteSearching(true);
@@ -366,7 +372,28 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const resp = await fetch(`/api/portfolio-quote-search?q=${encodeURIComponent(quoteSearchQuery.trim())}`);
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Search failed.');
-      setQuoteSearchResults(data.results || []);
+      const results = data.results || [];
+      setQuoteSearchResults(results);
+      // Follow-up price fetch so the person can visually confirm this is the right stock -
+      // Yahoo's search endpoint returns symbol/name but not a reliable live price. The
+      // symbol here already carries its own .NS/.BO suffix from Yahoo's own search result,
+      // so the exchange passed through doesn't matter - the price API's own suffix check
+      // already skips re-appending one to an already-suffixed symbol.
+      if (results.length > 0) {
+        const priceResp = await fetch('/api/portfolio-prices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbols: results.map((r: any) => ({ symbol: r.symbol, exchange: r.exchange || '' })) }),
+        });
+        if (priceResp.ok) {
+          const { results: priceResults } = await priceResp.json();
+          setQuoteSearchResults(results.map((r: any, i: number) => ({
+            ...r,
+            price: priceResults[i]?.price ?? null,
+            previousClose: priceResults[i]?.previousClose ?? null,
+          })));
+        }
+      }
     } catch (err: any) {
       setQuoteSearchError(err.message || 'Search failed.');
       setQuoteSearchResults([]);
@@ -485,6 +512,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   };
 
   const UNCLASSIFIED_LABEL = 'Unclassified';
+  const SYMBOL_NOT_FOUND_FILTER = 'Symbol Not Found';
 
   const filterOptions = useMemo(() => {
     const combos = new Set<string>();
@@ -532,7 +560,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
         const priceMoveOk = selectedPriceMoves.length === 0 || (moveLabel && selectedPriceMoves.includes(moveLabel));
         const portfolioName = portfolioMode === 'multiple' ? (portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned') : null;
         const portfolioOk = selectedPortfolios.length === 0 || (portfolioName && selectedPortfolios.includes(portfolioName));
-        return comboOk && sourceOk && changeOk && priceMoveOk && portfolioOk;
+        const symbolNotFoundOk = !holdingFilters.has(SYMBOL_NOT_FOUND_FILTER) || h.price_lookup_failed;
+        return comboOk && sourceOk && changeOk && priceMoveOk && portfolioOk && symbolNotFoundOk;
       });
     }
     if (!sortField) return list;
@@ -1176,21 +1205,35 @@ export default function PortfolioView(props: PortfolioViewProps) {
           {quoteSearchError && <p className="text-[10px] text-rose-500 font-semibold">{quoteSearchError}</p>}
           {quoteSearchResults.length > 0 && (
             <div className="divide-y divide-slate-100 dark:divide-slate-900">
-              {quoteSearchResults.map((r, i) => (
+              {quoteSearchResults.map((r, i) => {
+                const changePct = r.price != null && r.previousClose ? ((r.price - r.previousClose) / r.previousClose) * 100 : null;
+                return (
                 <div key={i} className="py-2.5 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{r.name}</p>
                     <p className="text-[10px] text-slate-400">{r.exchangeDisplay || r.exchange || 'Unknown exchange'}{r.type ? ` · ${r.type}` : ''}</p>
+                    {r.price != null ? (
+                      <p className="text-[10px] mt-0.5">
+                        <span className="font-bold text-slate-700 dark:text-slate-300">{r.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                        {changePct != null && (
+                          <span className={`ml-1.5 font-bold ${changePct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{changePct >= 0 ? '+' : ''}{changePct.toFixed(2)}%</span>
+                        )}
+                        <span className="text-slate-400"> · compare against your holding to confirm it's the right match</span>
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-slate-300 dark:text-slate-700 mt-0.5">No live price found for this result</p>
+                    )}
                   </div>
                   <button
-                    onClick={() => { navigator.clipboard?.writeText(r.symbol); }}
+                    onClick={() => copySymbol(r.symbol)}
                     title="Copy symbol"
-                    className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-black rounded-lg cursor-pointer shrink-0"
+                    className={`px-2.5 py-1.5 text-xs font-black rounded-lg cursor-pointer shrink-0 transition-colors ${copiedSymbol === r.symbol ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}
                   >
-                    {r.symbol}
+                    {copiedSymbol === r.symbol ? 'Copied ✓' : r.symbol}
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
           {!quoteSearching && quoteSearchResults.length === 0 && !quoteSearchError && quoteSearchQuery && (
@@ -1729,6 +1772,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
           {(filterOptions.combos.length > 1 || filterOptions.sources.length > 0 || filterOptions.priceMoves.length > 0) && (
             <div className="flex items-center gap-1.5 flex-wrap">
               <button onClick={() => setHoldingFilters(new Set())} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.size === 0 ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
+              {activeHoldings.some(h => h.price_lookup_failed) && (
+                <button onClick={() => toggleHoldingFilter(SYMBOL_NOT_FOUND_FILTER)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(SYMBOL_NOT_FOUND_FILTER) ? 'bg-rose-600 text-white' : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400'}`}>
+                  Symbol Not Found ({activeHoldings.filter(h => h.price_lookup_failed).length})
+                </button>
+              )}
               {filterOptions.combos.map(c => (
                 <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${brokerPillClass(c, holdingFilters.has(c))}`}>{c}</button>
               ))}
