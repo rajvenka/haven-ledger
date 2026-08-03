@@ -4,6 +4,19 @@
 // on one never blocks the others - the response always tells the caller exactly
 // which symbols succeeded and which didn't, rather than failing the whole batch.
 
+async function fetchYahooPrice(yahooSymbol: string) {
+  const resp = await fetch(
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}`,
+    { headers: { "User-Agent": "Mozilla/5.0" } }
+  );
+  if (!resp.ok) return { price: null, previousClose: null, error: `Yahoo returned ${resp.status}` };
+  const data = await resp.json();
+  const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+  const previousClose = data?.chart?.result?.[0]?.meta?.chartPreviousClose ?? data?.chart?.result?.[0]?.meta?.previousClose;
+  if (typeof price !== "number") return { price: null, previousClose: null, error: "No price found for this symbol" };
+  return { price, previousClose: typeof previousClose === "number" ? previousClose : null, error: null };
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -23,26 +36,27 @@ export default async function handler(req: any, res: any) {
         // and others use the plain symbol as-is. Previously this defaulted to ".NS" for
         // anything that wasn't literally "BSE", which silently broke every non-Indian
         // exchange (e.g. AAPL on NASDAQ became the invalid "AAPL.NS").
-        const suffix = exchange === "BSE" ? ".BO" : exchange === "NSE" ? ".NS" : "";
-        // Some symbols (particularly NSE SME-segment stocks) already carry their own exchange
-        // suffix from the broker's export - appending another one produced invalid lookups
-        // like "EFFWA-SM.NS.NS" instead of the real "EFFWA-SM.NS".
-        const yahooSymbol = /\.(NS|BO)$/i.test(symbol) || !suffix ? symbol : `${symbol}${suffix}`;
+        const isIndianExchange = exchange === "NSE" || exchange === "BSE";
+        const alreadySuffixed = /\.(NS|BO)$/i.test(symbol);
+        const primarySuffix = exchange === "BSE" ? ".BO" : isIndianExchange ? ".NS" : "";
+        const primarySymbol = alreadySuffixed || !primarySuffix ? symbol : `${symbol}${primarySuffix}`;
+
         try {
-          const resp = await fetch(
-            `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}`,
-            { headers: { "User-Agent": "Mozilla/5.0" } }
-          );
-          if (!resp.ok) {
-            return { symbol, exchange, price: null, previousClose: null, error: `Yahoo returned ${resp.status}` };
+          let result = await fetchYahooPrice(primarySymbol);
+          // A stock can genuinely be listed on only one of NSE/BSE, or the workspace's
+          // tagged exchange for it can simply be wrong - rather than fail outright, try
+          // the other Indian exchange before giving up. Only applies to plain (non-suffixed)
+          // Indian symbols, since a symbol that already carries its own .NS/.BO has no
+          // second exchange to fall back to.
+          if (result.price == null && isIndianExchange && !alreadySuffixed) {
+            const fallbackSuffix = primarySuffix === ".NS" ? ".BO" : ".NS";
+            const fallbackResult = await fetchYahooPrice(`${symbol}${fallbackSuffix}`);
+            if (fallbackResult.price != null) result = fallbackResult;
           }
-          const data = await resp.json();
-          const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-          const previousClose = data?.chart?.result?.[0]?.meta?.chartPreviousClose ?? data?.chart?.result?.[0]?.meta?.previousClose;
-          if (typeof price !== "number") {
-            return { symbol, exchange, price: null, previousClose: null, error: "No price found for this symbol" };
+          if (result.price == null) {
+            return { symbol, exchange, price: null, previousClose: null, error: result.error };
           }
-          return { symbol, exchange, price, previousClose: typeof previousClose === "number" ? previousClose : null, error: null };
+          return { symbol, exchange, price: result.price, previousClose: result.previousClose, error: null };
         } catch (err: any) {
           return { symbol, exchange, price: null, previousClose: null, error: err?.message || "Fetch failed" };
         }

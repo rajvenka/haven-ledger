@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   TrendingUp, TrendingDown, Plus, Trash2, RefreshCw, Users, Wallet,
-  CheckCircle2, X, Briefcase, Gift, Receipt, Upload, Edit2, ChevronDown, ArrowUpDown, Settings, ChevronUp, Download
+  CheckCircle2, X, Briefcase, Gift, Receipt, Upload, Edit2, ChevronDown, ArrowUpDown, Settings, ChevronUp, Download, Search
 } from 'lucide-react';
 
 interface WorkspaceMemberLite {
@@ -353,7 +353,27 @@ export default function PortfolioView(props: PortfolioViewProps) {
   };
 
   const [wipeConfirmText, setWipeConfirmText] = useState('');
-  const [holdingsTab, setHoldingsTab] = useState<'active' | 'sold'>('active');
+  const [holdingsTab, setHoldingsTab] = useState<'active' | 'sold' | 'search'>('active');
+  const [quoteSearchQuery, setQuoteSearchQuery] = useState('');
+  const [quoteSearchResults, setQuoteSearchResults] = useState<any[]>([]);
+  const [quoteSearching, setQuoteSearching] = useState(false);
+  const [quoteSearchError, setQuoteSearchError] = useState<string | null>(null);
+  const runQuoteSearch = async () => {
+    if (!quoteSearchQuery.trim()) return;
+    setQuoteSearching(true);
+    setQuoteSearchError(null);
+    try {
+      const resp = await fetch(`/api/portfolio-quote-search?q=${encodeURIComponent(quoteSearchQuery.trim())}`);
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Search failed.');
+      setQuoteSearchResults(data.results || []);
+    } catch (err: any) {
+      setQuoteSearchError(err.message || 'Search failed.');
+      setQuoteSearchResults([]);
+    } finally {
+      setQuoteSearching(false);
+    }
+  };
   const [editTargetType, setEditTargetType] = useState<'price' | 'percent'>('percent');
   const [editTargetValue, setEditTargetValue] = useState('');
   const [editHoldType, setEditHoldType] = useState<'days' | 'date'>('date');
@@ -831,44 +851,78 @@ export default function PortfolioView(props: PortfolioViewProps) {
       }
       const refreshable = scopedHoldings.filter(h => h.holding_type !== 'mutual_fund' && h.ticker);
       const skippedNoTicker = scopedHoldings.filter(h => h.holding_type !== 'mutual_fund' && !h.ticker).length;
-      if (refreshable.length === 0) {
-        setPriceRefreshSummary(skippedNoTicker > 0 ? `${skippedNoTicker} stock${skippedNoTicker !== 1 ? 's' : ''} need a ticker set before they can be refreshed.` : 'No stock holdings to refresh (mutual funds need manual NAV updates).');
-        return;
-      }
-      const symbols = refreshable.map(h => ({ symbol: h.ticker, exchange: h.exchange }));
-      const resp = await fetch('/api/portfolio-prices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols }),
-      });
-      if (!resp.ok) throw new Error('Price service did not respond. Try again shortly.');
-      const { results } = await resp.json();
+      const mutualFunds = scopedHoldings.filter(h => h.holding_type === 'mutual_fund');
 
       let succeeded = 0;
       let failed = 0;
       const updatePromises: Promise<void>[] = [];
-      // Match results back to holdings by position, not by re-searching for the ticker -
-      // Promise.all preserves the order of the input array, and matching by ticker alone
-      // breaks when the same stock exists both actively held and sold (10 tickers in this
-      // workspace do), since .find() would always return the first match and the other
-      // copy's live_price would never get updated.
-      results.forEach((r: any, i: number) => {
-        const holding = refreshable[i];
-        if (!holding) return;
-        if (r.price != null) {
-          updatePromises.push(updatePortfolioHoldingLivePrice(holding.id, r.price, r.previousClose ?? null));
-          succeeded++;
+
+      if (refreshable.length > 0) {
+        const symbols = refreshable.map(h => ({ symbol: h.ticker, exchange: h.exchange }));
+        const resp = await fetch('/api/portfolio-prices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbols }),
+        });
+        if (!resp.ok) throw new Error('Price service did not respond. Try again shortly.');
+        const { results } = await resp.json();
+        // Match results back to holdings by position, not by re-searching for the ticker -
+        // Promise.all preserves the order of the input array, and matching by ticker alone
+        // breaks when the same stock exists both actively held and sold (10 tickers in this
+        // workspace do), since .find() would always return the first match and the other
+        // copy's live_price would never get updated.
+        results.forEach((r: any, i: number) => {
+          const holding = refreshable[i];
+          if (!holding) return;
+          if (r.price != null) {
+            updatePromises.push(updatePortfolioHoldingLivePrice(holding.id, r.price, r.previousClose ?? null));
+            succeeded++;
+          } else {
+            updatePromises.push(markPriceLookupFailed(holding.id));
+            failed++;
+          }
+        });
+      }
+
+      let mfSucceeded = 0;
+      let mfFailed = 0;
+      if (mutualFunds.length > 0) {
+        const funds = mutualFunds.map(h => ({ id: h.id, isin: h.isin, name: h.symbol }));
+        const mfResp = await fetch('/api/portfolio-mf-nav', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ funds }),
+        });
+        if (mfResp.ok) {
+          const { results: mfResults } = await mfResp.json();
+          mfResults.forEach((r: any) => {
+            const holding = mutualFunds.find(h => h.id === r.id);
+            if (!holding) return;
+            if (r.nav != null) {
+              updatePromises.push(updatePortfolioHoldingLivePrice(holding.id, r.nav, null));
+              mfSucceeded++;
+            } else {
+              updatePromises.push(markPriceLookupFailed(holding.id));
+              mfFailed++;
+            }
+          });
         } else {
-          updatePromises.push(markPriceLookupFailed(holding.id));
-          failed++;
+          mfFailed += mutualFunds.length;
         }
-      });
+      }
+
       await Promise.all(updatePromises);
+
+      if (refreshable.length === 0 && mutualFunds.length === 0) {
+        setPriceRefreshSummary(skippedNoTicker > 0 ? `${skippedNoTicker} stock${skippedNoTicker !== 1 ? 's' : ''} need a ticker set before they can be refreshed.` : 'No holdings to refresh.');
+        return;
+      }
       const skipNote = skippedNoTicker > 0 ? ` · ${skippedNoTicker} skipped (no ticker set)` : '';
+      const mfNote = mutualFunds.length > 0 ? ` · MF NAV: ${mfSucceeded} updated${mfFailed > 0 ? `, ${mfFailed} not matched` : ''}` : '';
       setPriceRefreshSummary(
         failed === 0
-          ? `Live price updated for ${succeeded}${skipNote} · delayed a few minutes, not real-time`
-          : `Live price updated for ${succeeded}, couldn't find ${failed}${skipNote} · delayed a few minutes, not real-time`
+          ? `Live price updated for ${succeeded}${skipNote}${mfNote} · delayed a few minutes, not real-time`
+          : `Live price updated for ${succeeded}, couldn't find ${failed}${skipNote}${mfNote} · delayed a few minutes, not real-time`
       );
     });
     setRefreshingPrices(false);
@@ -1093,7 +1147,57 @@ export default function PortfolioView(props: PortfolioViewProps) {
       <div className="flex gap-1.5">
         <button onClick={() => setHoldingsTab('active')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'active' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Active ({activeHoldings.length})</button>
         <button onClick={() => setHoldingsTab('sold')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'sold' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Sold ({soldHoldings.length})</button>
+        <button onClick={() => setHoldingsTab('search')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${holdingsTab === 'search' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}><Search className="w-3 h-3" /> Quote Search</button>
       </div>
+
+      {holdingsTab === 'search' && (
+        <div className="apple-card p-4 space-y-3">
+          <div>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">Quote Search</span>
+            <p className="text-[9px] text-slate-400">Not sure what symbol a broker's name actually resolves to? Search here to find the real ticker before entering it via Edit.</p>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={quoteSearchQuery}
+              onChange={(e) => setQuoteSearchQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') runQuoteSearch(); }}
+              placeholder="e.g. Gold BeES, Jyoti Life Sciences, Apple"
+              className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+            />
+            <button
+              onClick={runQuoteSearch}
+              disabled={quoteSearching || !quoteSearchQuery.trim()}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-black uppercase rounded-lg cursor-pointer shrink-0"
+            >
+              {quoteSearching ? 'Searching…' : 'Search'}
+            </button>
+          </div>
+          {quoteSearchError && <p className="text-[10px] text-rose-500 font-semibold">{quoteSearchError}</p>}
+          {quoteSearchResults.length > 0 && (
+            <div className="divide-y divide-slate-100 dark:divide-slate-900">
+              {quoteSearchResults.map((r, i) => (
+                <div key={i} className="py-2.5 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{r.name}</p>
+                    <p className="text-[10px] text-slate-400">{r.exchangeDisplay || r.exchange || 'Unknown exchange'}{r.type ? ` · ${r.type}` : ''}</p>
+                  </div>
+                  <button
+                    onClick={() => { navigator.clipboard?.writeText(r.symbol); }}
+                    title="Copy symbol"
+                    className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-black rounded-lg cursor-pointer shrink-0"
+                  >
+                    {r.symbol}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {!quoteSearching && quoteSearchResults.length === 0 && !quoteSearchError && quoteSearchQuery && (
+            <p className="text-[10px] text-slate-400 text-center py-3">No results yet - try searching above.</p>
+          )}
+        </div>
+      )}
 
       {holdingsTab === 'active' && (
         <>
