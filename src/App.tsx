@@ -181,6 +181,7 @@ export default function App() {
     updatePortfolioHolding,
     sellPortfolioHolding,
     updatePortfolioHoldingLivePrice,
+    markPriceLookupFailed,
     deletePortfolioHolding,
     bulkTagPortfolioHoldings,
     bulkDeletePortfolioHoldings,
@@ -1653,6 +1654,7 @@ export default function App() {
                 updatePortfolioHolding={updatePortfolioHolding}
                 sellPortfolioHolding={sellPortfolioHolding}
                 updatePortfolioHoldingLivePrice={updatePortfolioHoldingLivePrice}
+                markPriceLookupFailed={markPriceLookupFailed}
                 deletePortfolioHolding={deletePortfolioHolding}
                 bulkTagPortfolioHoldings={bulkTagPortfolioHoldings}
                 bulkDeletePortfolioHoldings={bulkDeletePortfolioHoldings}

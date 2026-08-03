@@ -1370,9 +1370,15 @@ export function usePaymentState() {
   // previousClose (from Yahoo's own prior-close reference) powers the Daily Change headline
   // metric, distinct from Since Upload which compares against the file-sourced LTP instead.
   const updatePortfolioHoldingLivePrice = async (id: string, price: number, previousClose?: number | null) => {
-    const row: any = { live_price: price, live_price_updated_at: new Date().toISOString() };
+    const row: any = { live_price: price, live_price_updated_at: new Date().toISOString(), price_lookup_failed: false };
     if (previousClose !== undefined) row.previous_close = previousClose;
     const { error } = await supabase.from('portfolio_holdings').update(row).eq('id', id);
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
+  const markPriceLookupFailed = async (id: string) => {
+    const { error } = await supabase.from('portfolio_holdings').update({ price_lookup_failed: true }).eq('id', id);
     if (error) throw error;
     await loadPortfolioDetails();
   };
@@ -1738,7 +1744,7 @@ export function usePaymentState() {
     accessPlans, createAccessPlan, updateAccessPlan, deleteAccessPlan,
     myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan, setSuperAdminStatus,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, portfolioDataLoading, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
+    portfolioHoldings, portfolioDataLoading, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioPriceHistory,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
