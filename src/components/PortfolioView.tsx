@@ -2130,11 +2130,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                     type="text"
                                     value={editTicker}
                                     onChange={(e) => setEditTicker(e.target.value.toUpperCase())}
-                                    disabled={h.broker === 'Zerodha'}
+                                    disabled={h.broker === 'Zerodha' && !h.price_lookup_failed}
                                     placeholder={h.broker === 'Groww' ? 'e.g. RELIANCE' : ''}
                                     className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-xs disabled:opacity-60 disabled:cursor-not-allowed"
                                   />
-                                  {h.broker === 'Zerodha' && <p className="text-[8px] text-slate-400 mt-0.5">Zerodha's symbol is already a real ticker - no change needed.</p>}
+                                  {h.broker === 'Zerodha' && h.price_lookup_failed && <p className="text-[8px] text-rose-500 mt-0.5">Zerodha's symbol didn't resolve on the last refresh - correct it here (use Quote Search to find the real one).</p>}
+                                  {h.broker === 'Zerodha' && !h.price_lookup_failed && <p className="text-[8px] text-slate-400 mt-0.5">Zerodha's symbol is already a real ticker - no change needed.</p>}
                                   {h.broker === 'Groww' && !h.ticker && <p className="text-[8px] text-rose-500 mt-0.5">Not set - Refresh Prices will skip this stock until you add one.</p>}
                                 </div>
                                 <div className="flex gap-1.5 col-span-2">
