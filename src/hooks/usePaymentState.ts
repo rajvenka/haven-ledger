@@ -389,6 +389,38 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
+  // Loaded on-demand (not part of the main portfolio load) since it's only needed when the
+  // MF Holdings tab is actually opened. Global reference data, not workspace-scoped, so this
+  // simply loads everything cached so far - the table only grows as large as the number of
+  // distinct funds anyone has ever fetched holdings for, not per-workspace.
+  const loadMfHoldingsCache = async () => {
+    const { data, error } = await supabase.from('mf_holdings_cache').select('*');
+    if (error) throw error;
+    setMfHoldingsCache(data ?? []);
+  };
+
+  // Calls the mfdata.in proxy (matches to an AMFI scheme code by ISIN/name, then fetches
+  // that fund's underlying stock holdings), caches every stock row, and returns the result
+  // so the caller can update its own view immediately without waiting for a full reload.
+  const fetchAndCacheMfHoldings = async (isin: string | null, name: string) => {
+    const resp = await fetch('/api/portfolio-mf-holdings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isin, name }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Failed to fetch fund holdings.');
+    if (data.holdings && data.holdings.length > 0 && data.schemeCode) {
+      const rows = data.holdings.map((h: any) => ({
+        scheme_code: data.schemeCode, scheme_name: data.schemeName, stock_name: h.stockName, weight_pct: h.weightPct, fetched_at: new Date().toISOString(),
+      }));
+      const { error } = await supabase.from('mf_holdings_cache').upsert(rows, { onConflict: 'scheme_code,stock_name' });
+      if (error) throw error;
+      await loadMfHoldingsCache();
+    }
+    return data;
+  };
+
   const switchWorkspace = async (workspaceId: string) => {
     if (!user) return;
     setIsSyncing(true);
@@ -1025,6 +1057,7 @@ export function usePaymentState() {
   const [portfolioRecurringPlans, setPortfolioRecurringPlans] = useState<any[]>([]);
   const [portfolios, setPortfolios] = useState<any[]>([]);
   const [workspaceCurrencyRates, setWorkspaceCurrencyRates] = useState<any[]>([]);
+  const [mfHoldingsCache, setMfHoldingsCache] = useState<any[]>([]);
   const [portfolioDataLoading, setPortfolioDataLoading] = useState(true);
   const loadedPortfolioWorkspaces = useRef<Set<string>>(new Set());
 
@@ -1725,6 +1758,7 @@ export function usePaymentState() {
     // Workspace model
     workspaces, activeWorkspaceId, activeWorkspace, switchWorkspace, createWorkspace, setWorkspaceMode, updateWorkspaceLandingTab, updateWorkspaceColumnPrefs, dismissContributionReminder,
     portfolios, workspaceCurrencyRates, switchToMultiPortfolio, createPortfolio, updatePortfolio, deletePortfolio, upsertCurrencyRate,
+    mfHoldingsCache, loadMfHoldingsCache, fetchAndCacheMfHoldings,
     renameWorkspace, deleteWorkspace,
     incomeSources, addIncomeSource, deleteIncomeSource, incomeMode, updateIncomeMode, monthlyIncome, updateMonthlyIncome,
     workspaceBackups, createBackupNow, restoreFromBackup,

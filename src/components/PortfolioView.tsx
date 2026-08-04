@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   TrendingUp, TrendingDown, Plus, Trash2, RefreshCw, Users, Wallet,
-  CheckCircle2, X, Briefcase, Gift, Receipt, Upload, Edit2, ChevronDown, ArrowUpDown, Settings, ChevronUp, Download, Search
+  CheckCircle2, X, Briefcase, Gift, Receipt, Upload, Edit2, ChevronDown, ArrowUpDown, Settings, ChevronUp, Download, Search, PieChart
 } from 'lucide-react';
 
 interface WorkspaceMemberLite {
@@ -37,6 +37,9 @@ interface PortfolioViewProps {
   portfolios?: any[];
   portfolioMode?: 'single' | 'multiple';
   workspaceCurrencyRates?: any[];
+  mfHoldingsCache?: any[];
+  loadMfHoldingsCache?: () => Promise<void>;
+  fetchAndCacheMfHoldings?: (isin: string | null, name: string) => Promise<any>;
   baseCurrency?: string;
   reconcilePortfolioHoldingQuantity: (id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced') => Promise<void>;
   bulkHistoricalImport: (snapshots: { date: string; holdings: any[] }[], portfolioId?: string) => Promise<{ newCount: number; updatedCount: number; soldCount: number; skippedStaleCount: number; priceHistoryCount: number; stockCount: number }>;
@@ -143,6 +146,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     workspaceName, workspaceMembers, isReadOnly, isDataLoading, columnPrefs, onUpdateColumnPrefs,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances,
     portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
+    mfHoldingsCache = [], loadMfHoldingsCache, fetchAndCacheMfHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
@@ -353,7 +357,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
   };
 
   const [wipeConfirmText, setWipeConfirmText] = useState('');
-  const [holdingsTab, setHoldingsTab] = useState<'active' | 'sold' | 'search'>('active');
+  const [holdingsTab, setHoldingsTab] = useState<'active' | 'sold' | 'search' | 'mf-holdings'>('active');
+  const [mfHoldingsSelectedId, setMfHoldingsSelectedId] = useState<string>('all');
+  const [mfHoldingsFetchingId, setMfHoldingsFetchingId] = useState<string | null>(null);
+  const [mfHoldingsError, setMfHoldingsError] = useState<string | null>(null);
   const [quoteSearchQuery, setQuoteSearchQuery] = useState('');
   const [quoteSearchMode, setQuoteSearchMode] = useState<'stock' | 'mf'>('stock');
   const [quoteSearchResults, setQuoteSearchResults] = useState<any[]>([]);
@@ -1194,6 +1201,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
         <button onClick={() => setHoldingsTab('active')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'active' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Active ({activeHoldings.length})</button>
         <button onClick={() => setHoldingsTab('sold')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'sold' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Sold ({soldHoldings.length})</button>
         <button onClick={() => setHoldingsTab('search')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${holdingsTab === 'search' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}><Search className="w-3 h-3" /> Quote Search</button>
+        {activeHoldings.some(h => h.holding_type === 'mutual_fund') && (
+          <button
+            onClick={() => { setHoldingsTab('mf-holdings'); loadMfHoldingsCache?.(); }}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${holdingsTab === 'mf-holdings' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+          >
+            <PieChart className="w-3 h-3" /> MF Holdings
+          </button>
+        )}
       </div>
 
       {holdingsTab === 'search' && (
@@ -1285,6 +1300,121 @@ export default function PortfolioView(props: PortfolioViewProps) {
           )}
         </div>
       )}
+
+      {holdingsTab === 'mf-holdings' && (() => {
+        const mfHoldings = activeHoldings.filter(h => h.holding_type === 'mutual_fund');
+        const cacheFor = (h: any) => mfHoldingsCache.filter((c: any) => {
+          const a = (c.scheme_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const b = (h.symbol || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          return a === b;
+        });
+        const missingCache = mfHoldings.filter(h => cacheFor(h).length === 0);
+
+        const doFetch = async (h: any) => {
+          setMfHoldingsFetchingId(h.id);
+          setMfHoldingsError(null);
+          try {
+            const result = await fetchAndCacheMfHoldings?.(h.isin ?? null, h.symbol);
+            if (result?.error && (!result.holdings || result.holdings.length === 0)) {
+              setMfHoldingsError(`${h.symbol}: ${result.error}`);
+            }
+          } catch (err: any) {
+            setMfHoldingsError(err.message || 'Failed to fetch fund holdings.');
+          } finally {
+            setMfHoldingsFetchingId(null);
+          }
+        };
+
+        // Aggregated view: each fund's own cached stock weights, scaled by that fund's
+        // actual value in the portfolio (quantity x current price), summed across every
+        // fund that holds the same stock - so a stock at 8% in one fund and 5% in another
+        // shows its real combined rupee exposure, not just an average of two percentages.
+        const aggregated = (() => {
+          const totals = new Map<string, number>();
+          let totalMfValue = 0;
+          mfHoldings.forEach(h => {
+            const value = Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity);
+            totalMfValue += value;
+            cacheFor(h).forEach((c: any) => {
+              const exposure = value * (Number(c.weight_pct) / 100);
+              totals.set(c.stock_name, (totals.get(c.stock_name) || 0) + exposure);
+            });
+          });
+          return Array.from(totals.entries())
+            .map(([stockName, exposure]) => ({ stockName, exposure, pctOfMf: totalMfValue > 0 ? (exposure / totalMfValue) * 100 : 0 }))
+            .sort((a, b) => b.exposure - a.exposure);
+        })();
+
+        const selectedHolding = mfHoldingsSelectedId === 'all' ? null : mfHoldings.find(h => h.id === mfHoldingsSelectedId);
+
+        return (
+          <div className="apple-card p-4 space-y-3">
+            <div>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">MF Underlying Holdings</span>
+              <p className="text-[9px] text-slate-400">What stocks your mutual funds actually hold, and your combined exposure to each one across every fund. Data from mfdata.in, an independent community source - not an official AMFI feed.</p>
+            </div>
+
+            {missingCache.length > 0 && (
+              <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg p-3 space-y-2">
+                <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400">{missingCache.length} fund{missingCache.length !== 1 ? 's' : ''} need holdings data fetched before they're included below:</p>
+                {missingCache.map(h => (
+                  <div key={h.id} className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-slate-600 dark:text-slate-400 truncate">{h.symbol}</span>
+                    <button
+                      onClick={() => doFetch(h)}
+                      disabled={mfHoldingsFetchingId === h.id}
+                      className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer shrink-0"
+                    >
+                      {mfHoldingsFetchingId === h.id ? 'Fetching…' : 'Create Holdings %'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {mfHoldingsError && <p className="text-[10px] text-rose-500 font-semibold">{mfHoldingsError}</p>}
+
+            <select
+              value={mfHoldingsSelectedId}
+              onChange={(e) => setMfHoldingsSelectedId(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+            >
+              <option value="all">All Funds (combined top holdings)</option>
+              {mfHoldings.map(h => <option key={h.id} value={h.id}>{h.symbol}</option>)}
+            </select>
+
+            {mfHoldingsSelectedId === 'all' ? (
+              aggregated.length === 0 ? (
+                <p className="text-[11px] text-slate-400 text-center py-4">No holdings data cached yet - use "Create Holdings %" above to get started.</p>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-900">
+                  {aggregated.slice(0, 15).map((row, i) => (
+                    <div key={i} className="flex items-center justify-between py-2">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">{row.stockName}</span>
+                      <span className="text-xs text-right">
+                        <span className="font-black text-slate-700 dark:text-slate-300">{fmtHeader(row.exposure)}</span>
+                        <span className="text-slate-400 ml-1.5">({row.pctOfMf.toFixed(2)}% of MF value)</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : selectedHolding ? (
+              cacheFor(selectedHolding).length === 0 ? (
+                <p className="text-[11px] text-slate-400 text-center py-4">No holdings data cached for this fund yet.</p>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-900">
+                  {cacheFor(selectedHolding).sort((a: any, b: any) => Number(b.weight_pct) - Number(a.weight_pct)).map((c: any) => (
+                    <div key={c.id} className="flex items-center justify-between py-2">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">{c.stock_name}</span>
+                      <span className="text-xs font-black text-slate-700 dark:text-slate-300">{Number(c.weight_pct).toFixed(2)}%</span>
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : null}
+          </div>
+        );
+      })()}
 
       {holdingsTab === 'active' && (
         <>
