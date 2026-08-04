@@ -355,6 +355,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [wipeConfirmText, setWipeConfirmText] = useState('');
   const [holdingsTab, setHoldingsTab] = useState<'active' | 'sold' | 'search'>('active');
   const [quoteSearchQuery, setQuoteSearchQuery] = useState('');
+  const [quoteSearchMode, setQuoteSearchMode] = useState<'stock' | 'mf'>('stock');
   const [quoteSearchResults, setQuoteSearchResults] = useState<any[]>([]);
   const [quoteSearching, setQuoteSearching] = useState(false);
   const [quoteSearchError, setQuoteSearchError] = useState<string | null>(null);
@@ -369,6 +370,18 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setQuoteSearching(true);
     setQuoteSearchError(null);
     try {
+      if (quoteSearchMode === 'mf') {
+        // AMFI's own scheme list - a genuinely different data source from stock search,
+        // since Yahoo doesn't meaningfully index Indian MF schemes. Matched the same way
+        // portfolio-mf-nav.ts matches for the live NAV refresh, so a name found here is
+        // guaranteed to also resolve correctly during refresh.
+        const resp = await fetch(`/api/portfolio-mf-search?q=${encodeURIComponent(quoteSearchQuery.trim())}`);
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Search failed.');
+        setQuoteSearchResults(data.results || []);
+        setQuoteSearching(false);
+        return;
+      }
       const resp = await fetch(`/api/portfolio-quote-search?q=${encodeURIComponent(quoteSearchQuery.trim())}`);
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Search failed.');
@@ -1187,7 +1200,15 @@ export default function PortfolioView(props: PortfolioViewProps) {
         <div className="apple-card p-4 space-y-3">
           <div>
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">Quote Search</span>
-            <p className="text-[9px] text-slate-400">Not sure what symbol a broker's name actually resolves to? Search here to find the real ticker before entering it via Edit.</p>
+            <p className="text-[9px] text-slate-400">
+              {quoteSearchMode === 'stock'
+                ? "Not sure what symbol a broker's name actually resolves to? Search here to find the real ticker before entering it via Edit."
+                : "Search AMFI's own scheme list to confirm the exact fund name it recognizes, so NAV refresh can match it correctly."}
+            </p>
+          </div>
+          <div className="flex gap-1.5">
+            <button type="button" onClick={() => { setQuoteSearchMode('stock'); setQuoteSearchResults([]); setQuoteSearchError(null); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${quoteSearchMode === 'stock' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Stocks / ETFs</button>
+            <button type="button" onClick={() => { setQuoteSearchMode('mf'); setQuoteSearchResults([]); setQuoteSearchError(null); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${quoteSearchMode === 'mf' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Mutual Funds</button>
           </div>
           <div className="flex gap-2">
             <input
@@ -1195,7 +1216,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
               value={quoteSearchQuery}
               onChange={(e) => setQuoteSearchQuery(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') runQuoteSearch(); }}
-              placeholder="e.g. Gold BeES, Jyoti Life Sciences, Apple"
+              placeholder={quoteSearchMode === 'stock' ? 'e.g. Gold BeES, Jyoti Life Sciences, Apple' : 'e.g. Parag Parikh Flexi Cap, Nippon Gold'}
               className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
             />
             <button
@@ -1207,7 +1228,26 @@ export default function PortfolioView(props: PortfolioViewProps) {
             </button>
           </div>
           {quoteSearchError && <p className="text-[10px] text-rose-500 font-semibold">{quoteSearchError}</p>}
-          {quoteSearchResults.length > 0 && (
+          {quoteSearchMode === 'mf' && quoteSearchResults.length > 0 && (
+            <div className="divide-y divide-slate-100 dark:divide-slate-900">
+              {quoteSearchResults.map((r: any, i: number) => (
+                <div key={i} className="py-2.5 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{r.schemeName}</p>
+                    <p className="text-[10px] text-slate-400">NAV {r.nav.toLocaleString(undefined, { maximumFractionDigits: 4 })}{r.isin ? ` · ${r.isin}` : ''}</p>
+                  </div>
+                  <button
+                    onClick={() => copySymbol(r.schemeName)}
+                    title="Copy scheme name"
+                    className={`px-2.5 py-1.5 text-xs font-black rounded-lg cursor-pointer shrink-0 transition-colors ${copiedSymbol === r.schemeName ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}
+                  >
+                    {copiedSymbol === r.schemeName ? 'Copied ✓' : 'Copy Name'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {quoteSearchMode === 'stock' && quoteSearchResults.length > 0 && (
             <div className="divide-y divide-slate-100 dark:divide-slate-900">
               {quoteSearchResults.map((r, i) => {
                 const changePct = r.price != null && r.previousClose ? ((r.price - r.previousClose) / r.previousClose) * 100 : null;
