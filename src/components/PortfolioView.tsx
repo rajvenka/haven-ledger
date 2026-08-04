@@ -1301,22 +1301,33 @@ export default function PortfolioView(props: PortfolioViewProps) {
           ))}
         </div>
       )}
-      {availableReferenceDates.length > 0 && (
-        <div className="flex items-center gap-2">
-          <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 shrink-0">Reference Load Date</label>
-          <select
-            value={selectedReferenceDate}
-            onChange={(e) => setSelectedReferenceDate(e.target.value)}
-            className="px-2.5 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-semibold"
+      <div className="flex items-center gap-2 flex-wrap">
+        {availableReferenceDates.length > 0 && (
+          <>
+            <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 shrink-0">Reference Load Date</label>
+            <select
+              value={selectedReferenceDate}
+              onChange={(e) => setSelectedReferenceDate(e.target.value)}
+              className="px-2.5 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-semibold"
+            >
+              <option value="latest">Latest</option>
+              {availableReferenceDates.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+            {selectedReferenceDate !== 'latest' && (
+              <span className="text-[9px] text-slate-400">vs today · closest available price used per holding if dates don't align exactly</span>
+            )}
+          </>
+        )}
+        {!isReadOnly && activeHoldings.length > 0 && (
+          <button
+            onClick={() => refreshAllPrices('active')}
+            disabled={refreshingPrices}
+            className="ml-auto px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
           >
-            <option value="latest">Latest</option>
-            {availableReferenceDates.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
-          {selectedReferenceDate !== 'latest' && (
-            <span className="text-[9px] text-slate-400">vs today · closest available price used per holding if dates don't align exactly</span>
-          )}
-        </div>
-      )}
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshingPrices ? 'animate-spin' : ''}`} /> {refreshingPrices ? 'Refreshing…' : 'Refresh Prices'}
+          </button>
+        )}
+      </div>
 
       {/* Headline stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -1406,15 +1417,6 @@ export default function PortfolioView(props: PortfolioViewProps) {
       <div className="space-y-4">
           {!isReadOnly && (
           <div className="flex justify-end items-center gap-2 flex-wrap">
-            {showMoreActions && activeHoldings.length > 0 && (
-              <button
-                onClick={() => refreshAllPrices('active')}
-                disabled={refreshingPrices}
-                className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${refreshingPrices ? 'animate-spin' : ''}`} /> {refreshingPrices ? 'Refreshing…' : 'Refresh Prices'}
-              </button>
-            )}
             {showMoreActions && activeHoldings.length > 0 && (
               <>
               <button
