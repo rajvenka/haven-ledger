@@ -26,6 +26,27 @@ function normalizeName(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+// Exact normalized-string matching was too strict: broker-exported names ("PARAG PARIKH
+// FLEXI CAP FUND DIRECT GROWTH") don't exactly match AMFI's official naming ("Parag Parikh
+// Flexi Cap Fund - Direct Plan - Growth"), so a single wording difference caused a silent
+// "no match" for most funds without a stored ISIN. This instead requires every significant
+// word from the target name to appear somewhere in the AMFI scheme name (in any order,
+// ignoring punctuation) - and when several scheme variants match (Direct/Regular,
+// Growth/IDCW), picks whichever name is closest in length to the target, since AMFI's
+// actual match should read the most similar overall, not just share words.
+function fuzzyMatchScheme(rows: NavRow[], targetName: string): NavRow | undefined {
+  const targetWords = targetName.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(w => w.length > 1);
+  if (targetWords.length === 0) return undefined;
+  const candidates = rows.filter(row => {
+    const nameLower = row.schemeName.toLowerCase();
+    return targetWords.every(w => nameLower.includes(w));
+  });
+  if (candidates.length === 0) return undefined;
+  if (candidates.length === 1) return candidates[0];
+  candidates.sort((a, b) => Math.abs(a.schemeName.length - targetName.length) - Math.abs(b.schemeName.length - targetName.length));
+  return candidates[0];
+}
+
 interface NavRow {
   schemeCode: string;
   isinGrowth: string;
@@ -63,17 +84,15 @@ export default async function handler(req: any, res: any) {
     const navText = await getNavText();
     const navRows = parseNavText(navText);
     const byIsin = new Map<string, NavRow>();
-    const byName = new Map<string, NavRow>();
     for (const row of navRows) {
       if (row.isinGrowth) byIsin.set(row.isinGrowth, row);
       if (row.isinReinvest) byIsin.set(row.isinReinvest, row);
-      byName.set(normalizeName(row.schemeName), row);
     }
 
     const results = funds.map(({ id, isin, name }: { id: string; isin?: string; name: string }) => {
       let match: NavRow | undefined;
       if (isin) match = byIsin.get(isin.trim());
-      if (!match && name) match = byName.get(normalizeName(name));
+      if (!match && name) match = fuzzyMatchScheme(navRows, name);
       if (!match) return { id, nav: null, error: "No matching scheme found in AMFI's NAV list" };
       return { id, nav: match.nav, matchedSchemeName: match.schemeName, error: null };
     });

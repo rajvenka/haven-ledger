@@ -23,6 +23,21 @@ function normalizeName(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+// Same fuzzy matching as portfolio-mf-nav.ts - exact normalized-string matching was too
+// strict for broker-exported names that don't exactly match AMFI's official naming.
+function fuzzyMatchScheme(rows: NavRow[], targetName: string): NavRow | undefined {
+  const targetWords = targetName.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(w => w.length > 1);
+  if (targetWords.length === 0) return undefined;
+  const candidates = rows.filter(row => {
+    const nameLower = row.schemeName.toLowerCase();
+    return targetWords.every(w => nameLower.includes(w));
+  });
+  if (candidates.length === 0) return undefined;
+  if (candidates.length === 1) return candidates[0];
+  candidates.sort((a, b) => Math.abs(a.schemeName.length - targetName.length) - Math.abs(b.schemeName.length - targetName.length));
+  return candidates[0];
+}
+
 interface NavRow {
   schemeCode: string;
   isinGrowth: string;
@@ -63,8 +78,7 @@ export default async function handler(req: any, res: any) {
     let match: NavRow | undefined;
     if (isin) match = navRows.find(r => r.isinGrowth === isin.trim() || r.isinReinvest === isin.trim());
     if (!match && name) {
-      const target = normalizeName(name);
-      match = navRows.find(r => normalizeName(r.schemeName) === target);
+      match = fuzzyMatchScheme(navRows, name);
     }
     console.log("[mf-holdings] AMFI match:", match ? { schemeCode: match.schemeCode, schemeName: match.schemeName } : "NO MATCH");
     if (!match) {
@@ -79,7 +93,8 @@ export default async function handler(req: any, res: any) {
     const schemeBodyText = await schemeResp.text();
     console.log("[mf-holdings] scheme response status:", schemeResp.status, "body:", schemeBodyText.slice(0, 800));
     if (!schemeResp.ok) {
-      res.status(200).json({ holdings: [], schemeName: match.schemeName, error: `mfdata.in returned ${schemeResp.status} for this scheme.` });
+      const isDowntime = schemeResp.status >= 500;
+      res.status(200).json({ holdings: [], schemeName: match.schemeName, error: isDowntime ? `mfdata.in is temporarily unavailable (${schemeResp.status}) - this is the third-party data source being down, not a problem with your data. Try again in a few minutes.` : `mfdata.in returned ${schemeResp.status} for this scheme - it may not have holdings data for this fund.` });
       return;
     }
     let schemeData: any;
@@ -104,7 +119,7 @@ export default async function handler(req: any, res: any) {
     const holdingsBodyText = await holdingsResp.text();
     console.log("[mf-holdings] holdings response status:", holdingsResp.status, "body:", holdingsBodyText.slice(0, 800));
     if (!holdingsResp.ok) {
-      res.status(200).json({ holdings: [], schemeName: match.schemeName, error: `mfdata.in returned ${holdingsResp.status} for holdings.` });
+      res.status(200).json({ holdings: [], schemeName: match.schemeName, error: holdingsResp.status >= 500 ? `mfdata.in is temporarily unavailable (${holdingsResp.status}) - try again in a few minutes.` : `mfdata.in returned ${holdingsResp.status} for holdings.` });
       return;
     }
     let holdingsData: any;
