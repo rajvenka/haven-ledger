@@ -1035,6 +1035,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       quantity: String(h.quantity), buyPrice: String(h.buy_price), buyDate: h.buy_date,
       currentPrice: h.current_price != null ? String(h.current_price) : '', currency: h.currency ?? 'INR',
       holdingType: h.holding_type, source: h.source ?? '', portfolioId: h.portfolio_id ?? '',
+      originalSymbol: h.symbol, originalTicker: h.ticker ?? null,
     });
   };
 
@@ -1047,13 +1048,24 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setEditSaving(true);
     setEditError(null);
     try {
+      const trimmedSymbol = editForm.symbol.trim();
+      // If the symbol actually changed, sync the ticker (the field the price lookup
+      // actually reads) to match - otherwise correcting a broken symbol here silently
+      // leaves the old, still-broken ticker behind, exactly the confusion that happened
+      // with GOLDBEES-E/SILVERBEES-E/etc: symbol got fixed, ticker didn't, price lookup
+      // kept failing. Only auto-syncs when the ticker was previously matching the old
+      // symbol (i.e. broker-default behavior) - if someone had deliberately set a
+      // different ticker, that choice is preserved rather than silently overwritten.
+      const symbolChanged = trimmedSymbol.toUpperCase() !== (editForm.originalSymbol || '').toUpperCase();
+      const tickerWasFollowingSymbol = !editForm.originalTicker || editForm.originalTicker.toUpperCase() === (editForm.originalSymbol || '').toUpperCase();
       await updatePortfolioHolding(editingHoldingId, {
-        symbol: editForm.symbol.trim(), broker: editForm.broker.trim(), exchange: editForm.exchange?.trim() || 'Other',
+        symbol: trimmedSymbol, broker: editForm.broker.trim(), exchange: editForm.exchange?.trim() || 'Other',
         isin: editForm.isin?.trim() || null, quantity: Number(editForm.quantity), buyPrice: Number(editForm.buyPrice),
         buyDate: editForm.buyDate, currency: editForm.currency, holdingType: editForm.holdingType,
         source: editForm.source?.trim() || undefined,
         portfolioId: portfolioMode === 'multiple' ? (editForm.portfolioId || null) : undefined,
         ...(editForm.currentPrice !== '' ? { currentPrice: Number(editForm.currentPrice) } : {}),
+        ...(symbolChanged && tickerWasFollowingSymbol ? { ticker: trimmedSymbol.toUpperCase() } : {}),
       });
       setEditingHoldingId(null);
     } catch (err: any) {
@@ -2530,6 +2542,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <div className="col-span-2">
                   <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Symbol</label>
                   <input type="text" value={editForm.symbol ?? ''} onChange={(e) => setEditForm({ ...editForm, symbol: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                  <p className="text-[8px] text-slate-400 mt-0.5">Changing this also updates the live price lookup ticker to match, unless you've set a different one via the row's expand panel.</p>
                 </div>
                 <div>
                   <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Broker</label>
