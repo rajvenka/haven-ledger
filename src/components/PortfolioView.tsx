@@ -40,6 +40,7 @@ interface PortfolioViewProps {
   mfHoldingsCache?: any[];
   loadMfHoldingsCache?: () => Promise<void>;
   fetchAndCacheMfHoldings?: (isin: string | null, name: string) => Promise<any>;
+  saveManualMfHoldings?: (holdingId: string, schemeName: string, rows: { stockName: string; weightPct: number }[]) => Promise<void>;
   baseCurrency?: string;
   reconcilePortfolioHoldingQuantity: (id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced') => Promise<void>;
   bulkHistoricalImport: (snapshots: { date: string; holdings: any[] }[], portfolioId?: string) => Promise<{ newCount: number; updatedCount: number; soldCount: number; skippedStaleCount: number; priceHistoryCount: number; stockCount: number }>;
@@ -146,7 +147,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     workspaceName, workspaceMembers, isReadOnly, isDataLoading, columnPrefs, onUpdateColumnPrefs,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances,
     portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
-    mfHoldingsCache = [], loadMfHoldingsCache, fetchAndCacheMfHoldings,
+    mfHoldingsCache = [], loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
@@ -361,6 +362,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [mfHoldingsSelectedId, setMfHoldingsSelectedId] = useState<string>('all');
   const [mfHoldingsFetchingId, setMfHoldingsFetchingId] = useState<string | null>(null);
   const [mfHoldingsError, setMfHoldingsError] = useState<string | null>(null);
+  const [manualEntryHoldingId, setManualEntryHoldingId] = useState<string | null>(null);
+  const [manualRows, setManualRows] = useState<{ stockName: string; weightPct: string }[]>([{ stockName: '', weightPct: '' }]);
+  const [manualSaving, setManualSaving] = useState(false);
+  const [manualError, setManualError] = useState<string | null>(null);
   const [quoteSearchQuery, setQuoteSearchQuery] = useState('');
   const [quoteSearchMode, setQuoteSearchMode] = useState<'stock' | 'mf'>('stock');
   const [quoteSearchResults, setQuoteSearchResults] = useState<any[]>([]);
@@ -1087,6 +1092,50 @@ export default function PortfolioView(props: PortfolioViewProps) {
     }
   };
 
+  const openManualMfEntry = (h: any) => {
+    setManualEntryHoldingId(h.id);
+    setManualError(null);
+    const existing = mfHoldingsCache.filter((c: any) => {
+      const a = (c.scheme_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const b = (h.symbol || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      return a === b;
+    });
+    setManualRows(existing.length > 0
+      ? existing.map((c: any) => ({ stockName: c.stock_name, weightPct: String(c.weight_pct) }))
+      : [{ stockName: '', weightPct: '' }]);
+  };
+
+  const addManualRow = () => setManualRows(prev => [...prev, { stockName: '', weightPct: '' }]);
+  const removeManualRow = (index: number) => setManualRows(prev => prev.filter((_, i) => i !== index));
+  const updateManualRow = (index: number, field: 'stockName' | 'weightPct', value: string) =>
+    setManualRows(prev => prev.map((r, i) => i === index ? { ...r, [field]: value } : r));
+
+  const saveManualMfEntry = async (h: any) => {
+    const cleaned = manualRows
+      .map(r => ({ stockName: r.stockName.trim(), weightPct: parseFloat(r.weightPct) }))
+      .filter(r => r.stockName && !isNaN(r.weightPct));
+    if (cleaned.length === 0) { setManualError('Add at least one stock with a valid weight %.'); return; }
+    // De-dupe stock names within this batch - the underlying table has a uniqueness
+    // constraint per fund, so an accidental double-entry would otherwise fail the save.
+    const seen = new Set<string>();
+    const deduped = cleaned.filter(r => {
+      const key = r.stockName.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    setManualSaving(true);
+    setManualError(null);
+    try {
+      await saveManualMfHoldings?.(h.id, h.symbol, deduped);
+      setManualEntryHoldingId(null);
+    } catch (err: any) {
+      setManualError(err.message || 'Failed to save holdings.');
+    } finally {
+      setManualSaving(false);
+    }
+  };
+
   // ---- Contributions & Split ----
   const [isAddingContribution, setIsAddingContribution] = useState(false);
   const [cMemberId, setCMemberId] = useState('');
@@ -1351,22 +1400,71 @@ export default function PortfolioView(props: PortfolioViewProps) {
           <div className="apple-card p-4 space-y-3">
             <div>
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">MF Underlying Holdings</span>
-              <p className="text-[9px] text-slate-400">What stocks your mutual funds actually hold, and your combined exposure to each one across every fund. Data from mfdata.in, an independent community source - not an official AMFI feed.</p>
+              <p className="text-[9px] text-slate-400">What stocks your mutual funds actually hold, and your combined exposure to each one across every fund. "Create Holdings %" pulls from mfdata.in (an independent source, currently unreliable) - "Manual" lets you enter it yourself in the meantime.</p>
             </div>
 
             {missingCache.length > 0 && (
               <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg p-3 space-y-2">
-                <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400">{missingCache.length} fund{missingCache.length !== 1 ? 's' : ''} need holdings data fetched before they're included below:</p>
+                <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400">{missingCache.length} fund{missingCache.length !== 1 ? 's' : ''} need holdings data before they're included below:</p>
                 {missingCache.map(h => (
-                  <div key={h.id} className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] text-slate-600 dark:text-slate-400 truncate">{h.symbol}</span>
-                    <button
-                      onClick={() => doFetch(h)}
-                      disabled={mfHoldingsFetchingId === h.id}
-                      className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer shrink-0"
-                    >
-                      {mfHoldingsFetchingId === h.id ? 'Fetching…' : 'Create Holdings %'}
-                    </button>
+                  <div key={h.id} className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] text-slate-600 dark:text-slate-400 truncate">{h.symbol}</span>
+                      <div className="flex gap-1.5 shrink-0">
+                        <button
+                          onClick={() => doFetch(h)}
+                          disabled={mfHoldingsFetchingId === h.id}
+                          className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer"
+                        >
+                          {mfHoldingsFetchingId === h.id ? 'Fetching…' : 'Create Holdings %'}
+                        </button>
+                        <button
+                          onClick={() => manualEntryHoldingId === h.id ? setManualEntryHoldingId(null) : openManualMfEntry(h)}
+                          className="px-2.5 py-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 text-[9px] font-black uppercase rounded-lg cursor-pointer flex items-center gap-1"
+                        >
+                          Manual {manualEntryHoldingId === h.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                        </button>
+                      </div>
+                    </div>
+                    {manualEntryHoldingId === h.id && (
+                      <div className="bg-white dark:bg-slate-950 rounded-lg p-2.5 space-y-2">
+                        <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                          {manualRows.map((row, i) => (
+                            <div key={i} className="flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                value={row.stockName}
+                                onChange={(e) => updateManualRow(i, 'stockName', e.target.value)}
+                                placeholder="Stock name e.g. HDFC Bank"
+                                className="flex-1 px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
+                              />
+                              <input
+                                type="number"
+                                value={row.weightPct}
+                                onChange={(e) => updateManualRow(i, 'weightPct', e.target.value)}
+                                placeholder="Weight %"
+                                className="w-20 px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
+                              />
+                              <button onClick={() => removeManualRow(i)} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                            </div>
+                          ))}
+                        </div>
+                        <button onClick={addManualRow} className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Add Row</button>
+                        {manualError && <p className="text-[10px] text-rose-500 font-semibold">{manualError}</p>}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => saveManualMfEntry(h)}
+                            disabled={manualSaving}
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
+                          >
+                            {manualSaving ? 'Saving…' : 'Save Holdings'}
+                          </button>
+                          <button onClick={() => setManualEntryHoldingId(null)} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1399,18 +1497,65 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 </div>
               )
             ) : selectedHolding ? (
-              cacheFor(selectedHolding).length === 0 ? (
-                <p className="text-[11px] text-slate-400 text-center py-4">No holdings data cached for this fund yet.</p>
-              ) : (
-                <div className="divide-y divide-slate-100 dark:divide-slate-900">
-                  {cacheFor(selectedHolding).sort((a: any, b: any) => Number(b.weight_pct) - Number(a.weight_pct)).map((c: any) => (
-                    <div key={c.id} className="flex items-center justify-between py-2">
-                      <span className="text-xs font-bold text-slate-900 dark:text-white">{c.stock_name}</span>
-                      <span className="text-xs font-black text-slate-700 dark:text-slate-300">{Number(c.weight_pct).toFixed(2)}%</span>
+              <div className="space-y-2">
+                {cacheFor(selectedHolding).length === 0 ? (
+                  <p className="text-[11px] text-slate-400 text-center py-2">No holdings data cached for this fund yet.</p>
+                ) : (
+                  <div className="divide-y divide-slate-100 dark:divide-slate-900">
+                    {cacheFor(selectedHolding).sort((a: any, b: any) => Number(b.weight_pct) - Number(a.weight_pct)).map((c: any) => (
+                      <div key={c.id} className="flex items-center justify-between py-2">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white">{c.stock_name}</span>
+                        <span className="text-xs font-black text-slate-700 dark:text-slate-300">{Number(c.weight_pct).toFixed(2)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <button
+                  onClick={() => manualEntryHoldingId === selectedHolding.id ? setManualEntryHoldingId(null) : openManualMfEntry(selectedHolding)}
+                  className="px-2.5 py-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 text-[9px] font-black uppercase rounded-lg cursor-pointer flex items-center gap-1"
+                >
+                  {cacheFor(selectedHolding).length === 0 ? 'Enter Manually' : 'Edit Manually'} {manualEntryHoldingId === selectedHolding.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+                {manualEntryHoldingId === selectedHolding.id && (
+                  <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-2.5 space-y-2">
+                    <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                      {manualRows.map((row, i) => (
+                        <div key={i} className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            value={row.stockName}
+                            onChange={(e) => updateManualRow(i, 'stockName', e.target.value)}
+                            placeholder="Stock name e.g. HDFC Bank"
+                            className="flex-1 px-2 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
+                          />
+                          <input
+                            type="number"
+                            value={row.weightPct}
+                            onChange={(e) => updateManualRow(i, 'weightPct', e.target.value)}
+                            placeholder="Weight %"
+                            className="w-20 px-2 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
+                          />
+                          <button onClick={() => removeManualRow(i)} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              )
+                    <button onClick={addManualRow} className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Add Row</button>
+                    {manualError && <p className="text-[10px] text-rose-500 font-semibold">{manualError}</p>}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => saveManualMfEntry(selectedHolding)}
+                        disabled={manualSaving}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
+                      >
+                        {manualSaving ? 'Saving…' : 'Save Holdings'}
+                      </button>
+                      <button onClick={() => setManualEntryHoldingId(null)} className="px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : null}
           </div>
         );

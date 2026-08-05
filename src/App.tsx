@@ -85,7 +85,7 @@ export default function App() {
     updateWorkspaceColumnPrefs,
     dismissContributionReminder,
     portfolios, workspaceCurrencyRates, switchToMultiPortfolio, createPortfolio, updatePortfolio, deletePortfolio, upsertCurrencyRate,
-    mfHoldingsCache, loadMfHoldingsCache, fetchAndCacheMfHoldings,
+    mfHoldingsCache, loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
     createWorkspace,
     setWorkspaceMode,
     addFamilyMember,
@@ -1646,6 +1646,7 @@ export default function App() {
                 mfHoldingsCache={mfHoldingsCache}
                 loadMfHoldingsCache={loadMfHoldingsCache}
                 fetchAndCacheMfHoldings={fetchAndCacheMfHoldings}
+                saveManualMfHoldings={saveManualMfHoldings}
                 portfolioSplits={portfolioSplits}
                 addPortfolioSplit={addPortfolioSplit}
                 deletePortfolioSplit={deletePortfolioSplit}

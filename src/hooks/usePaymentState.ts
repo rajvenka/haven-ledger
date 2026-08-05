@@ -421,6 +421,27 @@ export function usePaymentState() {
     return data;
   };
 
+  // Manual entry fallback for when no API source resolves a fund - a synthetic
+  // "MANUAL-{holdingId}" scheme code keeps this uniquely scoped per holding (rather than a
+  // real AMFI code, which manual entry has no way to confirm), while still using the
+  // holding's own symbol as scheme_name so the existing name-based matching in the MF
+  // Holdings tab picks these rows up exactly like API-fetched ones, no special-casing needed
+  // elsewhere. Replaces (not merges) any prior rows for this fund, since a manual re-entry
+  // is meant to be the new complete picture, not an addition to a possibly-stale one.
+  const saveManualMfHoldings = async (holdingId: string, schemeName: string, rows: { stockName: string; weightPct: number }[]) => {
+    const schemeCode = `MANUAL-${holdingId}`;
+    const { error: deleteError } = await supabase.from('mf_holdings_cache').delete().eq('scheme_code', schemeCode);
+    if (deleteError) throw deleteError;
+    if (rows.length > 0) {
+      const dbRows = rows.map(r => ({
+        scheme_code: schemeCode, scheme_name: schemeName, stock_name: r.stockName, weight_pct: r.weightPct, fetched_at: new Date().toISOString(),
+      }));
+      const { error } = await supabase.from('mf_holdings_cache').insert(dbRows);
+      if (error) throw error;
+    }
+    await loadMfHoldingsCache();
+  };
+
   const switchWorkspace = async (workspaceId: string) => {
     if (!user) return;
     setIsSyncing(true);
@@ -1758,7 +1779,7 @@ export function usePaymentState() {
     // Workspace model
     workspaces, activeWorkspaceId, activeWorkspace, switchWorkspace, createWorkspace, setWorkspaceMode, updateWorkspaceLandingTab, updateWorkspaceColumnPrefs, dismissContributionReminder,
     portfolios, workspaceCurrencyRates, switchToMultiPortfolio, createPortfolio, updatePortfolio, deletePortfolio, upsertCurrencyRate,
-    mfHoldingsCache, loadMfHoldingsCache, fetchAndCacheMfHoldings,
+    mfHoldingsCache, loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
     renameWorkspace, deleteWorkspace,
     incomeSources, addIncomeSource, deleteIncomeSource, incomeMode, updateIncomeMode, monthlyIncome, updateMonthlyIncome,
     workspaceBackups, createBackupNow, restoreFromBackup,
