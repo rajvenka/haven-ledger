@@ -1,43 +1,11 @@
-// Searches AMFI's own scheme list by partial name match, returning matching schemes with
-// their current NAV. This is a genuinely different data source from the stock quote search
-// (Yahoo doesn't meaningfully index Indian MF schemes) - built specifically so a scheme
-// name mismatch (e.g. a broker export giving a shortened or differently-formatted name)
-// can be resolved against what AMFI actually calls it, the same source portfolio-mf-nav.ts
-// matches against for the live NAV refresh.
+// Searches Indian mutual fund schemes by partial name match, returning matches with their
+// current NAV. Uses mfapi.in's own /mf/search endpoint (dedicated, well-maintained, no
+// need to parse AMFI's raw text file by hand here) - a genuinely different data source
+// from the stock quote search, since Yahoo doesn't meaningfully index Indian MF schemes.
 
-let cachedNavText: string | null = null;
-let cachedAt = 0;
-const CACHE_MS = 20 * 60 * 1000;
-
-async function getNavText(): Promise<string> {
-  if (cachedNavText && Date.now() - cachedAt < CACHE_MS) return cachedNavText;
-  const resp = await fetch("https://www.amfiindia.com/spages/NAVAll.txt", { headers: { "User-Agent": "Mozilla/5.0" } });
-  if (!resp.ok) throw new Error(`AMFI returned ${resp.status}`);
-  const text = await resp.text();
-  cachedNavText = text;
-  cachedAt = Date.now();
-  return text;
-}
-
-interface NavRow {
-  schemeCode: string;
-  isinGrowth: string;
-  isinReinvest: string;
+interface MfapiSearchResult {
+  schemeCode: number;
   schemeName: string;
-  nav: number;
-}
-
-function parseNavText(text: string): NavRow[] {
-  const rows: NavRow[] = [];
-  for (const line of text.split("\n")) {
-    const parts = line.split(";");
-    if (parts.length < 6) continue;
-    const [schemeCode, isinGrowth, isinReinvest, schemeName, navStr] = parts;
-    const nav = parseFloat(navStr);
-    if (!schemeCode.trim() || schemeCode.trim() === "Scheme Code" || isNaN(nav)) continue;
-    rows.push({ schemeCode: schemeCode.trim(), isinGrowth: isinGrowth.trim(), isinReinvest: isinReinvest.trim(), schemeName: schemeName.trim(), nav });
-  }
-  return rows;
 }
 
 export default async function handler(req: any, res: any) {
@@ -47,29 +15,45 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const query = (req.query?.q || "").toString().trim().toLowerCase();
+    const query = (req.query?.q || "").toString().trim();
     if (!query) {
       res.status(400).json({ error: "Provide a 'q' query parameter to search for." });
       return;
     }
 
-    const navText = await getNavText();
-    const navRows = parseNavText(navText);
-    const words = query.split(/\s+/).filter(Boolean);
-    const matches = navRows
-      .filter(row => {
-        const nameLower = row.schemeName.toLowerCase();
-        return words.every(w => nameLower.includes(w));
-      })
-      .slice(0, 20)
-      .map(row => ({
-        schemeCode: row.schemeCode,
-        schemeName: row.schemeName,
-        isin: row.isinGrowth || row.isinReinvest || null,
-        nav: row.nav,
-      }));
+    const searchResp = await fetch(`https://api.mfapi.in/mf/search?q=${encodeURIComponent(query)}`);
+    if (!searchResp.ok) {
+      res.status(200).json({ results: [], error: `mfapi.in returned ${searchResp.status} for this search.` });
+      return;
+    }
+    const candidates: MfapiSearchResult[] = await searchResp.json();
+    if (!Array.isArray(candidates) || candidates.length === 0) {
+      res.status(200).json({ results: [] });
+      return;
+    }
 
-    res.status(200).json({ results: matches });
+    // Fetch NAV (and ISIN, from the same response) for the top matches only, to keep this
+    // fast - a broad query can return dozens of scheme variants.
+    const top = candidates.slice(0, 15);
+    const results = await Promise.all(top.map(async (c) => {
+      try {
+        const navResp = await fetch(`https://api.mfapi.in/mf/${c.schemeCode}/latest`);
+        if (!navResp.ok) return null;
+        const navData = await navResp.json();
+        const nav = parseFloat(navData?.data?.[0]?.nav);
+        if (isNaN(nav)) return null;
+        return {
+          schemeCode: c.schemeCode,
+          schemeName: c.schemeName,
+          isin: navData?.meta?.isin_growth || navData?.meta?.isin_div_reinvestment || null,
+          nav,
+        };
+      } catch {
+        return null;
+      }
+    }));
+
+    res.status(200).json({ results: results.filter(Boolean) });
   } catch (error: any) {
     console.error("Portfolio MF search error:", error);
     res.status(500).json({ error: error?.message || "Unexpected error searching for schemes." });

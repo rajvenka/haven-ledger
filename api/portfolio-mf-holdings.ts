@@ -23,19 +23,23 @@ function normalizeName(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-// Same fuzzy matching as portfolio-mf-nav.ts - exact normalized-string matching was too
-// strict for broker-exported names that don't exactly match AMFI's official naming.
-function fuzzyMatchScheme(rows: NavRow[], targetName: string): NavRow | undefined {
+interface MfapiSearchResult {
+  schemeCode: number;
+  schemeName: string;
+}
+
+// Same disambiguation logic as portfolio-mf-nav.ts - mfapi.in's search already finds
+// name-similar schemes, this picks the best variant (Direct/Regular, Growth/IDCW) among
+// its results rather than hand-parsing AMFI's raw text for name matching.
+function pickBestMatch(candidates: MfapiSearchResult[], targetName: string): MfapiSearchResult | undefined {
   const targetWords = targetName.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(w => w.length > 1);
-  if (targetWords.length === 0) return undefined;
-  const candidates = rows.filter(row => {
-    const nameLower = row.schemeName.toLowerCase();
+  if (targetWords.length === 0) return candidates[0];
+  const filtered = candidates.filter(c => {
+    const nameLower = c.schemeName.toLowerCase();
     return targetWords.every(w => nameLower.includes(w));
   });
-  if (candidates.length === 0) return undefined;
-  if (candidates.length === 1) return candidates[0];
-  candidates.sort((a, b) => Math.abs(a.schemeName.length - targetName.length) - Math.abs(b.schemeName.length - targetName.length));
-  return candidates[0];
+  const pool = filtered.length > 0 ? filtered : candidates;
+  return pool.sort((a, b) => Math.abs(a.schemeName.length - targetName.length) - Math.abs(b.schemeName.length - targetName.length))[0];
 }
 
 interface NavRow {
@@ -71,16 +75,27 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    // Step 1: resolve to an AMFI scheme code, same matching priority as the NAV endpoint.
+    // Step 1: resolve to a scheme code + name. ISIN still needs AMFI's file (no ISIN
+    // search elsewhere); name-based matching now goes through mfapi.in's search instead.
     const navText = await getNavText();
     const navRows = parseNavText(navText);
     console.log("[mf-holdings] AMFI rows parsed:", navRows.length);
-    let match: NavRow | undefined;
-    if (isin) match = navRows.find(r => r.isinGrowth === isin.trim() || r.isinReinvest === isin.trim());
-    if (!match && name) {
-      match = fuzzyMatchScheme(navRows, name);
+    let match: { schemeCode: string; schemeName: string } | undefined;
+    if (isin) {
+      const isinMatch = navRows.find(r => r.isinGrowth === isin.trim() || r.isinReinvest === isin.trim());
+      if (isinMatch) match = { schemeCode: isinMatch.schemeCode, schemeName: isinMatch.schemeName };
     }
-    console.log("[mf-holdings] AMFI match:", match ? { schemeCode: match.schemeCode, schemeName: match.schemeName } : "NO MATCH");
+    if (!match && name) {
+      const searchResp = await fetch(`https://api.mfapi.in/mf/search?q=${encodeURIComponent(name.trim().split(/\s+/).slice(0, 4).join(" "))}`);
+      if (searchResp.ok) {
+        const candidates: MfapiSearchResult[] = await searchResp.json();
+        if (Array.isArray(candidates) && candidates.length > 0) {
+          const best = pickBestMatch(candidates, name);
+          if (best) match = { schemeCode: String(best.schemeCode), schemeName: best.schemeName };
+        }
+      }
+    }
+    console.log("[mf-holdings] match:", match || "NO MATCH");
     if (!match) {
       res.status(200).json({ holdings: [], schemeName: null, error: "No matching AMFI scheme found for this fund." });
       return;
