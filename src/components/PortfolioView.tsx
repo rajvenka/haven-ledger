@@ -1400,7 +1400,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
           <div className="apple-card p-4 space-y-3">
             <div>
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">MF Underlying Holdings</span>
-              <p className="text-[9px] text-slate-400">What stocks your mutual funds actually hold, and your combined exposure to each one across every fund. "Create Holdings %" pulls from mfdata.in (an independent source, currently unreliable) - "Manual" lets you enter it yourself in the meantime.</p>
+              <p className="text-[9px] text-slate-400">What stocks your mutual funds actually hold, and your combined exposure to each one across every fund. "Create Holdings %" pulls from finapi.upvaly.com (an independent source) - "Manual" lets you enter it yourself if a fund doesn't resolve.</p>
             </div>
 
             {missingCache.length > 0 && (

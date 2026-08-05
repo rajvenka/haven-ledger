@@ -1,9 +1,10 @@
-// Fetches a mutual fund's underlying stock holdings (what it actually invests in, with
-// % weight) from mfdata.in, a free no-auth API for Indian mutual funds. Matching to an
-// AMFI scheme code first (same ISIN-then-name logic as portfolio-mf-nav.ts, so a fund
-// that resolves for NAV also resolves here), then using that code to find the fund
-// "family" mfdata.in stores holdings under (direct/regular/IDCW variants of the same
-// fund share one underlying portfolio).
+// Fetches a mutual fund's underlying stock holdings from finapi.upvaly.com, a free,
+// no-auth API keyed directly by ISIN - confirmed working with real, current data
+// (verified directly: GET /api/mf/isin/{isin} returns a holdings array with name/weightage
+// for every underlying position). AMFI's file is used only to resolve a fund name to its
+// ISIN when the holding doesn't already have one stored - fuzzy-matched the same way as
+// portfolio-mf-nav.ts, since broker-exported names rarely match AMFI's official naming
+// exactly.
 
 let cachedNavText: string | null = null;
 let cachedAt = 0;
@@ -17,29 +18,6 @@ async function getNavText(): Promise<string> {
   cachedNavText = text;
   cachedAt = Date.now();
   return text;
-}
-
-function normalizeName(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-interface MfapiSearchResult {
-  schemeCode: number;
-  schemeName: string;
-}
-
-// Same disambiguation logic as portfolio-mf-nav.ts - mfapi.in's search already finds
-// name-similar schemes, this picks the best variant (Direct/Regular, Growth/IDCW) among
-// its results rather than hand-parsing AMFI's raw text for name matching.
-function pickBestMatch(candidates: MfapiSearchResult[], targetName: string): MfapiSearchResult | undefined {
-  const targetWords = targetName.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(w => w.length > 1);
-  if (targetWords.length === 0) return candidates[0];
-  const filtered = candidates.filter(c => {
-    const nameLower = c.schemeName.toLowerCase();
-    return targetWords.every(w => nameLower.includes(w));
-  });
-  const pool = filtered.length > 0 ? filtered : candidates;
-  return pool.sort((a, b) => Math.abs(a.schemeName.length - targetName.length) - Math.abs(b.schemeName.length - targetName.length))[0];
 }
 
 interface NavRow {
@@ -61,6 +39,21 @@ function parseNavText(text: string): NavRow[] {
   return rows;
 }
 
+// Same disambiguation as portfolio-mf-nav.ts: every significant word from the broker's
+// name must appear in the AMFI candidate, closest-length variant wins among matches.
+function fuzzyMatchScheme(rows: NavRow[], targetName: string): NavRow | undefined {
+  const targetWords = targetName.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(w => w.length > 1);
+  if (targetWords.length === 0) return undefined;
+  const candidates = rows.filter(row => {
+    const nameLower = row.schemeName.toLowerCase();
+    return targetWords.every(w => nameLower.includes(w));
+  });
+  if (candidates.length === 0) return undefined;
+  if (candidates.length === 1) return candidates[0];
+  candidates.sort((a, b) => Math.abs(a.schemeName.length - targetName.length) - Math.abs(b.schemeName.length - targetName.length));
+  return candidates[0];
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -75,85 +68,59 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    // Step 1: resolve to a scheme code + name. ISIN still needs AMFI's file (no ISIN
-    // search elsewhere); name-based matching now goes through mfapi.in's search instead.
-    const navText = await getNavText();
-    const navRows = parseNavText(navText);
-    console.log("[mf-holdings] AMFI rows parsed:", navRows.length);
-    let match: { schemeCode: string; schemeName: string } | undefined;
-    if (isin) {
-      const isinMatch = navRows.find(r => r.isinGrowth === isin.trim() || r.isinReinvest === isin.trim());
-      if (isinMatch) match = { schemeCode: isinMatch.schemeCode, schemeName: isinMatch.schemeName };
-    }
-    if (!match && name) {
-      const searchResp = await fetch(`https://api.mfapi.in/mf/search?q=${encodeURIComponent(name.trim().split(/\s+/).slice(0, 4).join(" "))}`);
-      if (searchResp.ok) {
-        const candidates: MfapiSearchResult[] = await searchResp.json();
-        if (Array.isArray(candidates) && candidates.length > 0) {
-          const best = pickBestMatch(candidates, name);
-          if (best) match = { schemeCode: String(best.schemeCode), schemeName: best.schemeName };
-        }
+    let resolvedIsin: string | null = isin ? isin.trim() : null;
+    let matchedSchemeName: string | null = null;
+
+    if (!resolvedIsin && name) {
+      const navText = await getNavText();
+      const navRows = parseNavText(navText);
+      const match = fuzzyMatchScheme(navRows, name);
+      console.log("[mf-holdings] AMFI name match:", match ? { schemeCode: match.schemeCode, schemeName: match.schemeName } : "NO MATCH");
+      if (match) {
+        resolvedIsin = match.isinGrowth || match.isinReinvest || null;
+        matchedSchemeName = match.schemeName;
       }
     }
-    console.log("[mf-holdings] match:", match || "NO MATCH");
-    if (!match) {
-      res.status(200).json({ holdings: [], schemeName: null, error: "No matching AMFI scheme found for this fund." });
+
+    if (!resolvedIsin) {
+      res.status(200).json({ holdings: [], schemeName: matchedSchemeName, error: "Could not resolve this fund to an ISIN." });
       return;
     }
 
-    // Step 2: get the scheme's family ID from mfdata.in.
-    const schemeUrl = `https://mfdata.in/api/v1/schemes/${match.schemeCode}`;
-    console.log("[mf-holdings] fetching scheme:", schemeUrl);
-    const schemeResp = await fetch(schemeUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
-    const schemeBodyText = await schemeResp.text();
-    console.log("[mf-holdings] scheme response status:", schemeResp.status, "body:", schemeBodyText.slice(0, 800));
-    if (!schemeResp.ok) {
-      const isDowntime = schemeResp.status >= 500;
-      res.status(200).json({ holdings: [], schemeName: match.schemeName, error: isDowntime ? `mfdata.in is temporarily unavailable (${schemeResp.status}) - this is the third-party data source being down, not a problem with your data. Try again in a few minutes.` : `mfdata.in returned ${schemeResp.status} for this scheme - it may not have holdings data for this fund.` });
+    const holdingsUrl = `https://finapi.upvaly.com/api/mf/isin/${resolvedIsin}`;
+    console.log("[mf-holdings] fetching:", holdingsUrl);
+    const resp = await fetch(holdingsUrl);
+    const bodyText = await resp.text();
+    console.log("[mf-holdings] response status:", resp.status, "body preview:", bodyText.slice(0, 300));
+    if (!resp.ok) {
+      res.status(200).json({ holdings: [], schemeName: matchedSchemeName, error: resp.status >= 500 ? `finapi.upvaly.com is temporarily unavailable (${resp.status}) - try again shortly.` : `finapi.upvaly.com returned ${resp.status} for this ISIN.` });
       return;
     }
-    let schemeData: any;
+    let data: any;
     try {
-      schemeData = JSON.parse(schemeBodyText);
+      data = JSON.parse(bodyText);
     } catch {
-      console.log("[mf-holdings] scheme response was not valid JSON");
-      res.status(200).json({ holdings: [], schemeName: match.schemeName, error: "mfdata.in returned an unexpected (non-JSON) response for this scheme." });
-      return;
-    }
-    const familyId = schemeData?.data?.family_id ?? schemeData?.data?.family?.id;
-    console.log("[mf-holdings] extracted family_id:", familyId);
-    if (!familyId) {
-      res.status(200).json({ holdings: [], schemeName: match.schemeName, error: "No holdings data available for this fund yet (no family_id in scheme response - see server logs for the raw shape)." });
+      res.status(200).json({ holdings: [], schemeName: matchedSchemeName, error: "finapi.upvaly.com returned an unexpected (non-JSON) response." });
       return;
     }
 
-    // Step 3: fetch the actual stock-level holdings for that family.
-    const holdingsUrl = `https://mfdata.in/api/v1/families/${familyId}/holdings`;
-    console.log("[mf-holdings] fetching holdings:", holdingsUrl);
-    const holdingsResp = await fetch(holdingsUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
-    const holdingsBodyText = await holdingsResp.text();
-    console.log("[mf-holdings] holdings response status:", holdingsResp.status, "body:", holdingsBodyText.slice(0, 800));
-    if (!holdingsResp.ok) {
-      res.status(200).json({ holdings: [], schemeName: match.schemeName, error: holdingsResp.status >= 500 ? `mfdata.in is temporarily unavailable (${holdingsResp.status}) - try again in a few minutes.` : `mfdata.in returned ${holdingsResp.status} for holdings.` });
-      return;
-    }
-    let holdingsData: any;
-    try {
-      holdingsData = JSON.parse(holdingsBodyText);
-    } catch {
-      console.log("[mf-holdings] holdings response was not valid JSON");
-      res.status(200).json({ holdings: [], schemeName: match.schemeName, error: "mfdata.in returned an unexpected (non-JSON) response for holdings." });
-      return;
-    }
-    const equityHoldings = holdingsData?.data?.equity_holdings || [];
-    console.log("[mf-holdings] equity_holdings count:", equityHoldings.length, "sample:", JSON.stringify(equityHoldings[0] || null));
-    const holdings = equityHoldings.map((h: any) => ({
-      stockName: h.name || h.stock_name || h.security_name,
-      weightPct: h.weight_pct ?? h.weight ?? h.percentage ?? null,
-    })).filter((h: any) => h.stockName && h.weightPct != null);
-    console.log("[mf-holdings] final parsed holdings count:", holdings.length);
+    const rawHoldings = data?.data?.holdings || [];
+    // Exclude derivatives (futures show up as separate short-position rows with negative
+    // market value) and pure cash/debt line items - this feature is about stock exposure,
+    // and mixing in "Cash Offset For Derivatives" or a future contract would misrepresent it.
+    const holdings = rawHoldings
+      .filter((h: any) => h.name && !/future/i.test(h.name) && parseFloat(h.marketValue?.replace(/,/g, "") || "0") > 0)
+      .map((h: any) => ({ stockName: h.name, weightPct: parseFloat(h.weightage) }))
+      .filter((h: any) => h.stockName && !isNaN(h.weightPct));
 
-    res.status(200).json({ holdings, schemeCode: match.schemeCode, schemeName: match.schemeName, error: holdings.length === 0 ? "No equity holdings returned for this fund (see server logs for the raw response shape)." : null });
+    console.log("[mf-holdings] parsed holdings count:", holdings.length, "of raw:", rawHoldings.length);
+
+    res.status(200).json({
+      holdings,
+      schemeCode: data?.data?.schemeCode || null,
+      schemeName: data?.data?.schemeName || matchedSchemeName,
+      error: holdings.length === 0 ? "No equity holdings returned for this fund." : null,
+    });
   } catch (error: any) {
     console.error("[mf-holdings] EXCEPTION:", error?.message, error?.stack);
     res.status(500).json({ error: error?.message || "Unexpected error fetching fund holdings." });
