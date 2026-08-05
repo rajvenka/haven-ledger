@@ -31,6 +31,8 @@ interface ReportsViewProps {
   portfolioSnapshots: any[];
   takePortfolioSnapshot: (date: string, groups: { label: string; invested: number; current: number }[]) => Promise<void>;
   deletePortfolioSnapshotBatch: (date: string) => Promise<void>;
+  mfHoldingsCache?: any[];
+  loadMfHoldingsCache?: () => Promise<void>;
 }
 
 const fmt = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;

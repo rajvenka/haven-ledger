@@ -1355,11 +1355,31 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
       {holdingsTab === 'mf-holdings' && (() => {
         const mfHoldings = activeHoldings.filter(h => h.holding_type === 'mutual_fund');
-        const cacheFor = (h: any) => mfHoldingsCache.filter((c: any) => {
-          const a = (c.scheme_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-          const b = (h.symbol || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-          return a === b;
-        });
+        // Cache is keyed by the official AMFI scheme name (e.g. "HDFC Small Cap Fund -
+        // Growth Option - Direct Plan"), but h.symbol is the broker's own, differently
+        // worded name (e.g. "HDFC SMALL CAP FUND - DIRECT PLAN") - exact string matching
+        // after normalization failed for almost every fund except the few where the
+        // broker's name happened to exactly equal AMFI's, even though the backend had
+        // already correctly fetched and cached real data for all of them. Requires every
+        // significant word from the broker's symbol to appear in the cached scheme name,
+        // same fuzzy approach the backend already uses to resolve the fund in the first place.
+        const cacheFor = (h: any) => {
+          const bySchemeCode = mfHoldingsCache.filter((c: any) => c.scheme_code === `MANUAL-${h.id}`);
+          if (bySchemeCode.length > 0) return bySchemeCode;
+          const targetWords = (h.symbol || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w: string) => w.length > 1);
+          if (targetWords.length === 0) return [];
+          const grouped = new Map<string, any[]>();
+          mfHoldingsCache.forEach((c: any) => {
+            const list = grouped.get(c.scheme_code) || [];
+            list.push(c);
+            grouped.set(c.scheme_code, list);
+          });
+          for (const [, rows] of grouped) {
+            const nameLower = (rows[0]?.scheme_name || '').toLowerCase();
+            if (targetWords.every((w: string) => nameLower.includes(w))) return rows;
+          }
+          return [];
+        };
         const missingCache = mfHoldings.filter(h => cacheFor(h).length === 0);
 
         const doFetch = async (h: any) => {
