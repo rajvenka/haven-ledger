@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Trash2, Gift, Receipt, FileBarChart, ChevronLeft, TrendingUp, TrendingDown } from 'lucide-react';
+import { Trash2, Gift, Receipt, FileBarChart, ChevronLeft, TrendingUp, TrendingDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface WorkspaceMemberLite {
@@ -21,6 +21,8 @@ interface ReportsViewProps {
   portfolioContributions: any[];
   portfolioWithdrawals: any[];
   portfolioDividends: any[];
+  mfHoldingsCache?: any[];
+  loadMfHoldingsCache?: () => Promise<void>;
   addPortfolioDividend: (symbol: string, amount: number, date: string, holdingId?: string, notes?: string) => Promise<void>;
   deletePortfolioDividend: (id: string) => Promise<void>;
   portfolioFees: any[];
@@ -31,8 +33,6 @@ interface ReportsViewProps {
   portfolioSnapshots: any[];
   takePortfolioSnapshot: (date: string, groups: { label: string; invested: number; current: number }[]) => Promise<void>;
   deletePortfolioSnapshotBatch: (date: string) => Promise<void>;
-  mfHoldingsCache?: any[];
-  loadMfHoldingsCache?: () => Promise<void>;
 }
 
 const fmt = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
@@ -48,7 +48,7 @@ const fmtCur = (n: number, currency: string = 'INR') => {
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const memberName = (m: WorkspaceMemberLite) => m.displayName || m.email.split('@')[0];
 
-type ReportTab = 'overview' | 'insights' | 'activity' | 'movement' | 'summary';
+type ReportTab = 'overview' | 'insights' | 'activity' | 'movement' | 'summary' | 'mf-holdings';
 
 // Defined outside ReportsView so it keeps a stable identity across renders - when it was
 // defined inside the render body, every state update (e.g. toggling one card's details)
@@ -133,9 +133,11 @@ export default function ReportsView(props: ReportsViewProps) {
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
     portfolioSplits, portfolioCashBalances, portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
+    mfHoldingsCache = [], loadMfHoldingsCache,
   } = props;
 
   const [reportTab, setReportTab] = useState<ReportTab>('overview');
+  const [mfReportDrillStock, setMfReportDrillStock] = useState<string | null>(null);
   const [drillPath, setDrillPath] = useState<string[]>([]);
   const [insightsAssetFilter, setInsightsAssetFilter] = useState<'all' | 'stock' | 'mutual_fund'>('all');
   const [classificationMetric, setClassificationMetric] = useState<'inception' | 'd30' | 'ref'>('inception');
@@ -221,6 +223,7 @@ export default function ReportsView(props: ReportsViewProps) {
     { key: 'activity', label: 'Activity' },
     { key: 'movement', label: 'Movement' },
     { key: 'summary', label: 'Summary' },
+    ...(activeHoldings.some(h => h.holding_type === 'mutual_fund') ? [{ key: 'mf-holdings' as ReportTab, label: 'MF Holdings' }] : []),
   ];
 
   return (
@@ -258,7 +261,7 @@ export default function ReportsView(props: ReportsViewProps) {
         {TABS.map(t => (
           <button
             key={t.key}
-            onClick={() => setReportTab(t.key)}
+            onClick={() => { setReportTab(t.key); if (t.key === 'mf-holdings') loadMfHoldingsCache?.(); }}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${reportTab === t.key ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
           >
             {t.label}
@@ -1302,6 +1305,130 @@ export default function ReportsView(props: ReportsViewProps) {
           })()}
         </div>
         </>
+        );
+      })()}
+
+      {reportTab === 'mf-holdings' && (() => {
+        const fmt = (n: number) => fmtCur(n, reportDisplayCurrency);
+        const mfHoldings = activeHoldings.filter(h => h.holding_type === 'mutual_fund');
+
+        const cacheFor = (h: any) => {
+          const bySchemeCode = mfHoldingsCache.filter((c: any) => c.scheme_code === `MANUAL-${h.id}`);
+          if (bySchemeCode.length > 0) return bySchemeCode;
+          const targetWords = (h.symbol || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w: string) => w.length > 1);
+          if (targetWords.length === 0) return [];
+          const grouped = new Map<string, any[]>();
+          mfHoldingsCache.forEach((c: any) => {
+            const list = grouped.get(c.scheme_code) || [];
+            list.push(c);
+            grouped.set(c.scheme_code, list);
+          });
+          for (const [, rows] of grouped) {
+            const nameLower = (rows[0]?.scheme_name || '').toLowerCase();
+            if (targetWords.every((w: string) => nameLower.includes(w))) return rows;
+          }
+          return [];
+        };
+
+        // Top MF by value - what you actually have riding on each fund, independent of
+        // whether its underlying holdings have been fetched yet.
+        const mfByValue = mfHoldings
+          .map(h => ({ holding: h, value: Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity) }))
+          .sort((a, b) => b.value - a.value);
+        const totalMfValue = mfByValue.reduce((s, r) => s + r.value, 0);
+
+        // Top holdings across all funds by stock name - same combined-exposure math as the
+        // Portfolio page's MF Holdings tab, but kept as a report here with a full drill-down:
+        // for any stock, exactly which funds hold it, at what weight, and how much actual
+        // rupee value that represents from each - answers "two funds both have TCS at 4%,
+        // how much do I actually hold" directly rather than leaving it as a single number.
+        const stockContributions = new Map<string, { holding: any; weightPct: number; exposure: number }[]>();
+        mfHoldings.forEach(h => {
+          const value = Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity);
+          cacheFor(h).forEach((c: any) => {
+            const exposure = value * (Number(c.weight_pct) / 100);
+            const list = stockContributions.get(c.stock_name) || [];
+            list.push({ holding: h, weightPct: Number(c.weight_pct), exposure });
+            stockContributions.set(c.stock_name, list);
+          });
+        });
+        const aggregatedStocks = Array.from(stockContributions.entries())
+          .map(([stockName, contributions]) => ({
+            stockName,
+            totalExposure: contributions.reduce((s, c) => s + c.exposure, 0),
+            fundCount: contributions.length,
+            contributions: contributions.sort((a, b) => b.exposure - a.exposure),
+          }))
+          .sort((a, b) => b.totalExposure - a.totalExposure);
+
+        const fundsWithoutData = mfHoldings.length - new Set(Array.from(stockContributions.values()).flat().map(c => c.holding.id)).size;
+
+        return (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-widest">MF Holdings Insights</h3>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                What you actually hold, drawn from each fund's underlying stocks - fetched or entered manually on the Portfolio page's MF Holdings tab.
+                {fundsWithoutData > 0 && ` ${fundsWithoutData} fund${fundsWithoutData !== 1 ? 's' : ''} have no holdings data yet, so they're excluded from the combined view below.`}
+              </p>
+            </div>
+
+            <div className="apple-card p-4 space-y-2.5">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Top Mutual Funds by Value</span>
+              {mfByValue.length === 0 ? (
+                <p className="text-[11px] text-slate-400 text-center py-3">No mutual fund holdings in this portfolio.</p>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-900">
+                  {mfByValue.map((row, i) => (
+                    <div key={row.holding.id} className="flex items-center justify-between py-2">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white truncate">{i + 1}. {row.holding.symbol}</span>
+                      <span className="text-xs text-right shrink-0 ml-2">
+                        <span className="font-black text-slate-700 dark:text-slate-300">{fmt(row.value)}</span>
+                        <span className="text-slate-400 ml-1.5">{totalMfValue > 0 ? ((row.value / totalMfValue) * 100).toFixed(1) : '0'}%</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="apple-card p-4 space-y-2.5">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Top Holdings Across All Funds, by Stock</span>
+              {aggregatedStocks.length === 0 ? (
+                <p className="text-[11px] text-slate-400 text-center py-3">No underlying holdings data yet - fetch it from the Portfolio page's MF Holdings tab first.</p>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-900">
+                  {aggregatedStocks.map((row) => {
+                    const isOpen = mfReportDrillStock === row.stockName;
+                    return (
+                      <div key={row.stockName} className="py-1">
+                        <button onClick={() => setMfReportDrillStock(isOpen ? null : row.stockName)} className="w-full flex items-center justify-between py-1.5 cursor-pointer">
+                          <span className="text-xs font-bold text-slate-900 dark:text-white truncate text-left flex items-center gap-1.5">
+                            {row.stockName}
+                            {row.fundCount > 1 && <span className="text-[8px] font-black px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{row.fundCount} funds</span>}
+                          </span>
+                          <span className="flex items-center gap-1.5 shrink-0 ml-2">
+                            <span className="text-xs font-black text-slate-700 dark:text-slate-300">{fmt(row.totalExposure)}</span>
+                            {isOpen ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
+                          </span>
+                        </button>
+                        {isOpen && (
+                          <div className="pl-3 pb-2 space-y-1">
+                            {row.contributions.map((c, i) => (
+                              <div key={i} className="flex items-center justify-between text-[11px]">
+                                <span className="text-slate-500 dark:text-slate-400 truncate">{c.holding.symbol} <span className="text-slate-350">({c.weightPct.toFixed(2)}% of fund)</span></span>
+                                <span className="font-bold text-slate-600 dark:text-slate-300 shrink-0 ml-2">{fmt(c.exposure)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         );
       })()}
     </div>

@@ -1736,6 +1736,8 @@ export default function App() {
                 portfolioSnapshots={portfolioSnapshots}
                 takePortfolioSnapshot={takePortfolioSnapshot}
                 deletePortfolioSnapshotBatch={deletePortfolioSnapshotBatch}
+                mfHoldingsCache={mfHoldingsCache}
+                loadMfHoldingsCache={loadMfHoldingsCache}
               />
             ) : activeTab === 'income' ? (
               <IncomeView
