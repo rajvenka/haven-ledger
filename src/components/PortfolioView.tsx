@@ -362,6 +362,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [mfHoldingsSelectedId, setMfHoldingsSelectedId] = useState<string>('all');
   const [mfHoldingsFetchingId, setMfHoldingsFetchingId] = useState<string | null>(null);
   const [mfHoldingsError, setMfHoldingsError] = useState<string | null>(null);
+  const [mfFetchingAll, setMfFetchingAll] = useState(false);
+  const [mfFetchProgress, setMfFetchProgress] = useState<{ current: number; total: number; currentName: string } | null>(null);
+  const [expandedFundId, setExpandedFundId] = useState<string | null>(null);
   const [manualEntryHoldingId, setManualEntryHoldingId] = useState<string | null>(null);
   const [manualRows, setManualRows] = useState<{ stockName: string; weightPct: string }[]>([{ stockName: '', weightPct: '' }]);
   const [manualSaving, setManualSaving] = useState(false);
@@ -1374,10 +1377,28 @@ export default function PortfolioView(props: PortfolioViewProps) {
           }
         };
 
-        // Aggregated view: each fund's own cached stock weights, scaled by that fund's
-        // actual value in the portfolio (quantity x current price), summed across every
-        // fund that holds the same stock - so a stock at 8% in one fund and 5% in another
-        // shows its real combined rupee exposure, not just an average of two percentages.
+        // One button, fetches every fund that's missing data in sequence (not parallel -
+        // gentler on the third-party API, and lets progress be shown per-fund rather than
+        // just a single spinner with no idea how far along it is).
+        const fetchAllMissing = async () => {
+          setMfFetchingAll(true);
+          setMfHoldingsError(null);
+          const failures: string[] = [];
+          for (let i = 0; i < missingCache.length; i++) {
+            const h = missingCache[i];
+            setMfFetchProgress({ current: i + 1, total: missingCache.length, currentName: h.symbol });
+            try {
+              const result = await fetchAndCacheMfHoldings?.(h.isin ?? null, h.symbol);
+              if (result?.error && (!result.holdings || result.holdings.length === 0)) failures.push(h.symbol);
+            } catch {
+              failures.push(h.symbol);
+            }
+          }
+          setMfFetchProgress(null);
+          setMfFetchingAll(false);
+          if (failures.length > 0) setMfHoldingsError(`Couldn't resolve: ${failures.join(', ')} - try Manual entry for these.`);
+        };
+
         const aggregated = (() => {
           const totals = new Map<string, number>();
           let totalMfValue = 0;
@@ -1393,170 +1414,159 @@ export default function PortfolioView(props: PortfolioViewProps) {
             .map(([stockName, exposure]) => ({ stockName, exposure, pctOfMf: totalMfValue > 0 ? (exposure / totalMfValue) * 100 : 0 }))
             .sort((a, b) => b.exposure - a.exposure);
         })();
+        const maxExposure = aggregated[0]?.exposure || 1;
 
-        const selectedHolding = mfHoldingsSelectedId === 'all' ? null : mfHoldings.find(h => h.id === mfHoldingsSelectedId);
+        const renderManualForm = (h: any) => (
+          <div className="bg-white dark:bg-slate-950 rounded-lg p-2.5 space-y-2 mt-2">
+            <div className="space-y-1.5 max-h-64 overflow-y-auto">
+              {manualRows.map((row, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={row.stockName}
+                    onChange={(e) => updateManualRow(i, 'stockName', e.target.value)}
+                    placeholder="Stock name e.g. HDFC Bank"
+                    className="flex-1 px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
+                  />
+                  <input
+                    type="number"
+                    value={row.weightPct}
+                    onChange={(e) => updateManualRow(i, 'weightPct', e.target.value)}
+                    placeholder="Weight %"
+                    className="w-20 px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
+                  />
+                  <button onClick={() => removeManualRow(i)} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                </div>
+              ))}
+            </div>
+            <button onClick={addManualRow} className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Add Row</button>
+            {manualError && <p className="text-[10px] text-rose-500 font-semibold">{manualError}</p>}
+            <div className="flex gap-2">
+              <button
+                onClick={() => saveManualMfEntry(h)}
+                disabled={manualSaving}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
+              >
+                {manualSaving ? 'Saving…' : 'Save Holdings'}
+              </button>
+              <button onClick={() => setManualEntryHoldingId(null)} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
+                Cancel
+              </button>
+            </div>
+          </div>
+        );
 
         return (
-          <div className="apple-card p-4 space-y-3">
-            <div>
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">MF Underlying Holdings</span>
-              <p className="text-[9px] text-slate-400">What stocks your mutual funds actually hold, and your combined exposure to each one across every fund. "Create Holdings %" pulls from finapi.upvaly.com (an independent source) - "Manual" lets you enter it yourself if a fund doesn't resolve.</p>
+          <div className="space-y-3">
+            <div className="apple-card p-4 space-y-1">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">MF Underlying Holdings</span>
+              <p className="text-[9px] text-slate-400">What stocks your mutual funds actually hold, and your combined exposure to each one across every fund.</p>
             </div>
 
-            {missingCache.length > 0 && (
-              <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg p-3 space-y-2">
-                <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400">{missingCache.length} fund{missingCache.length !== 1 ? 's' : ''} need holdings data before they're included below:</p>
-                {missingCache.map(h => (
-                  <div key={h.id} className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] text-slate-600 dark:text-slate-400 truncate">{h.symbol}</span>
-                      <div className="flex gap-1.5 shrink-0">
-                        <button
-                          onClick={() => doFetch(h)}
-                          disabled={mfHoldingsFetchingId === h.id}
-                          className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer"
-                        >
-                          {mfHoldingsFetchingId === h.id ? 'Fetching…' : 'Create Holdings %'}
-                        </button>
-                        <button
-                          onClick={() => manualEntryHoldingId === h.id ? setManualEntryHoldingId(null) : openManualMfEntry(h)}
-                          className="px-2.5 py-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 text-[9px] font-black uppercase rounded-lg cursor-pointer flex items-center gap-1"
-                        >
-                          Manual {manualEntryHoldingId === h.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                        </button>
-                      </div>
-                    </div>
-                    {manualEntryHoldingId === h.id && (
-                      <div className="bg-white dark:bg-slate-950 rounded-lg p-2.5 space-y-2">
-                        <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                          {manualRows.map((row, i) => (
-                            <div key={i} className="flex items-center gap-1.5">
-                              <input
-                                type="text"
-                                value={row.stockName}
-                                onChange={(e) => updateManualRow(i, 'stockName', e.target.value)}
-                                placeholder="Stock name e.g. HDFC Bank"
-                                className="flex-1 px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
-                              />
-                              <input
-                                type="number"
-                                value={row.weightPct}
-                                onChange={(e) => updateManualRow(i, 'weightPct', e.target.value)}
-                                placeholder="Weight %"
-                                className="w-20 px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
-                              />
-                              <button onClick={() => removeManualRow(i)} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
-                            </div>
-                          ))}
-                        </div>
-                        <button onClick={addManualRow} className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Add Row</button>
-                        {manualError && <p className="text-[10px] text-rose-500 font-semibold">{manualError}</p>}
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => saveManualMfEntry(h)}
-                            disabled={manualSaving}
-                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
-                          >
-                            {manualSaving ? 'Saving…' : 'Save Holdings'}
-                          </button>
-                          <button onClick={() => setManualEntryHoldingId(null)} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-            {mfHoldingsError && <p className="text-[10px] text-rose-500 font-semibold">{mfHoldingsError}</p>}
-
-            <select
-              value={mfHoldingsSelectedId}
-              onChange={(e) => setMfHoldingsSelectedId(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
-            >
-              <option value="all">All Funds (combined top holdings)</option>
-              {mfHoldings.map(h => <option key={h.id} value={h.id}>{h.symbol}</option>)}
-            </select>
-
-            {mfHoldingsSelectedId === 'all' ? (
-              aggregated.length === 0 ? (
-                <p className="text-[11px] text-slate-400 text-center py-4">No holdings data cached yet - use "Create Holdings %" above to get started.</p>
+            {/* Combined exposure - always visible, no dropdown needed for the single most useful view */}
+            <div className="apple-card p-4 space-y-2.5">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Combined Top Holdings</span>
+              {aggregated.length === 0 ? (
+                <p className="text-[11px] text-slate-400 text-center py-4">No holdings data yet - fetch or enter it for your funds below to see your real combined stock exposure here.</p>
               ) : (
-                <div className="divide-y divide-slate-100 dark:divide-slate-900">
-                  {aggregated.slice(0, 15).map((row, i) => (
-                    <div key={i} className="flex items-center justify-between py-2">
-                      <span className="text-xs font-bold text-slate-900 dark:text-white">{row.stockName}</span>
-                      <span className="text-xs text-right">
-                        <span className="font-black text-slate-700 dark:text-slate-300">{fmtHeader(row.exposure)}</span>
-                        <span className="text-slate-400 ml-1.5">({row.pctOfMf.toFixed(2)}% of MF value)</span>
-                      </span>
+                <div className="space-y-2">
+                  {aggregated.slice(0, 10).map((row, i) => (
+                    <div key={i} className="relative">
+                      <div className="absolute inset-0 bg-indigo-50 dark:bg-indigo-950/30 rounded-md" style={{ width: `${Math.max(4, (row.exposure / maxExposure) * 100)}%` }} />
+                      <div className="relative flex items-center justify-between px-2.5 py-1.5">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white">{i + 1}. {row.stockName}</span>
+                        <span className="text-xs text-right shrink-0 ml-2">
+                          <span className="font-black text-slate-700 dark:text-slate-300">{fmtHeader(row.exposure)}</span>
+                          <span className="text-slate-400 ml-1.5">{row.pctOfMf.toFixed(1)}%</span>
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
-              )
-            ) : selectedHolding ? (
-              <div className="space-y-2">
-                {cacheFor(selectedHolding).length === 0 ? (
-                  <p className="text-[11px] text-slate-400 text-center py-2">No holdings data cached for this fund yet.</p>
-                ) : (
-                  <div className="divide-y divide-slate-100 dark:divide-slate-900">
-                    {cacheFor(selectedHolding).sort((a: any, b: any) => Number(b.weight_pct) - Number(a.weight_pct)).map((c: any) => (
-                      <div key={c.id} className="flex items-center justify-between py-2">
-                        <span className="text-xs font-bold text-slate-900 dark:text-white">{c.stock_name}</span>
-                        <span className="text-xs font-black text-slate-700 dark:text-slate-300">{Number(c.weight_pct).toFixed(2)}%</span>
-                      </div>
-                    ))}
-                  </div>
+              )}
+            </div>
+
+            {/* Single bulk-fetch button with live per-fund progress */}
+            {missingCache.length > 0 && (
+              <div className="apple-card p-4 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-bold text-slate-600 dark:text-slate-400">{missingCache.length} fund{missingCache.length !== 1 ? 's' : ''} not yet allocated</p>
+                  <button
+                    onClick={fetchAllMissing}
+                    disabled={mfFetchingAll}
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer flex items-center gap-1.5 shrink-0"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${mfFetchingAll ? 'animate-spin' : ''}`} />
+                    {mfFetchingAll ? 'Fetching…' : 'Fetch All Holdings'}
+                  </button>
+                </div>
+                {mfFetchProgress && (
+                  <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">Currently fetching {mfFetchProgress.currentName} ({mfFetchProgress.current} of {mfFetchProgress.total})…</p>
                 )}
-                <button
-                  onClick={() => manualEntryHoldingId === selectedHolding.id ? setManualEntryHoldingId(null) : openManualMfEntry(selectedHolding)}
-                  className="px-2.5 py-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 text-[9px] font-black uppercase rounded-lg cursor-pointer flex items-center gap-1"
-                >
-                  {cacheFor(selectedHolding).length === 0 ? 'Enter Manually' : 'Edit Manually'} {manualEntryHoldingId === selectedHolding.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                </button>
-                {manualEntryHoldingId === selectedHolding.id && (
-                  <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-2.5 space-y-2">
-                    <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                      {manualRows.map((row, i) => (
-                        <div key={i} className="flex items-center gap-1.5">
-                          <input
-                            type="text"
-                            value={row.stockName}
-                            onChange={(e) => updateManualRow(i, 'stockName', e.target.value)}
-                            placeholder="Stock name e.g. HDFC Bank"
-                            className="flex-1 px-2 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
-                          />
-                          <input
-                            type="number"
-                            value={row.weightPct}
-                            onChange={(e) => updateManualRow(i, 'weightPct', e.target.value)}
-                            placeholder="Weight %"
-                            className="w-20 px-2 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
-                          />
-                          <button onClick={() => removeManualRow(i)} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
-                        </div>
-                      ))}
-                    </div>
-                    <button onClick={addManualRow} className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Add Row</button>
-                    {manualError && <p className="text-[10px] text-rose-500 font-semibold">{manualError}</p>}
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => saveManualMfEntry(selectedHolding)}
-                        disabled={manualSaving}
-                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
-                      >
-                        {manualSaving ? 'Saving…' : 'Save Holdings'}
-                      </button>
-                      <button onClick={() => setManualEntryHoldingId(null)} className="px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
+                {mfHoldingsError && <p className="text-[10px] text-rose-500 font-semibold">{mfHoldingsError}</p>}
               </div>
-            ) : null}
+            )}
+
+            {/* Per-fund accordion - status badge shows allocated/not at a glance, expand for detail */}
+            <div className="apple-card divide-y divide-slate-100 dark:divide-slate-900">
+              {mfHoldings.map(h => {
+                const rows = cacheFor(h).sort((a: any, b: any) => Number(b.weight_pct) - Number(a.weight_pct));
+                const isAllocated = rows.length > 0;
+                const isExpanded = expandedFundId === h.id;
+                const isFetchingThis = mfHoldingsFetchingId === h.id || (mfFetchingAll && mfFetchProgress?.currentName === h.symbol);
+                return (
+                  <div key={h.id} className="p-3">
+                    <button onClick={() => setExpandedFundId(isExpanded ? null : h.id)} className="w-full flex items-center justify-between gap-2 cursor-pointer">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white truncate text-left">{h.symbol}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isFetchingThis ? (
+                          <span className="text-[9px] font-black uppercase text-indigo-500 flex items-center gap-1"><RefreshCw className="w-2.5 h-2.5 animate-spin" /> Fetching</span>
+                        ) : isAllocated ? (
+                          <span className="text-[9px] font-black uppercase text-emerald-600 dark:text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Allocated</span>
+                        ) : (
+                          <span className="text-[9px] font-black uppercase text-amber-600 dark:text-amber-400">Not Fetched</span>
+                        )}
+                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
+                      </div>
+                    </button>
+                    {isExpanded && (
+                      <div className="mt-2.5 pl-1">
+                        {isAllocated ? (
+                          <div className="divide-y divide-slate-100 dark:divide-slate-900">
+                            {rows.map((c: any) => (
+                              <div key={c.id} className="flex items-center justify-between py-1.5">
+                                <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">{c.stock_name}</span>
+                                <span className="text-[11px] font-black text-slate-500">{Number(c.weight_pct).toFixed(2)}%</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-[10px] text-slate-400 pb-1">No holdings data yet for this fund.</p>
+                        )}
+                        <div className="flex gap-1.5 mt-2">
+                          {!isAllocated && (
+                            <button
+                              onClick={() => doFetch(h)}
+                              disabled={isFetchingThis}
+                              className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer"
+                            >
+                              Fetch Holdings %
+                            </button>
+                          )}
+                          <button
+                            onClick={() => manualEntryHoldingId === h.id ? setManualEntryHoldingId(null) : openManualMfEntry(h)}
+                            className="px-2.5 py-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 text-[9px] font-black uppercase rounded-lg cursor-pointer flex items-center gap-1"
+                          >
+                            {isAllocated ? 'Edit Manually' : 'Enter Manually'} {manualEntryHoldingId === h.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                          </button>
+                        </div>
+                        {manualEntryHoldingId === h.id && renderManualForm(h)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         );
       })()}
