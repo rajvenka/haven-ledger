@@ -1315,7 +1315,10 @@ export default function ReportsView(props: ReportsViewProps) {
         const cacheFor = (h: any) => {
           const bySchemeCode = mfHoldingsCache.filter((c: any) => c.scheme_code === `MANUAL-${h.id}`);
           if (bySchemeCode.length > 0) return bySchemeCode;
-          const targetWords = (h.symbol || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w: string) => w.length > 1);
+          // Same exclusion as PortfolioView's cacheFor - "plan"/"option" are generic
+          // structural words broker names and cached scheme names don't consistently agree
+          // on including.
+          const targetWords = (h.symbol || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w: string) => w.length > 1 && w !== 'plan' && w !== 'option' && w !== 'options');
           if (targetWords.length === 0) return [];
           const grouped = new Map<string, any[]>();
           mfHoldingsCache.forEach((c: any) => {

@@ -1366,7 +1366,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
         const cacheFor = (h: any) => {
           const bySchemeCode = mfHoldingsCache.filter((c: any) => c.scheme_code === `MANUAL-${h.id}`);
           if (bySchemeCode.length > 0) return bySchemeCode;
-          const targetWords = (h.symbol || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w: string) => w.length > 1);
+          // "plan"/"option" excluded - broker names and the cached scheme name don't always
+          // agree on including these generic structural words (e.g. broker says "- Direct
+          // Plan", cached name says just "- Direct - Growth" with no "Plan" anywhere), and
+          // neither word actually helps identify which fund this is.
+          const targetWords = (h.symbol || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w: string) => w.length > 1 && w !== 'plan' && w !== 'option' && w !== 'options');
           if (targetWords.length === 0) return [];
           const grouped = new Map<string, any[]>();
           mfHoldingsCache.forEach((c: any) => {

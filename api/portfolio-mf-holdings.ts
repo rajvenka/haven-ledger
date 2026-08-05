@@ -108,12 +108,20 @@ export default async function handler(req: any, res: any) {
     // Exclude derivatives (futures show up as separate short-position rows with negative
     // market value) and pure cash/debt line items - this feature is about stock exposure,
     // and mixing in "Cash Offset For Derivatives" or a future contract would misrepresent it.
-    const holdings = rawHoldings
+    const filtered = rawHoldings
       .filter((h: any) => h.name && !/future/i.test(h.name) && parseFloat(h.marketValue?.replace(/,/g, "") || "0") > 0)
       .map((h: any) => ({ stockName: h.name, weightPct: parseFloat(h.weightage) }))
       .filter((h: any) => h.stockName && !isNaN(h.weightPct));
+    // Some funds carry the same company as more than one line item (e.g. a spot position
+    // plus a separate smaller entry from a corporate action or lot) - the cache table has a
+    // uniqueness constraint per stock name, so duplicates within a single save batch fail
+    // the whole insert outright rather than just that one row. Summing them is also the
+    // financially correct answer: both lines represent real exposure to the same company.
+    const byName = new Map<string, number>();
+    for (const h of filtered) byName.set(h.stockName, (byName.get(h.stockName) || 0) + h.weightPct);
+    const holdings = Array.from(byName.entries()).map(([stockName, weightPct]) => ({ stockName, weightPct }));
 
-    console.log("[mf-holdings] parsed holdings count:", holdings.length, "of raw:", rawHoldings.length);
+    console.log("[mf-holdings] parsed holdings count:", holdings.length, "of raw:", rawHoldings.length, "(deduped from", filtered.length, ")");
 
     res.status(200).json({
       holdings,
