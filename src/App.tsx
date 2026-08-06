@@ -178,6 +178,7 @@ export default function App() {
     addPortfolioHolding,
     bulkAddPortfolioHoldings,
     reconcilePortfolioHoldingQuantity,
+    markPortfolioHoldingSoldFromImport,
     bulkHistoricalImport,
     updatePortfolioHolding,
     sellPortfolioHolding,
@@ -1677,6 +1678,7 @@ export default function App() {
                 addPortfolioHolding={addPortfolioHolding}
                 bulkAddPortfolioHoldings={bulkAddPortfolioHoldings}
                 reconcilePortfolioHoldingQuantity={reconcilePortfolioHoldingQuantity}
+                markPortfolioHoldingSoldFromImport={markPortfolioHoldingSoldFromImport}
                 bulkHistoricalImport={bulkHistoricalImport}
                 updatePortfolioHolding={updatePortfolioHolding}
                 sellPortfolioHolding={sellPortfolioHolding}

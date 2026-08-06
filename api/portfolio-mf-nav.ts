@@ -42,10 +42,6 @@ interface MfapiSearchResult {
   schemeName: string;
 }
 
-// Picks the best candidate from mfapi.in's own search results - it already does the heavy
-// lifting of finding name-similar schemes, this just disambiguates between variants
-// (Direct/Regular, Growth/IDCW) by requiring every significant word from the broker's name
-// to appear in the candidate, then preferring the closest overall length match.
 function pickBestMatch(candidates: MfapiSearchResult[], targetName: string): MfapiSearchResult | undefined {
   const targetWords = targetName.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(w => w.length > 1);
   if (targetWords.length === 0) return candidates[0];
@@ -57,13 +53,19 @@ function pickBestMatch(candidates: MfapiSearchResult[], targetName: string): Mfa
   return pool.sort((a, b) => Math.abs(a.schemeName.length - targetName.length) - Math.abs(b.schemeName.length - targetName.length))[0];
 }
 
-async function fetchLatestNav(schemeCode: string | number): Promise<{ nav: number; schemeName: string } | null> {
+async function fetchLatestNav(schemeCode: string | number): Promise<{ nav: number; schemeName: string; httpStatus: number } | null> {
   const resp = await fetch(`https://api.mfapi.in/mf/${schemeCode}/latest`);
-  if (!resp.ok) return null;
+  if (!resp.ok) {
+    console.log(`[mf-nav] fetchLatestNav(${schemeCode}) HTTP ${resp.status}`);
+    return null;
+  }
   const data = await resp.json();
   const nav = parseFloat(data?.data?.[0]?.nav);
-  if (isNaN(nav)) return null;
-  return { nav, schemeName: data?.meta?.scheme_name || String(schemeCode) };
+  if (isNaN(nav)) {
+    console.log(`[mf-nav] fetchLatestNav(${schemeCode}) got NaN nav, raw data[0]:`, JSON.stringify(data?.data?.[0] || null));
+    return null;
+  }
+  return { nav, schemeName: data?.meta?.scheme_name || String(schemeCode), httpStatus: resp.status };
 }
 
 export default async function handler(req: any, res: any) {
@@ -78,6 +80,7 @@ export default async function handler(req: any, res: any) {
       res.status(400).json({ error: "Provide a non-empty 'funds' array of { id, isin?, name }." });
       return;
     }
+    console.log(`[mf-nav] request for ${funds.length} funds`);
 
     const navText = await getNavText();
     const isinRows = parseIsinRows(navText);
@@ -93,32 +96,51 @@ export default async function handler(req: any, res: any) {
           const isinMatch = byIsin.get(isin.trim());
           if (isinMatch) {
             const navResult = await fetchLatestNav(isinMatch.schemeCode);
-            if (navResult) return { id, nav: navResult.nav, matchedSchemeName: navResult.schemeName, error: null };
+            if (navResult) {
+              console.log(`[mf-nav] OK (isin path) id=${id} name="${name}" schemeCode=${isinMatch.schemeCode} nav=${navResult.nav}`);
+              return { id, nav: navResult.nav, matchedSchemeName: navResult.schemeName, error: null };
+            }
+            console.log(`[mf-nav] ISIN matched scheme ${isinMatch.schemeCode} but fetchLatestNav failed, id=${id} name="${name}"`);
+          } else {
+            console.log(`[mf-nav] no AMFI ISIN match for isin=${isin} id=${id} name="${name}"`);
           }
         }
         if (name) {
           const searchQuery = name.trim().split(/\s+/).slice(0, 4).join(" ");
           const searchResp = await fetch(`https://api.mfapi.in/mf/search?q=${encodeURIComponent(searchQuery)}`);
-          if (searchResp.ok) {
+          if (!searchResp.ok) {
+            console.log(`[mf-nav] mfapi search HTTP ${searchResp.status} for query="${searchQuery}" id=${id}`);
+          } else {
             const candidates: MfapiSearchResult[] = await searchResp.json();
             if (Array.isArray(candidates) && candidates.length > 0) {
               const best = pickBestMatch(candidates, name);
               if (best) {
                 const navResult = await fetchLatestNav(best.schemeCode);
-                if (navResult) return { id, nav: navResult.nav, matchedSchemeName: navResult.schemeName, error: null };
+                if (navResult) {
+                  console.log(`[mf-nav] OK (name path) id=${id} name="${name}" schemeCode=${best.schemeCode} nav=${navResult.nav}`);
+                  return { id, nav: navResult.nav, matchedSchemeName: navResult.schemeName, error: null };
+                }
+                console.log(`[mf-nav] name-matched scheme ${best.schemeCode} but fetchLatestNav failed, id=${id} name="${name}"`);
               }
+            } else {
+              console.log(`[mf-nav] mfapi search returned no candidates for query="${searchQuery}" id=${id}`);
             }
           }
         }
+        console.log(`[mf-nav] FAILED entirely: id=${id} name="${name}" isin=${isin}`);
         return { id, nav: null, error: "No matching scheme found." };
       } catch (err: any) {
+        console.log(`[mf-nav] EXCEPTION for id=${id} name="${name}":`, err?.message);
         return { id, nav: null, error: err?.message || "Lookup failed for this fund." };
       }
     }));
 
+    const okCount = results.filter((r: any) => r.nav != null).length;
+    console.log(`[mf-nav] done: ${okCount}/${results.length} succeeded`);
+
     res.status(200).json({ results });
   } catch (error: any) {
-    console.error("Portfolio MF NAV error:", error);
+    console.error("[mf-nav] TOP-LEVEL EXCEPTION:", error?.message, error?.stack);
     res.status(500).json({ error: error?.message || "Unexpected error fetching NAVs." });
   }
 }

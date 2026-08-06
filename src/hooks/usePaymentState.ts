@@ -1175,8 +1175,65 @@ export function usePaymentState() {
 
   // Reconciles an existing holding's quantity against a fresh import, tagging whether
   // it grew or shrank so it can be filtered like any other tag.
-  const reconcilePortfolioHoldingQuantity = async (id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced') => {
-    const { error } = await supabase.from('portfolio_holdings').update({ quantity: newQuantity, change_flag: changeFlag }).eq('id', id);
+  // On a quantity reduction, this now actually records the sale rather than silently
+  // shrinking the holding - mirrors sellPortfolioHolding's clone-the-sold-portion pattern.
+  // Since a broker's holdings file doesn't state the actual sale price/date, the current
+  // market price (from the same file) and today's date are used as the best available
+  // proxy - close enough for P/L tracking, though not the exact transaction details a
+  // manual sell would have. Also updates buy_price on the remaining active portion when
+  // the file's average cost has changed, since that's Zerodha's own recalculated average
+  // for whatever shares are actually left - not touched on the cloned sold row, which
+  // correctly keeps the prior cost basis for the shares that were actually sold.
+  const reconcilePortfolioHoldingQuantity = async (
+    id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced',
+    newBuyPrice?: number, currentPriceForSoldPortion?: number
+  ) => {
+    const { data: existing, error: fetchErr } = await supabase.from('portfolio_holdings').select('*').eq('id', id).maybeSingle();
+    if (fetchErr) throw fetchErr;
+    if (!existing) throw new Error('Holding not found.');
+
+    if (changeFlag === 'qty_reduced') {
+      const fullQty = Number(existing.quantity);
+      const soldQty = fullQty - newQuantity;
+      const soldRow: any = { ...existing };
+      delete soldRow.id;
+      soldRow.quantity = soldQty;
+      soldRow.status = 'sold';
+      soldRow.sold_price = currentPriceForSoldPortion ?? Number(existing.live_price ?? existing.current_price ?? existing.buy_price);
+      soldRow.sold_date = new Date().toISOString().slice(0, 10);
+      soldRow.live_price = null;
+      soldRow.live_price_updated_at = null;
+      soldRow.previous_close = null;
+      soldRow.change_flag = null;
+      const { error: insertErr } = await supabase.from('portfolio_holdings').insert(soldRow);
+      if (insertErr) throw insertErr;
+
+      const remainingRow: any = { quantity: newQuantity, change_flag: changeFlag };
+      if (newBuyPrice !== undefined) remainingRow.buy_price = newBuyPrice;
+      const { error: updateErr } = await supabase.from('portfolio_holdings').update(remainingRow).eq('id', id);
+      if (updateErr) throw updateErr;
+    } else {
+      const row: any = { quantity: newQuantity, change_flag: changeFlag };
+      if (newBuyPrice !== undefined) row.buy_price = newBuyPrice;
+      const { error } = await supabase.from('portfolio_holdings').update(row).eq('id', id);
+      if (error) throw error;
+    }
+    await loadPortfolioDetails();
+  };
+
+  // For a holding that's simply absent from a newly uploaded file entirely (not reduced,
+  // gone) - same proxy-price/today's-date reasoning as the partial-reduction path above,
+  // since the file doesn't carry an actual sale price or date for it either.
+  const markPortfolioHoldingSoldFromImport = async (id: string, currentPrice?: number) => {
+    const { data: existing, error: fetchErr } = await supabase.from('portfolio_holdings').select('*').eq('id', id).maybeSingle();
+    if (fetchErr) throw fetchErr;
+    if (!existing) throw new Error('Holding not found.');
+    const { error } = await supabase.from('portfolio_holdings').update({
+      status: 'sold',
+      sold_price: currentPrice ?? Number(existing.live_price ?? existing.current_price ?? existing.buy_price),
+      sold_date: new Date().toISOString().slice(0, 10),
+      change_flag: null,
+    }).eq('id', id);
     if (error) throw error;
     await loadPortfolioDetails();
   };
@@ -1799,7 +1856,7 @@ export function usePaymentState() {
     accessPlans, createAccessPlan, updateAccessPlan, deleteAccessPlan,
     myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan, setSuperAdminStatus,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, portfolioDataLoading, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
+    portfolioHoldings, portfolioDataLoading, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioPriceHistory,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,

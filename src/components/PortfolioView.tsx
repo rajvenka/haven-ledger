@@ -42,7 +42,8 @@ interface PortfolioViewProps {
   fetchAndCacheMfHoldings?: (isin: string | null, name: string) => Promise<any>;
   saveManualMfHoldings?: (holdingId: string, schemeName: string, rows: { stockName: string; weightPct: number }[]) => Promise<void>;
   baseCurrency?: string;
-  reconcilePortfolioHoldingQuantity: (id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced') => Promise<void>;
+  reconcilePortfolioHoldingQuantity: (id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced', newBuyPrice?: number, currentPriceForSoldPortion?: number) => Promise<void>;
+  markPortfolioHoldingSoldFromImport?: (id: string, currentPrice?: number) => Promise<void>;
   bulkHistoricalImport: (snapshots: { date: string; holdings: any[] }[], portfolioId?: string) => Promise<{ newCount: number; updatedCount: number; soldCount: number; skippedStaleCount: number; priceHistoryCount: number; stockCount: number }>;
   updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
   sellPortfolioHolding: (id: string, params: { quantity: number; soldPrice: number; soldDate: string }) => Promise<void>;
@@ -146,7 +147,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly, isDataLoading, columnPrefs, onUpdateColumnPrefs,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances,
-    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
+    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     mfHoldingsCache = [], loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
@@ -750,7 +751,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
     fresh: ParsedHolding[];
     qtyChanged: { parsed: ParsedHolding; existing: any; direction: 'increased' | 'reduced' }[];
     unchanged: number;
+    missing: any[];
   } | null>(null);
+  const [importMissingSelected, setImportMissingSelected] = useState<Set<string>>(new Set());
   const [importSourceTag, setImportSourceTag] = useState('');
   const [importBuyDate, setImportBuyDate] = useState(todayStr());
   const [importSaving, setImportSaving] = useState(false);
@@ -848,7 +851,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   // Recompute the preview whenever the raw parse changes, or the target portfolio changes -
   // switching portfolios should re-check what's already there for that specific one.
   useEffect(() => {
-    if (!importRawParsed) { setImportPreview(null); return; }
+    if (!importRawParsed) { setImportPreview(null); setImportMissingSelected(new Set()); return; }
     const targetPortfolioId = portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined;
     const fresh: ParsedHolding[] = [];
     const qtyChanged: { parsed: ParsedHolding; existing: any; direction: 'increased' | 'reduced' }[] = [];
@@ -859,12 +862,29 @@ export default function PortfolioView(props: PortfolioViewProps) {
       else if (c.status === 'qty_changed') qtyChanged.push({ parsed: h, existing: c.existing, direction: c.direction });
       else unchanged++;
     });
-    setImportPreview({ fresh, qtyChanged, unchanged });
+    // Holdings that are active, match a broker actually present in this file (and the
+    // target portfolio), but aren't matched by any row in it - the file is a full account
+    // snapshot, so absence almost always means it was sold outside the app, not that it was
+    // never held. Never auto-marked, though - surfaced for explicit per-item confirmation,
+    // since a partial/wrong-segment file could otherwise wrongly flag things as sold.
+    const brokersInFile = new Set(importRawParsed.map(h => h.broker));
+    const missing = portfolioHoldings.filter(h => {
+      if (h.status !== 'active') return false;
+      if (!brokersInFile.has(h.broker)) return false;
+      if (portfolioMode === 'multiple' && (h.portfolio_id ?? null) !== (targetPortfolioId ?? null)) return false;
+      return !importRawParsed.some(p => {
+        if (p.isin && h.isin) return h.isin === p.isin;
+        if (p.folioNumber && h.folio_number) return h.folio_number === p.folioNumber && h.symbol === p.symbol.toUpperCase();
+        return h.symbol === p.symbol.toUpperCase() && h.holding_type === p.holdingType && !h.folio_number && !p.folioNumber;
+      });
+    });
+    setImportPreview({ fresh, qtyChanged, unchanged, missing });
+    setImportMissingSelected(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importRawParsed, importPortfolioId, portfolioMode]);
 
   const confirmImport = async () => {
-    if (!importPreview || (importPreview.fresh.length === 0 && importPreview.qtyChanged.length === 0)) return;
+    if (!importPreview || (importPreview.fresh.length === 0 && importPreview.qtyChanged.length === 0 && importMissingSelected.size === 0)) return;
     setImportSaving(true);
     await runAction(async () => {
       if (importPreview.fresh.length > 0) {
@@ -878,10 +898,19 @@ export default function PortfolioView(props: PortfolioViewProps) {
         );
       }
       for (const { parsed, existing, direction } of importPreview.qtyChanged) {
-        await reconcilePortfolioHoldingQuantity(existing.id, parsed.quantity, direction === 'increased' ? 'qty_increased' : 'qty_reduced');
+        await reconcilePortfolioHoldingQuantity(
+          existing.id, parsed.quantity, direction === 'increased' ? 'qty_increased' : 'qty_reduced',
+          parsed.buyPrice !== Number(existing.buy_price) ? parsed.buyPrice : undefined,
+          parsed.currentPrice
+        );
+      }
+      for (const h of importPreview.missing) {
+        if (!importMissingSelected.has(h.id)) continue;
+        await markPortfolioHoldingSoldFromImport?.(h.id, Number(h.live_price ?? h.current_price ?? h.buy_price));
       }
       setImportPreview(null);
       setImportRawParsed(null);
+      setImportMissingSelected(new Set());
       setImportSourceTag('');
       setImportBuyDate(todayStr());
       setIsImporting(false);
@@ -1895,6 +1924,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                     {importPreview.fresh.length} new holding{importPreview.fresh.length !== 1 ? 's' : ''} found
                     {importPreview.qtyChanged.length > 0 && ` · ${importPreview.qtyChanged.length} with a changed quantity`}
                     {importPreview.unchanged > 0 && ` · ${importPreview.unchanged} unchanged (skipped)`}
+                    {importPreview.missing.length > 0 && ` · ${importPreview.missing.length} not found in this file`}
                     {' '}· external funds always excluded
                   </p>
                   {importPreview.qtyChanged.length > 0 && (
@@ -1910,6 +1940,40 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           </div>
                         ))}
                       </div>
+                      <p className="text-[9px] text-slate-400">A reduced quantity is recorded as an actual sale for the difference (today's date, current price as the best available estimate) - not just a silent quantity edit.</p>
+                    </div>
+                  )}
+                  {importPreview.missing.length > 0 && (
+                    <div className="space-y-1 bg-rose-50 dark:bg-rose-950/20 rounded-lg p-2">
+                      <span className="text-[9px] font-bold text-rose-600 dark:text-rose-400 uppercase">Not found in this file - likely sold outside the app</span>
+                      <p className="text-[9px] text-slate-500 dark:text-slate-400">Check any you know were actually sold - they'll be marked sold using today's date and their last known price as a proxy. Leave unchecked to keep as-is (e.g. if this file only covers part of your holdings).</p>
+                      <div className="max-h-40 overflow-y-auto space-y-1">
+                        {importPreview.missing.map((h) => (
+                          <label key={h.id} className="flex items-center gap-2 text-[10px] px-2 py-1 bg-white dark:bg-slate-950 rounded cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={importMissingSelected.has(h.id)}
+                              onChange={(e) => setImportMissingSelected(prev => {
+                                const next = new Set(prev);
+                                if (e.target.checked) next.add(h.id); else next.delete(h.id);
+                                return next;
+                              })}
+                              className="cursor-pointer"
+                            />
+                            <span className="text-slate-600 dark:text-slate-300 flex-1">{h.symbol}</span>
+                            <span className="text-slate-400">{h.quantity} held</span>
+                          </label>
+                        ))}
+                      </div>
+                      {importPreview.missing.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setImportMissingSelected(new Set(importPreview.missing.map(h => h.id)))}
+                          className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer"
+                        >
+                          Select all {importPreview.missing.length}
+                        </button>
+                      )}
                     </div>
                   )}
                   {importPreview.fresh.length > 0 && (
