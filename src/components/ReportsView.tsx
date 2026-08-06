@@ -851,7 +851,11 @@ export default function ReportsView(props: ReportsViewProps) {
             combinedStockMap.set(normalizedMfName, { label: row.stockName, directValue: 0, mfValue: row.totalExposure, mfFundCount: row.fundCount });
           }
         });
+        // Only the actual overlap - a stock genuinely held both directly AND through at
+        // least one fund - not every stock across both sources. That's the actual point of
+        // this view: "which companies am I doubling up on without realizing it."
         const combinedStocks = Array.from(combinedStockMap.values())
+          .filter(r => r.directValue > 0 && r.mfValue > 0)
           .map(r => ({ ...r, totalValue: r.directValue + r.mfValue }))
           .sort((a, b) => b.totalValue - a.totalValue);
 
@@ -923,7 +927,7 @@ export default function ReportsView(props: ReportsViewProps) {
             </div>
 
             <div className="apple-card p-4 space-y-2.5">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Top 5 Mutual Funds by Value</span>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Top 10 Mutual Funds by Value</span>
               {mfByValue.length === 0 ? (
                 <p className="text-[11px] text-slate-400 text-center py-3">No mutual fund holdings in this portfolio.</p>
               ) : (
@@ -933,7 +937,7 @@ export default function ReportsView(props: ReportsViewProps) {
                       <ComposedChart
                         data={(() => {
                           let running = 0;
-                          return mfByValue.slice(0, 5).map(r => {
+                          return mfByValue.slice(0, 10).map(r => {
                             running += r.value;
                             return { name: r.holding.symbol.length > 12 ? r.holding.symbol.slice(0, 12) + '…' : r.holding.symbol, value: r.value, cumulativePct: totalMfValue > 0 ? (running / totalMfValue) * 100 : 0 };
                           });
@@ -971,7 +975,7 @@ export default function ReportsView(props: ReportsViewProps) {
             </div>
 
             <div className="apple-card p-4 space-y-2.5">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Top 5 Holdings Across All Funds, by Stock</span>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Top 10 Holdings Across All Funds, by Stock</span>
               {aggregatedStocks.length === 0 ? (
                 <p className="text-[11px] text-slate-400 text-center py-3">No underlying holdings data yet - fetch it from the Portfolio page's MF Holdings tab first.</p>
               ) : (
@@ -982,7 +986,7 @@ export default function ReportsView(props: ReportsViewProps) {
                         data={(() => {
                           const totalStockExposure = aggregatedStocks.reduce((s, r) => s + r.totalExposure, 0);
                           let running = 0;
-                          return aggregatedStocks.slice(0, 5).map(r => {
+                          return aggregatedStocks.slice(0, 10).map(r => {
                             running += r.totalExposure;
                             return { name: r.stockName.length > 12 ? r.stockName.slice(0, 12) + '…' : r.stockName, value: r.totalExposure, cumulativePct: totalStockExposure > 0 ? (running / totalStockExposure) * 100 : 0 };
                           });
@@ -1059,17 +1063,17 @@ export default function ReportsView(props: ReportsViewProps) {
           {insightsSubTab === 'mf-stock' && (
           <div className="space-y-4">
             <div>
-              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-widest">MF + Stock Combined</h3>
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-widest">Common Stocks: MF + Direct</h3>
               <p className="text-[10px] text-slate-400 mt-0.5">
-                Your real total exposure to each company - direct stock holdings plus what you hold indirectly through mutual funds, combined.
-                Matched by name where possible; a best-effort match, so acronym-style tickers (e.g. TCS for Tata Consultancy Services) may show up as direct-only rather than combined.
+                Companies you hold both directly and through at least one mutual fund - your real combined exposure to each, and how much of it is "hidden" inside a fund.
+                Matched by name, best-effort: acronym-style tickers (e.g. TCS for Tata Consultancy Services) won't be caught by this and won't appear here even if genuinely held both ways.
               </p>
             </div>
 
             <div className="apple-card p-4 space-y-2.5">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Top 5 Common Holdings by Combined Value</span>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Top 10 Common Holdings by Combined Value</span>
               {combinedStocks.length === 0 ? (
-                <p className="text-[11px] text-slate-400 text-center py-3">No stock or mutual fund holdings data yet.</p>
+                <p className="text-[11px] text-slate-400 text-center py-3">No overlap found yet - either no stock is held both directly and through a fund, or MF holdings data hasn't been fetched yet (Portfolio page's MF Holdings tab).</p>
               ) : (
                 <>
                   <div style={{ height: 200 }}>
@@ -1078,7 +1082,7 @@ export default function ReportsView(props: ReportsViewProps) {
                         data={(() => {
                           const totalCombined = combinedStocks.reduce((s, r) => s + r.totalValue, 0);
                           let running = 0;
-                          return combinedStocks.slice(0, 5).map(r => {
+                          return combinedStocks.slice(0, 10).map(r => {
                             running += r.totalValue;
                             return { name: r.label.length > 12 ? r.label.slice(0, 12) + '…' : r.label, value: r.totalValue, cumulativePct: totalCombined > 0 ? (running / totalCombined) * 100 : 0 };
                           });
@@ -1117,9 +1121,8 @@ export default function ReportsView(props: ReportsViewProps) {
                         {combinedStocks.slice(mfStockRangeStart, mfStockRangeStart + 10).map((row, i) => (
                           <div key={row.label} className="py-2">
                             <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-slate-900 dark:text-white truncate flex items-center gap-1.5">
+                              <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
                                 {mfStockRangeStart + i + 1}. {row.label}
-                                {row.directValue > 0 && row.mfValue > 0 && <span className="text-[8px] font-black px-1.5 py-0.5 bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 rounded-full">both</span>}
                               </span>
                               <span className="text-xs font-black text-slate-700 dark:text-slate-300 shrink-0 ml-2">{fmtCurrency(row.totalValue)}</span>
                             </div>
