@@ -1192,7 +1192,7 @@ export function usePaymentState() {
   // correctly keeps the prior cost basis for the shares that were actually sold.
   const reconcilePortfolioHoldingQuantity = async (
     id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced',
-    newBuyPrice?: number, currentPriceForSoldPortion?: number
+    newBuyPrice?: number, currentPriceForSoldPortion?: number, soldItemBuyPrice?: number
   ) => {
     const { data: existing, error: fetchErr } = await supabase.from('portfolio_holdings').select('*').eq('id', id).maybeSingle();
     if (fetchErr) throw fetchErr;
@@ -1205,6 +1205,11 @@ export function usePaymentState() {
       delete soldRow.id;
       soldRow.quantity = soldQty;
       soldRow.status = 'sold';
+      // A broker export only ever gives the blended overall average, but a FIFO sale's
+      // actual cost basis is whichever specific lot got sold first - which can genuinely
+      // differ from that average. Defaults to the old average (best guess without more
+      // info) but is explicitly overridable when the real lot cost is known.
+      soldRow.buy_price = soldItemBuyPrice ?? existing.buy_price;
       soldRow.sold_price = currentPriceForSoldPortion ?? Number(existing.live_price ?? existing.current_price ?? existing.buy_price);
       soldRow.sold_date = new Date().toISOString().slice(0, 10);
       soldRow.live_price = null;

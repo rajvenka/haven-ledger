@@ -44,7 +44,7 @@ interface PortfolioViewProps {
   fetchAndCacheMfHoldings?: (isin: string | null, name: string) => Promise<any>;
   saveManualMfHoldings?: (holdingId: string, schemeName: string, rows: { stockName: string; weightPct: number }[]) => Promise<void>;
   baseCurrency?: string;
-  reconcilePortfolioHoldingQuantity: (id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced', newBuyPrice?: number, currentPriceForSoldPortion?: number) => Promise<void>;
+  reconcilePortfolioHoldingQuantity: (id: string, newQuantity: number, changeFlag: 'qty_increased' | 'qty_reduced', newBuyPrice?: number, currentPriceForSoldPortion?: number, soldItemBuyPrice?: number) => Promise<void>;
   markPortfolioHoldingSoldFromImport?: (id: string, currentPrice?: number) => Promise<void>;
   bulkHistoricalImport: (snapshots: { date: string; holdings: any[] }[], portfolioId?: string) => Promise<{ newCount: number; updatedCount: number; soldCount: number; skippedStaleCount: number; priceHistoryCount: number; stockCount: number }>;
   updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
@@ -757,7 +757,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   } | null>(null);
   const [importMissingSelected, setImportMissingSelected] = useState<Set<string>>(new Set());
   const [importMissingSellPrice, setImportMissingSellPrice] = useState<Record<string, string>>({});
-  const [importReducedOverrides, setImportReducedOverrides] = useState<Record<string, { sellPrice: string; newAvgPrice: string }>>({});
+  const [importReducedOverrides, setImportReducedOverrides] = useState<Record<string, { sellPrice: string; soldItemBuyPrice: string }>>({});
   const [importSourceTag, setImportSourceTag] = useState('');
   const [importBuyDate, setImportBuyDate] = useState(todayStr());
   const [importSaving, setImportSaving] = useState(false);
@@ -887,7 +887,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setImportMissingSellPrice(Object.fromEntries(missing.map(h => [h.id, String(Number(h.live_price ?? h.current_price ?? h.buy_price))])));
     setImportReducedOverrides(Object.fromEntries(qtyChanged.filter(qc => qc.direction === 'reduced').map(qc => [
       qc.existing.id,
-      { sellPrice: String(qc.parsed.currentPrice ?? qc.existing.live_price ?? qc.existing.current_price ?? qc.existing.buy_price), newAvgPrice: String(qc.parsed.buyPrice) },
+      { sellPrice: String(qc.parsed.currentPrice ?? qc.existing.live_price ?? qc.existing.current_price ?? qc.existing.buy_price), soldItemBuyPrice: String(qc.existing.buy_price) },
     ])));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importRawParsed, importPortfolioId, portfolioMode]);
@@ -908,12 +908,18 @@ export default function PortfolioView(props: PortfolioViewProps) {
       }
       for (const { parsed, existing, direction } of importPreview.qtyChanged) {
         const override = importReducedOverrides[existing.id];
-        const newAvgPrice = direction === 'reduced' && override ? parseFloat(override.newAvgPrice) : parsed.buyPrice;
+        // New avg price for the remaining active shares always comes straight from the
+        // file - Groww/Zerodha already computes this correctly, no need for a manual
+        // override. Only the sold portion's cost basis (soldItemBuyPrice) is editable,
+        // since that's the one thing the broker export genuinely can't tell us (which
+        // specific lot got sold in a FIFO sale).
         const sellPriceForReduced = direction === 'reduced' && override ? parseFloat(override.sellPrice) : parsed.currentPrice;
+        const soldItemBuyPrice = direction === 'reduced' && override ? parseFloat(override.soldItemBuyPrice) : undefined;
         await reconcilePortfolioHoldingQuantity(
           existing.id, parsed.quantity, direction === 'increased' ? 'qty_increased' : 'qty_reduced',
-          newAvgPrice !== Number(existing.buy_price) ? newAvgPrice : undefined,
-          sellPriceForReduced
+          parsed.buyPrice !== Number(existing.buy_price) ? parsed.buyPrice : undefined,
+          sellPriceForReduced,
+          soldItemBuyPrice
         );
       }
       for (const h of importPreview.missing) {
@@ -1987,22 +1993,30 @@ export default function PortfolioView(props: PortfolioViewProps) {
                             </div>
                             {qc.direction === 'reduced' && (
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-[9px] text-slate-400 shrink-0">Avg buy price: <span className="font-bold text-slate-600 dark:text-slate-300">{Number(qc.existing.buy_price).toFixed(2)}</span></span>
+                                <span className="text-[9px] text-slate-400 shrink-0">Current avg: <span className="font-bold text-slate-600 dark:text-slate-300">{Number(qc.existing.buy_price).toFixed(2)}</span></span>
+                                <span className="text-[9px] text-slate-400 shrink-0">New avg (from file): <span className="font-bold text-slate-600 dark:text-slate-300">{Number(qc.parsed.buyPrice).toFixed(2)}</span></span>
+                              </div>
+                            )}
+                            {qc.direction === 'reduced' && (
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <label className="text-[9px] text-slate-500 dark:text-slate-400 shrink-0">Sold item's buy price</label>
+                                <input
+                                  type="number"
+                                  value={importReducedOverrides[qc.existing.id]?.soldItemBuyPrice ?? ''}
+                                  onChange={(e) => setImportReducedOverrides(prev => ({ ...prev, [qc.existing.id]: { ...prev[qc.existing.id], soldItemBuyPrice: e.target.value, sellPrice: prev[qc.existing.id]?.sellPrice ?? String(qc.parsed.currentPrice) } }))}
+                                  className="w-20 px-1.5 py-0.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
+                                />
                                 <label className="text-[9px] text-slate-500 dark:text-slate-400 shrink-0">Sell price</label>
                                 <input
                                   type="number"
                                   value={importReducedOverrides[qc.existing.id]?.sellPrice ?? ''}
-                                  onChange={(e) => setImportReducedOverrides(prev => ({ ...prev, [qc.existing.id]: { ...prev[qc.existing.id], sellPrice: e.target.value, newAvgPrice: prev[qc.existing.id]?.newAvgPrice ?? String(qc.parsed.buyPrice) } }))}
-                                  className="w-20 px-1.5 py-0.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
-                                />
-                                <label className="text-[9px] text-slate-500 dark:text-slate-400 shrink-0">New avg price</label>
-                                <input
-                                  type="number"
-                                  value={importReducedOverrides[qc.existing.id]?.newAvgPrice ?? ''}
-                                  onChange={(e) => setImportReducedOverrides(prev => ({ ...prev, [qc.existing.id]: { sellPrice: prev[qc.existing.id]?.sellPrice ?? String(qc.parsed.currentPrice), newAvgPrice: e.target.value } }))}
+                                  onChange={(e) => setImportReducedOverrides(prev => ({ ...prev, [qc.existing.id]: { ...prev[qc.existing.id], sellPrice: e.target.value, soldItemBuyPrice: prev[qc.existing.id]?.soldItemBuyPrice ?? String(qc.existing.buy_price) } }))}
                                   className="w-20 px-1.5 py-0.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
                                 />
                               </div>
+                            )}
+                            {qc.direction === 'reduced' && (
+                              <p className="text-[8px] text-slate-400">"Sold item's buy price" defaults to the current average, but if you know the actual lot that got sold (FIFO), correct it here - the broker file only ever gives a blended average, not per-lot cost.</p>
                             )}
                           </div>
                         ))}
