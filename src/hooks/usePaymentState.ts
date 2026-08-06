@@ -1496,6 +1496,17 @@ export function usePaymentState() {
     if (previousClose !== undefined) row.previous_close = previousClose;
     const { error } = await supabase.from('portfolio_holdings').update(row).eq('id', id);
     if (error) throw error;
+    // Record price history on every refresh, not just rare paths (initial import, historical
+    // backfill) - this was the actual root cause of the Movement tab's drill-down computing
+    // zero movement for most stocks: regular Refresh Prices clicks never built any history at
+    // all, so both the older and newer snapshot-date lookups kept falling back to the same
+    // stale value. Upserts on (holding_id, recorded_date) so repeated same-day refreshes
+    // update one row rather than accumulating duplicates.
+    const { error: histErr } = await supabase.from('portfolio_price_history').upsert(
+      { workspace_id: activeWorkspaceId, holding_id: id, price, recorded_date: new Date().toISOString().slice(0, 10) },
+      { onConflict: 'holding_id,recorded_date' }
+    );
+    if (histErr) console.error('Failed to record price history:', histErr);
     await loadPortfolioDetails();
   };
 
