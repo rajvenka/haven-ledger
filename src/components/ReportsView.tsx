@@ -137,13 +137,12 @@ export default function ReportsView(props: ReportsViewProps) {
   } = props;
 
   const [reportTab, setReportTab] = useState<ReportTab>('overview');
-  const [insightsSubTab, setInsightsSubTab] = useState<'overview' | 'mf-holdings' | 'mf-stock'>('overview');
+  const [insightsSubTab, setInsightsSubTab] = useState<'all' | 'stock' | 'mutual_fund' | 'mf-holdings' | 'mf-stock'>('all');
   const [mfReportDrillStock, setMfReportDrillStock] = useState<string | null>(null);
   const [mfFundsDetailOpen, setMfFundsDetailOpen] = useState(false);
   const [mfStocksDetailOpen, setMfStocksDetailOpen] = useState(false);
   const [mfStockRangeStart, setMfStockRangeStart] = useState(0);
   const [drillPath, setDrillPath] = useState<string[]>([]);
-  const [insightsAssetFilter, setInsightsAssetFilter] = useState<'all' | 'stock' | 'mutual_fund'>('all');
   const [classificationMetric, setClassificationMetric] = useState<'inception' | 'd30' | 'ref'>('inception');
   const [classificationView, setClassificationView] = useState<'active' | 'sold'>('active');
   const [classificationSoldMetric, setClassificationSoldMetric] = useState<'realized' | 'sinceSold'>('realized');
@@ -740,8 +739,8 @@ export default function ReportsView(props: ReportsViewProps) {
       )}
 
       {reportTab === 'insights' && (() => {
-        const filtered = insightsAssetFilter === 'all' ? activeHoldings : activeHoldings.filter(h => (h.holding_type === 'mutual_fund' ? 'mutual_fund' : 'stock') === insightsAssetFilter);
-        const soldFiltered = insightsAssetFilter === 'all' ? soldHoldings : soldHoldings.filter(h => (h.holding_type === 'mutual_fund' ? 'mutual_fund' : 'stock') === insightsAssetFilter);
+        const filtered = insightsSubTab === 'all' ? activeHoldings : activeHoldings.filter(h => (h.holding_type === 'mutual_fund' ? 'mutual_fund' : 'stock') === insightsSubTab);
+        const soldFiltered = insightsSubTab === 'all' ? soldHoldings : soldHoldings.filter(h => (h.holding_type === 'mutual_fund' ? 'mutual_fund' : 'stock') === insightsSubTab);
 
         const withGain = filtered.map(h => {
           const current = Number(h.live_price ?? h.current_price ?? h.buy_price);
@@ -872,33 +871,21 @@ export default function ReportsView(props: ReportsViewProps) {
         return (
           <>
           <div className="flex gap-1.5">
-            {(['overview', 'mf-holdings', 'mf-stock'] as const)
-              .filter(t => t === 'overview' || activeHoldings.some(h => h.holding_type === 'mutual_fund'))
+            {(['all', 'stock', 'mutual_fund', 'mf-holdings', 'mf-stock'] as const)
+              .filter(t => (t !== 'mf-holdings' && t !== 'mf-stock') || activeHoldings.some(h => h.holding_type === 'mutual_fund'))
               .map(t => (
               <button
                 key={t}
-                onClick={() => { setInsightsSubTab(t); if (t !== 'overview') loadMfHoldingsCache?.(); }}
+                onClick={() => { setInsightsSubTab(t); if (t === 'mf-holdings' || t === 'mf-stock') loadMfHoldingsCache?.(); }}
                 className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer ${insightsSubTab === t ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
               >
-                {t === 'overview' ? 'Overview' : t === 'mf-holdings' ? 'MF Holdings' : 'MF + Stock'}
+                {t === 'all' ? 'All' : t === 'stock' ? 'Stock' : t === 'mutual_fund' ? 'Mutual Funds' : t === 'mf-holdings' ? 'MF Holdings' : 'MF + Stock'}
               </button>
             ))}
           </div>
 
-          {insightsSubTab === 'overview' && (
+          {(insightsSubTab === 'all' || insightsSubTab === 'stock' || insightsSubTab === 'mutual_fund') && (
           <>
-          <div className="flex gap-1.5">
-            {(['all', 'stock', 'mutual_fund'] as const).map(f => (
-              <button
-                key={f}
-                onClick={() => setInsightsAssetFilter(f)}
-                className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer ${insightsAssetFilter === f ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
-              >
-                {f === 'all' ? 'All' : f === 'stock' ? 'Stocks' : 'Mutual Funds'}
-              </button>
-            ))}
-          </div>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <InsightCard title="Top 5 Holdings (by value)" items={topHoldings} pctKey="_gainPct" valueKey="_value" subFn={(h) => `${h._gainPct >= 0 ? '+' : ''}${h._gainPct.toFixed(2)}% gain`} isOpen={expandedInsightCards.has("top-holdings")} onToggle={() => toggleCard("top-holdings")} fmt={fmt} />
             <InsightCard title="Top 5 Winners" items={topWinners} pctKey="_gainPct" isOpen={expandedInsightCards.has("top-winners")} onToggle={() => toggleCard("top-winners")} fmt={fmt} />
