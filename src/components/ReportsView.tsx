@@ -48,7 +48,7 @@ const fmtCur = (n: number, currency: string = 'INR') => {
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const memberName = (m: WorkspaceMemberLite) => m.displayName || m.email.split('@')[0];
 
-type ReportTab = 'overview' | 'insights' | 'activity' | 'movement' | 'summary' | 'mf-holdings';
+type ReportTab = 'overview' | 'insights' | 'activity' | 'movement' | 'summary';
 
 // Defined outside ReportsView so it keeps a stable identity across renders - when it was
 // defined inside the render body, every state update (e.g. toggling one card's details)
@@ -137,6 +137,7 @@ export default function ReportsView(props: ReportsViewProps) {
   } = props;
 
   const [reportTab, setReportTab] = useState<ReportTab>('overview');
+  const [insightsSubTab, setInsightsSubTab] = useState<'overview' | 'mf-holdings' | 'mf-stock'>('overview');
   const [mfReportDrillStock, setMfReportDrillStock] = useState<string | null>(null);
   const [mfFundsDetailOpen, setMfFundsDetailOpen] = useState(false);
   const [mfStocksDetailOpen, setMfStocksDetailOpen] = useState(false);
@@ -226,7 +227,6 @@ export default function ReportsView(props: ReportsViewProps) {
     { key: 'activity', label: 'Activity' },
     { key: 'movement', label: 'Movement' },
     { key: 'summary', label: 'Summary' },
-    ...(activeHoldings.some(h => h.holding_type === 'mutual_fund') ? [{ key: 'mf-holdings' as ReportTab, label: 'MF Holdings' }] : []),
   ];
 
   return (
@@ -264,7 +264,7 @@ export default function ReportsView(props: ReportsViewProps) {
         {TABS.map(t => (
           <button
             key={t.key}
-            onClick={() => { setReportTab(t.key); if (t.key === 'mf-holdings') loadMfHoldingsCache?.(); }}
+            onClick={() => setReportTab(t.key)}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${reportTab === t.key ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
           >
             {t.label}
@@ -773,8 +773,106 @@ export default function ReportsView(props: ReportsViewProps) {
           return next;
         });
 
+        // Shared by the MF Holdings and MF + Stock sub-tabs below - computed once here
+        // rather than duplicated in each, since both need the same fund-level cache lookup
+        // and aggregated stock exposure.
+        const fmtCurrency = (n: number) => fmtCur(n, reportDisplayCurrency);
+        const mfHoldings = activeHoldings.filter(h => h.holding_type === 'mutual_fund');
+        const stockHoldings = activeHoldings.filter(h => h.holding_type !== 'mutual_fund');
+        const cacheFor = (h: any) => {
+          const bySchemeCode = mfHoldingsCache.filter((c: any) => c.scheme_code === `MANUAL-${h.id}`);
+          if (bySchemeCode.length > 0) return bySchemeCode;
+          // "plan"/"option" excluded - generic structural words broker names and cached
+          // scheme names don't consistently agree on including.
+          const targetWords = (h.symbol || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w: string) => w.length > 1 && w !== 'plan' && w !== 'option' && w !== 'options');
+          if (targetWords.length === 0) return [];
+          const grouped = new Map<string, any[]>();
+          mfHoldingsCache.forEach((c: any) => {
+            const list = grouped.get(c.scheme_code) || [];
+            list.push(c);
+            grouped.set(c.scheme_code, list);
+          });
+          for (const [, rows] of grouped) {
+            const nameLower = (rows[0]?.scheme_name || '').toLowerCase();
+            if (targetWords.every((w: string) => nameLower.includes(w))) return rows;
+          }
+          return [];
+        };
+        const mfByValue = mfHoldings
+          .map(h => ({ holding: h, value: Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity) }))
+          .sort((a, b) => b.value - a.value);
+        const totalMfValue = mfByValue.reduce((s, r) => s + r.value, 0);
+        const stockContributions = new Map<string, { holding: any; weightPct: number; exposure: number }[]>();
+        mfHoldings.forEach(h => {
+          const value = Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity);
+          cacheFor(h).forEach((c: any) => {
+            const exposure = value * (Number(c.weight_pct) / 100);
+            const list = stockContributions.get(c.stock_name) || [];
+            list.push({ holding: h, weightPct: Number(c.weight_pct), exposure });
+            stockContributions.set(c.stock_name, list);
+          });
+        });
+        const aggregatedStocks = Array.from(stockContributions.entries())
+          .map(([stockName, contributions]) => ({
+            stockName,
+            totalExposure: contributions.reduce((s, c) => s + c.exposure, 0),
+            fundCount: contributions.length,
+            contributions: contributions.sort((a, b) => b.exposure - a.exposure),
+          }))
+          .sort((a, b) => b.totalExposure - a.totalExposure);
+        const fundsWithoutData = mfHoldings.length - new Set(Array.from(stockContributions.values()).flat().map(c => c.holding.id)).size;
+
+        // MF + Stock combined: matches a direct stock holding's symbol against MF-derived
+        // stock names by checking whether the (cleaned) symbol appears as a substring of the
+        // normalized company name - works for most Indian tickers since they're usually
+        // drawn directly from the name (RELIANCE -> "Reliance Industries Ltd", HDFCBANK ->
+        // "HDFC Bank Ltd"), but is a best-effort heuristic, not a guaranteed match - acronym
+        // style tickers (e.g. TCS for Tata Consultancy Services) won't be caught by this and
+        // will show up as direct-only. Flagged in the UI rather than silently missed.
+        const normalizeForMatch = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const combinedStockMap = new Map<string, { label: string; directValue: number; mfValue: number; mfFundCount: number }>();
+        stockHoldings.forEach(h => {
+          const value = Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity);
+          const key = normalizeForMatch(h.symbol);
+          const existing = combinedStockMap.get(key);
+          if (existing) { existing.directValue += value; } else { combinedStockMap.set(key, { label: h.symbol, directValue: value, mfValue: 0, mfFundCount: 0 }); }
+        });
+        aggregatedStocks.forEach(row => {
+          const normalizedMfName = normalizeForMatch(row.stockName);
+          let matched = false;
+          combinedStockMap.forEach((entry, key) => {
+            if (key.length >= 3 && normalizedMfName.includes(key)) {
+              entry.mfValue += row.totalExposure;
+              entry.mfFundCount += row.fundCount;
+              matched = true;
+            }
+          });
+          if (!matched) {
+            combinedStockMap.set(normalizedMfName, { label: row.stockName, directValue: 0, mfValue: row.totalExposure, mfFundCount: row.fundCount });
+          }
+        });
+        const combinedStocks = Array.from(combinedStockMap.values())
+          .map(r => ({ ...r, totalValue: r.directValue + r.mfValue }))
+          .sort((a, b) => b.totalValue - a.totalValue);
+
 
         return (
+          <>
+          <div className="flex gap-1.5">
+            {(['overview', 'mf-holdings', 'mf-stock'] as const)
+              .filter(t => t === 'overview' || activeHoldings.some(h => h.holding_type === 'mutual_fund'))
+              .map(t => (
+              <button
+                key={t}
+                onClick={() => { setInsightsSubTab(t); if (t !== 'overview') loadMfHoldingsCache?.(); }}
+                className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer ${insightsSubTab === t ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+              >
+                {t === 'overview' ? 'Overview' : t === 'mf-holdings' ? 'MF Holdings' : 'MF + Stock'}
+              </button>
+            ))}
+          </div>
+
+          {insightsSubTab === 'overview' && (
           <>
           <div className="flex gap-1.5">
             {(['all', 'stock', 'mutual_fund'] as const).map(f => (
@@ -812,6 +910,235 @@ export default function ReportsView(props: ReportsViewProps) {
               <InsightCard title="Bad Decision - price rose after selling" items={badSells} pctKey="_sinceSoldPct" subFn={(h) => `sold ${h.sold_date}`} isOpen={expandedInsightCards.has("bad-sells")} onToggle={() => toggleCard("bad-sells")} fmt={fmt} />
             </div>
           </div>
+          </>
+          )}
+          {insightsSubTab === 'mf-holdings' && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-widest">MF Holdings Insights</h3>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                What you actually hold, drawn from each fund's underlying stocks - fetched or entered manually on the Portfolio page's MF Holdings tab.
+                {fundsWithoutData > 0 && ` ${fundsWithoutData} fund${fundsWithoutData !== 1 ? 's' : ''} have no holdings data yet, so they're excluded from the combined view below.`}
+              </p>
+            </div>
+
+            <div className="apple-card p-4 space-y-2.5">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Top 5 Mutual Funds by Value</span>
+              {mfByValue.length === 0 ? (
+                <p className="text-[11px] text-slate-400 text-center py-3">No mutual fund holdings in this portfolio.</p>
+              ) : (
+                <>
+                  <div style={{ height: 200 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart
+                        data={(() => {
+                          let running = 0;
+                          return mfByValue.slice(0, 5).map(r => {
+                            running += r.value;
+                            return { name: r.holding.symbol.length > 12 ? r.holding.symbol.slice(0, 12) + '…' : r.holding.symbol, value: r.value, cumulativePct: totalMfValue > 0 ? (running / totalMfValue) * 100 : 0 };
+                          });
+                        })()}
+                        margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+                      >
+                        <XAxis dataKey="name" tick={{ fontSize: 8 }} axisLine={false} tickLine={false} interval={0} />
+                        <YAxis yAxisId="value" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => fmtCurrency(v)} />
+                        <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
+                        <Tooltip formatter={(v: number, key: string) => key === 'cumulativePct' ? [`${v.toFixed(1)}%`, 'Cumulative Share'] : [fmtCurrency(v), 'Value']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                        <Bar yAxisId="value" dataKey="value" radius={[4, 4, 0, 0]} fill="#6366f1" barSize={28} />
+                        <Line yAxisId="pct" type="monotone" dataKey="cumulativePct" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3, fill: '#f59e0b' }} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <p className="text-[9px] text-slate-400">Bars = value per fund · Line = cumulative share of total MF value</p>
+                  <button onClick={() => setMfFundsDetailOpen(v => !v)} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
+                    {mfFundsDetailOpen ? 'Hide' : 'View'} all {mfByValue.length} funds <ChevronLeft className={`w-3 h-3 transition-transform ${mfFundsDetailOpen ? 'rotate-90' : '-rotate-90'}`} />
+                  </button>
+                  {mfFundsDetailOpen && (
+                    <div className="divide-y divide-slate-100 dark:divide-slate-900">
+                      {mfByValue.map((row, i) => (
+                        <div key={row.holding.id} className="flex items-center justify-between py-2">
+                          <span className="text-xs font-bold text-slate-900 dark:text-white truncate">{i + 1}. {row.holding.symbol}</span>
+                          <span className="text-xs text-right shrink-0 ml-2">
+                            <span className="font-black text-slate-700 dark:text-slate-300">{fmtCurrency(row.value)}</span>
+                            <span className="text-slate-400 ml-1.5">{totalMfValue > 0 ? ((row.value / totalMfValue) * 100).toFixed(1) : '0'}%</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="apple-card p-4 space-y-2.5">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Top 5 Holdings Across All Funds, by Stock</span>
+              {aggregatedStocks.length === 0 ? (
+                <p className="text-[11px] text-slate-400 text-center py-3">No underlying holdings data yet - fetch it from the Portfolio page's MF Holdings tab first.</p>
+              ) : (
+                <>
+                  <div style={{ height: 200 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart
+                        data={(() => {
+                          const totalStockExposure = aggregatedStocks.reduce((s, r) => s + r.totalExposure, 0);
+                          let running = 0;
+                          return aggregatedStocks.slice(0, 5).map(r => {
+                            running += r.totalExposure;
+                            return { name: r.stockName.length > 12 ? r.stockName.slice(0, 12) + '…' : r.stockName, value: r.totalExposure, cumulativePct: totalStockExposure > 0 ? (running / totalStockExposure) * 100 : 0 };
+                          });
+                        })()}
+                        margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+                      >
+                        <XAxis dataKey="name" tick={{ fontSize: 8 }} axisLine={false} tickLine={false} interval={0} />
+                        <YAxis yAxisId="value" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => fmtCurrency(v)} />
+                        <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
+                        <Tooltip formatter={(v: number, key: string) => key === 'cumulativePct' ? [`${v.toFixed(1)}%`, 'Cumulative Share'] : [fmtCurrency(v), 'Combined Value']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                        <Bar yAxisId="value" dataKey="value" radius={[4, 4, 0, 0]} fill="#10b981" barSize={28} />
+                        <Line yAxisId="pct" type="monotone" dataKey="cumulativePct" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3, fill: '#f59e0b' }} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <p className="text-[9px] text-slate-400">Bars = combined value per stock · Line = cumulative share of total holdings value</p>
+                  <button onClick={() => setMfStocksDetailOpen(v => !v)} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
+                    {mfStocksDetailOpen ? 'Hide' : 'View'} all {aggregatedStocks.length} holdings <ChevronLeft className={`w-3 h-3 transition-transform ${mfStocksDetailOpen ? 'rotate-90' : '-rotate-90'}`} />
+                  </button>
+                  {mfStocksDetailOpen && (
+                    <>
+                      {/* Range pills for easy paging on mobile - 10-at-a-time, only shown once the
+                          list is actually longer than one page */}
+                      {aggregatedStocks.length > 10 && (
+                        <div className="flex gap-1.5 flex-wrap pb-1">
+                          {Array.from({ length: Math.ceil(aggregatedStocks.length / 10) }, (_, i) => i * 10).map(start => (
+                            <button
+                              key={start}
+                              onClick={() => setMfStockRangeStart(start)}
+                              className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${mfStockRangeStart === start ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+                            >
+                              {start + 1}-{Math.min(start + 10, aggregatedStocks.length)}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <div className="divide-y divide-slate-100 dark:divide-slate-900">
+                        {aggregatedStocks.slice(mfStockRangeStart, mfStockRangeStart + 10).map((row, i) => {
+                          const isOpen = mfReportDrillStock === row.stockName;
+                          return (
+                            <div key={row.stockName} className="py-1">
+                              <button onClick={() => setMfReportDrillStock(isOpen ? null : row.stockName)} className="w-full flex items-center justify-between py-1.5 cursor-pointer">
+                                <span className="text-xs font-bold text-slate-900 dark:text-white truncate text-left flex items-center gap-1.5">
+                                  {mfStockRangeStart + i + 1}. {row.stockName}
+                                  {row.fundCount > 1 && <span className="text-[8px] font-black px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{row.fundCount} funds</span>}
+                                </span>
+                                <span className="flex items-center gap-1.5 shrink-0 ml-2">
+                                  <span className="text-xs font-black text-slate-700 dark:text-slate-300">{fmtCurrency(row.totalExposure)}</span>
+                                  {isOpen ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
+                                </span>
+                              </button>
+                              {isOpen && (
+                                <div className="pl-3 pb-2 space-y-1">
+                                  {row.contributions.map((c, ci) => (
+                                    <div key={ci} className="flex items-center justify-between text-[11px]">
+                                      <span className="text-slate-500 dark:text-slate-400 truncate">{c.holding.symbol} <span className="text-slate-350">({c.weightPct.toFixed(2)}% of fund)</span></span>
+                                      <span className="font-bold text-slate-600 dark:text-slate-300 shrink-0 ml-2">{fmtCurrency(c.exposure)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+          )}
+
+          {insightsSubTab === 'mf-stock' && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-widest">MF + Stock Combined</h3>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                Your real total exposure to each company - direct stock holdings plus what you hold indirectly through mutual funds, combined.
+                Matched by name where possible; a best-effort match, so acronym-style tickers (e.g. TCS for Tata Consultancy Services) may show up as direct-only rather than combined.
+              </p>
+            </div>
+
+            <div className="apple-card p-4 space-y-2.5">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Top 5 Common Holdings by Combined Value</span>
+              {combinedStocks.length === 0 ? (
+                <p className="text-[11px] text-slate-400 text-center py-3">No stock or mutual fund holdings data yet.</p>
+              ) : (
+                <>
+                  <div style={{ height: 200 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart
+                        data={(() => {
+                          const totalCombined = combinedStocks.reduce((s, r) => s + r.totalValue, 0);
+                          let running = 0;
+                          return combinedStocks.slice(0, 5).map(r => {
+                            running += r.totalValue;
+                            return { name: r.label.length > 12 ? r.label.slice(0, 12) + '…' : r.label, value: r.totalValue, cumulativePct: totalCombined > 0 ? (running / totalCombined) * 100 : 0 };
+                          });
+                        })()}
+                        margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+                      >
+                        <XAxis dataKey="name" tick={{ fontSize: 8 }} axisLine={false} tickLine={false} interval={0} />
+                        <YAxis yAxisId="value" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => fmtCurrency(v)} />
+                        <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
+                        <Tooltip formatter={(v: number, key: string) => key === 'cumulativePct' ? [`${v.toFixed(1)}%`, 'Cumulative Share'] : [fmtCurrency(v), 'Combined Value']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                        <Bar yAxisId="value" dataKey="value" radius={[4, 4, 0, 0]} fill="#8b5cf6" barSize={28} />
+                        <Line yAxisId="pct" type="monotone" dataKey="cumulativePct" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3, fill: '#f59e0b' }} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <p className="text-[9px] text-slate-400">Bars = direct + MF-derived value combined · Line = cumulative share of total</p>
+                  <button onClick={() => setMfStocksDetailOpen(v => !v)} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
+                    {mfStocksDetailOpen ? 'Hide' : 'View'} all {combinedStocks.length} holdings <ChevronLeft className={`w-3 h-3 transition-transform ${mfStocksDetailOpen ? 'rotate-90' : '-rotate-90'}`} />
+                  </button>
+                  {mfStocksDetailOpen && (
+                    <>
+                      {combinedStocks.length > 10 && (
+                        <div className="flex gap-1.5 flex-wrap pb-1">
+                          {Array.from({ length: Math.ceil(combinedStocks.length / 10) }, (_, i) => i * 10).map(start => (
+                            <button
+                              key={start}
+                              onClick={() => setMfStockRangeStart(start)}
+                              className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${mfStockRangeStart === start ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+                            >
+                              {start + 1}-{Math.min(start + 10, combinedStocks.length)}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <div className="divide-y divide-slate-100 dark:divide-slate-900">
+                        {combinedStocks.slice(mfStockRangeStart, mfStockRangeStart + 10).map((row, i) => (
+                          <div key={row.label} className="py-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-slate-900 dark:text-white truncate flex items-center gap-1.5">
+                                {mfStockRangeStart + i + 1}. {row.label}
+                                {row.directValue > 0 && row.mfValue > 0 && <span className="text-[8px] font-black px-1.5 py-0.5 bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 rounded-full">both</span>}
+                              </span>
+                              <span className="text-xs font-black text-slate-700 dark:text-slate-300 shrink-0 ml-2">{fmtCurrency(row.totalValue)}</span>
+                            </div>
+                            <div className="text-[9px] text-slate-400 mt-0.5">
+                              {row.directValue > 0 && <span>Direct: {fmtCurrency(row.directValue)}</span>}
+                              {row.directValue > 0 && row.mfValue > 0 && <span> · </span>}
+                              {row.mfValue > 0 && <span>Via {row.mfFundCount} fund{row.mfFundCount !== 1 ? 's' : ''}: {fmtCurrency(row.mfValue)}</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+          )}
+
           </>
         );
       })()}
@@ -1308,209 +1635,6 @@ export default function ReportsView(props: ReportsViewProps) {
           })()}
         </div>
         </>
-        );
-      })()}
-
-      {reportTab === 'mf-holdings' && (() => {
-        const fmt = (n: number) => fmtCur(n, reportDisplayCurrency);
-        const mfHoldings = activeHoldings.filter(h => h.holding_type === 'mutual_fund');
-
-        const cacheFor = (h: any) => {
-          const bySchemeCode = mfHoldingsCache.filter((c: any) => c.scheme_code === `MANUAL-${h.id}`);
-          if (bySchemeCode.length > 0) return bySchemeCode;
-          // Same exclusion as PortfolioView's cacheFor - "plan"/"option" are generic
-          // structural words broker names and cached scheme names don't consistently agree
-          // on including.
-          const targetWords = (h.symbol || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w: string) => w.length > 1 && w !== 'plan' && w !== 'option' && w !== 'options');
-          if (targetWords.length === 0) return [];
-          const grouped = new Map<string, any[]>();
-          mfHoldingsCache.forEach((c: any) => {
-            const list = grouped.get(c.scheme_code) || [];
-            list.push(c);
-            grouped.set(c.scheme_code, list);
-          });
-          for (const [, rows] of grouped) {
-            const nameLower = (rows[0]?.scheme_name || '').toLowerCase();
-            if (targetWords.every((w: string) => nameLower.includes(w))) return rows;
-          }
-          return [];
-        };
-
-        // Top MF by value - what you actually have riding on each fund, independent of
-        // whether its underlying holdings have been fetched yet.
-        const mfByValue = mfHoldings
-          .map(h => ({ holding: h, value: Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity) }))
-          .sort((a, b) => b.value - a.value);
-        const totalMfValue = mfByValue.reduce((s, r) => s + r.value, 0);
-
-        // Top holdings across all funds by stock name - same combined-exposure math as the
-        // Portfolio page's MF Holdings tab, but kept as a report here with a full drill-down:
-        // for any stock, exactly which funds hold it, at what weight, and how much actual
-        // rupee value that represents from each - answers "two funds both have TCS at 4%,
-        // how much do I actually hold" directly rather than leaving it as a single number.
-        const stockContributions = new Map<string, { holding: any; weightPct: number; exposure: number }[]>();
-        mfHoldings.forEach(h => {
-          const value = Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity);
-          cacheFor(h).forEach((c: any) => {
-            const exposure = value * (Number(c.weight_pct) / 100);
-            const list = stockContributions.get(c.stock_name) || [];
-            list.push({ holding: h, weightPct: Number(c.weight_pct), exposure });
-            stockContributions.set(c.stock_name, list);
-          });
-        });
-        const aggregatedStocks = Array.from(stockContributions.entries())
-          .map(([stockName, contributions]) => ({
-            stockName,
-            totalExposure: contributions.reduce((s, c) => s + c.exposure, 0),
-            fundCount: contributions.length,
-            contributions: contributions.sort((a, b) => b.exposure - a.exposure),
-          }))
-          .sort((a, b) => b.totalExposure - a.totalExposure);
-
-        const fundsWithoutData = mfHoldings.length - new Set(Array.from(stockContributions.values()).flat().map(c => c.holding.id)).size;
-
-        return (
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-widest">MF Holdings Insights</h3>
-              <p className="text-[10px] text-slate-400 mt-0.5">
-                What you actually hold, drawn from each fund's underlying stocks - fetched or entered manually on the Portfolio page's MF Holdings tab.
-                {fundsWithoutData > 0 && ` ${fundsWithoutData} fund${fundsWithoutData !== 1 ? 's' : ''} have no holdings data yet, so they're excluded from the combined view below.`}
-              </p>
-            </div>
-
-            <div className="apple-card p-4 space-y-2.5">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Top 5 Mutual Funds by Value</span>
-              {mfByValue.length === 0 ? (
-                <p className="text-[11px] text-slate-400 text-center py-3">No mutual fund holdings in this portfolio.</p>
-              ) : (
-                <>
-                  <div style={{ height: 200 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart
-                        data={(() => {
-                          let running = 0;
-                          return mfByValue.slice(0, 5).map(r => {
-                            running += r.value;
-                            return { name: r.holding.symbol.length > 12 ? r.holding.symbol.slice(0, 12) + '…' : r.holding.symbol, value: r.value, cumulativePct: totalMfValue > 0 ? (running / totalMfValue) * 100 : 0 };
-                          });
-                        })()}
-                        margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
-                      >
-                        <XAxis dataKey="name" tick={{ fontSize: 8 }} axisLine={false} tickLine={false} interval={0} />
-                        <YAxis yAxisId="value" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => fmt(v)} />
-                        <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
-                        <Tooltip formatter={(v: number, key: string) => key === 'cumulativePct' ? [`${v.toFixed(1)}%`, 'Cumulative Share'] : [fmt(v), 'Value']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-                        <Bar yAxisId="value" dataKey="value" radius={[4, 4, 0, 0]} fill="#6366f1" barSize={28} />
-                        <Line yAxisId="pct" type="monotone" dataKey="cumulativePct" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3, fill: '#f59e0b' }} />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <p className="text-[9px] text-slate-400">Bars = value per fund · Line = cumulative share of total MF value</p>
-                  <button onClick={() => setMfFundsDetailOpen(v => !v)} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
-                    {mfFundsDetailOpen ? 'Hide' : 'View'} all {mfByValue.length} funds <ChevronLeft className={`w-3 h-3 transition-transform ${mfFundsDetailOpen ? 'rotate-90' : '-rotate-90'}`} />
-                  </button>
-                  {mfFundsDetailOpen && (
-                    <div className="divide-y divide-slate-100 dark:divide-slate-900">
-                      {mfByValue.map((row, i) => (
-                        <div key={row.holding.id} className="flex items-center justify-between py-2">
-                          <span className="text-xs font-bold text-slate-900 dark:text-white truncate">{i + 1}. {row.holding.symbol}</span>
-                          <span className="text-xs text-right shrink-0 ml-2">
-                            <span className="font-black text-slate-700 dark:text-slate-300">{fmt(row.value)}</span>
-                            <span className="text-slate-400 ml-1.5">{totalMfValue > 0 ? ((row.value / totalMfValue) * 100).toFixed(1) : '0'}%</span>
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            <div className="apple-card p-4 space-y-2.5">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Top 5 Holdings Across All Funds, by Stock</span>
-              {aggregatedStocks.length === 0 ? (
-                <p className="text-[11px] text-slate-400 text-center py-3">No underlying holdings data yet - fetch it from the Portfolio page's MF Holdings tab first.</p>
-              ) : (
-                <>
-                  <div style={{ height: 200 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart
-                        data={(() => {
-                          const totalStockExposure = aggregatedStocks.reduce((s, r) => s + r.totalExposure, 0);
-                          let running = 0;
-                          return aggregatedStocks.slice(0, 5).map(r => {
-                            running += r.totalExposure;
-                            return { name: r.stockName.length > 12 ? r.stockName.slice(0, 12) + '…' : r.stockName, value: r.totalExposure, cumulativePct: totalStockExposure > 0 ? (running / totalStockExposure) * 100 : 0 };
-                          });
-                        })()}
-                        margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
-                      >
-                        <XAxis dataKey="name" tick={{ fontSize: 8 }} axisLine={false} tickLine={false} interval={0} />
-                        <YAxis yAxisId="value" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => fmt(v)} />
-                        <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
-                        <Tooltip formatter={(v: number, key: string) => key === 'cumulativePct' ? [`${v.toFixed(1)}%`, 'Cumulative Share'] : [fmt(v), 'Combined Value']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-                        <Bar yAxisId="value" dataKey="value" radius={[4, 4, 0, 0]} fill="#10b981" barSize={28} />
-                        <Line yAxisId="pct" type="monotone" dataKey="cumulativePct" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3, fill: '#f59e0b' }} />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <p className="text-[9px] text-slate-400">Bars = combined value per stock · Line = cumulative share of total holdings value</p>
-                  <button onClick={() => setMfStocksDetailOpen(v => !v)} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
-                    {mfStocksDetailOpen ? 'Hide' : 'View'} all {aggregatedStocks.length} holdings <ChevronLeft className={`w-3 h-3 transition-transform ${mfStocksDetailOpen ? 'rotate-90' : '-rotate-90'}`} />
-                  </button>
-                  {mfStocksDetailOpen && (
-                    <>
-                      {/* Range pills for easy paging on mobile - 10-at-a-time, only shown once the
-                          list is actually longer than one page */}
-                      {aggregatedStocks.length > 10 && (
-                        <div className="flex gap-1.5 flex-wrap pb-1">
-                          {Array.from({ length: Math.ceil(aggregatedStocks.length / 10) }, (_, i) => i * 10).map(start => (
-                            <button
-                              key={start}
-                              onClick={() => setMfStockRangeStart(start)}
-                              className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${mfStockRangeStart === start ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
-                            >
-                              {start + 1}-{Math.min(start + 10, aggregatedStocks.length)}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      <div className="divide-y divide-slate-100 dark:divide-slate-900">
-                        {aggregatedStocks.slice(mfStockRangeStart, mfStockRangeStart + 10).map((row, i) => {
-                          const isOpen = mfReportDrillStock === row.stockName;
-                          return (
-                            <div key={row.stockName} className="py-1">
-                              <button onClick={() => setMfReportDrillStock(isOpen ? null : row.stockName)} className="w-full flex items-center justify-between py-1.5 cursor-pointer">
-                                <span className="text-xs font-bold text-slate-900 dark:text-white truncate text-left flex items-center gap-1.5">
-                                  {mfStockRangeStart + i + 1}. {row.stockName}
-                                  {row.fundCount > 1 && <span className="text-[8px] font-black px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{row.fundCount} funds</span>}
-                                </span>
-                                <span className="flex items-center gap-1.5 shrink-0 ml-2">
-                                  <span className="text-xs font-black text-slate-700 dark:text-slate-300">{fmt(row.totalExposure)}</span>
-                                  {isOpen ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
-                                </span>
-                              </button>
-                              {isOpen && (
-                                <div className="pl-3 pb-2 space-y-1">
-                                  {row.contributions.map((c, ci) => (
-                                    <div key={ci} className="flex items-center justify-between text-[11px]">
-                                      <span className="text-slate-500 dark:text-slate-400 truncate">{c.holding.symbol} <span className="text-slate-350">({c.weightPct.toFixed(2)}% of fund)</span></span>
-                                      <span className="font-bold text-slate-600 dark:text-slate-300 shrink-0 ml-2">{fmt(c.exposure)}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
         );
       })()}
     </div>
