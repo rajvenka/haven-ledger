@@ -1626,9 +1626,20 @@ export function usePaymentState() {
   // updates the current balance rather than creating a growing log.
   const setPortfolioCashBalance = async (location: 'Zerodha' | 'Groww' | 'Bank' | 'Other', amount: number, asOfDate?: string, notes?: string, portfolioId?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
-    const { error } = await supabase.from('portfolio_cash_balances').upsert({
+    const row: any = {
       workspace_id: activeWorkspaceId, location, amount, as_of_date: asOfDate ?? new Date().toISOString().slice(0, 10), notes: notes ?? null, updated_at: new Date().toISOString(), portfolio_id: portfolioId ?? null,
-    }, { onConflict: portfolioId ? 'workspace_id,location,portfolio_id' : 'workspace_id,location' });
+    };
+    // Manual select-then-update-or-insert rather than .upsert() with onConflict - Supabase-JS's
+    // onConflict string can't express the WHERE predicate a partial unique index needs
+    // (this table has two: one for portfolio_id IS NULL, one for IS NOT NULL), so PostgREST
+    // generates a plain ON CONFLICT (col) that doesn't match either index and fails outright
+    // ("no unique or exclusion constraint matching the ON CONFLICT specification").
+    let existingQuery = supabase.from('portfolio_cash_balances').select('id').eq('workspace_id', activeWorkspaceId).eq('location', location);
+    existingQuery = portfolioId ? existingQuery.eq('portfolio_id', portfolioId) : existingQuery.is('portfolio_id', null);
+    const { data: existing } = await existingQuery.maybeSingle();
+    const { error } = existing
+      ? await supabase.from('portfolio_cash_balances').update(row).eq('id', existing.id)
+      : await supabase.from('portfolio_cash_balances').insert(row);
     if (error) throw error;
     await loadPortfolioDetails();
   };
@@ -1645,9 +1656,17 @@ export function usePaymentState() {
   // contributions (which silently misattributed any unrecorded cash movement as gain/loss).
   const setBookedPlBaseline = async (amount: number, date: string, portfolioId?: string) => {
     if (!user || !activeWorkspaceId) return;
-    const { error } = await supabase.from('portfolio_booked_pl_baseline').upsert({
+    const row: any = {
       workspace_id: activeWorkspaceId, portfolio_id: portfolioId ?? null, baseline_amount: amount, baseline_date: date, updated_by: user.id, updated_at: new Date().toISOString(),
-    }, { onConflict: portfolioId ? 'workspace_id,portfolio_id' : 'workspace_id' });
+    };
+    // Same fix as setPortfolioCashBalance above - manual select-then-update-or-insert instead
+    // of .upsert() with onConflict, which can't match this table's partial unique indexes.
+    let existingQuery = supabase.from('portfolio_booked_pl_baseline').select('id').eq('workspace_id', activeWorkspaceId);
+    existingQuery = portfolioId ? existingQuery.eq('portfolio_id', portfolioId) : existingQuery.is('portfolio_id', null);
+    const { data: existing } = await existingQuery.maybeSingle();
+    const { error } = existing
+      ? await supabase.from('portfolio_booked_pl_baseline').update(row).eq('id', existing.id)
+      : await supabase.from('portfolio_booked_pl_baseline').insert(row);
     if (error) throw error;
     await loadPortfolioDetails();
   };
