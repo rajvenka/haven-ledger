@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Trash2, Gift, Receipt, FileBarChart, ChevronLeft, TrendingUp, TrendingDown, ChevronUp, ChevronDown } from 'lucide-react';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ComposedChart, Line } from 'recharts';
 
 interface WorkspaceMemberLite {
   uid: string;
@@ -1380,21 +1380,33 @@ export default function ReportsView(props: ReportsViewProps) {
             </div>
 
             <div className="apple-card p-4 space-y-2.5">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Top 10 Mutual Funds by Value</span>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Top 5 Mutual Funds by Value</span>
               {mfByValue.length === 0 ? (
                 <p className="text-[11px] text-slate-400 text-center py-3">No mutual fund holdings in this portfolio.</p>
               ) : (
                 <>
-                  <div style={{ height: Math.max(60, Math.min(10, mfByValue.length) * 28) }}>
+                  <div style={{ height: 200 }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={mfByValue.slice(0, 10).map(r => ({ name: r.holding.symbol.length > 18 ? r.holding.symbol.slice(0, 18) + '…' : r.holding.symbol, value: r.value }))} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
-                        <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => fmt(v)} />
-                        <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} width={110} />
-                        <Tooltip formatter={(v: number) => [fmt(v), 'Value']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-                        <Bar dataKey="value" radius={[0, 4, 4, 0]} fill="#6366f1" />
-                      </BarChart>
+                      <ComposedChart
+                        data={(() => {
+                          let running = 0;
+                          return mfByValue.slice(0, 5).map(r => {
+                            running += r.value;
+                            return { name: r.holding.symbol.length > 12 ? r.holding.symbol.slice(0, 12) + '…' : r.holding.symbol, value: r.value, cumulativePct: totalMfValue > 0 ? (running / totalMfValue) * 100 : 0 };
+                          });
+                        })()}
+                        margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+                      >
+                        <XAxis dataKey="name" tick={{ fontSize: 8 }} axisLine={false} tickLine={false} interval={0} />
+                        <YAxis yAxisId="value" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => fmt(v)} />
+                        <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
+                        <Tooltip formatter={(v: number, key: string) => key === 'cumulativePct' ? [`${v.toFixed(1)}%`, 'Cumulative Share'] : [fmt(v), 'Value']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                        <Bar yAxisId="value" dataKey="value" radius={[4, 4, 0, 0]} fill="#6366f1" barSize={28} />
+                        <Line yAxisId="pct" type="monotone" dataKey="cumulativePct" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3, fill: '#f59e0b' }} />
+                      </ComposedChart>
                     </ResponsiveContainer>
                   </div>
+                  <p className="text-[9px] text-slate-400">Bars = value per fund · Line = cumulative share of total MF value</p>
                   <button onClick={() => setMfFundsDetailOpen(v => !v)} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
                     {mfFundsDetailOpen ? 'Hide' : 'View'} all {mfByValue.length} funds <ChevronLeft className={`w-3 h-3 transition-transform ${mfFundsDetailOpen ? 'rotate-90' : '-rotate-90'}`} />
                   </button>
@@ -1416,21 +1428,34 @@ export default function ReportsView(props: ReportsViewProps) {
             </div>
 
             <div className="apple-card p-4 space-y-2.5">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Top Holdings Across All Funds, by Stock</span>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Top 5 Holdings Across All Funds, by Stock</span>
               {aggregatedStocks.length === 0 ? (
                 <p className="text-[11px] text-slate-400 text-center py-3">No underlying holdings data yet - fetch it from the Portfolio page's MF Holdings tab first.</p>
               ) : (
                 <>
-                  <div style={{ height: Math.max(60, Math.min(10, aggregatedStocks.length) * 28) }}>
+                  <div style={{ height: 200 }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={aggregatedStocks.slice(0, 10).map(r => ({ name: r.stockName.length > 18 ? r.stockName.slice(0, 18) + '…' : r.stockName, value: r.totalExposure }))} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
-                        <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => fmt(v)} />
-                        <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} width={110} />
-                        <Tooltip formatter={(v: number) => [fmt(v), 'Combined Value']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-                        <Bar dataKey="value" radius={[0, 4, 4, 0]} fill="#10b981" />
-                      </BarChart>
+                      <ComposedChart
+                        data={(() => {
+                          const totalStockExposure = aggregatedStocks.reduce((s, r) => s + r.totalExposure, 0);
+                          let running = 0;
+                          return aggregatedStocks.slice(0, 5).map(r => {
+                            running += r.totalExposure;
+                            return { name: r.stockName.length > 12 ? r.stockName.slice(0, 12) + '…' : r.stockName, value: r.totalExposure, cumulativePct: totalStockExposure > 0 ? (running / totalStockExposure) * 100 : 0 };
+                          });
+                        })()}
+                        margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+                      >
+                        <XAxis dataKey="name" tick={{ fontSize: 8 }} axisLine={false} tickLine={false} interval={0} />
+                        <YAxis yAxisId="value" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => fmt(v)} />
+                        <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
+                        <Tooltip formatter={(v: number, key: string) => key === 'cumulativePct' ? [`${v.toFixed(1)}%`, 'Cumulative Share'] : [fmt(v), 'Combined Value']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                        <Bar yAxisId="value" dataKey="value" radius={[4, 4, 0, 0]} fill="#10b981" barSize={28} />
+                        <Line yAxisId="pct" type="monotone" dataKey="cumulativePct" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3, fill: '#f59e0b' }} />
+                      </ComposedChart>
                     </ResponsiveContainer>
                   </div>
+                  <p className="text-[9px] text-slate-400">Bars = combined value per stock · Line = cumulative share of total holdings value</p>
                   <button onClick={() => setMfStocksDetailOpen(v => !v)} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
                     {mfStocksDetailOpen ? 'Hide' : 'View'} all {aggregatedStocks.length} holdings <ChevronLeft className={`w-3 h-3 transition-transform ${mfStocksDetailOpen ? 'rotate-90' : '-rotate-90'}`} />
                   </button>
