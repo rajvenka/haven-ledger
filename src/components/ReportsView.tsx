@@ -138,6 +138,9 @@ export default function ReportsView(props: ReportsViewProps) {
 
   const [reportTab, setReportTab] = useState<ReportTab>('overview');
   const [mfReportDrillStock, setMfReportDrillStock] = useState<string | null>(null);
+  const [mfFundsDetailOpen, setMfFundsDetailOpen] = useState(false);
+  const [mfStocksDetailOpen, setMfStocksDetailOpen] = useState(false);
+  const [mfStockRangeStart, setMfStockRangeStart] = useState(0);
   const [drillPath, setDrillPath] = useState<string[]>([]);
   const [insightsAssetFilter, setInsightsAssetFilter] = useState<'all' | 'stock' | 'mutual_fund'>('all');
   const [classificationMetric, setClassificationMetric] = useState<'inception' | 'd30' | 'ref'>('inception');
@@ -1377,21 +1380,38 @@ export default function ReportsView(props: ReportsViewProps) {
             </div>
 
             <div className="apple-card p-4 space-y-2.5">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Top Mutual Funds by Value</span>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Top 10 Mutual Funds by Value</span>
               {mfByValue.length === 0 ? (
                 <p className="text-[11px] text-slate-400 text-center py-3">No mutual fund holdings in this portfolio.</p>
               ) : (
-                <div className="divide-y divide-slate-100 dark:divide-slate-900">
-                  {mfByValue.map((row, i) => (
-                    <div key={row.holding.id} className="flex items-center justify-between py-2">
-                      <span className="text-xs font-bold text-slate-900 dark:text-white truncate">{i + 1}. {row.holding.symbol}</span>
-                      <span className="text-xs text-right shrink-0 ml-2">
-                        <span className="font-black text-slate-700 dark:text-slate-300">{fmt(row.value)}</span>
-                        <span className="text-slate-400 ml-1.5">{totalMfValue > 0 ? ((row.value / totalMfValue) * 100).toFixed(1) : '0'}%</span>
-                      </span>
+                <>
+                  <div style={{ height: Math.max(60, Math.min(10, mfByValue.length) * 28) }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={mfByValue.slice(0, 10).map(r => ({ name: r.holding.symbol.length > 18 ? r.holding.symbol.slice(0, 18) + '…' : r.holding.symbol, value: r.value }))} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
+                        <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => fmt(v)} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} width={110} />
+                        <Tooltip formatter={(v: number) => [fmt(v), 'Value']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                        <Bar dataKey="value" radius={[0, 4, 4, 0]} fill="#6366f1" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <button onClick={() => setMfFundsDetailOpen(v => !v)} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
+                    {mfFundsDetailOpen ? 'Hide' : 'View'} all {mfByValue.length} funds <ChevronLeft className={`w-3 h-3 transition-transform ${mfFundsDetailOpen ? 'rotate-90' : '-rotate-90'}`} />
+                  </button>
+                  {mfFundsDetailOpen && (
+                    <div className="divide-y divide-slate-100 dark:divide-slate-900">
+                      {mfByValue.map((row, i) => (
+                        <div key={row.holding.id} className="flex items-center justify-between py-2">
+                          <span className="text-xs font-bold text-slate-900 dark:text-white truncate">{i + 1}. {row.holding.symbol}</span>
+                          <span className="text-xs text-right shrink-0 ml-2">
+                            <span className="font-black text-slate-700 dark:text-slate-300">{fmt(row.value)}</span>
+                            <span className="text-slate-400 ml-1.5">{totalMfValue > 0 ? ((row.value / totalMfValue) * 100).toFixed(1) : '0'}%</span>
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </div>
 
@@ -1400,35 +1420,69 @@ export default function ReportsView(props: ReportsViewProps) {
               {aggregatedStocks.length === 0 ? (
                 <p className="text-[11px] text-slate-400 text-center py-3">No underlying holdings data yet - fetch it from the Portfolio page's MF Holdings tab first.</p>
               ) : (
-                <div className="divide-y divide-slate-100 dark:divide-slate-900">
-                  {aggregatedStocks.map((row) => {
-                    const isOpen = mfReportDrillStock === row.stockName;
-                    return (
-                      <div key={row.stockName} className="py-1">
-                        <button onClick={() => setMfReportDrillStock(isOpen ? null : row.stockName)} className="w-full flex items-center justify-between py-1.5 cursor-pointer">
-                          <span className="text-xs font-bold text-slate-900 dark:text-white truncate text-left flex items-center gap-1.5">
-                            {row.stockName}
-                            {row.fundCount > 1 && <span className="text-[8px] font-black px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{row.fundCount} funds</span>}
-                          </span>
-                          <span className="flex items-center gap-1.5 shrink-0 ml-2">
-                            <span className="text-xs font-black text-slate-700 dark:text-slate-300">{fmt(row.totalExposure)}</span>
-                            {isOpen ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
-                          </span>
-                        </button>
-                        {isOpen && (
-                          <div className="pl-3 pb-2 space-y-1">
-                            {row.contributions.map((c, i) => (
-                              <div key={i} className="flex items-center justify-between text-[11px]">
-                                <span className="text-slate-500 dark:text-slate-400 truncate">{c.holding.symbol} <span className="text-slate-350">({c.weightPct.toFixed(2)}% of fund)</span></span>
-                                <span className="font-bold text-slate-600 dark:text-slate-300 shrink-0 ml-2">{fmt(c.exposure)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                <>
+                  <div style={{ height: Math.max(60, Math.min(10, aggregatedStocks.length) * 28) }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={aggregatedStocks.slice(0, 10).map(r => ({ name: r.stockName.length > 18 ? r.stockName.slice(0, 18) + '…' : r.stockName, value: r.totalExposure }))} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
+                        <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => fmt(v)} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} width={110} />
+                        <Tooltip formatter={(v: number) => [fmt(v), 'Combined Value']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                        <Bar dataKey="value" radius={[0, 4, 4, 0]} fill="#10b981" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <button onClick={() => setMfStocksDetailOpen(v => !v)} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
+                    {mfStocksDetailOpen ? 'Hide' : 'View'} all {aggregatedStocks.length} holdings <ChevronLeft className={`w-3 h-3 transition-transform ${mfStocksDetailOpen ? 'rotate-90' : '-rotate-90'}`} />
+                  </button>
+                  {mfStocksDetailOpen && (
+                    <>
+                      {/* Range pills for easy paging on mobile - 10-at-a-time, only shown once the
+                          list is actually longer than one page */}
+                      {aggregatedStocks.length > 10 && (
+                        <div className="flex gap-1.5 flex-wrap pb-1">
+                          {Array.from({ length: Math.ceil(aggregatedStocks.length / 10) }, (_, i) => i * 10).map(start => (
+                            <button
+                              key={start}
+                              onClick={() => setMfStockRangeStart(start)}
+                              className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${mfStockRangeStart === start ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+                            >
+                              {start + 1}-{Math.min(start + 10, aggregatedStocks.length)}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <div className="divide-y divide-slate-100 dark:divide-slate-900">
+                        {aggregatedStocks.slice(mfStockRangeStart, mfStockRangeStart + 10).map((row, i) => {
+                          const isOpen = mfReportDrillStock === row.stockName;
+                          return (
+                            <div key={row.stockName} className="py-1">
+                              <button onClick={() => setMfReportDrillStock(isOpen ? null : row.stockName)} className="w-full flex items-center justify-between py-1.5 cursor-pointer">
+                                <span className="text-xs font-bold text-slate-900 dark:text-white truncate text-left flex items-center gap-1.5">
+                                  {mfStockRangeStart + i + 1}. {row.stockName}
+                                  {row.fundCount > 1 && <span className="text-[8px] font-black px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{row.fundCount} funds</span>}
+                                </span>
+                                <span className="flex items-center gap-1.5 shrink-0 ml-2">
+                                  <span className="text-xs font-black text-slate-700 dark:text-slate-300">{fmt(row.totalExposure)}</span>
+                                  {isOpen ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
+                                </span>
+                              </button>
+                              {isOpen && (
+                                <div className="pl-3 pb-2 space-y-1">
+                                  {row.contributions.map((c, ci) => (
+                                    <div key={ci} className="flex items-center justify-between text-[11px]">
+                                      <span className="text-slate-500 dark:text-slate-400 truncate">{c.holding.symbol} <span className="text-slate-350">({c.weightPct.toFixed(2)}% of fund)</span></span>
+                                      <span className="font-bold text-slate-600 dark:text-slate-300 shrink-0 ml-2">{fmt(c.exposure)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
-                    );
-                  })}
-                </div>
+                    </>
+                  )}
+                </>
               )}
             </div>
           </div>
