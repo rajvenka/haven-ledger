@@ -34,6 +34,8 @@ interface InvestmentPlanViewProps {
   deletePortfolioCashBalance: (id: string) => Promise<void>;
   portfolioBookedPlBaselines?: any[];
   setBookedPlBaseline?: (amount: number, date: string, portfolioId?: string) => Promise<void>;
+  portfolioProjectedBankBalances?: any[];
+  setProjectedBankBalance?: (amount: number, portfolioId?: string) => Promise<void>;
   portfolioRecurringPlans: any[];
   addPortfolioRecurringPlan: (memberUserId: string, amount: number, frequency: 'monthly' | 'quarterly' | 'yearly', startDate: string, dayOfMonth?: number, notes?: string, portfolioId?: string) => Promise<void>;
   updatePortfolioRecurringPlan: (id: string, updates: { active?: boolean; expectedAmount?: number }) => Promise<void>;
@@ -56,6 +58,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
     portfolioWithdrawals: allPortfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
     portfolioCashBalances: allPortfolioCashBalances, setPortfolioCashBalance, deletePortfolioCashBalance,
     portfolioBookedPlBaselines = [], setBookedPlBaseline,
+    portfolioProjectedBankBalances = [], setProjectedBankBalance,
     portfolioRecurringPlans: allPortfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,
   } = props;
 
@@ -206,6 +209,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const [editingBookedPlBaseline, setEditingBookedPlBaseline] = useState(false);
   const [bookedPlBaselineAmountInput, setBookedPlBaselineAmountInput] = useState('');
   const [bookedPlBaselineDateInput, setBookedPlBaselineDateInput] = useState(todayStr());
+  const [editingProjectedBankBalance, setEditingProjectedBankBalance] = useState(false);
+  const [projectedBankBalanceAmountInput, setProjectedBankBalanceAmountInput] = useState('');
 
   const handleAddWithdrawal = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1003,6 +1008,69 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                         setEditingBookedPlBaseline(true);
                         setBookedPlBaselineAmountInput(String(existingBaseline?.baseline_amount ?? ''));
                         setBookedPlBaselineDateInput(existingBaseline?.baseline_date ?? todayStr());
+                      }}
+                      className="text-slate-300 hover:text-indigo-500 cursor-pointer"
+                    ><Edit2 className="w-3.5 h-3.5" /></button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {(() => {
+          const projPortfolioId = portfolioMode === 'multiple' ? selectedPlanPortfolioIds?.[0] : undefined;
+          const canEditProj = portfolioMode !== 'multiple' || (selectedPlanPortfolioIds?.length === 1);
+          const existingProjected = portfolioProjectedBankBalances.find((p: any) => (p.portfolio_id ?? null) === (projPortfolioId ?? null));
+          const cashRowsForScope = portfolioCashBalances.filter((c: any) => (c.portfolio_id ?? null) === (projPortfolioId ?? null));
+          const cashLatest = cashRowsForScope.reduce((latest: string | null, c: any) => (!latest || c.updated_at > latest) ? c.updated_at : latest, null as string | null);
+          const projectedIsCurrentlyUsed = existingProjected && (!cashLatest || existingProjected.updated_at > cashLatest);
+          return (
+            <div className="apple-card p-4 space-y-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Banknote className="w-3.5 h-3.5" /> Projected Bank Balance</span>
+              <p className="text-[9px] text-slate-400">
+                A fallback figure for when Cash Balance above hasn't been kept current. Whichever of the two - Cash Balance's total, or this - was updated more recently is what's actually shown in the portfolio header.
+                {portfolioMode === 'multiple' && selectedPlanPortfolios.size !== 1 && ' Select a single portfolio above to set its figure.'}
+              </p>
+              {editingProjectedBankBalance ? (
+                <div className="space-y-2">
+                  <input
+                    type="number"
+                    value={projectedBankBalanceAmountInput}
+                    onChange={(e) => setProjectedBankBalanceAmountInput(e.target.value)}
+                    placeholder="Amount"
+                    autoFocus
+                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                  />
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => runAction(async () => {
+                        await setProjectedBankBalance?.(parseFloat(projectedBankBalanceAmountInput) || 0, projPortfolioId);
+                        setEditingProjectedBankBalance(false);
+                      })}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
+                    >
+                      Save
+                    </button>
+                    <button onClick={() => setEditingProjectedBankBalance(false)} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-black text-slate-900 dark:text-white">{fmt(Number(existingProjected?.projected_amount ?? 0))}</span>
+                    <span className="text-[9px] text-slate-400 block">
+                      {existingProjected ? `updated ${new Date(existingProjected.updated_at).toLocaleDateString()}` : 'not set'}
+                      {projectedIsCurrentlyUsed && <span className="text-indigo-500 font-bold"> · currently in use (more recent than Cash Balance)</span>}
+                    </span>
+                  </div>
+                  {!isReadOnly && canEditProj && (
+                    <button
+                      onClick={() => {
+                        setEditingProjectedBankBalance(true);
+                        setProjectedBankBalanceAmountInput(String(existingProjected?.projected_amount ?? ''));
                       }}
                       className="text-slate-300 hover:text-indigo-500 cursor-pointer"
                     ><Edit2 className="w-3.5 h-3.5" /></button>

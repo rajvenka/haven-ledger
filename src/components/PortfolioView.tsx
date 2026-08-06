@@ -22,6 +22,7 @@ interface PortfolioViewProps {
   portfolioSplits: any[];
   portfolioCashBalances: any[];
   portfolioBookedPlBaselines?: any[];
+  portfolioProjectedBankBalances?: any[];
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
   deletePortfolioSplit: (id: string) => Promise<void>;
   portfolioHoldings: any[];
@@ -147,7 +148,7 @@ const memberName = (m: WorkspaceMemberLite) => m.displayName || m.email.split('@
 export default function PortfolioView(props: PortfolioViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly, isDataLoading, columnPrefs, onUpdateColumnPrefs,
-    portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances, portfolioBookedPlBaselines = [],
+    portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances, portfolioBookedPlBaselines = [], portfolioProjectedBankBalances = [],
     portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     mfHoldingsCache = [], loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
@@ -1250,7 +1251,21 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const totalWithdrawn = headerWithdrawals.reduce((s: number, w: any) => s + Number(w.amount), 0);
   const netContributed = totalContributed - totalWithdrawn;
   const totalInvestedActive = filteredActiveHoldings.reduce((s, h) => s + convHeader(h, Number(h.buy_price) * Number(h.quantity)), 0);
-  const balanceCash = headerCashBalances.reduce((s: number, c: any) => s + Number(c.amount), 0);
+  // Per portfolio in scope, uses whichever of (sum of actual Cash Balance entries) or
+  // (manually-set Projected Bank Balance) was updated more recently - a fallback for when
+  // Cash Balance entries haven't been kept current, rather than always trusting a
+  // possibly-stale number over a more recently confirmed one.
+  const headerPortfolioIdsForCash = selectedHeaderPortfolioIds ?? (portfolioMode === 'multiple' ? portfolios.map((p: any) => p.id) : [null]);
+  const balanceCash = headerPortfolioIdsForCash.reduce((total: number, pid: string | null) => {
+    const cashRows = portfolioCashBalances.filter((c: any) => (c.portfolio_id ?? null) === (pid ?? null));
+    const cashSum = cashRows.reduce((s: number, c: any) => s + Number(c.amount), 0);
+    const cashLatest = cashRows.reduce((latest: string | null, c: any) => (!latest || c.updated_at > latest) ? c.updated_at : latest, null as string | null);
+    const projectedRow = portfolioProjectedBankBalances.find((p: any) => (p.portfolio_id ?? null) === (pid ?? null));
+    if (projectedRow && (!cashLatest || projectedRow.updated_at > cashLatest)) {
+      return total + Number(projectedRow.projected_amount);
+    }
+    return total + cashSum;
+  }, 0);
   const totalStockInvestment = totalInvestedActive; // current cost basis of active stock + MF holdings
   // Booked P/L computed directly from actual realized sales, not indirectly from cash
   // balance/contributions (which silently misattributed any unrecorded cash movement -

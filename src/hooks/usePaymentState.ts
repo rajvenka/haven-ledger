@@ -1074,6 +1074,7 @@ export function usePaymentState() {
   const [portfolioWithdrawals, setPortfolioWithdrawals] = useState<any[]>([]);
   const [portfolioCashBalances, setPortfolioCashBalances] = useState<any[]>([]);
   const [portfolioBookedPlBaselines, setPortfolioBookedPlBaselines] = useState<any[]>([]);
+  const [portfolioProjectedBankBalances, setPortfolioProjectedBankBalances] = useState<any[]>([]);
   const [portfolioDividends, setPortfolioDividends] = useState<any[]>([]);
   const [portfolioFees, setPortfolioFees] = useState<any[]>([]);
   const [portfolioRecurringPlans, setPortfolioRecurringPlans] = useState<any[]>([]);
@@ -1096,7 +1097,7 @@ export function usePaymentState() {
     // flicker during completely normal use, not just on initial load or workspace switch.
     const isFirstLoadForWorkspace = !loadedPortfolioWorkspaces.current.has(activeWorkspaceId);
     if (isFirstLoadForWorkspace) setPortfolioDataLoading(true);
-    const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: cashBalances }, { data: portfoliosData }, { data: currencyRatesData }, { data: bookedPlBaselinesData }] = await Promise.all([
+    const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: cashBalances }, { data: portfoliosData }, { data: currencyRatesData }, { data: bookedPlBaselinesData }, { data: projectedBankBalancesData }] = await Promise.all([
       supabase.from('portfolio_holdings').select('*').eq('workspace_id', activeWorkspaceId).order('buy_date', { ascending: false }),
       supabase.from('portfolio_price_history').select('*').eq('workspace_id', activeWorkspaceId).order('recorded_date', { ascending: false }),
       supabase.from('portfolio_splits').select('*').eq('workspace_id', activeWorkspaceId).order('effective_from'),
@@ -1109,6 +1110,7 @@ export function usePaymentState() {
       supabase.from('portfolios').select('*').eq('workspace_id', activeWorkspaceId).order('created_at'),
       supabase.from('workspace_currency_rates').select('*').eq('workspace_id', activeWorkspaceId),
       supabase.from('portfolio_booked_pl_baseline').select('*').eq('workspace_id', activeWorkspaceId),
+      supabase.from('portfolio_projected_bank_balance').select('*').eq('workspace_id', activeWorkspaceId),
     ]);
     setPortfolioHoldings(holdings ?? []);
     setPortfolioPriceHistory(priceHistory ?? []);
@@ -1122,6 +1124,7 @@ export function usePaymentState() {
     setPortfolios(portfoliosData ?? []);
     setWorkspaceCurrencyRates(currencyRatesData ?? []);
     setPortfolioBookedPlBaselines(bookedPlBaselinesData ?? []);
+    setPortfolioProjectedBankBalances(projectedBankBalancesData ?? []);
     loadedPortfolioWorkspaces.current.add(activeWorkspaceId);
     setPortfolioDataLoading(false);
   }, [activeWorkspaceId]);
@@ -1671,6 +1674,24 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
+  // A manually-set fallback figure for when actual Cash Balance entries haven't been kept
+  // current - the header displays whichever of the two (actual cash balance total, or this
+  // projected figure) was updated more recently, rather than always trusting one or the other.
+  const setProjectedBankBalance = async (amount: number, portfolioId?: string) => {
+    if (!user || !activeWorkspaceId) return;
+    const row: any = {
+      workspace_id: activeWorkspaceId, portfolio_id: portfolioId ?? null, projected_amount: amount, updated_by: user.id, updated_at: new Date().toISOString(),
+    };
+    let existingQuery = supabase.from('portfolio_projected_bank_balance').select('id').eq('workspace_id', activeWorkspaceId);
+    existingQuery = portfolioId ? existingQuery.eq('portfolio_id', portfolioId) : existingQuery.is('portfolio_id', null);
+    const { data: existing } = await existingQuery.maybeSingle();
+    const { error } = existing
+      ? await supabase.from('portfolio_projected_bank_balance').update(row).eq('id', existing.id)
+      : await supabase.from('portfolio_projected_bank_balance').insert(row);
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
   const addPortfolioDividend = async (symbol: string, amount: number, dividendDate: string, holdingId?: string, notes?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_dividends').insert({
@@ -1898,6 +1919,7 @@ export function usePaymentState() {
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
     portfolioCashBalances, setPortfolioCashBalance, deletePortfolioCashBalance,
     portfolioBookedPlBaselines, setBookedPlBaseline,
+    portfolioProjectedBankBalances, setProjectedBankBalance,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
     portfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,

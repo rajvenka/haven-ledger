@@ -203,6 +203,8 @@ export default function App() {
     deletePortfolioCashBalance,
     portfolioBookedPlBaselines,
     setBookedPlBaseline,
+    portfolioProjectedBankBalances,
+    setProjectedBankBalance,
     portfolioDividends,
     addPortfolioDividend,
     deletePortfolioDividend,
@@ -1691,6 +1693,7 @@ export default function App() {
                 deleteAllPortfolioData={deleteAllPortfolioData}
                 portfolioCashBalances={portfolioCashBalances}
                 portfolioBookedPlBaselines={portfolioBookedPlBaselines}
+                portfolioProjectedBankBalances={portfolioProjectedBankBalances}
                 portfolioSnapshots={portfolioSnapshots}
                 takePortfolioSnapshot={takePortfolioSnapshot}
                 deletePortfolioSnapshotBatch={deletePortfolioSnapshotBatch}
@@ -1735,6 +1738,8 @@ export default function App() {
                 deletePortfolioCashBalance={deletePortfolioCashBalance}
                 portfolioBookedPlBaselines={portfolioBookedPlBaselines}
                 setBookedPlBaseline={setBookedPlBaseline}
+                portfolioProjectedBankBalances={portfolioProjectedBankBalances}
+                setProjectedBankBalance={setProjectedBankBalance}
                 portfolioRecurringPlans={portfolioRecurringPlans}
                 addPortfolioRecurringPlan={addPortfolioRecurringPlan}
                 updatePortfolioRecurringPlan={updatePortfolioRecurringPlan}
