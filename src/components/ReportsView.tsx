@@ -830,12 +830,17 @@ export default function ReportsView(props: ReportsViewProps) {
         // style tickers (e.g. TCS for Tata Consultancy Services) won't be caught by this and
         // will show up as direct-only. Flagged in the UI rather than silently missed.
         const normalizeForMatch = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        const combinedStockMap = new Map<string, { label: string; directValue: number; mfValue: number; mfFundCount: number }>();
+        const combinedStockMap = new Map<string, {
+          label: string; directValue: number; mfValue: number; mfFundCount: number;
+          directContributions: { holding: any; value: number }[];
+          mfContributions: { holding: any; weightPct: number; exposure: number; mfStockName: string }[];
+        }>();
         stockHoldings.forEach(h => {
           const value = Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity);
           const key = normalizeForMatch(h.symbol);
           const existing = combinedStockMap.get(key);
-          if (existing) { existing.directValue += value; } else { combinedStockMap.set(key, { label: h.symbol, directValue: value, mfValue: 0, mfFundCount: 0 }); }
+          if (existing) { existing.directValue += value; existing.directContributions.push({ holding: h, value }); }
+          else { combinedStockMap.set(key, { label: h.symbol, directValue: value, mfValue: 0, mfFundCount: 0, directContributions: [{ holding: h, value }], mfContributions: [] }); }
         });
         aggregatedStocks.forEach(row => {
           const normalizedMfName = normalizeForMatch(row.stockName);
@@ -844,11 +849,15 @@ export default function ReportsView(props: ReportsViewProps) {
             if (key.length >= 3 && normalizedMfName.includes(key)) {
               entry.mfValue += row.totalExposure;
               entry.mfFundCount += row.fundCount;
+              row.contributions.forEach(c => entry.mfContributions.push({ holding: c.holding, weightPct: c.weightPct, exposure: c.exposure, mfStockName: row.stockName }));
               matched = true;
             }
           });
           if (!matched) {
-            combinedStockMap.set(normalizedMfName, { label: row.stockName, directValue: 0, mfValue: row.totalExposure, mfFundCount: row.fundCount });
+            combinedStockMap.set(normalizedMfName, {
+              label: row.stockName, directValue: 0, mfValue: row.totalExposure, mfFundCount: row.fundCount,
+              directContributions: [], mfContributions: row.contributions.map(c => ({ holding: c.holding, weightPct: c.weightPct, exposure: c.exposure, mfStockName: row.stockName })),
+            });
           }
         });
         // Only the actual overlap - a stock genuinely held both directly AND through at
@@ -1118,21 +1127,53 @@ export default function ReportsView(props: ReportsViewProps) {
                         </div>
                       )}
                       <div className="divide-y divide-slate-100 dark:divide-slate-900">
-                        {combinedStocks.slice(mfStockRangeStart, mfStockRangeStart + 10).map((row, i) => (
-                          <div key={row.label} className="py-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                                {mfStockRangeStart + i + 1}. {row.label}
-                              </span>
-                              <span className="text-xs font-black text-slate-700 dark:text-slate-300 shrink-0 ml-2">{fmtCurrency(row.totalValue)}</span>
-                            </div>
-                            <div className="text-[9px] text-slate-400 mt-0.5">
-                              {row.directValue > 0 && <span>Direct: {fmtCurrency(row.directValue)}</span>}
-                              {row.directValue > 0 && row.mfValue > 0 && <span> · </span>}
-                              {row.mfValue > 0 && <span>Via {row.mfFundCount} fund{row.mfFundCount !== 1 ? 's' : ''}: {fmtCurrency(row.mfValue)}</span>}
-                            </div>
+                        {combinedStocks.slice(mfStockRangeStart, mfStockRangeStart + 10).map((row, i) => {
+                          const isOpen = mfReportDrillStock === row.label;
+                          return (
+                          <div key={row.label} className="py-1">
+                            <button onClick={() => setMfReportDrillStock(isOpen ? null : row.label)} className="w-full text-left cursor-pointer py-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-900 dark:text-white truncate flex items-center gap-1">
+                                  {mfStockRangeStart + i + 1}. {row.label}
+                                  {isOpen ? <ChevronUp className="w-3 h-3 text-slate-400 shrink-0" /> : <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />}
+                                </span>
+                                <span className="text-xs font-black text-slate-700 dark:text-slate-300 shrink-0 ml-2">{fmtCurrency(row.totalValue)}</span>
+                              </div>
+                              <div className="text-[9px] text-slate-400 mt-0.5">
+                                {row.directValue > 0 && <span>Direct: {fmtCurrency(row.directValue)}</span>}
+                                {row.directValue > 0 && row.mfValue > 0 && <span> · </span>}
+                                {row.mfValue > 0 && <span>Via {row.mfFundCount} fund{row.mfFundCount !== 1 ? 's' : ''}: {fmtCurrency(row.mfValue)}</span>}
+                              </div>
+                            </button>
+                            {isOpen && (
+                              <div className="pl-3 pb-2 space-y-2">
+                                {row.directContributions.length > 0 && (
+                                  <div className="space-y-0.5">
+                                    <span className="text-[8px] font-black text-slate-400 uppercase">Direct holding{row.directContributions.length !== 1 ? 's' : ''}</span>
+                                    {row.directContributions.map((c, ci) => (
+                                      <div key={ci} className="flex items-center justify-between text-[11px]">
+                                        <span className="text-slate-500 dark:text-slate-400 truncate">{c.holding.symbol} · {c.holding.quantity} @ {fmtCurrency(Number(c.holding.live_price ?? c.holding.current_price ?? c.holding.buy_price))}</span>
+                                        <span className="font-bold text-slate-600 dark:text-slate-300 shrink-0 ml-2">{fmtCurrency(c.value)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {row.mfContributions.length > 0 && (
+                                  <div className="space-y-0.5">
+                                    <span className="text-[8px] font-black text-slate-400 uppercase">Via mutual funds</span>
+                                    {row.mfContributions.map((c, ci) => (
+                                      <div key={ci} className="flex items-center justify-between text-[11px]">
+                                        <span className="text-slate-500 dark:text-slate-400 truncate">{c.holding.symbol} <span className="text-slate-350">({c.weightPct.toFixed(2)}% of fund{c.mfStockName !== row.label ? ` · as "${c.mfStockName}"` : ''})</span></span>
+                                        <span className="font-bold text-slate-600 dark:text-slate-300 shrink-0 ml-2">{fmtCurrency(c.exposure)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </>
                   )}

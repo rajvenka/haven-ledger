@@ -1481,6 +1481,28 @@ export default function App() {
                 )}
               </button>
 
+              {/* Header Action: Agent/Chat - same toggles as the floating capsule, kept here
+                  too since that capsule can end up covered by or covering page content when
+                  scrolled down on longer pages, making it unreliable as the only entry point. */}
+              {user && hasFeature('agent') && (
+                <button
+                  onClick={toggleAgent}
+                  className={`p-2 rounded-full transition-colors cursor-pointer ${isAgentOpen ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30' : 'text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-900'}`}
+                  title="Haven AI Agent"
+                >
+                  <Sparkles className="w-4.5 h-4.5" />
+                </button>
+              )}
+              {user && hasFeature('chat') && (
+                <button
+                  onClick={toggleFamilyChat}
+                  className={`p-2 rounded-full transition-colors cursor-pointer ${isFamilyChatOpen ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30' : 'text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-900'}`}
+                  title="Family Chat"
+                >
+                  <MessageSquare className="w-4.5 h-4.5" />
+                </button>
+              )}
+
               {/* User Profile avatar + Loading indicator */}
               <button 
                 onClick={() => setIsProfileScopeModalOpen(true)}
