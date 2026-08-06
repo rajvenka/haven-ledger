@@ -1073,6 +1073,7 @@ export function usePaymentState() {
   const [portfolioContributions, setPortfolioContributions] = useState<any[]>([]);
   const [portfolioWithdrawals, setPortfolioWithdrawals] = useState<any[]>([]);
   const [portfolioCashBalances, setPortfolioCashBalances] = useState<any[]>([]);
+  const [portfolioBookedPlBaselines, setPortfolioBookedPlBaselines] = useState<any[]>([]);
   const [portfolioDividends, setPortfolioDividends] = useState<any[]>([]);
   const [portfolioFees, setPortfolioFees] = useState<any[]>([]);
   const [portfolioRecurringPlans, setPortfolioRecurringPlans] = useState<any[]>([]);
@@ -1095,7 +1096,7 @@ export function usePaymentState() {
     // flicker during completely normal use, not just on initial load or workspace switch.
     const isFirstLoadForWorkspace = !loadedPortfolioWorkspaces.current.has(activeWorkspaceId);
     if (isFirstLoadForWorkspace) setPortfolioDataLoading(true);
-    const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: cashBalances }, { data: portfoliosData }, { data: currencyRatesData }] = await Promise.all([
+    const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: cashBalances }, { data: portfoliosData }, { data: currencyRatesData }, { data: bookedPlBaselinesData }] = await Promise.all([
       supabase.from('portfolio_holdings').select('*').eq('workspace_id', activeWorkspaceId).order('buy_date', { ascending: false }),
       supabase.from('portfolio_price_history').select('*').eq('workspace_id', activeWorkspaceId).order('recorded_date', { ascending: false }),
       supabase.from('portfolio_splits').select('*').eq('workspace_id', activeWorkspaceId).order('effective_from'),
@@ -1107,6 +1108,7 @@ export function usePaymentState() {
       supabase.from('portfolio_cash_balances').select('*').eq('workspace_id', activeWorkspaceId).order('location'),
       supabase.from('portfolios').select('*').eq('workspace_id', activeWorkspaceId).order('created_at'),
       supabase.from('workspace_currency_rates').select('*').eq('workspace_id', activeWorkspaceId),
+      supabase.from('portfolio_booked_pl_baseline').select('*').eq('workspace_id', activeWorkspaceId),
     ]);
     setPortfolioHoldings(holdings ?? []);
     setPortfolioPriceHistory(priceHistory ?? []);
@@ -1119,6 +1121,7 @@ export function usePaymentState() {
     setPortfolioCashBalances(cashBalances ?? []);
     setPortfolios(portfoliosData ?? []);
     setWorkspaceCurrencyRates(currencyRatesData ?? []);
+    setPortfolioBookedPlBaselines(bookedPlBaselinesData ?? []);
     loadedPortfolioWorkspaces.current.add(activeWorkspaceId);
     setPortfolioDataLoading(false);
   }, [activeWorkspaceId]);
@@ -1636,6 +1639,19 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
+  // Lets a person set a known-correct Booked P/L number as of a specific date - going
+  // forward, Booked P/L is computed as this baseline plus the sum of realized P/L from
+  // every sale after that date, rather than derived indirectly from cash balance and
+  // contributions (which silently misattributed any unrecorded cash movement as gain/loss).
+  const setBookedPlBaseline = async (amount: number, date: string, portfolioId?: string) => {
+    if (!user || !activeWorkspaceId) return;
+    const { error } = await supabase.from('portfolio_booked_pl_baseline').upsert({
+      workspace_id: activeWorkspaceId, portfolio_id: portfolioId ?? null, baseline_amount: amount, baseline_date: date, updated_by: user.id, updated_at: new Date().toISOString(),
+    }, { onConflict: portfolioId ? 'workspace_id,portfolio_id' : 'workspace_id' });
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
   const addPortfolioDividend = async (symbol: string, amount: number, dividendDate: string, holdingId?: string, notes?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_dividends').insert({
@@ -1862,6 +1878,7 @@ export function usePaymentState() {
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
     portfolioCashBalances, setPortfolioCashBalance, deletePortfolioCashBalance,
+    portfolioBookedPlBaselines, setBookedPlBaseline,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
     portfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,

@@ -158,6 +158,8 @@ export default function ReportsView(props: ReportsViewProps) {
   };
   const [expandedInsightCards, setExpandedInsightCards] = useState<Set<string>>(new Set());
   const [snapshotMessage, setSnapshotMessage] = useState<string | null>(null);
+  const [movementDrillLabel, setMovementDrillLabel] = useState<string | null>(null);
+  const [movementDrillExpanded, setMovementDrillExpanded] = useState(false);
   const [expandedActivityBuckets, setExpandedActivityBuckets] = useState<Set<string>>(new Set());
   const toggleActivityBucket = (key: string) => setExpandedActivityBuckets(prev => {
     const next = new Set(prev);
@@ -1451,9 +1453,13 @@ export default function ReportsView(props: ReportsViewProps) {
                       const newerVal = Number(newer?.current_value ?? 0);
                       const diff = newerVal - olderVal;
                       const isTotal = label === 'Total Asset Value';
+                      const isDrillOpen = movementDrillLabel === label;
                       return (
-                        <tr key={label} className={isTotal ? 'font-black' : ''}>
-                          <td className="p-2 text-slate-700 dark:text-slate-300">{label}</td>
+                        <tr key={label} className={`${isTotal ? 'font-black' : ''} cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900`} onClick={() => { setMovementDrillLabel(isDrillOpen ? null : label); setMovementDrillExpanded(false); }}>
+                          <td className="p-2 text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                            {label}
+                            {isDrillOpen ? <ChevronUp className="w-3 h-3 text-slate-400" /> : <ChevronDown className="w-3 h-3 text-slate-400" />}
+                          </td>
                           <td className="p-2 text-right text-slate-500">{older ? fmt(olderVal) : '—'}</td>
                           <td className="p-2 text-right text-slate-900 dark:text-white">{newer ? fmt(newerVal) : '—'}</td>
                           <td className={`p-2 text-right font-bold ${diff >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{diff >= 0 ? '+' : ''}{fmt(diff)}</td>
@@ -1462,6 +1468,61 @@ export default function ReportsView(props: ReportsViewProps) {
                     })}
                   </tbody>
                 </table>
+                {movementDrillLabel && (() => {
+                  const isTotal = movementDrillLabel === 'Total Asset Value';
+                  const relevantHoldings = activeHoldings.filter(h => isTotal || (h.source || 'Untagged') === movementDrillLabel);
+                  const movers = relevantHoldings.map(h => {
+                    const qty = Number(h.quantity);
+                    const olderPrice = getPriceAtOrBefore(h.id, olderDate);
+                    const newerPrice = getPriceAtOrBefore(h.id, newerDate) ?? Number(h.live_price ?? h.current_price ?? h.buy_price);
+                    if (olderPrice == null) return null; // no price history that far back for this stock - can't attribute its movement
+                    return { symbol: h.symbol, diff: (newerPrice - olderPrice) * qty };
+                  }).filter((m): m is { symbol: string; diff: number } => m !== null)
+                    .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+                  const missingHistoryCount = relevantHoldings.length - movers.length;
+
+                  return (
+                    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-900 space-y-2">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Which stocks moved "{movementDrillLabel === 'Total Asset Value' ? 'Total' : movementDrillLabel}"</span>
+                      {movers.length === 0 ? (
+                        <p className="text-[11px] text-slate-400">No price history far back enough ({olderDate}) to attribute this movement to individual stocks - needs a price refresh recorded around that date.</p>
+                      ) : (
+                        <>
+                          <div style={{ height: 180 }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={movers.slice(0, 5).map(m => ({ name: m.symbol.length > 12 ? m.symbol.slice(0, 12) + '…' : m.symbol, value: m.diff }))} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                                <XAxis dataKey="name" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} interval={0} />
+                                <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => fmt(v)} />
+                                <Tooltip formatter={(v: number) => [`${v >= 0 ? '+' : ''}${fmt(v)}`, 'Contribution']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                                  {movers.slice(0, 5).map((m, i) => <Cell key={i} fill={m.diff >= 0 ? '#10b981' : '#f43f5e'} />)}
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                          {movers.length > 5 && (
+                            <button onClick={() => setMovementDrillExpanded(v => !v)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
+                              {movementDrillExpanded ? 'Show less' : `Show all ${movers.length}`}
+                            </button>
+                          )}
+                          {movementDrillExpanded && (
+                            <div className="divide-y divide-slate-100 dark:divide-slate-900">
+                              {movers.map((m, i) => (
+                                <div key={i} className="flex items-center justify-between py-1.5 text-[11px]">
+                                  <span className="text-slate-600 dark:text-slate-300">{i + 1}. {m.symbol}</span>
+                                  <span className={`font-bold ${m.diff >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{m.diff >= 0 ? '+' : ''}{fmt(m.diff)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {missingHistoryCount > 0 && (
+                            <p className="text-[9px] text-slate-400">{missingHistoryCount} holding{missingHistoryCount !== 1 ? 's' : ''} excluded - no recorded price as far back as {olderDate}.</p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
                 {!isReadOnly && (
                   <button onClick={() => runAction(() => deletePortfolioSnapshotBatch(newerDate))} className="mt-2 text-[9px] font-bold text-rose-400 hover:text-rose-500 cursor-pointer">Delete {newerDate} snapshot</button>
                 )}

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Trash2, Users, Wallet, Edit2, CheckCircle2, X, ClipboardList, Banknote, AlertTriangle } from 'lucide-react';
+import { Trash2, Users, Wallet, Edit2, CheckCircle2, X, ClipboardList, Banknote, AlertTriangle, TrendingUp } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface WorkspaceMemberLite {
@@ -32,6 +32,8 @@ interface InvestmentPlanViewProps {
   portfolioCashBalances: any[];
   setPortfolioCashBalance: (location: 'Zerodha' | 'Groww' | 'Bank' | 'Other', amount: number, asOfDate?: string, notes?: string, portfolioId?: string) => Promise<void>;
   deletePortfolioCashBalance: (id: string) => Promise<void>;
+  portfolioBookedPlBaselines?: any[];
+  setBookedPlBaseline?: (amount: number, date: string, portfolioId?: string) => Promise<void>;
   portfolioRecurringPlans: any[];
   addPortfolioRecurringPlan: (memberUserId: string, amount: number, frequency: 'monthly' | 'quarterly' | 'yearly', startDate: string, dayOfMonth?: number, notes?: string, portfolioId?: string) => Promise<void>;
   updatePortfolioRecurringPlan: (id: string, updates: { active?: boolean; expectedAmount?: number }) => Promise<void>;
@@ -53,6 +55,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
     portfolioContributions: allPortfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals: allPortfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
     portfolioCashBalances: allPortfolioCashBalances, setPortfolioCashBalance, deletePortfolioCashBalance,
+    portfolioBookedPlBaselines = [], setBookedPlBaseline,
     portfolioRecurringPlans: allPortfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,
   } = props;
 
@@ -200,6 +203,9 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const CASH_LOCATIONS: ('Zerodha' | 'Groww' | 'Bank' | 'Other')[] = ['Zerodha', 'Groww', 'Bank', 'Other'];
   const [editingCashLocation, setEditingCashLocation] = useState<string | null>(null);
   const [cashAmountInput, setCashAmountInput] = useState('');
+  const [editingBookedPlBaseline, setEditingBookedPlBaseline] = useState(false);
+  const [bookedPlBaselineAmountInput, setBookedPlBaselineAmountInput] = useState('');
+  const [bookedPlBaselineDateInput, setBookedPlBaselineDateInput] = useState(todayStr());
 
   const handleAddWithdrawal = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -940,6 +946,72 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
             <span className="font-black text-slate-900 dark:text-white">{fmt(portfolioCashBalances.reduce((s: number, c: any) => s + Number(c.amount), 0))}</span>
           </div>
         </div>
+
+        {(() => {
+          const baselinePortfolioId = portfolioMode === 'multiple' ? selectedPlanPortfolioIds?.[0] : undefined;
+          const canEditBaseline = portfolioMode !== 'multiple' || (selectedPlanPortfolioIds?.length === 1);
+          const existingBaseline = portfolioBookedPlBaselines.find((b: any) => (b.portfolio_id ?? null) === (baselinePortfolioId ?? null));
+          return (
+            <div className="apple-card p-4 space-y-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5" /> Booked Profit/Loss</span>
+              <p className="text-[9px] text-slate-400">
+                Set today's actual correct Booked P/L once - from that date forward, it's computed automatically from real sales only (not affected by contributions sitting as cash, or sale proceeds not yet reinvested).
+                {portfolioMode === 'multiple' && selectedPlanPortfolios.size !== 1 && ' Select a single portfolio above to set its baseline.'}
+              </p>
+              {editingBookedPlBaseline ? (
+                <div className="space-y-2">
+                  <div className="flex gap-1.5">
+                    <input
+                      type="number"
+                      value={bookedPlBaselineAmountInput}
+                      onChange={(e) => setBookedPlBaselineAmountInput(e.target.value)}
+                      placeholder="Amount"
+                      autoFocus
+                      className="flex-1 px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                    />
+                    <input
+                      type="date"
+                      value={bookedPlBaselineDateInput}
+                      onChange={(e) => setBookedPlBaselineDateInput(e.target.value)}
+                      className="px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                    />
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => runAction(async () => {
+                        await setBookedPlBaseline?.(parseFloat(bookedPlBaselineAmountInput) || 0, bookedPlBaselineDateInput, baselinePortfolioId);
+                        setEditingBookedPlBaseline(false);
+                      })}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
+                    >
+                      Save
+                    </button>
+                    <button onClick={() => setEditingBookedPlBaseline(false)} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-black text-slate-900 dark:text-white">{fmt(Number(existingBaseline?.baseline_amount ?? 0))}</span>
+                    <span className="text-[9px] text-slate-400 block">{existingBaseline ? `as of ${existingBaseline.baseline_date}` : 'not set - starting from 0'}</span>
+                  </div>
+                  {!isReadOnly && canEditBaseline && (
+                    <button
+                      onClick={() => {
+                        setEditingBookedPlBaseline(true);
+                        setBookedPlBaselineAmountInput(String(existingBaseline?.baseline_amount ?? ''));
+                        setBookedPlBaselineDateInput(existingBaseline?.baseline_date ?? todayStr());
+                      }}
+                      className="text-slate-300 hover:text-indigo-500 cursor-pointer"
+                    ><Edit2 className="w-3.5 h-3.5" /></button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
         </>
       )}
 

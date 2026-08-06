@@ -21,6 +21,7 @@ interface PortfolioViewProps {
   onUpdateColumnPrefs?: (prefs: { key: string; visible: boolean }[] | null) => Promise<void>;
   portfolioSplits: any[];
   portfolioCashBalances: any[];
+  portfolioBookedPlBaselines?: any[];
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
   deletePortfolioSplit: (id: string) => Promise<void>;
   portfolioHoldings: any[];
@@ -146,7 +147,7 @@ const memberName = (m: WorkspaceMemberLite) => m.displayName || m.email.split('@
 export default function PortfolioView(props: PortfolioViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly, isDataLoading, columnPrefs, onUpdateColumnPrefs,
-    portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances,
+    portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances, portfolioBookedPlBaselines = [],
     portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     mfHoldingsCache = [], loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
@@ -1251,7 +1252,23 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const totalInvestedActive = filteredActiveHoldings.reduce((s, h) => s + convHeader(h, Number(h.buy_price) * Number(h.quantity)), 0);
   const balanceCash = headerCashBalances.reduce((s: number, c: any) => s + Number(c.amount), 0);
   const totalStockInvestment = totalInvestedActive; // current cost basis of active stock + MF holdings
-  const bookedProfitLoss = (balanceCash + totalStockInvestment) - netContributed;
+  // Booked P/L computed directly from actual realized sales, not indirectly from cash
+  // balance/contributions (which silently misattributed any unrecorded cash movement -
+  // contributions not yet invested, sale proceeds not yet reinvested - as booked gain/loss).
+  // Each portfolio in scope contributes its own manually-set baseline (0 if never set) plus
+  // the sum of (sold_price - buy_price) x quantity for everything sold after that baseline's
+  // date - history before the baseline stays frozen at whatever's confirmed correct, nothing
+  // retroactively recalculated.
+  const headerPortfolioIdsForBaseline = selectedHeaderPortfolioIds ?? (portfolioMode === 'multiple' ? portfolios.map((p: any) => p.id) : [null]);
+  const bookedProfitLoss = headerPortfolioIdsForBaseline.reduce((total: number, pid: string | null) => {
+    const baseline = portfolioBookedPlBaselines.find((b: any) => (b.portfolio_id ?? null) === (pid ?? null));
+    const baselineAmount = baseline ? Number(baseline.baseline_amount) : 0;
+    const baselineDate = baseline ? baseline.baseline_date : '1900-01-01';
+    const realizedSinceBaseline = portfolioHoldings
+      .filter((h: any) => h.status === 'sold' && (h.portfolio_id ?? null) === (pid ?? null) && h.sold_date > baselineDate)
+      .reduce((s: number, h: any) => s + convHeader(h, (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity)), 0);
+    return total + baselineAmount + realizedSinceBaseline;
+  }, 0);
   const currentValueActive = filteredActiveHoldings.reduce((s, h) => s + convHeader(h, Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity)), 0);
   const unrealizedGain = currentValueActive - totalInvestedActive;
   const realizedGain = soldHoldings.reduce((s, h) => s + (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity), 0);
