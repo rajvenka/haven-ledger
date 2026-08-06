@@ -1435,7 +1435,6 @@ export default function App() {
                   <span>Haven Vault</span>
                   <span className="w-1.5 h-1.5 bg-indigo-600 dark:bg-indigo-500 rounded-full animate-ping" />
                 </h1>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5 text-left">Sleek Family Payment Ledger</p>
               </div>
             </div>
 
