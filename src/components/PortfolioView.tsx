@@ -754,6 +754,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
     missing: any[];
   } | null>(null);
   const [importMissingSelected, setImportMissingSelected] = useState<Set<string>>(new Set());
+  const [importMissingSellPrice, setImportMissingSellPrice] = useState<Record<string, string>>({});
+  const [importReducedOverrides, setImportReducedOverrides] = useState<Record<string, { sellPrice: string; newAvgPrice: string }>>({});
   const [importSourceTag, setImportSourceTag] = useState('');
   const [importBuyDate, setImportBuyDate] = useState(todayStr());
   const [importSaving, setImportSaving] = useState(false);
@@ -880,6 +882,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
     });
     setImportPreview({ fresh, qtyChanged, unchanged, missing });
     setImportMissingSelected(new Set());
+    setImportMissingSellPrice(Object.fromEntries(missing.map(h => [h.id, String(Number(h.live_price ?? h.current_price ?? h.buy_price))])));
+    setImportReducedOverrides(Object.fromEntries(qtyChanged.filter(qc => qc.direction === 'reduced').map(qc => [
+      qc.existing.id,
+      { sellPrice: String(qc.parsed.currentPrice ?? qc.existing.live_price ?? qc.existing.current_price ?? qc.existing.buy_price), newAvgPrice: String(qc.parsed.buyPrice) },
+    ])));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importRawParsed, importPortfolioId, portfolioMode]);
 
@@ -898,19 +905,26 @@ export default function PortfolioView(props: PortfolioViewProps) {
         );
       }
       for (const { parsed, existing, direction } of importPreview.qtyChanged) {
+        const override = importReducedOverrides[existing.id];
+        const newAvgPrice = direction === 'reduced' && override ? parseFloat(override.newAvgPrice) : parsed.buyPrice;
+        const sellPriceForReduced = direction === 'reduced' && override ? parseFloat(override.sellPrice) : parsed.currentPrice;
         await reconcilePortfolioHoldingQuantity(
           existing.id, parsed.quantity, direction === 'increased' ? 'qty_increased' : 'qty_reduced',
-          parsed.buyPrice !== Number(existing.buy_price) ? parsed.buyPrice : undefined,
-          parsed.currentPrice
+          newAvgPrice !== Number(existing.buy_price) ? newAvgPrice : undefined,
+          sellPriceForReduced
         );
       }
       for (const h of importPreview.missing) {
         if (!importMissingSelected.has(h.id)) continue;
-        await markPortfolioHoldingSoldFromImport?.(h.id, Number(h.live_price ?? h.current_price ?? h.buy_price));
+        const overridePrice = importMissingSellPrice[h.id];
+        const sellPrice = overridePrice !== undefined && overridePrice !== '' ? parseFloat(overridePrice) : Number(h.live_price ?? h.current_price ?? h.buy_price);
+        await markPortfolioHoldingSoldFromImport?.(h.id, sellPrice);
       }
       setImportPreview(null);
       setImportRawParsed(null);
       setImportMissingSelected(new Set());
+      setImportMissingSellPrice({});
+      setImportReducedOverrides({});
       setImportSourceTag('');
       setImportBuyDate(todayStr());
       setIsImporting(false);
@@ -1930,40 +1944,76 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   {importPreview.qtyChanged.length > 0 && (
                     <div className="space-y-1">
                       <span className="text-[9px] font-bold text-slate-400 uppercase">Quantity Changed</span>
-                      <div className="max-h-32 overflow-y-auto space-y-1">
+                      <div className="max-h-56 overflow-y-auto space-y-1.5">
                         {importPreview.qtyChanged.map((qc, i) => (
-                          <div key={i} className="flex items-center justify-between text-[10px] px-2 py-1 bg-amber-50 dark:bg-amber-950/20 rounded">
-                            <span className="text-slate-600 dark:text-slate-300">{qc.parsed.symbol}</span>
-                            <span className={`font-bold ${qc.direction === 'increased' ? 'text-emerald-600' : 'text-rose-500'}`}>
-                              {qc.existing.quantity} → {qc.parsed.quantity} ({qc.direction === 'increased' ? '+' : ''}{qc.parsed.quantity - Number(qc.existing.quantity)})
-                            </span>
+                          <div key={i} className="px-2 py-1.5 bg-amber-50 dark:bg-amber-950/20 rounded space-y-1">
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="text-slate-600 dark:text-slate-300">{qc.parsed.symbol}</span>
+                              <span className={`font-bold ${qc.direction === 'increased' ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                {qc.existing.quantity} → {qc.parsed.quantity} ({qc.direction === 'increased' ? '+' : ''}{qc.parsed.quantity - Number(qc.existing.quantity)})
+                              </span>
+                            </div>
+                            {qc.direction === 'reduced' && (
+                              <div className="flex items-center gap-2">
+                                <label className="text-[9px] text-slate-500 dark:text-slate-400 shrink-0">Sell price</label>
+                                <input
+                                  type="number"
+                                  value={importReducedOverrides[qc.existing.id]?.sellPrice ?? ''}
+                                  onChange={(e) => setImportReducedOverrides(prev => ({ ...prev, [qc.existing.id]: { ...prev[qc.existing.id], sellPrice: e.target.value, newAvgPrice: prev[qc.existing.id]?.newAvgPrice ?? String(qc.parsed.buyPrice) } }))}
+                                  className="w-20 px-1.5 py-0.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
+                                />
+                                <label className="text-[9px] text-slate-500 dark:text-slate-400 shrink-0">New avg price</label>
+                                <input
+                                  type="number"
+                                  value={importReducedOverrides[qc.existing.id]?.newAvgPrice ?? ''}
+                                  onChange={(e) => setImportReducedOverrides(prev => ({ ...prev, [qc.existing.id]: { sellPrice: prev[qc.existing.id]?.sellPrice ?? String(qc.parsed.currentPrice), newAvgPrice: e.target.value } }))}
+                                  className="w-20 px-1.5 py-0.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
+                                />
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
-                      <p className="text-[9px] text-slate-400">A reduced quantity is recorded as an actual sale for the difference (today's date, current price as the best available estimate) - not just a silent quantity edit.</p>
+                      <p className="text-[9px] text-slate-400">A reduced quantity is recorded as an actual sale for the difference - sell price and new average cost default from the file, both editable above.</p>
                     </div>
                   )}
                   {importPreview.missing.length > 0 && (
                     <div className="space-y-1 bg-rose-50 dark:bg-rose-950/20 rounded-lg p-2">
                       <span className="text-[9px] font-bold text-rose-600 dark:text-rose-400 uppercase">Not found in this file - likely sold outside the app</span>
                       <p className="text-[9px] text-slate-500 dark:text-slate-400">Check any you know were actually sold - they'll be marked sold using today's date and their last known price as a proxy. Leave unchecked to keep as-is (e.g. if this file only covers part of your holdings).</p>
-                      <div className="max-h-40 overflow-y-auto space-y-1">
-                        {importPreview.missing.map((h) => (
-                          <label key={h.id} className="flex items-center gap-2 text-[10px] px-2 py-1 bg-white dark:bg-slate-950 rounded cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={importMissingSelected.has(h.id)}
-                              onChange={(e) => setImportMissingSelected(prev => {
-                                const next = new Set(prev);
-                                if (e.target.checked) next.add(h.id); else next.delete(h.id);
-                                return next;
-                              })}
-                              className="cursor-pointer"
-                            />
-                            <span className="text-slate-600 dark:text-slate-300 flex-1">{h.symbol}</span>
-                            <span className="text-slate-400">{h.quantity} held</span>
-                          </label>
-                        ))}
+                      <div className="max-h-52 overflow-y-auto space-y-1">
+                        {importPreview.missing.map((h) => {
+                          const checked = importMissingSelected.has(h.id);
+                          return (
+                          <div key={h.id} className="bg-white dark:bg-slate-950 rounded px-2 py-1 space-y-1">
+                            <label className="flex items-center gap-2 text-[10px] cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => setImportMissingSelected(prev => {
+                                  const next = new Set(prev);
+                                  if (e.target.checked) next.add(h.id); else next.delete(h.id);
+                                  return next;
+                                })}
+                                className="cursor-pointer"
+                              />
+                              <span className="text-slate-600 dark:text-slate-300 flex-1">{h.symbol}</span>
+                              <span className="text-slate-400">{h.quantity} held</span>
+                            </label>
+                            {checked && (
+                              <div className="flex items-center gap-2 pl-5">
+                                <label className="text-[9px] text-slate-500 dark:text-slate-400 shrink-0">Sell price</label>
+                                <input
+                                  type="number"
+                                  value={importMissingSellPrice[h.id] ?? ''}
+                                  onChange={(e) => setImportMissingSellPrice(prev => ({ ...prev, [h.id]: e.target.value }))}
+                                  className="w-24 px-1.5 py-0.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
+                                />
+                              </div>
+                            )}
+                          </div>
+                          );
+                        })}
                       </div>
                       {importPreview.missing.length > 1 && (
                         <button
