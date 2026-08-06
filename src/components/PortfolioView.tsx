@@ -1986,7 +1986,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               </span>
                             </div>
                             {qc.direction === 'reduced' && (
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[9px] text-slate-400 shrink-0">Avg buy price: <span className="font-bold text-slate-600 dark:text-slate-300">{Number(qc.existing.buy_price).toFixed(2)}</span></span>
                                 <label className="text-[9px] text-slate-500 dark:text-slate-400 shrink-0">Sell price</label>
                                 <input
                                   type="number"
