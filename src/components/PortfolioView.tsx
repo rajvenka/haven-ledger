@@ -2,7 +2,7 @@ import { parseBrokerFile, parseBrokerFileWithDate, BrokerTemplate, ParsedHolding
 import * as XLSX from 'xlsx';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-  TrendingUp, TrendingDown, Plus, Trash2, RefreshCw, Users, Wallet,
+  TrendingUp, TrendingDown, Plus, Trash2, RefreshCw, Users, Wallet, Banknote,
   CheckCircle2, X, Briefcase, Gift, Receipt, Upload, Edit2, ChevronDown, ArrowUpDown, Settings, ChevronUp, Download, Search, PieChart
 } from 'lucide-react';
 
@@ -23,6 +23,10 @@ interface PortfolioViewProps {
   portfolioCashBalances: any[];
   portfolioBookedPlBaselines?: any[];
   portfolioProjectedBankBalances?: any[];
+  setPortfolioCashBalance?: (location: 'Zerodha' | 'Groww' | 'Bank' | 'Other', amount: number, asOfDate?: string, notes?: string, portfolioId?: string) => Promise<void>;
+  deletePortfolioCashBalance?: (id: string) => Promise<void>;
+  setBookedPlBaseline?: (amount: number, date: string, portfolioId?: string) => Promise<void>;
+  setProjectedBankBalance?: (amount: number, portfolioId?: string) => Promise<void>;
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
   deletePortfolioSplit: (id: string) => Promise<void>;
   portfolioHoldings: any[];
@@ -149,6 +153,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly, isDataLoading, columnPrefs, onUpdateColumnPrefs,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances, portfolioBookedPlBaselines = [], portfolioProjectedBankBalances = [],
+    setPortfolioCashBalance, deletePortfolioCashBalance, setBookedPlBaseline, setProjectedBankBalance,
     portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     mfHoldingsCache = [], loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
@@ -361,13 +366,26 @@ export default function PortfolioView(props: PortfolioViewProps) {
   };
 
   const [wipeConfirmText, setWipeConfirmText] = useState('');
-  const [holdingsTab, setHoldingsTab] = useState<'active' | 'sold' | 'search' | 'mf-holdings'>('active');
+  const [holdingsTab, setHoldingsTab] = useState<'active' | 'sold' | 'search' | 'mf-holdings' | 'settings'>('active');
   const [mfHoldingsSelectedId, setMfHoldingsSelectedId] = useState<string>('all');
   const [mfHoldingsFetchingId, setMfHoldingsFetchingId] = useState<string | null>(null);
   const [mfHoldingsError, setMfHoldingsError] = useState<string | null>(null);
   const [mfFetchingAll, setMfFetchingAll] = useState(false);
   const [mfFetchProgress, setMfFetchProgress] = useState<{ current: number; total: number; currentName: string } | null>(null);
   const [expandedFundId, setExpandedFundId] = useState<string | null>(null);
+
+  // ---- Settings tab (moved here from Investment Plan for easier navigation) ----
+  const CASH_LOCATIONS: ('Zerodha' | 'Groww' | 'Bank' | 'Other')[] = ['Zerodha', 'Groww', 'Bank', 'Other'];
+  const [editingCashLocation, setEditingCashLocation] = useState<string | null>(null);
+  const [cashAmountInput, setCashAmountInput] = useState('');
+  const [cashBalancePortfolioId, setCashBalancePortfolioId] = useState<string>('');
+  const [editingBookedPlBaseline, setEditingBookedPlBaseline] = useState(false);
+  const [bookedPlBaselineAmountInput, setBookedPlBaselineAmountInput] = useState('');
+  const [bookedPlBaselineDateInput, setBookedPlBaselineDateInput] = useState(new Date().toISOString().slice(0, 10));
+  const [bookedPlPortfolioId, setBookedPlPortfolioId] = useState<string>('');
+  const [editingProjectedBankBalance, setEditingProjectedBankBalance] = useState(false);
+  const [projectedBankBalanceAmountInput, setProjectedBankBalanceAmountInput] = useState('');
+  const [projectedBalancePortfolioId, setProjectedBalancePortfolioId] = useState<string>('');
   const [manualEntryHoldingId, setManualEntryHoldingId] = useState<string | null>(null);
   const [manualRows, setManualRows] = useState<{ stockName: string; weightPct: string }[]>([{ stockName: '', weightPct: '' }]);
   const [manualSaving, setManualSaving] = useState(false);
@@ -1349,6 +1367,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         <button onClick={() => setHoldingsTab('active')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'active' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Active ({activeHoldings.length})</button>
         <button onClick={() => setHoldingsTab('sold')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'sold' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Sold ({soldHoldings.length})</button>
         <button onClick={() => setHoldingsTab('search')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${holdingsTab === 'search' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}><Search className="w-3 h-3" /> Quote Search</button>
+        <button onClick={() => setHoldingsTab('settings')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${holdingsTab === 'settings' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}><Settings className="w-3 h-3" /> Settings</button>
         {activeHoldings.some(h => h.holding_type === 'mutual_fund') && (
           <button
             onClick={() => { setHoldingsTab('mf-holdings'); loadMfHoldingsCache?.(); }}
@@ -1690,6 +1709,221 @@ export default function PortfolioView(props: PortfolioViewProps) {
           </div>
         );
       })()}
+
+      {holdingsTab === 'settings' && (
+        <div className="space-y-3">
+        <div className="apple-card p-4 space-y-3">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Banknote className="w-3.5 h-3.5" /> Cash Balance</span>
+          <p className="text-[9px] text-slate-400">
+            Uninvested cash sitting in each location - contributed but not yet deployed into holdings.
+          </p>
+          {portfolioMode === 'multiple' && (
+            <select
+              value={cashBalancePortfolioId || portfolios[0]?.id || ''}
+              onChange={(e) => { setCashBalancePortfolioId(e.target.value); setEditingCashLocation(null); }}
+              className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+            >
+              {portfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            {CASH_LOCATIONS.map(loc => {
+              // Editing cash requires picking which portfolio it's for in multi-portfolio
+              // mode (the dropdown above) - editing without one selected would be ambiguous
+              // about which portfolio's cash to actually update.
+              const activeCashPortfolioId = portfolioMode === 'multiple' ? (cashBalancePortfolioId || portfolios[0]?.id) : undefined;
+              const canEditCash = portfolioMode !== 'multiple' || !!activeCashPortfolioId;
+              const existing = portfolioCashBalances.find((c: any) => c.location === loc && (portfolioMode !== 'multiple' || c.portfolio_id === activeCashPortfolioId));
+              const isEditing = editingCashLocation === loc;
+              return (
+                <div key={loc} className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase block mb-1">{loc}</span>
+                  {isEditing ? (
+                    <div className="flex gap-1.5">
+                      <input
+                        type="number"
+                        value={cashAmountInput}
+                        onChange={(e) => setCashAmountInput(e.target.value)}
+                        autoFocus
+                        className="w-full px-2 py-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                      />
+                      <button
+                        onClick={() => runAction(async () => {
+                          await setPortfolioCashBalance(loc, parseFloat(cashAmountInput) || 0, undefined, undefined, activeCashPortfolioId);
+                          setEditingCashLocation(null);
+                        })}
+                        className="p-1.5 bg-indigo-600 text-white rounded-md cursor-pointer shrink-0"
+                      ><CheckCircle2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => setEditingCashLocation(null)} className="p-1.5 text-slate-400 cursor-pointer shrink-0"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-black text-slate-900 dark:text-white">{fmt(Number(existing?.amount ?? 0))}</span>
+                      {!isReadOnly && canEditCash && (
+                        <button
+                          onClick={() => { setEditingCashLocation(loc); setCashAmountInput(String(existing?.amount ?? '')); }}
+                          className="text-slate-300 hover:text-indigo-500 cursor-pointer"
+                        ><Edit2 className="w-3 h-3" /></button>
+                      )}
+                    </div>
+                  )}
+                  {existing?.as_of_date && <span className="text-[8px] text-slate-400 block mt-1">as of {existing.as_of_date}</span>}
+                </div>
+              );
+            })}
+          </div>
+          <div className="pt-1 flex justify-between text-xs">
+            <span className="font-bold text-slate-500">Total Cash</span>
+            <span className="font-black text-slate-900 dark:text-white">{fmt(portfolioCashBalances.reduce((s: number, c: any) => s + Number(c.amount), 0))}</span>
+          </div>
+        </div>
+
+        {(() => {
+          const baselinePortfolioId = portfolioMode === 'multiple' ? (bookedPlPortfolioId || portfolios[0]?.id) : undefined;
+          const canEditBaseline = portfolioMode !== 'multiple' || !!baselinePortfolioId;
+          const existingBaseline = portfolioBookedPlBaselines.find((b: any) => (b.portfolio_id ?? null) === (baselinePortfolioId ?? null));
+          return (
+            <div className="apple-card p-4 space-y-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5" /> Booked Profit/Loss</span>
+              <p className="text-[9px] text-slate-400">
+                Set today's actual correct Booked P/L once - from that date forward, it's computed automatically from real sales only (not affected by contributions sitting as cash, or sale proceeds not yet reinvested).
+              </p>
+              {portfolioMode === 'multiple' && (
+                <select
+                  value={baselinePortfolioId ?? ''}
+                  onChange={(e) => { setBookedPlPortfolioId(e.target.value); setEditingBookedPlBaseline(false); }}
+                  className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                >
+                  {portfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              )}
+              {editingBookedPlBaseline ? (
+                <div className="space-y-2">
+                  <div className="flex gap-1.5">
+                    <input
+                      type="number"
+                      value={bookedPlBaselineAmountInput}
+                      onChange={(e) => setBookedPlBaselineAmountInput(e.target.value)}
+                      placeholder="Amount"
+                      autoFocus
+                      className="flex-1 px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                    />
+                    <input
+                      type="date"
+                      value={bookedPlBaselineDateInput}
+                      onChange={(e) => setBookedPlBaselineDateInput(e.target.value)}
+                      className="px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                    />
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => runAction(async () => {
+                        await setBookedPlBaseline?.(parseFloat(bookedPlBaselineAmountInput) || 0, bookedPlBaselineDateInput, baselinePortfolioId);
+                        setEditingBookedPlBaseline(false);
+                      })}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
+                    >
+                      Save
+                    </button>
+                    <button onClick={() => setEditingBookedPlBaseline(false)} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-black text-slate-900 dark:text-white">{fmt(Number(existingBaseline?.baseline_amount ?? 0))}</span>
+                    <span className="text-[9px] text-slate-400 block">{existingBaseline ? `as of ${existingBaseline.baseline_date}` : 'not set - starting from 0'}</span>
+                  </div>
+                  {!isReadOnly && canEditBaseline && (
+                    <button
+                      onClick={() => {
+                        setEditingBookedPlBaseline(true);
+                        setBookedPlBaselineAmountInput(String(existingBaseline?.baseline_amount ?? ''));
+                        setBookedPlBaselineDateInput(existingBaseline?.baseline_date ?? todayStr());
+                      }}
+                      className="text-slate-300 hover:text-indigo-500 cursor-pointer"
+                    ><Edit2 className="w-3.5 h-3.5" /></button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {(() => {
+          const projPortfolioId = portfolioMode === 'multiple' ? (projectedBalancePortfolioId || portfolios[0]?.id) : undefined;
+          const canEditProj = portfolioMode !== 'multiple' || !!projPortfolioId;
+          const existingProjected = portfolioProjectedBankBalances.find((p: any) => (p.portfolio_id ?? null) === (projPortfolioId ?? null));
+          const cashRowsForScope = portfolioCashBalances.filter((c: any) => (c.portfolio_id ?? null) === (projPortfolioId ?? null));
+          const cashLatest = cashRowsForScope.reduce((latest: string | null, c: any) => (!latest || c.updated_at > latest) ? c.updated_at : latest, null as string | null);
+          const projectedIsCurrentlyUsed = existingProjected && (!cashLatest || existingProjected.updated_at > cashLatest);
+          return (
+            <div className="apple-card p-4 space-y-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Banknote className="w-3.5 h-3.5" /> Projected Bank Balance</span>
+              <p className="text-[9px] text-slate-400">
+                A fallback figure for when Cash Balance above hasn't been kept current. Whichever was updated more recently - Cash Balance's total, or this - wins; if neither has ever been set, an auto-calculated figure (contributions minus active holdings plus Booked P/L) is used instead of an un-set zero.
+              </p>
+              {portfolioMode === 'multiple' && (
+                <select
+                  value={projPortfolioId ?? ''}
+                  onChange={(e) => { setProjectedBalancePortfolioId(e.target.value); setEditingProjectedBankBalance(false); }}
+                  className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                >
+                  {portfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              )}
+              {editingProjectedBankBalance ? (
+                <div className="space-y-2">
+                  <input
+                    type="number"
+                    value={projectedBankBalanceAmountInput}
+                    onChange={(e) => setProjectedBankBalanceAmountInput(e.target.value)}
+                    placeholder="Amount"
+                    autoFocus
+                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                  />
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => runAction(async () => {
+                        await setProjectedBankBalance?.(parseFloat(projectedBankBalanceAmountInput) || 0, projPortfolioId);
+                        setEditingProjectedBankBalance(false);
+                      })}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
+                    >
+                      Save
+                    </button>
+                    <button onClick={() => setEditingProjectedBankBalance(false)} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-black text-slate-900 dark:text-white">{fmt(Number(existingProjected?.projected_amount ?? 0))}</span>
+                    <span className="text-[9px] text-slate-400 block">
+                      {existingProjected ? `updated ${new Date(existingProjected.updated_at).toLocaleDateString()}` : 'not set'}
+                      {projectedIsCurrentlyUsed && <span className="text-indigo-500 font-bold"> · currently in use (more recent than Cash Balance)</span>}
+                    </span>
+                  </div>
+                  {!isReadOnly && canEditProj && (
+                    <button
+                      onClick={() => {
+                        setEditingProjectedBankBalance(true);
+                        setProjectedBankBalanceAmountInput(String(existingProjected?.projected_amount ?? ''));
+                      }}
+                      className="text-slate-300 hover:text-indigo-500 cursor-pointer"
+                    ><Edit2 className="w-3.5 h-3.5" /></button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+        </div>
+      )}
 
       {holdingsTab === 'active' && (
         <>

@@ -1692,8 +1692,12 @@ export default function App() {
                 bulkDeletePortfolioHoldings={bulkDeletePortfolioHoldings}
                 deleteAllPortfolioData={deleteAllPortfolioData}
                 portfolioCashBalances={portfolioCashBalances}
+                setPortfolioCashBalance={setPortfolioCashBalance}
+                deletePortfolioCashBalance={deletePortfolioCashBalance}
                 portfolioBookedPlBaselines={portfolioBookedPlBaselines}
+                setBookedPlBaseline={setBookedPlBaseline}
                 portfolioProjectedBankBalances={portfolioProjectedBankBalances}
+                setProjectedBankBalance={setProjectedBankBalance}
                 portfolioSnapshots={portfolioSnapshots}
                 takePortfolioSnapshot={takePortfolioSnapshot}
                 deletePortfolioSnapshotBatch={deletePortfolioSnapshotBatch}
