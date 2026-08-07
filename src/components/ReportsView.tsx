@@ -159,6 +159,8 @@ export default function ReportsView(props: ReportsViewProps) {
   const [expandedInsightCards, setExpandedInsightCards] = useState<Set<string>>(new Set());
   const [snapshotMessage, setSnapshotMessage] = useState<string | null>(null);
   const [movementDrillLabel, setMovementDrillLabel] = useState<string | null>(null);
+  const [movementSortKey, setMovementSortKey] = useState<'label' | 'older' | 'newer' | 'diff'>('diff');
+  const [movementSortDir, setMovementSortDir] = useState<'asc' | 'desc'>('desc');
   const [movementDrillExpanded, setMovementDrillExpanded] = useState(false);
   const [expandedActivityBuckets, setExpandedActivityBuckets] = useState<Set<string>>(new Set());
   const toggleActivityBucket = (key: string) => setExpandedActivityBuckets(prev => {
@@ -1413,7 +1415,31 @@ export default function ReportsView(props: ReportsViewProps) {
             const newerRows = portfolioSnapshots.filter(s => s.snapshot_date === newerDate);
             const olderRows = portfolioSnapshots.filter(s => s.snapshot_date === olderDate);
             const labels = Array.from(new Set([...olderRows.map(r => r.label), ...newerRows.map(r => r.label)]));
-            const orderedLabels = [...labels.filter(l => l !== 'Total Asset Value'), ...(labels.includes('Total Asset Value') ? ['Total Asset Value'] : [])];
+            const sortableLabels = labels.filter(l => l !== 'Total Asset Value');
+            const rowFor = (label: string) => {
+              const older = olderRows.find(r => r.label === label);
+              const newer = newerRows.find(r => r.label === label);
+              const olderVal = Number(older?.current_value ?? 0);
+              const newerVal = Number(newer?.current_value ?? 0);
+              return { label, older, newer, olderVal, newerVal, diff: newerVal - olderVal };
+            };
+            const sortValueFor = (label: string) => {
+              const r = rowFor(label);
+              return movementSortKey === 'label' ? label : movementSortKey === 'older' ? r.olderVal : movementSortKey === 'newer' ? r.newerVal : r.diff;
+            };
+            sortableLabels.sort((a, b) => {
+              const av = sortValueFor(a), bv = sortValueFor(b);
+              const cmp = typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number);
+              return movementSortDir === 'asc' ? cmp : -cmp;
+            });
+            // Total Asset Value always stays last - it's a summary row, not a regular
+            // sortable entry, so it shouldn't jump around based on the current sort.
+            const orderedLabels = [...sortableLabels, ...(labels.includes('Total Asset Value') ? ['Total Asset Value'] : [])];
+            const toggleSort = (key: typeof movementSortKey) => {
+              if (movementSortKey === key) setMovementSortDir(d => d === 'asc' ? 'desc' : 'asc');
+              else { setMovementSortKey(key); setMovementSortDir('desc'); }
+            };
+            const sortArrow = (key: typeof movementSortKey) => movementSortKey === key ? (movementSortDir === 'asc' ? ' ↑' : ' ↓') : '';
             return (
               <div className="space-y-3">
                 <div className="h-40">
@@ -1439,30 +1465,29 @@ export default function ReportsView(props: ReportsViewProps) {
                 <table className="w-full text-xs min-w-[640px]">
                   <thead>
                     <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
-                      <th className="p-2 text-left">List</th>
-                      <th className="p-2 text-right">{olderDate} Value</th>
-                      <th className="p-2 text-right">{newerDate} Value</th>
-                      <th className="p-2 text-right">Difference</th>
+                      <th className="p-2 text-left cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-300" onClick={() => toggleSort('label')}>List{sortArrow('label')}</th>
+                      <th className="p-2 text-right cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-300" onClick={() => toggleSort('older')}>{olderDate} Value{sortArrow('older')}</th>
+                      <th className="p-2 text-right cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-300" onClick={() => toggleSort('newer')}>{newerDate} Value{sortArrow('newer')}</th>
+                      <th className="p-2 text-right cursor-pointer select-none hover:text-slate-600 dark:hover:text-slate-300" onClick={() => toggleSort('diff')}>Difference{sortArrow('diff')}</th>
+                      <th className="p-2 text-center w-8"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-900">
                     {orderedLabels.map(label => {
-                      const older = olderRows.find(r => r.label === label);
-                      const newer = newerRows.find(r => r.label === label);
-                      const olderVal = Number(older?.current_value ?? 0);
-                      const newerVal = Number(newer?.current_value ?? 0);
-                      const diff = newerVal - olderVal;
+                      const { older, newer, olderVal, newerVal, diff } = rowFor(label);
                       const isTotal = label === 'Total Asset Value';
                       const isDrillOpen = movementDrillLabel === label;
                       return (
                         <tr key={label} className={`${isTotal ? 'font-black' : ''} cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900`} onClick={() => { setMovementDrillLabel(isDrillOpen ? null : label); setMovementDrillExpanded(false); }}>
-                          <td className="p-2 text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                            {label}
-                            {isDrillOpen ? <ChevronUp className="w-3 h-3 text-slate-400" /> : <ChevronDown className="w-3 h-3 text-slate-400" />}
-                          </td>
+                          <td className="p-2 text-slate-700 dark:text-slate-300">{label}</td>
                           <td className="p-2 text-right text-slate-500">{older ? fmt(olderVal) : '—'}</td>
                           <td className="p-2 text-right text-slate-900 dark:text-white">{newer ? fmt(newerVal) : '—'}</td>
                           <td className={`p-2 text-right font-bold ${diff >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{diff >= 0 ? '+' : ''}{fmt(diff)}</td>
+                          <td className="p-2 text-center">
+                            <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full ${isDrillOpen ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+                              {isDrillOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                            </span>
+                          </td>
                         </tr>
                       );
                     })}
