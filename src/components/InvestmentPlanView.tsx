@@ -206,11 +206,14 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const CASH_LOCATIONS: ('Zerodha' | 'Groww' | 'Bank' | 'Other')[] = ['Zerodha', 'Groww', 'Bank', 'Other'];
   const [editingCashLocation, setEditingCashLocation] = useState<string | null>(null);
   const [cashAmountInput, setCashAmountInput] = useState('');
+  const [cashBalancePortfolioId, setCashBalancePortfolioId] = useState<string>('');
   const [editingBookedPlBaseline, setEditingBookedPlBaseline] = useState(false);
   const [bookedPlBaselineAmountInput, setBookedPlBaselineAmountInput] = useState('');
   const [bookedPlBaselineDateInput, setBookedPlBaselineDateInput] = useState(todayStr());
+  const [bookedPlPortfolioId, setBookedPlPortfolioId] = useState<string>('');
   const [editingProjectedBankBalance, setEditingProjectedBankBalance] = useState(false);
   const [projectedBankBalanceAmountInput, setProjectedBankBalanceAmountInput] = useState('');
+  const [projectedBalancePortfolioId, setProjectedBalancePortfolioId] = useState<string>('');
 
   const handleAddWithdrawal = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -897,16 +900,23 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Banknote className="w-3.5 h-3.5" /> Cash Balance</span>
           <p className="text-[9px] text-slate-400">
             Uninvested cash sitting in each location - contributed but not yet deployed into holdings.
-            {portfolioMode === 'multiple' && selectedPlanPortfolios.size !== 1 && ' Select a single portfolio above to edit its cash balances.'}
           </p>
+          {portfolioMode === 'multiple' && (
+            <select
+              value={cashBalancePortfolioId || allPortfolios[0]?.id || ''}
+              onChange={(e) => { setCashBalancePortfolioId(e.target.value); setEditingCashLocation(null); }}
+              className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+            >
+              {allPortfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
           <div className="grid grid-cols-2 gap-2">
             {CASH_LOCATIONS.map(loc => {
-              // Editing cash requires a single portfolio selected at the page level (the
-              // All/Port1/Port2 row above) - editing "All" would be ambiguous about which
-              // portfolio's cash to actually update, so editing is disabled until narrowed
-              // to exactly one, same principle as the currency-aware headline cards.
-              const activeCashPortfolioId = portfolioMode === 'multiple' ? selectedPlanPortfolioIds?.[0] : undefined;
-              const canEditCash = portfolioMode !== 'multiple' || (selectedPlanPortfolioIds?.length === 1);
+              // Editing cash requires picking which portfolio it's for in multi-portfolio
+              // mode (the dropdown above) - editing without one selected would be ambiguous
+              // about which portfolio's cash to actually update.
+              const activeCashPortfolioId = portfolioMode === 'multiple' ? (cashBalancePortfolioId || allPortfolios[0]?.id) : undefined;
+              const canEditCash = portfolioMode !== 'multiple' || !!activeCashPortfolioId;
               const existing = portfolioCashBalances.find((c: any) => c.location === loc && (portfolioMode !== 'multiple' || c.portfolio_id === activeCashPortfolioId));
               const isEditing = editingCashLocation === loc;
               return (
@@ -953,16 +963,24 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
         </div>
 
         {(() => {
-          const baselinePortfolioId = portfolioMode === 'multiple' ? selectedPlanPortfolioIds?.[0] : undefined;
-          const canEditBaseline = portfolioMode !== 'multiple' || (selectedPlanPortfolioIds?.length === 1);
+          const baselinePortfolioId = portfolioMode === 'multiple' ? (bookedPlPortfolioId || allPortfolios[0]?.id) : undefined;
+          const canEditBaseline = portfolioMode !== 'multiple' || !!baselinePortfolioId;
           const existingBaseline = portfolioBookedPlBaselines.find((b: any) => (b.portfolio_id ?? null) === (baselinePortfolioId ?? null));
           return (
             <div className="apple-card p-4 space-y-2">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5" /> Booked Profit/Loss</span>
               <p className="text-[9px] text-slate-400">
                 Set today's actual correct Booked P/L once - from that date forward, it's computed automatically from real sales only (not affected by contributions sitting as cash, or sale proceeds not yet reinvested).
-                {portfolioMode === 'multiple' && selectedPlanPortfolios.size !== 1 && ' Select a single portfolio above to set its baseline.'}
               </p>
+              {portfolioMode === 'multiple' && (
+                <select
+                  value={baselinePortfolioId ?? ''}
+                  onChange={(e) => { setBookedPlPortfolioId(e.target.value); setEditingBookedPlBaseline(false); }}
+                  className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                >
+                  {allPortfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              )}
               {editingBookedPlBaseline ? (
                 <div className="space-y-2">
                   <div className="flex gap-1.5">
@@ -1019,8 +1037,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
         })()}
 
         {(() => {
-          const projPortfolioId = portfolioMode === 'multiple' ? selectedPlanPortfolioIds?.[0] : undefined;
-          const canEditProj = portfolioMode !== 'multiple' || (selectedPlanPortfolioIds?.length === 1);
+          const projPortfolioId = portfolioMode === 'multiple' ? (projectedBalancePortfolioId || allPortfolios[0]?.id) : undefined;
+          const canEditProj = portfolioMode !== 'multiple' || !!projPortfolioId;
           const existingProjected = portfolioProjectedBankBalances.find((p: any) => (p.portfolio_id ?? null) === (projPortfolioId ?? null));
           const cashRowsForScope = portfolioCashBalances.filter((c: any) => (c.portfolio_id ?? null) === (projPortfolioId ?? null));
           const cashLatest = cashRowsForScope.reduce((latest: string | null, c: any) => (!latest || c.updated_at > latest) ? c.updated_at : latest, null as string | null);
@@ -1030,8 +1048,16 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Banknote className="w-3.5 h-3.5" /> Projected Bank Balance</span>
               <p className="text-[9px] text-slate-400">
                 A fallback figure for when Cash Balance above hasn't been kept current. Whichever was updated more recently - Cash Balance's total, or this - wins; if neither has ever been set, an auto-calculated figure (contributions minus active holdings plus Booked P/L) is used instead of an un-set zero.
-                {portfolioMode === 'multiple' && selectedPlanPortfolios.size !== 1 && ' Select a single portfolio above to set its figure.'}
               </p>
+              {portfolioMode === 'multiple' && (
+                <select
+                  value={projPortfolioId ?? ''}
+                  onChange={(e) => { setProjectedBalancePortfolioId(e.target.value); setEditingProjectedBankBalance(false); }}
+                  className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                >
+                  {allPortfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              )}
               {editingProjectedBankBalance ? (
                 <div className="space-y-2">
                   <input
