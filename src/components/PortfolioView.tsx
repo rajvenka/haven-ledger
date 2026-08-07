@@ -1257,10 +1257,33 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const totalWithdrawn = headerWithdrawals.reduce((s: number, w: any) => s + Number(w.amount), 0);
   const netContributed = totalContributed - totalWithdrawn;
   const totalInvestedActive = filteredActiveHoldings.reduce((s, h) => s + convHeader(h, Number(h.buy_price) * Number(h.quantity)), 0);
-  // Per portfolio in scope, uses whichever of (sum of actual Cash Balance entries) or
-  // (manually-set Projected Bank Balance) was updated more recently - a fallback for when
-  // Cash Balance entries haven't been kept current, rather than always trusting a
-  // possibly-stale number over a more recently confirmed one.
+  const totalStockInvestment = totalInvestedActive; // current cost basis of active stock + MF holdings
+
+  // Booked P/L computed directly from actual realized sales, not indirectly from cash
+  // balance/contributions (which silently misattributed any unrecorded cash movement -
+  // contributions not yet invested, sale proceeds not yet reinvested - as booked gain/loss).
+  // A portfolio's baseline (0 if never set) plus the sum of (sold_price - buy_price) x
+  // quantity for everything sold after that baseline's date - history before the baseline
+  // stays frozen at whatever's confirmed correct, nothing retroactively recalculated.
+  const getPortfolioBookedPL = (pid: string | null) => {
+    const baseline = portfolioBookedPlBaselines.find((b: any) => (b.portfolio_id ?? null) === (pid ?? null));
+    const baselineAmount = baseline ? Number(baseline.baseline_amount) : 0;
+    const baselineDate = baseline ? baseline.baseline_date : '1900-01-01';
+    const realizedSinceBaseline = portfolioHoldings
+      .filter((h: any) => h.status === 'sold' && (h.portfolio_id ?? null) === (pid ?? null) && h.sold_date > baselineDate)
+      .reduce((s: number, h: any) => s + convHeader(h, (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity)), 0);
+    return baselineAmount + realizedSinceBaseline;
+  };
+  const headerPortfolioIdsForBaseline = selectedHeaderPortfolioIds ?? (portfolioMode === 'multiple' ? portfolios.map((p: any) => p.id) : [null]);
+  const bookedProfitLoss = headerPortfolioIdsForBaseline.reduce((total: number, pid: string | null) => total + getPortfolioBookedPL(pid), 0);
+
+  // Per portfolio in scope, uses whichever of three sources was most recently confirmed:
+  // (1) sum of actual Cash Balance entries, (2) manually-set Projected Bank Balance, or
+  // (3) an always-available auto-calculated figure (net contributed - active cost basis +
+  // booked P/L - the same reconciliation identity, now trustworthy since booked P/L no
+  // longer circularly depends on cash balance). Manual entries still win when more recent,
+  // since a person might know something the formula can't - e.g. cash withdrawn to a
+  // personal account that was never logged as a withdrawal.
   const headerPortfolioIdsForCash = selectedHeaderPortfolioIds ?? (portfolioMode === 'multiple' ? portfolios.map((p: any) => p.id) : [null]);
   const balanceCash = headerPortfolioIdsForCash.reduce((total: number, pid: string | null) => {
     const cashRows = portfolioCashBalances.filter((c: any) => (c.portfolio_id ?? null) === (pid ?? null));
@@ -1270,25 +1293,15 @@ export default function PortfolioView(props: PortfolioViewProps) {
     if (projectedRow && (!cashLatest || projectedRow.updated_at > cashLatest)) {
       return total + Number(projectedRow.projected_amount);
     }
-    return total + cashSum;
-  }, 0);
-  const totalStockInvestment = totalInvestedActive; // current cost basis of active stock + MF holdings
-  // Booked P/L computed directly from actual realized sales, not indirectly from cash
-  // balance/contributions (which silently misattributed any unrecorded cash movement -
-  // contributions not yet invested, sale proceeds not yet reinvested - as booked gain/loss).
-  // Each portfolio in scope contributes its own manually-set baseline (0 if never set) plus
-  // the sum of (sold_price - buy_price) x quantity for everything sold after that baseline's
-  // date - history before the baseline stays frozen at whatever's confirmed correct, nothing
-  // retroactively recalculated.
-  const headerPortfolioIdsForBaseline = selectedHeaderPortfolioIds ?? (portfolioMode === 'multiple' ? portfolios.map((p: any) => p.id) : [null]);
-  const bookedProfitLoss = headerPortfolioIdsForBaseline.reduce((total: number, pid: string | null) => {
-    const baseline = portfolioBookedPlBaselines.find((b: any) => (b.portfolio_id ?? null) === (pid ?? null));
-    const baselineAmount = baseline ? Number(baseline.baseline_amount) : 0;
-    const baselineDate = baseline ? baseline.baseline_date : '1900-01-01';
-    const realizedSinceBaseline = portfolioHoldings
-      .filter((h: any) => h.status === 'sold' && (h.portfolio_id ?? null) === (pid ?? null) && h.sold_date > baselineDate)
-      .reduce((s: number, h: any) => s + convHeader(h, (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity)), 0);
-    return total + baselineAmount + realizedSinceBaseline;
+    if (cashLatest) {
+      return total + cashSum;
+    }
+    // Neither manual source has ever been touched for this portfolio - fall back to the
+    // auto-calculated figure rather than showing a misleading, un-set zero.
+    const pNetContributed = portfolioContributions.filter((c: any) => (c.portfolio_id ?? null) === (pid ?? null)).reduce((s: number, c: any) => s + Number(c.amount), 0)
+      - portfolioWithdrawals.filter((w: any) => (w.portfolio_id ?? null) === (pid ?? null)).reduce((s: number, w: any) => s + Number(w.amount), 0);
+    const pActiveCostBasis = filteredActiveHoldings.filter((h: any) => (h.portfolio_id ?? null) === (pid ?? null)).reduce((s, h) => s + convHeader(h, Number(h.buy_price) * Number(h.quantity)), 0);
+    return total + (pNetContributed - pActiveCostBasis + getPortfolioBookedPL(pid));
   }, 0);
   const currentValueActive = filteredActiveHoldings.reduce((s, h) => s + convHeader(h, Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity)), 0);
   const unrealizedGain = currentValueActive - totalInvestedActive;

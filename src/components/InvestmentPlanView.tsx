@@ -1029,7 +1029,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
             <div className="apple-card p-4 space-y-2">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Banknote className="w-3.5 h-3.5" /> Projected Bank Balance</span>
               <p className="text-[9px] text-slate-400">
-                A fallback figure for when Cash Balance above hasn't been kept current. Whichever of the two - Cash Balance's total, or this - was updated more recently is what's actually shown in the portfolio header.
+                A fallback figure for when Cash Balance above hasn't been kept current. Whichever was updated more recently - Cash Balance's total, or this - wins; if neither has ever been set, an auto-calculated figure (contributions minus active holdings plus Booked P/L) is used instead of an un-set zero.
                 {portfolioMode === 'multiple' && selectedPlanPortfolios.size !== 1 && ' Select a single portfolio above to set its figure.'}
               </p>
               {editingProjectedBankBalance ? (
