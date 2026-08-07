@@ -1293,11 +1293,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
     if (projectedRow && (!cashLatest || projectedRow.updated_at > cashLatest)) {
       return total + Number(projectedRow.projected_amount);
     }
-    if (cashLatest) {
+    if (cashLatest && cashSum !== 0) {
       return total + cashSum;
     }
-    // Neither manual source has ever been touched for this portfolio - fall back to the
-    // auto-calculated figure rather than showing a misleading, un-set zero.
+    // Neither manual source has a meaningful value for this portfolio (never set, or every
+    // entry sums to exactly zero - which almost never reflects an actually-maintained zero
+    // balance, more likely a leftover placeholder) - fall back to the auto-calculated figure
+    // rather than showing a misleading zero.
     const pNetContributed = portfolioContributions.filter((c: any) => (c.portfolio_id ?? null) === (pid ?? null)).reduce((s: number, c: any) => s + Number(c.amount), 0)
       - portfolioWithdrawals.filter((w: any) => (w.portfolio_id ?? null) === (pid ?? null)).reduce((s: number, w: any) => s + Number(w.amount), 0);
     const pActiveCostBasis = filteredActiveHoldings.filter((h: any) => (h.portfolio_id ?? null) === (pid ?? null)).reduce((s, h) => s + convHeader(h, Number(h.buy_price) * Number(h.quantity)), 0);
