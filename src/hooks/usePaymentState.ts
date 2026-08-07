@@ -1568,6 +1568,12 @@ export function usePaymentState() {
   // TOTAL row), so it can be compared against a later snapshot in the Monthly Movement Report.
   const takePortfolioSnapshot = async (date: string, groups: { label: string; invested: number; current: number }[]) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
+    // Delete any existing snapshot for this date first - taking a snapshot again on the same
+    // day replaces it with the latest figures rather than accumulating duplicate rows (which
+    // is exactly what was happening before: multiple clicks on the same day each added a new
+    // row, leaving the Movement tab to arbitrarily pick one of several duplicates).
+    const { error: deleteErr } = await supabase.from('portfolio_snapshots').delete().eq('workspace_id', activeWorkspaceId).eq('snapshot_date', date);
+    if (deleteErr) throw deleteErr;
     const rows = groups.map(g => ({
       workspace_id: activeWorkspaceId, snapshot_date: date, label: g.label,
       invested_value: g.invested, current_value: g.current, created_by: user?.id ?? null,
