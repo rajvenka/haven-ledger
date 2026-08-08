@@ -1032,85 +1032,110 @@ export default function PortfolioView(props: PortfolioViewProps) {
     if (!importPreview || (importPreview.fresh.length === 0 && importPreview.qtyChanged.length === 0 && importPreview.priceChanged.length === 0 && importPreview.unchangedWithLiveData.length === 0 && importMissingSelected.size === 0)) return;
     setImportSaving(true);
     await runAction(async () => {
+      // Collected rather than thrown immediately - a sync can touch 60+ holdings across
+      // several categories, and one failure (a single bad row) previously silently aborted
+      // everything sequenced after it in this same try block, including the lots sync at
+      // the very end. Each step below is now independently wrapped, so one failure doesn't
+      // cascade and block unrelated holdings or later steps from completing.
+      const stepErrors: string[] = [];
       if (importPreview.fresh.length > 0) {
-        await bulkAddPortfolioHoldings(
-          importPreview.fresh.map(h => ({
-            holdingType: h.holdingType, broker: h.broker, symbol: h.symbol, isin: h.isin, folioNumber: h.folioNumber, exchange: h.exchange,
-            quantity: h.quantity, buyPrice: h.buyPrice, buyDate: importBuyDate, currentPrice: h.currentPrice,
-            source: h.source || importSourceTag.trim() || undefined, currency: h.currency,
-            leverage: h.leverage, stopLossRate: h.stopLossRate, takeProfitRate: h.takeProfitRate, etoroNetValueAmount: h.etoroNetValueAmount,
-          })),
-          portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined
-        );
+        try {
+          await bulkAddPortfolioHoldings(
+            importPreview.fresh.map(h => ({
+              holdingType: h.holdingType, broker: h.broker, symbol: h.symbol, isin: h.isin, folioNumber: h.folioNumber, exchange: h.exchange,
+              quantity: h.quantity, buyPrice: h.buyPrice, buyDate: importBuyDate, currentPrice: h.currentPrice,
+              source: h.source || importSourceTag.trim() || undefined, currency: h.currency,
+              leverage: h.leverage, stopLossRate: h.stopLossRate, takeProfitRate: h.takeProfitRate, etoroNetValueAmount: h.etoroNetValueAmount,
+            })),
+            portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined
+          );
+        } catch (err: any) { stepErrors.push(`New holdings: ${err?.message || 'failed'}`); }
       }
       for (const { parsed, existing, direction } of importPreview.qtyChanged) {
-        const override = importReducedOverrides[existing.id];
-        // New avg price for the remaining active shares always comes straight from the
-        // file - Groww/Zerodha already computes this correctly, no need for a manual
-        // override. Only the sold portion's cost basis (soldItemBuyPrice) is editable,
-        // since that's the one thing the broker export genuinely can't tell us (which
-        // specific lot got sold in a FIFO sale).
-        const sellPriceForReduced = direction === 'reduced' && override ? parseFloat(override.sellPrice) : parsed.currentPrice;
-        const soldItemBuyPrice = direction === 'reduced' && override ? parseFloat(override.soldItemBuyPrice) : undefined;
-        await reconcilePortfolioHoldingQuantity(
-          existing.id, parsed.quantity, direction === 'increased' ? 'qty_increased' : 'qty_reduced',
-          parsed.buyPrice !== Number(existing.buy_price) ? parsed.buyPrice : undefined,
-          sellPriceForReduced,
-          soldItemBuyPrice
-        );
-        // The remaining active row keeps the same id after a partial sell/increase - refresh
-        // its live eToro fields too, since reconcilePortfolioHoldingQuantity only handles
-        // quantity/cost-basis reconciliation, not these.
-        if (parsed.leverage != null || parsed.stopLossRate != null || parsed.etoroNetValueAmount != null) {
-          await updatePortfolioHolding(existing.id, {
-            currentPrice: parsed.currentPrice,
-            leverage: parsed.leverage, stopLossRate: parsed.stopLossRate, takeProfitRate: parsed.takeProfitRate, etoroNetValueAmount: parsed.etoroNetValueAmount,
-          });
-        }
+        try {
+          const override = importReducedOverrides[existing.id];
+          // New avg price for the remaining active shares always comes straight from the
+          // file - Groww/Zerodha already computes this correctly, no need for a manual
+          // override. Only the sold portion's cost basis (soldItemBuyPrice) is editable,
+          // since that's the one thing the broker export genuinely can't tell us (which
+          // specific lot got sold in a FIFO sale).
+          const sellPriceForReduced = direction === 'reduced' && override ? parseFloat(override.sellPrice) : parsed.currentPrice;
+          const soldItemBuyPrice = direction === 'reduced' && override ? parseFloat(override.soldItemBuyPrice) : undefined;
+          await reconcilePortfolioHoldingQuantity(
+            existing.id, parsed.quantity, direction === 'increased' ? 'qty_increased' : 'qty_reduced',
+            parsed.buyPrice !== Number(existing.buy_price) ? parsed.buyPrice : undefined,
+            sellPriceForReduced,
+            soldItemBuyPrice
+          );
+          // The remaining active row keeps the same id after a partial sell/increase -
+          // refresh its live eToro fields too, since reconcilePortfolioHoldingQuantity only
+          // handles quantity/cost-basis reconciliation, not these.
+          if (parsed.leverage != null || parsed.stopLossRate != null || parsed.etoroNetValueAmount != null) {
+            await updatePortfolioHolding(existing.id, {
+              currentPrice: parsed.currentPrice,
+              leverage: parsed.leverage, stopLossRate: parsed.stopLossRate, takeProfitRate: parsed.takeProfitRate, etoroNetValueAmount: parsed.etoroNetValueAmount,
+            });
+          }
+        } catch (err: any) { stepErrors.push(`${parsed.symbol} (qty change): ${err?.message || 'failed'}`); }
       }
       // Same quantity, but the file's average cost differs from what's stored - previously
       // silently missed entirely, since these were classified "unchanged" and skipped. A
       // straight cost-basis correction, no shares actually changed hands, so just update
       // buy_price directly rather than going through the sold-clone reconciliation path.
       for (const { parsed, existing } of importPreview.priceChanged) {
-        await updatePortfolioHolding(existing.id, {
-          buyPrice: parsed.buyPrice, currentPrice: parsed.currentPrice,
-          leverage: parsed.leverage, stopLossRate: parsed.stopLossRate, takeProfitRate: parsed.takeProfitRate, etoroNetValueAmount: parsed.etoroNetValueAmount,
-        });
+        try {
+          await updatePortfolioHolding(existing.id, {
+            buyPrice: parsed.buyPrice, currentPrice: parsed.currentPrice,
+            leverage: parsed.leverage, stopLossRate: parsed.stopLossRate, takeProfitRate: parsed.takeProfitRate, etoroNetValueAmount: parsed.etoroNetValueAmount,
+          });
+        } catch (err: any) { stepErrors.push(`${parsed.symbol} (price change): ${err?.message || 'failed'}`); }
       }
       // eToro's current price, stop-loss, leverage, and net value can change independently
       // of quantity/average cost - these otherwise-"unchanged" holdings would never
       // otherwise get their live fields refreshed on a re-sync.
       for (const { parsed, existing } of importPreview.unchangedWithLiveData) {
-        await updatePortfolioHolding(existing.id, {
-          currentPrice: parsed.currentPrice,
-          leverage: parsed.leverage, stopLossRate: parsed.stopLossRate, takeProfitRate: parsed.takeProfitRate, etoroNetValueAmount: parsed.etoroNetValueAmount,
-        });
+        try {
+          await updatePortfolioHolding(existing.id, {
+            currentPrice: parsed.currentPrice,
+            leverage: parsed.leverage, stopLossRate: parsed.stopLossRate, takeProfitRate: parsed.takeProfitRate, etoroNetValueAmount: parsed.etoroNetValueAmount,
+          });
+        } catch (err: any) { stepErrors.push(`${parsed.symbol} (live refresh): ${err?.message || 'failed'}`); }
       }
       for (const h of importPreview.missing) {
         if (!importMissingSelected.has(h.id)) continue;
-        const overridePrice = importMissingSellPrice[h.id];
-        const sellPrice = overridePrice !== undefined && overridePrice !== '' ? parseFloat(overridePrice) : Number(h.live_price ?? h.current_price ?? h.buy_price);
-        await markPortfolioHoldingSoldFromImport?.(h.id, sellPrice);
+        try {
+          const overridePrice = importMissingSellPrice[h.id];
+          const sellPrice = overridePrice !== undefined && overridePrice !== '' ? parseFloat(overridePrice) : Number(h.live_price ?? h.current_price ?? h.buy_price);
+          await markPortfolioHoldingSoldFromImport?.(h.id, sellPrice);
+        } catch (err: any) { stepErrors.push(`${h.symbol} (mark sold): ${err?.message || 'failed'}`); }
       }
       // Auto-recalculate Projected Bank Balance now that this import's holdings are saved -
       // establishes a fresh baseline at import time. A manual edit made afterward still
       // always wins (both just set updated_at, and the header uses whichever is more
       // recent) - this doesn't lock the value in, just keeps it current by default.
-      await recalculateProjectedBankBalance?.(portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined);
+      try {
+        await recalculateProjectedBankBalance?.(portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined);
+      } catch (err: any) { stepErrors.push(`Projected balance recalc: ${err?.message || 'failed'}`); }
       // Sync individual eToro lot detail into the child table now that master holdings are
       // saved - matches each raw lot group to its consolidated master by symbol, via the
       // matchKey both share from the sync response.
       if (etoroRawLots.length > 0) {
-        const matchKeyToSymbol = new Map<string, string>((importRawParsed ?? []).filter(h => h.matchKey).map(h => [h.matchKey as string, h.symbol]));
-        const rawLotsBySymbol = new Map<string, any[]>();
-        for (const lot of etoroRawLots) {
-          const symbol = matchKeyToSymbol.get(lot.matchKey);
-          if (!symbol) continue;
-          rawLotsBySymbol.set(symbol, [...(rawLotsBySymbol.get(symbol) ?? []), lot]);
-        }
-        await syncEtoroHoldingLots?.(Array.from(rawLotsBySymbol.keys()), rawLotsBySymbol, portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined);
+        try {
+          const matchKeyToSymbol = new Map<string, string>((importRawParsed ?? []).filter(h => h.matchKey).map(h => [h.matchKey as string, h.symbol]));
+          const rawLotsBySymbol = new Map<string, any[]>();
+          for (const lot of etoroRawLots) {
+            const symbol = matchKeyToSymbol.get(lot.matchKey);
+            if (!symbol) continue;
+            rawLotsBySymbol.set(symbol, [...(rawLotsBySymbol.get(symbol) ?? []), lot]);
+          }
+          await syncEtoroHoldingLots?.(Array.from(rawLotsBySymbol.keys()), rawLotsBySymbol, portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined);
+        } catch (err: any) { stepErrors.push(`Individual lots: ${err?.message || 'failed'}`); }
         setEtoroRawLots([]);
+      }
+      // Surfaced rather than thrown, so a partial failure among 60+ holdings doesn't hide
+      // that the rest genuinely succeeded - the person can see exactly what needs retrying.
+      if (stepErrors.length > 0) {
+        setFormError(`${stepErrors.length} item(s) had an issue: ${stepErrors.slice(0, 5).join('; ')}${stepErrors.length > 5 ? ` (+${stepErrors.length - 5} more)` : ''}`);
       }
       setImportPreview(null);
       setImportRawParsed(null);
