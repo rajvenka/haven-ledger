@@ -909,7 +909,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         body: JSON.stringify({ apiKey: connection.credentials?.api_key, userKey: connection.credentials?.user_key }),
       });
       const data = await resp.json();
-      if (data?.instrumentDebug) setEtoroSyncDebug(data.instrumentDebug);
+      if (data?.instrumentDebug || data?.settlementBreakdown) setEtoroSyncDebug(data);
       if (!resp.ok) throw new Error(data?.error || `eToro sync failed (${resp.status})`);
       setImportTemplate('universal');
       setImportPortfolioId(connection.portfolio_id ?? '');
@@ -1893,13 +1893,22 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 </div>
               )}
               {etoroSyncError && <p className="text-[10px] text-rose-500">{etoroSyncError}</p>}
-              {etoroSyncDebug && etoroSyncDebug.resolvedCount < etoroSyncDebug.requestedCount && (
-                <div className="text-[9px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 rounded p-2 space-y-0.5 font-mono">
-                  <p>Symbol resolution: {etoroSyncDebug.resolvedCount}/{etoroSyncDebug.requestedCount} resolved</p>
-                  <p>Instruments endpoint: status {etoroSyncDebug.status}, ok={String(etoroSyncDebug.ok)}</p>
-                  {etoroSyncDebug.rawKeys && <p>Response keys: {JSON.stringify(etoroSyncDebug.rawKeys)}</p>}
-                  {etoroSyncDebug.sample && <p className="break-all">Sample: {etoroSyncDebug.sample}</p>}
-                  {etoroSyncDebug.errorBody && <p className="break-all">Error body: {etoroSyncDebug.errorBody}</p>}
+              {etoroSyncDebug && (
+                <div className="text-[9px] text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 rounded p-2 space-y-0.5 font-mono">
+                  <p className="font-bold text-slate-700 dark:text-slate-200">Sync breakdown</p>
+                  <p>Total positions from eToro: {etoroSyncDebug.totalPositions}</p>
+                  <p>Real Asset (settlementTypeID=1): {etoroSyncDebug.realAssetPositions}</p>
+                  <p>Consolidated into holdings: {etoroSyncDebug.consolidatedHoldingsCount}</p>
+                  {etoroSyncDebug.settlementBreakdown && <p>By type: {JSON.stringify(etoroSyncDebug.settlementBreakdown)}</p>}
+                  {etoroSyncDebug.instrumentDebug && etoroSyncDebug.instrumentDebug.resolvedCount < etoroSyncDebug.instrumentDebug.requestedCount && (
+                    <>
+                      <p className="text-amber-600 dark:text-amber-400 pt-1">Symbol resolution: {etoroSyncDebug.instrumentDebug.resolvedCount}/{etoroSyncDebug.instrumentDebug.requestedCount} resolved</p>
+                      <p>Instruments endpoint: status {etoroSyncDebug.instrumentDebug.status}, ok={String(etoroSyncDebug.instrumentDebug.ok)}</p>
+                      {etoroSyncDebug.instrumentDebug.rawKeys && <p>Response keys: {JSON.stringify(etoroSyncDebug.instrumentDebug.rawKeys)}</p>}
+                      {etoroSyncDebug.instrumentDebug.sample && <p className="break-all">Sample: {etoroSyncDebug.instrumentDebug.sample}</p>}
+                      {etoroSyncDebug.instrumentDebug.errorBody && <p className="break-all">Error body: {etoroSyncDebug.instrumentDebug.errorBody}</p>}
+                    </>
+                  )}
                 </div>
               )}
             </div>

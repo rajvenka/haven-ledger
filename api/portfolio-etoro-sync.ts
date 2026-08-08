@@ -60,8 +60,17 @@ export default async function handler(req: any, res: any) {
     const allPositions: any[] = portfolioData?.clientPortfolio?.positions ?? [];
     const realAssetPositions = allPositions.filter((p) => Number(p.settlementTypeID) === 1);
 
+    // Breakdown by settlementTypeID - to actually see what the total count is made of (real
+    // assets vs CFD/crypto-margin/futures) rather than guessing why a filtered count differs
+    // from an unfiltered one.
+    const settlementBreakdown: Record<string, number> = {};
+    for (const p of allPositions) {
+      const key = String(p.settlementTypeID ?? 'undefined');
+      settlementBreakdown[key] = (settlementBreakdown[key] ?? 0) + 1;
+    }
+
     if (realAssetPositions.length === 0) {
-      res.status(200).json({ holdings: [], excludedCount: allPositions.length, message: "No Real Asset positions found (CFD/leveraged/crypto-margin positions are excluded on purpose)." });
+      res.status(200).json({ holdings: [], excludedCount: allPositions.length, totalPositions: allPositions.length, settlementBreakdown, message: "No Real Asset positions found (CFD/leveraged/crypto-margin positions are excluded on purpose)." });
       return;
     }
 
@@ -132,6 +141,10 @@ export default async function handler(req: any, res: any) {
 
     res.status(200).json({
       holdings,
+      totalPositions: allPositions.length,
+      realAssetPositions: realAssetPositions.length,
+      consolidatedHoldingsCount: holdings.length,
+      settlementBreakdown,
       excludedCount: allPositions.length - realAssetPositions.length,
       syncedAt: new Date().toISOString(),
       instrumentDebug,
