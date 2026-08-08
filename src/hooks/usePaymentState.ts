@@ -1693,7 +1693,12 @@ export function usePaymentState() {
       ? await supabase.from('portfolio_booked_pl_baseline').update(row).eq('id', existing.id)
       : await supabase.from('portfolio_booked_pl_baseline').insert(row);
     if (error) throw error;
-    await loadPortfolioDetails();
+    // Booked P/L feeds directly into the Projected Bank Balance formula (Total Investment -
+    // Active Cost Basis + Booked P/L) - without this, a manual baseline edit leaves the
+    // stored projected figure stale until the next import happens to trigger a refresh,
+    // exactly the mismatch already hit in practice once. Already reloads portfolio details
+    // internally (via setProjectedBankBalance), no need to do it again here.
+    await recalculateProjectedBankBalance(portfolioId);
   };
 
   // A manually-set fallback figure for when actual Cash Balance entries haven't been kept
