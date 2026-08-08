@@ -1075,6 +1075,7 @@ export function usePaymentState() {
   const [portfolioCashBalances, setPortfolioCashBalances] = useState<any[]>([]);
   const [portfolioBookedPlBaselines, setPortfolioBookedPlBaselines] = useState<any[]>([]);
   const [portfolioProjectedBankBalances, setPortfolioProjectedBankBalances] = useState<any[]>([]);
+  const [etoroCredentials, setEtoroCredentialsState] = useState<any>(null);
   const [portfolioDividends, setPortfolioDividends] = useState<any[]>([]);
   const [portfolioFees, setPortfolioFees] = useState<any[]>([]);
   const [portfolioRecurringPlans, setPortfolioRecurringPlans] = useState<any[]>([]);
@@ -1097,7 +1098,7 @@ export function usePaymentState() {
     // flicker during completely normal use, not just on initial load or workspace switch.
     const isFirstLoadForWorkspace = !loadedPortfolioWorkspaces.current.has(activeWorkspaceId);
     if (isFirstLoadForWorkspace) setPortfolioDataLoading(true);
-    const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: cashBalances }, { data: portfoliosData }, { data: currencyRatesData }, { data: bookedPlBaselinesData }, { data: projectedBankBalancesData }] = await Promise.all([
+    const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: cashBalances }, { data: portfoliosData }, { data: currencyRatesData }, { data: bookedPlBaselinesData }, { data: projectedBankBalancesData }, { data: etoroCredsData }] = await Promise.all([
       supabase.from('portfolio_holdings').select('*').eq('workspace_id', activeWorkspaceId).order('buy_date', { ascending: false }),
       supabase.from('portfolio_price_history').select('*').eq('workspace_id', activeWorkspaceId).order('recorded_date', { ascending: false }),
       supabase.from('portfolio_splits').select('*').eq('workspace_id', activeWorkspaceId).order('effective_from'),
@@ -1111,6 +1112,7 @@ export function usePaymentState() {
       supabase.from('workspace_currency_rates').select('*').eq('workspace_id', activeWorkspaceId),
       supabase.from('portfolio_booked_pl_baseline').select('*').eq('workspace_id', activeWorkspaceId),
       supabase.from('portfolio_projected_bank_balance').select('*').eq('workspace_id', activeWorkspaceId),
+      supabase.from('portfolio_etoro_credentials').select('*').eq('workspace_id', activeWorkspaceId).maybeSingle(),
     ]);
     setPortfolioHoldings(holdings ?? []);
     setPortfolioPriceHistory(priceHistory ?? []);
@@ -1125,6 +1127,7 @@ export function usePaymentState() {
     setWorkspaceCurrencyRates(currencyRatesData ?? []);
     setPortfolioBookedPlBaselines(bookedPlBaselinesData ?? []);
     setPortfolioProjectedBankBalances(projectedBankBalancesData ?? []);
+    setEtoroCredentialsState(etoroCredsData ?? null);
     loadedPortfolioWorkspaces.current.add(activeWorkspaceId);
     setPortfolioDataLoading(false);
   }, [activeWorkspaceId]);
@@ -1757,6 +1760,33 @@ export function usePaymentState() {
     await setProjectedBankBalance(calculated, portfolioId);
   };
 
+  // eToro API credentials (x-api-key/x-user-key pair) for connecting a real eToro account
+  // rather than manual file uploads. Consistent with this app's established access model:
+  // readable by any workspace member (same as every other piece of workspace data), not
+  // gated behind a service-role-only backend - the actual calls to eToro's API still
+  // happen server-side via a Vercel route, keeping keys out of client-to-eToro network
+  // requests, which is the boundary that matters for external exposure.
+  const setEtoroCredentials = async (apiKey: string, userKey: string, etoroUsername?: string) => {
+    if (!user || !activeWorkspaceId) return;
+    const row: any = {
+      workspace_id: activeWorkspaceId, api_key: apiKey, user_key: userKey, etoro_username: etoroUsername ?? null,
+      created_by: user.id, updated_at: new Date().toISOString(),
+    };
+    const { data: existing } = await supabase.from('portfolio_etoro_credentials').select('id').eq('workspace_id', activeWorkspaceId).maybeSingle();
+    const { error } = existing
+      ? await supabase.from('portfolio_etoro_credentials').update(row).eq('id', existing.id)
+      : await supabase.from('portfolio_etoro_credentials').insert(row);
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
+  const deleteEtoroCredentials = async () => {
+    if (!activeWorkspaceId) return;
+    const { error } = await supabase.from('portfolio_etoro_credentials').delete().eq('workspace_id', activeWorkspaceId);
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
   const addPortfolioDividend = async (symbol: string, amount: number, dividendDate: string, holdingId?: string, notes?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_dividends').insert({
@@ -1985,6 +2015,7 @@ export function usePaymentState() {
     portfolioCashBalances, setPortfolioCashBalance, deletePortfolioCashBalance,
     portfolioBookedPlBaselines, setBookedPlBaseline,
     portfolioProjectedBankBalances, setProjectedBankBalance, recalculateProjectedBankBalance,
+    etoroCredentials, setEtoroCredentials, deleteEtoroCredentials,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
     portfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,

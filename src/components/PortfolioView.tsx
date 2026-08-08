@@ -28,6 +28,9 @@ interface PortfolioViewProps {
   setBookedPlBaseline?: (amount: number, date: string, portfolioId?: string) => Promise<void>;
   setProjectedBankBalance?: (amount: number, portfolioId?: string) => Promise<void>;
   recalculateProjectedBankBalance?: (portfolioId?: string) => Promise<void>;
+  etoroCredentials?: any;
+  setEtoroCredentials?: (apiKey: string, userKey: string, etoroUsername?: string) => Promise<void>;
+  deleteEtoroCredentials?: () => Promise<void>;
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
   deletePortfolioSplit: (id: string) => Promise<void>;
   portfolioHoldings: any[];
@@ -155,6 +158,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     workspaceName, workspaceMembers, isReadOnly, isDataLoading, columnPrefs, onUpdateColumnPrefs,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances, portfolioBookedPlBaselines = [], portfolioProjectedBankBalances = [],
     setPortfolioCashBalance, deletePortfolioCashBalance, setBookedPlBaseline, setProjectedBankBalance, recalculateProjectedBankBalance,
+    etoroCredentials, setEtoroCredentials, deleteEtoroCredentials,
     portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     mfHoldingsCache = [], loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
@@ -387,6 +391,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [editingProjectedBankBalance, setEditingProjectedBankBalance] = useState(false);
   const [projectedBankBalanceAmountInput, setProjectedBankBalanceAmountInput] = useState('');
   const [projectedBalancePortfolioId, setProjectedBalancePortfolioId] = useState<string>('');
+  const [etoroEditing, setEtoroEditing] = useState(false);
+  const [etoroApiKeyInput, setEtoroApiKeyInput] = useState('');
+  const [etoroUserKeyInput, setEtoroUserKeyInput] = useState('');
+  const [etoroSyncing, setEtoroSyncing] = useState(false);
+  const [etoroSyncError, setEtoroSyncError] = useState<string | null>(null);
   const [manualEntryHoldingId, setManualEntryHoldingId] = useState<string | null>(null);
   const [manualRows, setManualRows] = useState<{ stockName: string; weightPct: string }[]>([{ stockName: '', weightPct: '' }]);
   const [manualSaving, setManualSaving] = useState(false);
@@ -881,6 +890,29 @@ export default function PortfolioView(props: PortfolioViewProps) {
     } finally {
       setImportParsing(false);
       e.target.value = '';
+    }
+  };
+
+  const handleEtoroSync = async () => {
+    if (!etoroCredentials) return;
+    setEtoroSyncing(true);
+    setEtoroSyncError(null);
+    setImportPreview(null);
+    try {
+      const resp = await fetch('/api/portfolio-etoro-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: etoroCredentials.api_key, userKey: etoroCredentials.user_key }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.error || `eToro sync failed (${resp.status})`);
+      setImportTemplate('universal');
+      setImportRawParsed(data.holdings);
+      setIsImporting(true);
+    } catch (err: any) {
+      setEtoroSyncError(err?.message || 'Could not sync from eToro.');
+    } finally {
+      setEtoroSyncing(false);
     }
   };
 
@@ -1747,6 +1779,79 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
       {holdingsTab === 'settings' && (
         <div className="space-y-3">
+        {(() => {
+          const isConnected = !!etoroCredentials;
+          return (
+            <div className="apple-card p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5" /> Connect eToro</span>
+                {isConnected && <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400">● Connected</span>}
+              </div>
+              <p className="text-[9px] text-slate-400">
+                Sync real account holdings directly from eToro's API instead of a manual file upload. Only Real Asset positions are pulled in - CFDs and leveraged/margin positions are excluded, since those aren't genuine ownership comparable to a Zerodha/Groww holding.
+              </p>
+              {etoroEditing ? (
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={etoroApiKeyInput}
+                    onChange={(e) => setEtoroApiKeyInput(e.target.value)}
+                    placeholder="x-api-key"
+                    autoFocus
+                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs font-mono"
+                  />
+                  <input
+                    type="password"
+                    value={etoroUserKeyInput}
+                    onChange={(e) => setEtoroUserKeyInput(e.target.value)}
+                    placeholder="x-user-key"
+                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs font-mono"
+                  />
+                  <p className="text-[9px] text-slate-400">Generate these at api-portal.etoro.com → Settings → Trading → API Key Management. Your account must be verified first.</p>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => runAction(async () => {
+                        await setEtoroCredentials?.(etoroApiKeyInput.trim(), etoroUserKeyInput.trim());
+                        setEtoroEditing(false);
+                        setEtoroApiKeyInput('');
+                        setEtoroUserKeyInput('');
+                      })}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
+                    >
+                      Save
+                    </button>
+                    <button onClick={() => { setEtoroEditing(false); setEtoroApiKeyInput(''); setEtoroUserKeyInput(''); }} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  {isConnected ? (
+                    <>
+                      <button
+                        onClick={handleEtoroSync}
+                        disabled={etoroSyncing}
+                        className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer"
+                      >
+                        {etoroSyncing ? 'Syncing…' : 'Sync from eToro'}
+                      </button>
+                      <button onClick={() => runAction(() => deleteEtoroCredentials?.())} className="px-3 py-2 text-[10px] font-bold text-rose-500 cursor-pointer">Disconnect</button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setEtoroEditing(true)}
+                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer"
+                    >
+                      Connect eToro Account
+                    </button>
+                  )}
+                </div>
+              )}
+              {etoroSyncError && <p className="text-[10px] text-rose-500">{etoroSyncError}</p>}
+            </div>
+          );
+        })()}
         <div className="apple-card p-4 space-y-3">
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Banknote className="w-3.5 h-3.5" /> Cash Balance</span>
           <p className="text-[9px] text-slate-400">

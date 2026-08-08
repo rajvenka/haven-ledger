@@ -206,6 +206,9 @@ export default function App() {
     portfolioProjectedBankBalances,
     setProjectedBankBalance,
     recalculateProjectedBankBalance,
+    etoroCredentials,
+    setEtoroCredentials,
+    deleteEtoroCredentials,
     portfolioDividends,
     addPortfolioDividend,
     deletePortfolioDividend,
@@ -1700,6 +1703,9 @@ export default function App() {
                 portfolioProjectedBankBalances={portfolioProjectedBankBalances}
                 setProjectedBankBalance={setProjectedBankBalance}
                 recalculateProjectedBankBalance={recalculateProjectedBankBalance}
+                etoroCredentials={etoroCredentials}
+                setEtoroCredentials={setEtoroCredentials}
+                deleteEtoroCredentials={deleteEtoroCredentials}
                 portfolioSnapshots={portfolioSnapshots}
                 takePortfolioSnapshot={takePortfolioSnapshot}
                 deletePortfolioSnapshotBatch={deletePortfolioSnapshotBatch}
