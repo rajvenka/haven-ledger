@@ -398,6 +398,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [etoroUserKeyInput, setEtoroUserKeyInput] = useState('');
   const [etoroSyncing, setEtoroSyncing] = useState(false);
   const [etoroSyncError, setEtoroSyncError] = useState<string | null>(null);
+  const [etoroSyncDebug, setEtoroSyncDebug] = useState<any>(null);
   const [manualEntryHoldingId, setManualEntryHoldingId] = useState<string | null>(null);
   const [manualRows, setManualRows] = useState<{ stockName: string; weightPct: string }[]>([{ stockName: '', weightPct: '' }]);
   const [manualSaving, setManualSaving] = useState(false);
@@ -899,6 +900,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     if (!connection) return;
     setEtoroSyncing(true);
     setEtoroSyncError(null);
+    setEtoroSyncDebug(null);
     setImportPreview(null);
     try {
       const resp = await fetch('/api/portfolio-etoro-sync', {
@@ -907,6 +909,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         body: JSON.stringify({ apiKey: connection.credentials?.api_key, userKey: connection.credentials?.user_key }),
       });
       const data = await resp.json();
+      if (data?.instrumentDebug) setEtoroSyncDebug(data.instrumentDebug);
       if (!resp.ok) throw new Error(data?.error || `eToro sync failed (${resp.status})`);
       setImportTemplate('universal');
       setImportPortfolioId(connection.portfolio_id ?? '');
@@ -1890,6 +1893,15 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 </div>
               )}
               {etoroSyncError && <p className="text-[10px] text-rose-500">{etoroSyncError}</p>}
+              {etoroSyncDebug && etoroSyncDebug.resolvedCount < etoroSyncDebug.requestedCount && (
+                <div className="text-[9px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 rounded p-2 space-y-0.5 font-mono">
+                  <p>Symbol resolution: {etoroSyncDebug.resolvedCount}/{etoroSyncDebug.requestedCount} resolved</p>
+                  <p>Instruments endpoint: status {etoroSyncDebug.status}, ok={String(etoroSyncDebug.ok)}</p>
+                  {etoroSyncDebug.rawKeys && <p>Response keys: {JSON.stringify(etoroSyncDebug.rawKeys)}</p>}
+                  {etoroSyncDebug.sample && <p className="break-all">Sample: {etoroSyncDebug.sample}</p>}
+                  {etoroSyncDebug.errorBody && <p className="break-all">Error body: {etoroSyncDebug.errorBody}</p>}
+                </div>
+              )}
             </div>
           );
         })()}

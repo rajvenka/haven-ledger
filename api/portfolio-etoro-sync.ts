@@ -70,17 +70,28 @@ export default async function handler(req: any, res: any) {
     const uniqueIds = Array.from(new Set(realAssetPositions.map((p) => p.instrumentID)));
     const instrumentsResp = await etoroFetch(`/market-data/instruments?instrumentIds=${uniqueIds.join(",")}`, apiKey, userKey);
     const instrumentMap = new Map<number, { symbol: string; name: string; exchange: string }>();
+    // Captured for diagnostics - the first real sync revealed instrument resolution silently
+    // failing (all symbols showing as "INSTRUMENT_xxxx" placeholders), and there's no way to
+    // see why without this - Vercel runtime logs weren't reachable when this was needed.
+    let instrumentDebug: any = { status: instrumentsResp.status, ok: instrumentsResp.ok };
     if (instrumentsResp.ok) {
       const instrumentsData = await instrumentsResp.json();
-      const list: any[] = Array.isArray(instrumentsData) ? instrumentsData : (instrumentsData?.items ?? instrumentsData?.data ?? []);
+      instrumentDebug.rawKeys = instrumentsData && typeof instrumentsData === 'object' ? Object.keys(instrumentsData) : null;
+      instrumentDebug.sample = JSON.stringify(instrumentsData).slice(0, 500);
+      const list: any[] = Array.isArray(instrumentsData) ? instrumentsData : (instrumentsData?.items ?? instrumentsData?.data ?? instrumentsData?.instruments ?? []);
+      instrumentDebug.listLength = list.length;
       for (const inst of list) {
-        const id = inst.instrumentId ?? inst.instrumentID ?? inst.id;
-        const symbol = inst.internalSymbolFull ?? inst.symbol ?? inst.symbolFull ?? String(id);
-        const name = inst.displayName ?? inst.name ?? symbol;
+        const id = inst.instrumentId ?? inst.instrumentID ?? inst.id ?? inst.InstrumentID;
+        const symbol = inst.internalSymbolFull ?? inst.symbol ?? inst.symbolFull ?? inst.SymbolFull ?? String(id);
+        const name = inst.displayName ?? inst.name ?? inst.instrumentDisplayName ?? symbol;
         const exchange = inst.exchangeName ?? inst.exchange ?? "eToro";
         if (id != null) instrumentMap.set(Number(id), { symbol, name, exchange });
       }
+    } else {
+      instrumentDebug.errorBody = (await instrumentsResp.text().catch(() => "")).slice(0, 500);
     }
+    instrumentDebug.resolvedCount = instrumentMap.size;
+    instrumentDebug.requestedCount = uniqueIds.length;
 
     // eToro's same-stock-bought-5-times pattern: positions are individual trade entries,
     // not consolidated by instrument - the same stock genuinely can appear as several
@@ -123,6 +134,7 @@ export default async function handler(req: any, res: any) {
       holdings,
       excludedCount: allPositions.length - realAssetPositions.length,
       syncedAt: new Date().toISOString(),
+      instrumentDebug,
     });
   } catch (error: any) {
     console.error("eToro sync error:", error);
