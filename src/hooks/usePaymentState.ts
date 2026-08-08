@@ -1726,7 +1726,7 @@ export function usePaymentState() {
     const withdrawQuery = supabase.from('portfolio_withdrawals').select('amount').eq('workspace_id', activeWorkspaceId);
     const activeQuery = supabase.from('portfolio_holdings').select('buy_price,quantity').eq('workspace_id', activeWorkspaceId).eq('status', 'active');
     const soldQuery = supabase.from('portfolio_holdings').select('buy_price,quantity,sold_price,sold_date').eq('workspace_id', activeWorkspaceId).eq('status', 'sold');
-    const baselineQuery = supabase.from('portfolio_booked_pl_baseline').select('baseline_amount,baseline_date').eq('workspace_id', activeWorkspaceId);
+    const baselineQuery = supabase.from('portfolio_booked_pl_baseline').select('baseline_amount,updated_at').eq('workspace_id', activeWorkspaceId);
     const [contribRes, withdrawRes, activeRes, soldRes, baselineRes] = await Promise.all([
       portfolioId ? contribQuery.eq('portfolio_id', portfolioId) : contribQuery.is('portfolio_id', null),
       portfolioId ? withdrawQuery.eq('portfolio_id', portfolioId) : withdrawQuery.is('portfolio_id', null),
@@ -1739,9 +1739,13 @@ export function usePaymentState() {
     const activeCostBasis = (activeRes.data ?? []).reduce((s, h: any) => s + Number(h.buy_price) * Number(h.quantity), 0);
     const baseline = baselineRes.data?.[0];
     const baselineAmount = baseline ? Number(baseline.baseline_amount) : 0;
-    const baselineDate = baseline ? baseline.baseline_date : '1900-01-01';
+    // Same fix as the header's getPortfolioBookedPL - uses the baseline's actual save
+    // timestamp (updated_at), not the user-entered "as of" date, since a person setting
+    // "today's correct value" has already accounted for anything sold up to the moment
+    // they actually saved it, regardless of what date they typed into the field.
+    const baselineCutoffDate = baseline ? String(baseline.updated_at).slice(0, 10) : '1900-01-01';
     const realizedSinceBaseline = (soldRes.data ?? [])
-      .filter((h: any) => h.sold_date > baselineDate)
+      .filter((h: any) => h.sold_date > baselineCutoffDate)
       .reduce((s, h: any) => s + (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity), 0);
     const bookedPL = baselineAmount + realizedSinceBaseline;
     const calculated = netContributed - activeCostBasis + bookedPL;

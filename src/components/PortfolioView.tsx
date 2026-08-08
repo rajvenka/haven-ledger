@@ -1311,14 +1311,19 @@ export default function PortfolioView(props: PortfolioViewProps) {
   // balance/contributions (which silently misattributed any unrecorded cash movement -
   // contributions not yet invested, sale proceeds not yet reinvested - as booked gain/loss).
   // A portfolio's baseline (0 if never set) plus the sum of (sold_price - buy_price) x
-  // quantity for everything sold after that baseline's date - history before the baseline
-  // stays frozen at whatever's confirmed correct, nothing retroactively recalculated.
+  // quantity for everything sold after the baseline was actually confirmed - history up to
+  // that point stays frozen at whatever's confirmed correct, nothing retroactively
+  // recalculated. Uses the baseline's real save timestamp (updated_at), not the
+  // user-entered "as of" date field - the feature's intent is "set today's correct value",
+  // and if the entered date lags behind the actual save moment, sales in that gap were
+  // already reflected in the number the person typed in, so counting them again on top
+  // double-counts them.
   const getPortfolioBookedPL = (pid: string | null) => {
     const baseline = portfolioBookedPlBaselines.find((b: any) => (b.portfolio_id ?? null) === (pid ?? null));
     const baselineAmount = baseline ? Number(baseline.baseline_amount) : 0;
-    const baselineDate = baseline ? baseline.baseline_date : '1900-01-01';
+    const baselineCutoffDate = baseline ? String(baseline.updated_at).slice(0, 10) : '1900-01-01';
     const realizedSinceBaseline = portfolioHoldings
-      .filter((h: any) => h.status === 'sold' && (h.portfolio_id ?? null) === (pid ?? null) && h.sold_date > baselineDate)
+      .filter((h: any) => h.status === 'sold' && (h.portfolio_id ?? null) === (pid ?? null) && h.sold_date > baselineCutoffDate)
       .reduce((s: number, h: any) => s + convHeader(h, (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity)), 0);
     return baselineAmount + realizedSinceBaseline;
   };
