@@ -27,6 +27,7 @@ interface PortfolioViewProps {
   deletePortfolioCashBalance?: (id: string) => Promise<void>;
   setBookedPlBaseline?: (amount: number, date: string, portfolioId?: string) => Promise<void>;
   setProjectedBankBalance?: (amount: number, portfolioId?: string) => Promise<void>;
+  recalculateProjectedBankBalance?: (portfolioId?: string) => Promise<void>;
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
   deletePortfolioSplit: (id: string) => Promise<void>;
   portfolioHoldings: any[];
@@ -153,7 +154,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly, isDataLoading, columnPrefs, onUpdateColumnPrefs,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances, portfolioBookedPlBaselines = [], portfolioProjectedBankBalances = [],
-    setPortfolioCashBalance, deletePortfolioCashBalance, setBookedPlBaseline, setProjectedBankBalance,
+    setPortfolioCashBalance, deletePortfolioCashBalance, setBookedPlBaseline, setProjectedBankBalance, recalculateProjectedBankBalance,
     portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     mfHoldingsCache = [], loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
@@ -946,6 +947,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
         const sellPrice = overridePrice !== undefined && overridePrice !== '' ? parseFloat(overridePrice) : Number(h.live_price ?? h.current_price ?? h.buy_price);
         await markPortfolioHoldingSoldFromImport?.(h.id, sellPrice);
       }
+      // Auto-recalculate Projected Bank Balance now that this import's holdings are saved -
+      // establishes a fresh baseline at import time. A manual edit made afterward still
+      // always wins (both just set updated_at, and the header uses whichever is more
+      // recent) - this doesn't lock the value in, just keeps it current by default.
+      await recalculateProjectedBankBalance?.(portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined);
       setImportPreview(null);
       setImportRawParsed(null);
       setImportMissingSelected(new Set());

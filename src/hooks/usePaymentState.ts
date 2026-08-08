@@ -1714,6 +1714,40 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
+  // Auto-recalculates and saves Projected Bank Balance right after an import - queries
+  // Supabase directly rather than trusting component state, since React state from the
+  // holding-write calls just before this won't have re-rendered yet within the same
+  // function execution. A manual edit made afterward still always wins over this (both
+  // just set updated_at, and the header already uses whichever is more recent) - this only
+  // establishes a fresh baseline at the moment of import, it doesn't lock anything in.
+  const recalculateProjectedBankBalance = async (portfolioId?: string) => {
+    if (!user || !activeWorkspaceId) return;
+    const contribQuery = supabase.from('portfolio_contributions').select('amount').eq('workspace_id', activeWorkspaceId);
+    const withdrawQuery = supabase.from('portfolio_withdrawals').select('amount').eq('workspace_id', activeWorkspaceId);
+    const activeQuery = supabase.from('portfolio_holdings').select('buy_price,quantity').eq('workspace_id', activeWorkspaceId).eq('status', 'active');
+    const soldQuery = supabase.from('portfolio_holdings').select('buy_price,quantity,sold_price,sold_date').eq('workspace_id', activeWorkspaceId).eq('status', 'sold');
+    const baselineQuery = supabase.from('portfolio_booked_pl_baseline').select('baseline_amount,baseline_date').eq('workspace_id', activeWorkspaceId);
+    const [contribRes, withdrawRes, activeRes, soldRes, baselineRes] = await Promise.all([
+      portfolioId ? contribQuery.eq('portfolio_id', portfolioId) : contribQuery.is('portfolio_id', null),
+      portfolioId ? withdrawQuery.eq('portfolio_id', portfolioId) : withdrawQuery.is('portfolio_id', null),
+      portfolioId ? activeQuery.eq('portfolio_id', portfolioId) : activeQuery.is('portfolio_id', null),
+      portfolioId ? soldQuery.eq('portfolio_id', portfolioId) : soldQuery.is('portfolio_id', null),
+      portfolioId ? baselineQuery.eq('portfolio_id', portfolioId) : baselineQuery.is('portfolio_id', null),
+    ]);
+    const netContributed = (contribRes.data ?? []).reduce((s, c: any) => s + Number(c.amount), 0)
+      - (withdrawRes.data ?? []).reduce((s, w: any) => s + Number(w.amount), 0);
+    const activeCostBasis = (activeRes.data ?? []).reduce((s, h: any) => s + Number(h.buy_price) * Number(h.quantity), 0);
+    const baseline = baselineRes.data?.[0];
+    const baselineAmount = baseline ? Number(baseline.baseline_amount) : 0;
+    const baselineDate = baseline ? baseline.baseline_date : '1900-01-01';
+    const realizedSinceBaseline = (soldRes.data ?? [])
+      .filter((h: any) => h.sold_date > baselineDate)
+      .reduce((s, h: any) => s + (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity), 0);
+    const bookedPL = baselineAmount + realizedSinceBaseline;
+    const calculated = netContributed - activeCostBasis + bookedPL;
+    await setProjectedBankBalance(calculated, portfolioId);
+  };
+
   const addPortfolioDividend = async (symbol: string, amount: number, dividendDate: string, holdingId?: string, notes?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_dividends').insert({
@@ -1941,7 +1975,7 @@ export function usePaymentState() {
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
     portfolioCashBalances, setPortfolioCashBalance, deletePortfolioCashBalance,
     portfolioBookedPlBaselines, setBookedPlBaseline,
-    portfolioProjectedBankBalances, setProjectedBankBalance,
+    portfolioProjectedBankBalances, setProjectedBankBalance, recalculateProjectedBankBalance,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
     portfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,

@@ -205,6 +205,7 @@ export default function App() {
     setBookedPlBaseline,
     portfolioProjectedBankBalances,
     setProjectedBankBalance,
+    recalculateProjectedBankBalance,
     portfolioDividends,
     addPortfolioDividend,
     deletePortfolioDividend,
@@ -1698,6 +1699,7 @@ export default function App() {
                 setBookedPlBaseline={setBookedPlBaseline}
                 portfolioProjectedBankBalances={portfolioProjectedBankBalances}
                 setProjectedBankBalance={setProjectedBankBalance}
+                recalculateProjectedBankBalance={recalculateProjectedBankBalance}
                 portfolioSnapshots={portfolioSnapshots}
                 takePortfolioSnapshot={takePortfolioSnapshot}
                 deletePortfolioSnapshotBatch={deletePortfolioSnapshotBatch}
