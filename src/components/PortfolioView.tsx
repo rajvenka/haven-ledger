@@ -771,6 +771,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [importPreview, setImportPreview] = useState<{
     fresh: ParsedHolding[];
     qtyChanged: { parsed: ParsedHolding; existing: any; direction: 'increased' | 'reduced' }[];
+    priceChanged: { parsed: ParsedHolding; existing: any }[];
     unchanged: number;
     missing: any[];
   } | null>(null);
@@ -781,7 +782,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [importBuyDate, setImportBuyDate] = useState(todayStr());
   const [importSaving, setImportSaving] = useState(false);
 
-  type ImportClassification = { status: 'new' } | { status: 'unchanged'; existing: any } | { status: 'qty_changed'; existing: any; direction: 'increased' | 'reduced' };
+  type ImportClassification = { status: 'new' } | { status: 'unchanged'; existing: any } | { status: 'qty_changed'; existing: any; direction: 'increased' | 'reduced' } | { status: 'price_changed'; existing: any };
 
   const classifyImportRow = (parsed: ParsedHolding, targetPortfolioId?: string): ImportClassification => {
     const existing = portfolioHoldings.find(h => {
@@ -798,7 +799,17 @@ export default function PortfolioView(props: PortfolioViewProps) {
       return h.symbol === parsed.symbol.toUpperCase() && h.holding_type === parsed.holdingType && !h.folio_number && !parsed.folioNumber;
     });
     if (!existing) return { status: 'new' };
-    if (Number(existing.quantity) === parsed.quantity) return { status: 'unchanged', existing };
+    if (Number(existing.quantity) === parsed.quantity) {
+      // Same quantity doesn't necessarily mean nothing changed - the average cost basis can
+      // shift without a quantity change (a corporate action, or simply a stale import from
+      // before a later correction) and this was previously being silently missed entirely,
+      // since "unchanged" rows are skipped outright. A small tolerance (0.5% or 1 paisa,
+      // whichever is larger) avoids flagging on floating-point noise from repeated imports.
+      const priceDiff = Math.abs(Number(existing.buy_price) - parsed.buyPrice);
+      const tolerance = Math.max(Number(existing.buy_price) * 0.005, 0.01);
+      if (priceDiff > tolerance) return { status: 'price_changed', existing };
+      return { status: 'unchanged', existing };
+    }
     return { status: 'qty_changed', existing, direction: parsed.quantity > Number(existing.quantity) ? 'increased' : 'reduced' };
   };
 
@@ -878,11 +889,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
     const targetPortfolioId = portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined;
     const fresh: ParsedHolding[] = [];
     const qtyChanged: { parsed: ParsedHolding; existing: any; direction: 'increased' | 'reduced' }[] = [];
+    const priceChanged: { parsed: ParsedHolding; existing: any }[] = [];
     let unchanged = 0;
     importRawParsed.forEach(h => {
       const c = classifyImportRow(h, targetPortfolioId);
       if (c.status === 'new') fresh.push(h);
       else if (c.status === 'qty_changed') qtyChanged.push({ parsed: h, existing: c.existing, direction: c.direction });
+      else if (c.status === 'price_changed') priceChanged.push({ parsed: h, existing: c.existing });
       else unchanged++;
     });
     // Holdings that are active, match a broker+holding-type combination actually present in
@@ -903,7 +916,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         return h.symbol === p.symbol.toUpperCase() && h.holding_type === p.holdingType && !h.folio_number && !p.folioNumber;
       });
     });
-    setImportPreview({ fresh, qtyChanged, unchanged, missing });
+    setImportPreview({ fresh, qtyChanged, priceChanged, unchanged, missing });
     setImportMissingSelected(new Set());
     setImportMissingSellPrice(Object.fromEntries(missing.map(h => [h.id, String(Number(h.live_price ?? h.current_price ?? h.buy_price))])));
     setImportReducedOverrides(Object.fromEntries(qtyChanged.filter(qc => qc.direction === 'reduced').map(qc => [
@@ -914,7 +927,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   }, [importRawParsed, importPortfolioId, portfolioMode]);
 
   const confirmImport = async () => {
-    if (!importPreview || (importPreview.fresh.length === 0 && importPreview.qtyChanged.length === 0 && importMissingSelected.size === 0)) return;
+    if (!importPreview || (importPreview.fresh.length === 0 && importPreview.qtyChanged.length === 0 && importPreview.priceChanged.length === 0 && importMissingSelected.size === 0)) return;
     setImportSaving(true);
     await runAction(async () => {
       if (importPreview.fresh.length > 0) {
@@ -942,6 +955,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
           sellPriceForReduced,
           soldItemBuyPrice
         );
+      }
+      // Same quantity, but the file's average cost differs from what's stored - previously
+      // silently missed entirely, since these were classified "unchanged" and skipped. A
+      // straight cost-basis correction, no shares actually changed hands, so just update
+      // buy_price directly rather than going through the sold-clone reconciliation path.
+      for (const { parsed, existing } of importPreview.priceChanged) {
+        await updatePortfolioHolding(existing.id, { buyPrice: parsed.buyPrice });
       }
       for (const h of importPreview.missing) {
         if (!importMissingSelected.has(h.id)) continue;
@@ -2232,6 +2252,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
                     {importPreview.fresh.length} new holding{importPreview.fresh.length !== 1 ? 's' : ''} found
                     {importPreview.qtyChanged.length > 0 && ` · ${importPreview.qtyChanged.length} with a changed quantity`}
+                    {importPreview.priceChanged.length > 0 && ` · ${importPreview.priceChanged.length} with only a changed avg price`}
                     {importPreview.unchanged > 0 && ` · ${importPreview.unchanged} unchanged (skipped)`}
                     {importPreview.missing.length > 0 && ` · ${importPreview.missing.length} not found in this file`}
                     {' '}· external funds always excluded
@@ -2279,6 +2300,22 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         ))}
                       </div>
                       <p className="text-[9px] text-slate-400">A reduced quantity is recorded as an actual sale for the difference - sell price and new average cost default from the file, both editable above.</p>
+                    </div>
+                  )}
+                  {importPreview.priceChanged.length > 0 && (
+                    <div className="space-y-1">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">Average Price Updated (same quantity)</span>
+                      <div className="max-h-32 overflow-y-auto space-y-1">
+                        {importPreview.priceChanged.map((pc, i) => (
+                          <div key={i} className="flex items-center justify-between text-[10px] px-2 py-1 bg-indigo-50 dark:bg-indigo-950/20 rounded">
+                            <span className="text-slate-600 dark:text-slate-300">{pc.parsed.symbol}</span>
+                            <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                              {Number(pc.existing.buy_price).toFixed(2)} → {pc.parsed.buyPrice.toFixed(2)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[9px] text-slate-400">Same quantity, but the file's average cost differs from what's stored - corrected directly, no shares treated as sold.</p>
                     </div>
                   )}
                   {importPreview.missing.length > 0 && (
@@ -2364,13 +2401,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       />
                     </>
                   )}
-                  {(importPreview.fresh.length > 0 || importPreview.qtyChanged.length > 0 || importMissingSelected.size > 0) && (
+                  {(importPreview.fresh.length > 0 || importPreview.qtyChanged.length > 0 || importPreview.priceChanged.length > 0 || importMissingSelected.size > 0) && (
                     <button
                       onClick={confirmImport}
                       disabled={importSaving}
                       className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer"
                     >
-                      {importSaving ? 'Importing…' : `Import ${importPreview.fresh.length} New${importPreview.qtyChanged.length > 0 ? ` + Update ${importPreview.qtyChanged.length}` : ''}${importMissingSelected.size > 0 ? ` + Mark ${importMissingSelected.size} Sold` : ''}`}
+                      {importSaving ? 'Importing…' : `Import ${importPreview.fresh.length} New${importPreview.qtyChanged.length > 0 ? ` + Update ${importPreview.qtyChanged.length}` : ''}${importPreview.priceChanged.length > 0 ? ` + Fix ${importPreview.priceChanged.length} Price${importPreview.priceChanged.length !== 1 ? 's' : ''}` : ''}${importMissingSelected.size > 0 ? ` + Mark ${importMissingSelected.size} Sold` : ''}`}
                     </button>
                   )}
                 </div>
