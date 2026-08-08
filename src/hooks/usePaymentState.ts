@@ -1768,11 +1768,11 @@ export function usePaymentState() {
   // static keys, IG deliberately never has a password stored here - only username/api_key
   // persist, the password itself is asked for fresh on every sync (safer than persisting a
   // brokerage password, at the cost of re-entering it each time).
-  const setPortfolioBrokerConnection = async (brokerType: 'etoro' | 'ig' | 'webull', credentials: Record<string, string>, portfolioId?: string) => {
+  const setPortfolioBrokerConnection = async (brokerType: 'etoro' | 'ig' | 'webull', credentials: Record<string, string>, portfolioId?: string, connectionLabel?: string) => {
     if (!user || !activeWorkspaceId) return;
     const row: any = {
       workspace_id: activeWorkspaceId, portfolio_id: portfolioId ?? null, broker_type: brokerType, credentials,
-      created_by: user.id, updated_at: new Date().toISOString(),
+      connection_label: connectionLabel ?? null, created_by: user.id, updated_at: new Date().toISOString(),
     };
     let existingQuery = supabase.from('portfolio_broker_connections').select('id').eq('workspace_id', activeWorkspaceId).eq('broker_type', brokerType);
     existingQuery = portfolioId ? existingQuery.eq('portfolio_id', portfolioId) : existingQuery.is('portfolio_id', null);
