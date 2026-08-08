@@ -44,13 +44,18 @@ interface MfapiSearchResult {
 
 function pickBestMatch(candidates: MfapiSearchResult[], targetName: string): MfapiSearchResult | undefined {
   const targetWords = targetName.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(w => w.length > 1);
-  if (targetWords.length === 0) return candidates[0];
+  if (targetWords.length === 0) return undefined;
   const filtered = candidates.filter(c => {
     const nameLower = c.schemeName.toLowerCase();
     return targetWords.every(w => nameLower.includes(w));
   });
-  const pool = filtered.length > 0 ? filtered : candidates;
-  return pool.sort((a, b) => Math.abs(a.schemeName.length - targetName.length) - Math.abs(b.schemeName.length - targetName.length))[0];
+  // Never fall back to picking from unfiltered candidates - that's exactly how a wrong
+  // scheme variant (e.g. an IDCW/dividend-payout plan instead of Growth, which can have a
+  // wildly different NAV for the same fund) gets silently matched. No candidate containing
+  // every required word - including disambiguators like "growth"/"direct" - means no match,
+  // not a best-effort guess.
+  if (filtered.length === 0) return undefined;
+  return filtered.sort((a, b) => Math.abs(a.schemeName.length - targetName.length) - Math.abs(b.schemeName.length - targetName.length))[0];
 }
 
 async function fetchLatestNav(schemeCode: string | number): Promise<{ nav: number; schemeName: string; httpStatus: number } | null> {
@@ -106,7 +111,11 @@ export default async function handler(req: any, res: any) {
           }
         }
         if (name) {
-          const searchQuery = name.trim().split(/\s+/).slice(0, 4).join(" ");
+          // Full name, not truncated - dropping words like "Direct"/"Growth" from the query
+          // is exactly what let mfapi.in's search surface the wrong scheme variant (e.g. an
+          // IDCW/dividend-payout plan with a wildly different NAV) when nothing in the
+          // results happened to contain those words for disambiguation.
+          const searchQuery = name.trim();
           const searchResp = await fetch(`https://api.mfapi.in/mf/search?q=${encodeURIComponent(searchQuery)}`);
           if (!searchResp.ok) {
             console.log(`[mf-nav] mfapi search HTTP ${searchResp.status} for query="${searchQuery}" id=${id}`);
