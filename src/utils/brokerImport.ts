@@ -12,6 +12,9 @@ export interface ParsedHolding {
   currentPrice: number;
   source?: string;
   currency?: 'INR' | 'USD' | 'AUD' | 'EUR' | 'GBP' | 'SGD' | 'AED' | 'CAD';
+  leverage?: number;
+  stopLossRate?: number;
+  takeProfitRate?: number;
 }
 
 export type BrokerTemplate = 'zerodha' | 'groww_stocks' | 'groww_mf' | 'universal';

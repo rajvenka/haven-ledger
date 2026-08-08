@@ -977,6 +977,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             holdingType: h.holdingType, broker: h.broker, symbol: h.symbol, isin: h.isin, folioNumber: h.folioNumber, exchange: h.exchange,
             quantity: h.quantity, buyPrice: h.buyPrice, buyDate: importBuyDate, currentPrice: h.currentPrice,
             source: h.source || importSourceTag.trim() || undefined, currency: h.currency,
+            leverage: h.leverage, stopLossRate: h.stopLossRate, takeProfitRate: h.takeProfitRate,
           })),
           portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined
         );
@@ -2130,6 +2131,40 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
       {holdingsTab === 'active' && (
         <>
+      {(() => {
+        // Alert system: flags any holding whose current price has moved within 10% of its
+        // stop-loss level - only holdings with a stop_loss_rate set (currently eToro
+        // CFD/leveraged positions) participate, since that's the only data source that
+        // carries this per-position risk parameter today.
+        const STOP_LOSS_WARN_PCT = 10;
+        const atRisk = activeHoldings
+          .filter((h: any) => h.stop_loss_rate != null)
+          .map((h: any) => {
+            const current = Number(h.live_price ?? h.current_price ?? h.buy_price);
+            const stopLoss = Number(h.stop_loss_rate);
+            const distancePct = current > 0 ? (Math.abs(current - stopLoss) / current) * 100 : 999;
+            return { holding: h, current, stopLoss, distancePct };
+          })
+          .filter(a => a.distancePct <= STOP_LOSS_WARN_PCT)
+          .sort((a, b) => a.distancePct - b.distancePct);
+        if (atRisk.length === 0) return null;
+        return (
+          <div className="apple-card p-4 space-y-2 border-2 border-rose-200 dark:border-rose-900 bg-rose-50/50 dark:bg-rose-950/20">
+            <span className="text-[10px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
+              <TrendingDown className="w-3.5 h-3.5" /> {atRisk.length} Holding{atRisk.length !== 1 ? 's' : ''} Near Stop Loss
+            </span>
+            <div className="space-y-1">
+              {atRisk.map((a, i) => (
+                <div key={i} className="flex items-center justify-between text-[11px] px-2 py-1.5 bg-white dark:bg-slate-950 rounded-lg">
+                  <span className="font-bold text-slate-700 dark:text-slate-300">{a.holding.symbol}</span>
+                  <span className="text-slate-500">Current {fmt(a.current)} · Stop {fmt(a.stopLoss)}</span>
+                  <span className={`font-black ${a.distancePct <= 3 ? 'text-rose-600' : 'text-amber-600'}`}>{a.distancePct.toFixed(1)}% away</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
       {portfolioMode === 'multiple' && filterOptions.portfolioNames.length > 1 && (
         <div className="flex items-center gap-1.5 flex-wrap">
           <button

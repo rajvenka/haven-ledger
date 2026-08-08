@@ -1163,6 +1163,7 @@ export function usePaymentState() {
   // Bulk import from a broker file - inserts many holdings in one request, then refreshes once.
   const bulkAddPortfolioHoldings = async (holdings: {
     holdingType: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; folioNumber?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string; currency?: string;
+    leverage?: number; stopLossRate?: number; takeProfitRate?: number;
   }[], portfolioId?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     if (holdings.length === 0) return;
@@ -1174,6 +1175,7 @@ export function usePaymentState() {
       current_price: h.currentPrice ?? null, current_price_updated_at: h.currentPrice != null ? new Date().toISOString() : null,
       reference_price: h.currentPrice ?? h.buyPrice, reference_date: new Date().toISOString().slice(0, 10),
       source: h.source ?? null, change_flag: 'added', currency: h.currency ?? 'INR',
+      leverage: h.leverage ?? null, stop_loss_rate: h.stopLossRate ?? null, take_profit_rate: h.takeProfitRate ?? null,
     }));
     const { data: inserted, error } = await supabase.from('portfolio_holdings').insert(rows).select('id, current_price');
     if (error) throw error;

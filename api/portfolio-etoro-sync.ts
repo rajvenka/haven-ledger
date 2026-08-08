@@ -118,7 +118,12 @@ export default async function handler(req: any, res: any) {
     // instrument, so a CFD position and a Real Asset position in the same underlying
     // instrument are never merged into one holding, since they're fundamentally different
     // kinds of exposure. Same principle as the Groww MF folio dedup fix from earlier.
-    const consolidated = new Map<string, { symbol: string; name: string; exchange: string; source: string; totalUnits: number; totalCost: number; currentValue: number }>();
+    // Leverage/stop-loss/take-profit are per-position risk parameters that don't average
+    // cleanly across multiple lots - leverage uses a units-weighted average (it's normally
+    // consistent across positions in the same instrument+type anyway), while stop-loss and
+    // take-profit keep the tightest (most conservative) value seen, so an alert system
+    // built on this never under-warns by picking a looser threshold from a different lot.
+    const consolidated = new Map<string, { symbol: string; name: string; exchange: string; source: string; totalUnits: number; totalCost: number; currentValue: number; leverageWeighted: number; stopLossRate: number | null; takeProfitRate: number | null }>();
     for (const pos of realAssetPositions) {
       const id = Number(pos.instrumentID);
       const settlementKey = String(pos.settlementTypeID ?? 'undefined');
@@ -128,13 +133,32 @@ export default async function handler(req: any, res: any) {
       const units = Number(pos.units) || 0;
       const openRate = Number(pos.openRate) || 0;
       const currentValue = Number(pos.unitsBaseValueDollars ?? pos.initialAmountInDollars) || 0;
+      const leverage = Number(pos.leverage) || 1;
+      const isBuy = pos.isBuy !== false; // default true (long) if not specified
+      const posStopLoss = pos.stopLossRate != null ? Number(pos.stopLossRate) : null;
+      const posTakeProfit = pos.takeProfitRate != null ? Number(pos.takeProfitRate) : null;
       const existing = consolidated.get(mapKey);
       if (existing) {
         existing.totalUnits += units;
         existing.totalCost += units * openRate;
         existing.currentValue += currentValue;
+        existing.leverageWeighted += units * leverage;
+        // Tightest = closest to current price in the direction that matters: for a long
+        // position a higher stop-loss is tighter, for a short a lower one is tighter.
+        if (posStopLoss != null) {
+          existing.stopLossRate = existing.stopLossRate == null ? posStopLoss
+            : (isBuy ? Math.max(existing.stopLossRate, posStopLoss) : Math.min(existing.stopLossRate, posStopLoss));
+        }
+        if (posTakeProfit != null) {
+          existing.takeProfitRate = existing.takeProfitRate == null ? posTakeProfit
+            : (isBuy ? Math.min(existing.takeProfitRate, posTakeProfit) : Math.max(existing.takeProfitRate, posTakeProfit));
+        }
       } else {
-        consolidated.set(mapKey, { symbol: info.symbol, name: info.name, exchange: info.exchange, source, totalUnits: units, totalCost: units * openRate, currentValue });
+        consolidated.set(mapKey, {
+          symbol: info.symbol, name: info.name, exchange: info.exchange, source,
+          totalUnits: units, totalCost: units * openRate, currentValue,
+          leverageWeighted: units * leverage, stopLossRate: posStopLoss, takeProfitRate: posTakeProfit,
+        });
       }
     }
 
@@ -151,6 +175,9 @@ export default async function handler(req: any, res: any) {
         currentPrice: h.currentValue / h.totalUnits,
         currency: "USD",
         source: h.source,
+        leverage: h.leverageWeighted / h.totalUnits,
+        stopLossRate: h.stopLossRate ?? undefined,
+        takeProfitRate: h.takeProfitRate ?? undefined,
       }));
 
     res.status(200).json({
