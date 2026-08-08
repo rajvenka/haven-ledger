@@ -169,9 +169,9 @@ export default async function handler(req: any, res: any) {
       }
     }
 
-    const holdings = Array.from(consolidated.values())
-      .filter((h) => h.totalUnits > 0)
-      .map((h) => ({
+    const holdings = Array.from(consolidated.entries())
+      .filter(([, h]) => h.totalUnits > 0)
+      .map(([mapKey, h]) => ({
         symbol: h.symbol,
         name: h.name,
         broker: "eToro",
@@ -186,10 +186,37 @@ export default async function handler(req: any, res: any) {
         leverage: h.leverageWeighted / h.totalUnits,
         stopLossRate: h.stopLossRate ?? undefined,
         takeProfitRate: h.takeProfitRate ?? undefined,
+        matchKey: mapKey,
       }));
+
+    // Individual, un-consolidated lots - each tagged with the same matchKey as its parent
+    // master holding above, so the frontend can link each raw position to the correct
+    // consolidated row once it's saved and has a real id. This is the actual per-lot detail
+    // (own entry price, stop-loss, leverage, net value) the master row's "tightest value"
+    // approximation was standing in for.
+    const rawLots = realAssetPositions.map((pos: any) => {
+      const id = Number(pos.instrumentID);
+      const settlementKey = String(pos.settlementTypeID ?? 'undefined');
+      const mapKey = `${id}_${settlementKey}`;
+      return {
+        matchKey: mapKey,
+        externalPositionId: String(pos.positionID ?? ''),
+        broker: "eToro",
+        quantity: Number(pos.units) || 0,
+        buyPrice: Number(pos.openRate) || 0,
+        currentPrice: (Number(pos.unitsBaseValueDollars ?? pos.initialAmountInDollars) || 0) / (Number(pos.units) || 1),
+        leverage: Number(pos.leverage) || 1,
+        stopLossRate: pos.stopLossRate != null ? Number(pos.stopLossRate) : undefined,
+        takeProfitRate: pos.takeProfitRate != null ? Number(pos.takeProfitRate) : undefined,
+        etoroNetValueAmount: Number(pos.amount) || 0,
+        openDate: pos.openDateTime ?? undefined,
+        source: settlementLabels[settlementKey] ?? `eToro (type ${settlementKey})`,
+      };
+    });
 
     res.status(200).json({
       holdings,
+      rawLots,
       totalPositions: allPositions.length,
       includedPositions: realAssetPositions.length,
       consolidatedHoldingsCount: holdings.length,

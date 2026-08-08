@@ -210,6 +210,8 @@ export default function App() {
     setPortfolioBrokerConnection,
     deletePortfolioBrokerConnection,
     markBrokerConnectionSynced,
+    syncEtoroHoldingLots,
+    loadPortfolioHoldingLots,
     portfolioDividends,
     addPortfolioDividend,
     deletePortfolioDividend,
@@ -1708,6 +1710,8 @@ export default function App() {
                 setPortfolioBrokerConnection={setPortfolioBrokerConnection}
                 deletePortfolioBrokerConnection={deletePortfolioBrokerConnection}
                 markBrokerConnectionSynced={markBrokerConnectionSynced}
+                syncEtoroHoldingLots={syncEtoroHoldingLots}
+                loadPortfolioHoldingLots={loadPortfolioHoldingLots}
                 portfolioSnapshots={portfolioSnapshots}
                 takePortfolioSnapshot={takePortfolioSnapshot}
                 deletePortfolioSnapshotBatch={deletePortfolioSnapshotBatch}

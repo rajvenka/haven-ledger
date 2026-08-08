@@ -1802,6 +1802,68 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
+  // Upserts individual per-lot detail rows for a master holding - matched on
+  // (holding_id, external_position_id), so a re-sync updates the same lot rather than
+  // duplicating it. Stale lots (present before this sync but not in the new set - e.g. a
+  // position was fully closed on eToro) are deleted, since the master holding's own
+  // quantity reconciliation already handles the "this got sold" case at the aggregate
+  // level, and a lingering child row would misrepresent the current position.
+  const upsertPortfolioHoldingLots = async (holdingId: string, lots: {
+    externalPositionId: string; broker: string; quantity: number; buyPrice: number; currentPrice?: number;
+    leverage?: number; stopLossRate?: number; takeProfitRate?: number; etoroNetValueAmount?: number; openDate?: string; source?: string;
+  }[]) => {
+    if (!activeWorkspaceId) throw new Error('Select a workspace first.');
+    const keepIds = lots.map(l => l.externalPositionId).filter(Boolean);
+    if (keepIds.length > 0) {
+      await supabase.from('portfolio_holding_lots').delete().eq('holding_id', holdingId).not('external_position_id', 'in', `(${keepIds.join(',')})`);
+    }
+    for (const lot of lots) {
+      if (!lot.externalPositionId) continue;
+      const row: any = {
+        holding_id: holdingId, workspace_id: activeWorkspaceId, external_position_id: lot.externalPositionId, broker: lot.broker,
+        quantity: lot.quantity, buy_price: lot.buyPrice, current_price: lot.currentPrice ?? null,
+        leverage: lot.leverage ?? null, stop_loss_rate: lot.stopLossRate ?? null, take_profit_rate: lot.takeProfitRate ?? null,
+        etoro_net_value_amount: lot.etoroNetValueAmount ?? null, open_date: lot.openDate ?? null, source: lot.source ?? null,
+        updated_at: new Date().toISOString(),
+      };
+      const { data: existing } = await supabase.from('portfolio_holding_lots').select('id').eq('holding_id', holdingId).eq('external_position_id', lot.externalPositionId).maybeSingle();
+      const { error } = existing
+        ? await supabase.from('portfolio_holding_lots').update(row).eq('id', existing.id)
+        : await supabase.from('portfolio_holding_lots').insert(row);
+      if (error) throw error;
+    }
+  };
+
+  const loadPortfolioHoldingLots = async (holdingId: string) => {
+    const { data, error } = await supabase.from('portfolio_holding_lots').select('*').eq('holding_id', holdingId).order('open_date', { ascending: false });
+    if (error) throw error;
+    return data ?? [];
+  };
+
+  // Called right after an eToro import saves its master (consolidated) holdings - queries
+  // Supabase directly for the just-saved rows rather than trusting component state, since
+  // the write calls just before this won't have re-rendered into props yet within the same
+  // function execution (same reasoning as recalculateProjectedBankBalance). Matches by
+  // symbol alone (not symbol+source) - source can be overridden by a global import tag at
+  // save time, which would silently break a source-based match. Known limitation: if the
+  // same stock genuinely has both a Real Asset and a CFD position simultaneously, both
+  // would map to the same symbol and this match becomes ambiguous - rare enough in
+  // practice not to block on, but worth knowing.
+  const syncEtoroHoldingLots = async (symbols: string[], rawLotsBySymbol: Map<string, any[]>, portfolioId?: string) => {
+    if (!activeWorkspaceId || symbols.length === 0) return;
+    let query = supabase.from('portfolio_holdings').select('id, symbol').eq('workspace_id', activeWorkspaceId).eq('broker', 'eToro').eq('status', 'active');
+    query = portfolioId ? query.eq('portfolio_id', portfolioId) : query.is('portfolio_id', null);
+    const { data: masterRows } = await query;
+    if (!masterRows) return;
+    for (const symbol of symbols) {
+      const master = masterRows.find((r: any) => r.symbol === symbol.toUpperCase());
+      const lots = rawLotsBySymbol.get(symbol);
+      if (master && lots) {
+        await upsertPortfolioHoldingLots(master.id, lots);
+      }
+    }
+  };
+
   const addPortfolioDividend = async (symbol: string, amount: number, dividendDate: string, holdingId?: string, notes?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_dividends').insert({
@@ -2031,6 +2093,7 @@ export function usePaymentState() {
     portfolioBookedPlBaselines, setBookedPlBaseline,
     portfolioProjectedBankBalances, setProjectedBankBalance, recalculateProjectedBankBalance,
     portfolioBrokerConnections, setPortfolioBrokerConnection, deletePortfolioBrokerConnection, markBrokerConnectionSynced,
+    upsertPortfolioHoldingLots, loadPortfolioHoldingLots, syncEtoroHoldingLots,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
     portfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,

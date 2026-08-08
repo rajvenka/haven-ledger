@@ -32,6 +32,8 @@ interface PortfolioViewProps {
   setPortfolioBrokerConnection?: (brokerType: 'etoro' | 'ig' | 'webull', credentials: Record<string, string>, portfolioId?: string, connectionLabel?: string) => Promise<void>;
   deletePortfolioBrokerConnection?: (id: string) => Promise<void>;
   markBrokerConnectionSynced?: (id: string) => Promise<void>;
+  syncEtoroHoldingLots?: (symbols: string[], rawLotsBySymbol: Map<string, any[]>, portfolioId?: string) => Promise<void>;
+  loadPortfolioHoldingLots?: (holdingId: string) => Promise<any[]>;
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
   deletePortfolioSplit: (id: string) => Promise<void>;
   portfolioHoldings: any[];
@@ -181,6 +183,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances, portfolioBookedPlBaselines = [], portfolioProjectedBankBalances = [],
     setPortfolioCashBalance, deletePortfolioCashBalance, setBookedPlBaseline, setProjectedBankBalance, recalculateProjectedBankBalance,
     portfolioBrokerConnections = [], setPortfolioBrokerConnection, deletePortfolioBrokerConnection, markBrokerConnectionSynced,
+    syncEtoroHoldingLots, loadPortfolioHoldingLots,
     portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     mfHoldingsCache = [], loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
@@ -423,6 +426,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [etoroSyncing, setEtoroSyncing] = useState(false);
   const [etoroSyncError, setEtoroSyncError] = useState<string | null>(null);
   const [etoroSyncDebug, setEtoroSyncDebug] = useState<any>(null);
+  const [etoroRawLots, setEtoroRawLots] = useState<any[]>([]);
+  const [expandedLotHoldingId, setExpandedLotHoldingId] = useState<string | null>(null);
+  const [expandedLots, setExpandedLots] = useState<any[]>([]);
+  const [expandedLotsLoading, setExpandedLotsLoading] = useState(false);
   const [manualEntryHoldingId, setManualEntryHoldingId] = useState<string | null>(null);
   const [manualRows, setManualRows] = useState<{ stockName: string; weightPct: string }[]>([{ stockName: '', weightPct: '' }]);
   const [manualSaving, setManualSaving] = useState(false);
@@ -922,6 +929,23 @@ export default function PortfolioView(props: PortfolioViewProps) {
     }
   };
 
+  const toggleLotExpand = async (holdingId: string) => {
+    if (expandedLotHoldingId === holdingId) {
+      setExpandedLotHoldingId(null);
+      setExpandedLots([]);
+      return;
+    }
+    setExpandedLotHoldingId(holdingId);
+    setExpandedLots([]);
+    setExpandedLotsLoading(true);
+    try {
+      const lots = await loadPortfolioHoldingLots?.(holdingId) ?? [];
+      setExpandedLots(lots);
+    } finally {
+      setExpandedLotsLoading(false);
+    }
+  };
+
   const handleEtoroSync = async (connection: any) => {
     if (!connection) return;
     setEtoroSyncing(true);
@@ -936,6 +960,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       });
       const data = await resp.json();
       if (data?.instrumentDebug || data?.settlementBreakdown) setEtoroSyncDebug(data);
+      setEtoroRawLots(data?.rawLots ?? []);
       if (!resp.ok) throw new Error(data?.error || `eToro sync failed (${resp.status})`);
       setImportTemplate('universal');
       setImportPortfolioId(connection.portfolio_id ?? '');
@@ -1073,6 +1098,20 @@ export default function PortfolioView(props: PortfolioViewProps) {
       // always wins (both just set updated_at, and the header uses whichever is more
       // recent) - this doesn't lock the value in, just keeps it current by default.
       await recalculateProjectedBankBalance?.(portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined);
+      // Sync individual eToro lot detail into the child table now that master holdings are
+      // saved - matches each raw lot group to its consolidated master by symbol, via the
+      // matchKey both share from the sync response.
+      if (etoroRawLots.length > 0) {
+        const matchKeyToSymbol = new Map<string, string>((importRawParsed ?? []).filter(h => h.matchKey).map(h => [h.matchKey as string, h.symbol]));
+        const rawLotsBySymbol = new Map<string, any[]>();
+        for (const lot of etoroRawLots) {
+          const symbol = matchKeyToSymbol.get(lot.matchKey);
+          if (!symbol) continue;
+          rawLotsBySymbol.set(symbol, [...(rawLotsBySymbol.get(symbol) ?? []), lot]);
+        }
+        await syncEtoroHoldingLots?.(Array.from(rawLotsBySymbol.keys()), rawLotsBySymbol, portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined);
+        setEtoroRawLots([]);
+      }
       setImportPreview(null);
       setImportRawParsed(null);
       setImportMissingSelected(new Set());
@@ -3053,6 +3092,15 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               >
                                 <ChevronDown className={`w-3 h-3 transition-transform ${expandedHoldingId === h.id ? 'rotate-180' : ''}`} />
                               </button>
+                              {h.broker === 'eToro' && (
+                                <button
+                                  onClick={() => toggleLotExpand(h.id)}
+                                  title="Show individual lots"
+                                  className="text-[8px] font-black px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full cursor-pointer flex items-center gap-0.5"
+                                >
+                                  Lots {expandedLotHoldingId === h.id ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+                                </button>
+                              )}
                               <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{h.broker}</span>
                               {portfolioMode === 'multiple' && (
                                 <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-500 dark:text-indigo-400 rounded-full">
@@ -3271,6 +3319,34 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                   </button>
                                 )}
                               </div>
+                            </td>
+                          </tr>
+                        )}
+                        {expandedLotHoldingId === h.id && (
+                          <tr>
+                            <td colSpan={(isSelectingForTag ? 1 : 0) + 2 + visibleColumns.length} className="p-3 bg-slate-50 dark:bg-slate-900">
+                              {expandedLotsLoading ? (
+                                <p className="text-[10px] text-slate-400">Loading lots…</p>
+                              ) : expandedLots.length === 0 ? (
+                                <p className="text-[10px] text-slate-400">No individual lot detail recorded for this holding yet - try syncing from eToro again.</p>
+                              ) : (
+                                <div className="space-y-1">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{expandedLots.length} individual lot{expandedLots.length !== 1 ? 's' : ''}</span>
+                                  <div className="grid grid-cols-6 gap-2 text-[9px] font-bold text-slate-400 uppercase px-2">
+                                    <span>Qty</span><span>Entry</span><span>Current</span><span>Leverage</span><span>Stop Loss</span><span>Net Value</span>
+                                  </div>
+                                  {expandedLots.map((lot: any) => (
+                                    <div key={lot.id} className="grid grid-cols-6 gap-2 text-[10px] px-2 py-1.5 bg-white dark:bg-slate-950 rounded">
+                                      <span className="font-bold text-slate-700 dark:text-slate-300">{fmtQty(Number(lot.quantity))}</span>
+                                      <span>{fmtCur(Number(lot.buy_price), h.currency)}</span>
+                                      <span>{lot.current_price != null ? fmtCur(Number(lot.current_price), h.currency) : '—'}</span>
+                                      <span>{lot.leverage != null ? `${Number(lot.leverage)}x` : '—'}</span>
+                                      <span>{lot.stop_loss_rate != null ? fmtCur(Number(lot.stop_loss_rate), h.currency) : '—'}</span>
+                                      <span className="font-bold text-indigo-600 dark:text-indigo-400">{lot.etoro_net_value_amount != null ? fmtCur(Number(lot.etoro_net_value_amount), h.currency) : '—'}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </td>
                           </tr>
                         )}
