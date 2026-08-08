@@ -2157,7 +2157,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
               {atRisk.map((a, i) => (
                 <div key={i} className="flex items-center justify-between text-[11px] px-2 py-1.5 bg-white dark:bg-slate-950 rounded-lg">
                   <span className="font-bold text-slate-700 dark:text-slate-300">{a.holding.symbol}</span>
-                  <span className="text-slate-500">Current {fmt(a.current)} · Stop {fmt(a.stopLoss)}</span>
+                  <span className="text-slate-500">Current {fmtCur(a.current, a.holding.currency)} · Stop {fmtCur(a.stopLoss, a.holding.currency)}</span>
                   <span className={`font-black ${a.distancePct <= 3 ? 'text-rose-600' : 'text-amber-600'}`}>{a.distancePct.toFixed(1)}% away</span>
                 </div>
               ))}
@@ -3032,7 +3032,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                   </td>
                                 );
                               case 'buy_price':
-                                return <td key="buy_price" className="p-2.5 text-right text-slate-600 dark:text-slate-300">₹{Number(h.buy_price).toFixed(2)}</td>;
+                                return <td key="buy_price" className="p-2.5 text-right text-slate-600 dark:text-slate-300">{fmtCur(Number(h.buy_price), h.currency)}</td>;
                               case 'current_price':
                                 return (
                                   <td key="current_price" className="p-2.5 text-right">
@@ -3049,7 +3049,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                       </div>
                                     ) : (
                                       <button onClick={() => setPriceEdits(prev => ({ ...prev, [h.id]: String(Number(h.current_price ?? h.buy_price)) }))} className="font-bold text-slate-900 dark:text-white flex items-center gap-1 ml-auto cursor-pointer" title="Update LTP (last file-sourced price)">
-                                        ₹{Number(h.current_price ?? h.buy_price).toFixed(2)} <RefreshCw className="w-2.5 h-2.5 text-slate-400" />
+                                        {fmtCur(Number(h.current_price ?? h.buy_price), h.currency)} <RefreshCw className="w-2.5 h-2.5 text-slate-400" />
                                       </button>
                                     )}
                                   </td>
@@ -3057,7 +3057,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               case 'live_price':
                                 return (
                                   <td key="live_price" className="p-2.5 text-right text-slate-600 dark:text-slate-300">
-                                    {h.live_price != null ? `₹${Number(h.live_price).toFixed(2)}` : <span className="text-slate-300 dark:text-slate-700">—</span>}
+                                    {h.live_price != null ? fmtCur(Number(h.live_price), h.currency) : <span className="text-slate-300 dark:text-slate-700">—</span>}
                                   </td>
                                 );
                               case 'daily_change': {
@@ -3075,11 +3075,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                 return <td key="since_previous_load" className={`p-2.5 text-right font-bold ${sl >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{sl >= 0 ? '+' : ''}{fmt(sl)}</td>;
                               }
                               case 'invested':
-                                return <td key="invested" className="p-2.5 text-right text-slate-600 dark:text-slate-300">{fmt(invested)}</td>;
+                                return <td key="invested" className="p-2.5 text-right text-slate-600 dark:text-slate-300">{fmtCur(invested, h.currency)}</td>;
                               case 'current_value':
-                                return <td key="current_value" className="p-2.5 text-right text-slate-600 dark:text-slate-300">{fmt(curValue)}</td>;
+                                return <td key="current_value" className="p-2.5 text-right text-slate-600 dark:text-slate-300">{fmtCur(curValue, h.currency)}</td>;
                               case 'gain':
-                                return <td key="gain" className={`p-2.5 text-right font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)}</td>;
+                                return <td key="gain" className={`p-2.5 text-right font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gain >= 0 ? '+' : ''}{fmtCur(gain, h.currency)}</td>;
                               case 'gain_pct':
                                 return <td key="gain_pct" className={`p-2.5 text-right font-bold ${gainPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gainPct >= 0 ? '+' : ''}{gainPct.toFixed(2)}%</td>;
                               case 'since_reference':
@@ -3401,11 +3401,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               </div>
                             )}
                           </td>
-                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">₹{Number(h.buy_price).toFixed(2)}</td>
-                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">₹{Number(h.sold_price).toFixed(2)}</td>
-                          <td className="p-2.5 text-right text-slate-500">{fmt(invested)}</td>
-                          <td className="p-2.5 text-right text-slate-900 dark:text-white font-semibold">{fmt(soldValue)}</td>
-                          <td className={`p-2.5 text-right font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gain >= 0 ? '+' : ''}{fmt(gain)}</td>
+                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">{fmtCur(Number(h.buy_price), h.currency)}</td>
+                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-300">{fmtCur(Number(h.sold_price), h.currency)}</td>
+                          <td className="p-2.5 text-right text-slate-500">{fmtCur(invested, h.currency)}</td>
+                          <td className="p-2.5 text-right text-slate-900 dark:text-white font-semibold">{fmtCur(soldValue, h.currency)}</td>
+                          <td className={`p-2.5 text-right font-bold ${gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gain >= 0 ? '+' : ''}{fmtCur(gain, h.currency)}</td>
                           <td className={`p-2.5 text-right font-bold ${gainPct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{gainPct >= 0 ? '+' : ''}{gainPct.toFixed(2)}%</td>
                           <td className="p-2.5 text-right text-slate-400">{h.sold_date}</td>
                           <td className="p-2.5 text-right">
