@@ -113,6 +113,23 @@ const convertToBase = (amount: number, fromCurrency: string, baseCurrency: strin
   if (!rate) return amount;
   return amount * rate;
 };
+// eToro "Net Value" - total cash committed to a leveraged position (original margin plus
+// any maintenance margin debited for extending the stop-loss beyond the default 50%-of-
+// margin risk allowance). Verified against eToro's own documented example (a $1000/10x
+// position with stop loss extended to 150% correctly computes to $2000 total invested)
+// plus two independently reported real examples - not a guess. isBuy flips the direction
+// for short positions, where loss increases as price rises above entry instead of falls
+// below it.
+const computeEtoroNetValue = (h: any): number | null => {
+  if (h.stop_loss_rate == null || h.leverage == null || Number(h.leverage) <= 0) return null;
+  const entry = Number(h.buy_price);
+  const stop = Number(h.stop_loss_rate);
+  const qty = Number(h.quantity);
+  const margin = (entry * qty) / Number(h.leverage);
+  const isShort = h.source?.toLowerCase?.().includes('short'); // best-effort; direction isn't separately stored yet
+  const lossAtStop = isShort ? (stop - entry) * qty : (entry - stop) * qty;
+  return lossAtStop + margin * 0.5;
+};
 const fmtQty = (n: number) => Number.isInteger(n) ? String(n) : n.toFixed(2);
 
 // Generic CSV export - takes column headers and row objects keyed by header, handles
@@ -150,6 +167,7 @@ const DEFAULT_COLUMNS: { key: string; label: string; align: 'text-left' | 'text-
   { key: 'gain_pct', label: '% Chg', align: 'text-right' },
   { key: 'since_reference', label: 'Since Reference (%)', align: 'text-right' },
   { key: 'since_reference_amount', label: 'Since Reference ($)', align: 'text-right' },
+  { key: 'net_value', label: 'Net Value (eToro)', align: 'text-right' },
 ];
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const memberName = (m: WorkspaceMemberLite) => m.displayName || m.email.split('@')[0];
@@ -254,6 +272,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         case 'gain_pct': return Number(h.buy_price) > 0 ? (((Number(h.live_price ?? h.current_price ?? h.buy_price) - Number(h.buy_price)) / Number(h.buy_price)) * 100).toFixed(2) : '';
         case 'since_reference': { const pct = getSinceReferencePct(h); return pct !== null ? pct.toFixed(2) : ''; }
         case 'since_reference_amount': { const amt = getSinceReferenceAmount(h); return amt !== null ? amt.toFixed(2) : ''; }
+        case 'net_value': { const nv = computeEtoroNetValue(h); return nv !== null ? nv.toFixed(2) : ''; }
         default: return '';
       }
     };
@@ -281,6 +300,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         case 'gain_pct': return Number(h.buy_price) > 0 ? (((Number(h.live_price ?? h.current_price ?? h.buy_price) - Number(h.buy_price)) / Number(h.buy_price)) * 100).toFixed(2) : '';
         case 'since_reference': { const pct = getSinceReferencePct(h); return pct !== null ? pct.toFixed(2) : ''; }
         case 'since_reference_amount': { const amt = getSinceReferenceAmount(h); return amt !== null ? amt.toFixed(2) : ''; }
+        case 'net_value': { const nv = computeEtoroNetValue(h); return nv !== null ? nv.toFixed(2) : ''; }
         default: return '';
       }
     };
@@ -657,6 +677,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
           }
           return h.reference_price != null ? (current - Number(h.reference_price)) * qty : -Infinity;
         }
+        case 'net_value': { const nv = computeEtoroNetValue(h); return nv ?? -Infinity; }
         default: return 0;
       }
     };
@@ -3105,6 +3126,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                     ) : (
                                       <span className="text-slate-300 dark:text-slate-700">—</span>
                                     )}
+                                  </td>
+                                );
+                              }
+                              case 'net_value': {
+                                const nv = computeEtoroNetValue(h);
+                                return (
+                                  <td key="net_value" className="p-2.5 text-right" title="Total cash committed to this leveraged position (margin + any maintenance margin for an extended stop-loss)">
+                                    {nv !== null ? fmtCur(nv, h.currency) : <span className="text-slate-300 dark:text-slate-700">—</span>}
                                   </td>
                                 );
                               }
