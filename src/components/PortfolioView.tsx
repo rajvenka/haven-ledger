@@ -2016,7 +2016,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             {bookedProfitLoss >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
             {fmtHeader(Math.abs(bookedProfitLoss))}
           </span>
-          <span className="text-[9px] text-slate-400 block mt-0.5">cash + stock value vs. contributed</span>
+          <span className="text-[9px] text-slate-400 block mt-0.5">from real sales since baseline</span>
         </div>
         <div className="apple-card p-4">
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Total Stock Investment</span>
