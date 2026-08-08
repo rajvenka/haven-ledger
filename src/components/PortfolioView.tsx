@@ -113,14 +113,17 @@ const convertToBase = (amount: number, fromCurrency: string, baseCurrency: strin
   if (!rate) return amount;
   return amount * rate;
 };
-// eToro "Net Value" - total cash committed to a leveraged position (original margin plus
-// any maintenance margin debited for extending the stop-loss beyond the default 50%-of-
-// margin risk allowance). Verified against eToro's own documented example (a $1000/10x
-// position with stop loss extended to 150% correctly computes to $2000 total invested)
-// plus two independently reported real examples - not a guess. isBuy flips the direction
-// for short positions, where loss increases as price rises above entry instead of falls
-// below it.
+// eToro "Net Value" - total cash committed to a leveraged position. eToro's own API
+// returns this directly per position as "amount" (distinct from initialAmountInDollars,
+// which stays fixed at the original investment) - confirmed to vary with stop-loss changes,
+// so it's summed across consolidated lots at sync time and used directly here whenever
+// present, since that's strictly more reliable than deriving it. The formula below (margin
+// + maintenance margin for an extended stop, verified against eToro's own documented
+// example and two independently reported real cases) is kept only as a fallback for
+// holdings synced before this field was captured, or any future non-eToro source that
+// carries leverage/stop-loss without the direct amount.
 const computeEtoroNetValue = (h: any): number | null => {
+  if (h.etoro_net_value_amount != null) return Number(h.etoro_net_value_amount);
   if (h.stop_loss_rate == null || h.leverage == null || Number(h.leverage) <= 0) return null;
   const entry = Number(h.buy_price);
   const stop = Number(h.stop_loss_rate);
@@ -999,7 +1002,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             holdingType: h.holdingType, broker: h.broker, symbol: h.symbol, isin: h.isin, folioNumber: h.folioNumber, exchange: h.exchange,
             quantity: h.quantity, buyPrice: h.buyPrice, buyDate: importBuyDate, currentPrice: h.currentPrice,
             source: h.source || importSourceTag.trim() || undefined, currency: h.currency,
-            leverage: h.leverage, stopLossRate: h.stopLossRate, takeProfitRate: h.takeProfitRate,
+            leverage: h.leverage, stopLossRate: h.stopLossRate, takeProfitRate: h.takeProfitRate, etoroNetValueAmount: h.etoroNetValueAmount,
           })),
           portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined
         );

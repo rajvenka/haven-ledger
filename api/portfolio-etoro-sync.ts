@@ -123,7 +123,11 @@ export default async function handler(req: any, res: any) {
     // consistent across positions in the same instrument+type anyway), while stop-loss and
     // take-profit keep the tightest (most conservative) value seen, so an alert system
     // built on this never under-warns by picking a looser threshold from a different lot.
-    const consolidated = new Map<string, { symbol: string; name: string; exchange: string; source: string; totalUnits: number; totalCost: number; currentValue: number; leverageWeighted: number; stopLossRate: number | null; takeProfitRate: number | null }>();
+    // "amount" (distinct from initialAmountInDollars, which stays fixed at the original
+    // investment) is eToro's own direct source for "Net Value" - confirmed to vary with
+    // stop-loss changes, so it's summed across consolidated lots rather than derived
+    // client-side, which is strictly more reliable than a formula.
+    const consolidated = new Map<string, { symbol: string; name: string; exchange: string; source: string; totalUnits: number; totalCost: number; currentValue: number; leverageWeighted: number; stopLossRate: number | null; takeProfitRate: number | null; totalNetValueAmount: number }>();
     for (const pos of realAssetPositions) {
       const id = Number(pos.instrumentID);
       const settlementKey = String(pos.settlementTypeID ?? 'undefined');
@@ -137,12 +141,14 @@ export default async function handler(req: any, res: any) {
       const isBuy = pos.isBuy !== false; // default true (long) if not specified
       const posStopLoss = pos.stopLossRate != null ? Number(pos.stopLossRate) : null;
       const posTakeProfit = pos.takeProfitRate != null ? Number(pos.takeProfitRate) : null;
+      const posNetValueAmount = Number(pos.amount) || 0;
       const existing = consolidated.get(mapKey);
       if (existing) {
         existing.totalUnits += units;
         existing.totalCost += units * openRate;
         existing.currentValue += currentValue;
         existing.leverageWeighted += units * leverage;
+        existing.totalNetValueAmount += posNetValueAmount;
         // Tightest = closest to current price in the direction that matters: for a long
         // position a higher stop-loss is tighter, for a short a lower one is tighter.
         if (posStopLoss != null) {
@@ -158,6 +164,7 @@ export default async function handler(req: any, res: any) {
           symbol: info.symbol, name: info.name, exchange: info.exchange, source,
           totalUnits: units, totalCost: units * openRate, currentValue,
           leverageWeighted: units * leverage, stopLossRate: posStopLoss, takeProfitRate: posTakeProfit,
+          totalNetValueAmount: posNetValueAmount,
         });
       }
     }
@@ -175,6 +182,7 @@ export default async function handler(req: any, res: any) {
         currentPrice: h.currentValue / h.totalUnits,
         currency: "USD",
         source: h.source,
+        etoroNetValueAmount: h.totalNetValueAmount,
         leverage: h.leverageWeighted / h.totalUnits,
         stopLossRate: h.stopLossRate ?? undefined,
         takeProfitRate: h.takeProfitRate ?? undefined,

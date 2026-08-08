@@ -15,6 +15,7 @@ export interface ParsedHolding {
   leverage?: number;
   stopLossRate?: number;
   takeProfitRate?: number;
+  etoroNetValueAmount?: number;
 }
 
 export type BrokerTemplate = 'zerodha' | 'groww_stocks' | 'groww_mf' | 'universal';
