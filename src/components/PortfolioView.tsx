@@ -885,15 +885,17 @@ export default function PortfolioView(props: PortfolioViewProps) {
       else if (c.status === 'qty_changed') qtyChanged.push({ parsed: h, existing: c.existing, direction: c.direction });
       else unchanged++;
     });
-    // Holdings that are active, match a broker actually present in this file (and the
-    // target portfolio), but aren't matched by any row in it - the file is a full account
-    // snapshot, so absence almost always means it was sold outside the app, not that it was
-    // never held. Never auto-marked, though - surfaced for explicit per-item confirmation,
-    // since a partial/wrong-segment file could otherwise wrongly flag things as sold.
-    const brokersInFile = new Set(importRawParsed.map(h => h.broker));
+    // Holdings that are active, match a broker+holding-type combination actually present in
+    // this file (and the target portfolio), but aren't matched by any row in it - the file
+    // is a full account snapshot for that combination, so absence almost always means it was
+    // sold outside the app. Scoped to broker+type together, not broker alone - a Groww
+    // stocks file only covers stocks, so it must never flag Groww mutual funds as missing
+    // just because they share the same broker name; a Zerodha file follows the identical
+    // rule (stocks file -> only compares against Zerodha stocks, MF file -> only Zerodha MF).
+    const brokerTypesInFile = new Set(importRawParsed.map(h => `${h.broker}|${h.holdingType}`));
     const missing = portfolioHoldings.filter(h => {
       if (h.status !== 'active') return false;
-      if (!brokersInFile.has(h.broker)) return false;
+      if (!brokerTypesInFile.has(`${h.broker}|${h.holding_type}`)) return false;
       if (portfolioMode === 'multiple' && (h.portfolio_id ?? null) !== (targetPortfolioId ?? null)) return false;
       return !importRawParsed.some(p => {
         if (p.isin && h.isin) return h.isin === p.isin;
