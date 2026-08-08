@@ -803,10 +803,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
       // Same quantity doesn't necessarily mean nothing changed - the average cost basis can
       // shift without a quantity change (a corporate action, or simply a stale import from
       // before a later correction) and this was previously being silently missed entirely,
-      // since "unchanged" rows are skipped outright. A small tolerance (0.5% or 1 paisa,
-      // whichever is larger) avoids flagging on floating-point noise from repeated imports.
+      // since "unchanged" rows are skipped outright. A flat 1-paisa tolerance only exists to
+      // absorb genuine floating-point rounding noise, not to hide real differences - a 0.5%
+      // relative tolerance was tried first but confirmed too loose in practice (missed a
+      // ~0.16% and a ~0.26% real difference while barely catching a ~0.53% one).
       const priceDiff = Math.abs(Number(existing.buy_price) - parsed.buyPrice);
-      const tolerance = Math.max(Number(existing.buy_price) * 0.005, 0.01);
+      const tolerance = 0.01;
       if (priceDiff > tolerance) return { status: 'price_changed', existing };
       return { status: 'unchanged', existing };
     }
