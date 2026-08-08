@@ -2364,13 +2364,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       />
                     </>
                   )}
-                  {(importPreview.fresh.length > 0 || importPreview.qtyChanged.length > 0) && (
+                  {(importPreview.fresh.length > 0 || importPreview.qtyChanged.length > 0 || importMissingSelected.size > 0) && (
                     <button
                       onClick={confirmImport}
                       disabled={importSaving}
                       className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer"
                     >
-                      {importSaving ? 'Importing…' : `Import ${importPreview.fresh.length} New${importPreview.qtyChanged.length > 0 ? ` + Update ${importPreview.qtyChanged.length}` : ''}`}
+                      {importSaving ? 'Importing…' : `Import ${importPreview.fresh.length} New${importPreview.qtyChanged.length > 0 ? ` + Update ${importPreview.qtyChanged.length}` : ''}${importMissingSelected.size > 0 ? ` + Mark ${importMissingSelected.size} Sold` : ''}`}
                     </button>
                   )}
                 </div>
