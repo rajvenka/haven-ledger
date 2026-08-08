@@ -46,10 +46,11 @@ export default async function handler(req: any, res: any) {
     }
 
     // Real account positions - includes CFDs, real-asset stocks, crypto margin trades, and
-    // futures all mixed together (settlementTypeID distinguishes them). Filtered below to
-    // settlementTypeID === 1 (Real Asset) only, since that's genuine stock/ETF ownership -
-    // the only kind directly comparable to a Zerodha/Groww holding. CFDs and leveraged
-    // positions are deliberately excluded, not imported as if they were real ownership.
+    // futures all mixed together (settlementTypeID distinguishes them). Per discussion,
+    // everything is brought in now - not just Real Asset - since a CFD/commodity position
+    // (e.g. leveraged Gold) is still a real position the person holds and wants tracked.
+    // Tagged by settlement type (via the "source" field) rather than silently blended in
+    // indistinguishably from genuine stock ownership, so the distinction isn't lost.
     const portfolioResp = await etoroFetch("/trading/info/portfolio", apiKey, userKey);
     if (!portfolioResp.ok) {
       const body = await portfolioResp.text().catch(() => "");
@@ -58,7 +59,8 @@ export default async function handler(req: any, res: any) {
     }
     const portfolioData = await portfolioResp.json();
     const allPositions: any[] = portfolioData?.clientPortfolio?.positions ?? [];
-    const realAssetPositions = allPositions.filter((p) => Number(p.settlementTypeID) === 1);
+    const settlementLabels: Record<string, string> = { "0": "eToro CFD/Leveraged", "1": "eToro Real Asset", "2": "eToro Crypto Margin", "3": "eToro Futures" };
+    const realAssetPositions = allPositions; // no longer filtered - kept the variable name to minimize the diff below
 
     // Breakdown by settlementTypeID - to actually see what the total count is made of (real
     // assets vs CFD/crypto-margin/futures) rather than guessing why a filtered count differs
@@ -70,7 +72,7 @@ export default async function handler(req: any, res: any) {
     }
 
     if (realAssetPositions.length === 0) {
-      res.status(200).json({ holdings: [], excludedCount: allPositions.length, totalPositions: allPositions.length, settlementBreakdown, message: "No Real Asset positions found (CFD/leveraged/crypto-margin positions are excluded on purpose)." });
+      res.status(200).json({ holdings: [], excludedCount: allPositions.length, totalPositions: allPositions.length, settlementBreakdown, message: "No positions found in your eToro account." });
       return;
     }
 
@@ -111,24 +113,28 @@ export default async function handler(req: any, res: any) {
 
     // eToro's same-stock-bought-5-times pattern: positions are individual trade entries,
     // not consolidated by instrument - the same stock genuinely can appear as several
-    // separate position rows. Consolidated here into one holding per instrument (summed
-    // units, weighted-average entry price) rather than importing 5 separate rows for what
-    // is, for reconciliation purposes, a single position - same principle as the Groww MF
-    // folio dedup fix from earlier in this project.
-    const consolidated = new Map<number, { symbol: string; name: string; exchange: string; totalUnits: number; totalCost: number; currentValue: number }>();
+    // separate position rows. Consolidated here into one holding per instrument+settlement
+    // type (summed units, weighted-average entry price) - keyed on both, not just
+    // instrument, so a CFD position and a Real Asset position in the same underlying
+    // instrument are never merged into one holding, since they're fundamentally different
+    // kinds of exposure. Same principle as the Groww MF folio dedup fix from earlier.
+    const consolidated = new Map<string, { symbol: string; name: string; exchange: string; source: string; totalUnits: number; totalCost: number; currentValue: number }>();
     for (const pos of realAssetPositions) {
       const id = Number(pos.instrumentID);
+      const settlementKey = String(pos.settlementTypeID ?? 'undefined');
+      const mapKey = `${id}_${settlementKey}`;
       const info = instrumentMap.get(id) ?? { symbol: `INSTRUMENT_${id}`, name: `Instrument ${id}`, exchange: "eToro" };
+      const source = settlementLabels[settlementKey] ?? `eToro (type ${settlementKey})`;
       const units = Number(pos.units) || 0;
       const openRate = Number(pos.openRate) || 0;
       const currentValue = Number(pos.unitsBaseValueDollars ?? pos.initialAmountInDollars) || 0;
-      const existing = consolidated.get(id);
+      const existing = consolidated.get(mapKey);
       if (existing) {
         existing.totalUnits += units;
         existing.totalCost += units * openRate;
         existing.currentValue += currentValue;
       } else {
-        consolidated.set(id, { symbol: info.symbol, name: info.name, exchange: info.exchange, totalUnits: units, totalCost: units * openRate, currentValue });
+        consolidated.set(mapKey, { symbol: info.symbol, name: info.name, exchange: info.exchange, source, totalUnits: units, totalCost: units * openRate, currentValue });
       }
     }
 
@@ -144,15 +150,15 @@ export default async function handler(req: any, res: any) {
         buyPrice: h.totalCost / h.totalUnits,
         currentPrice: h.currentValue / h.totalUnits,
         currency: "USD",
+        source: h.source,
       }));
 
     res.status(200).json({
       holdings,
       totalPositions: allPositions.length,
-      realAssetPositions: realAssetPositions.length,
+      includedPositions: realAssetPositions.length,
       consolidatedHoldingsCount: holdings.length,
       settlementBreakdown,
-      excludedCount: allPositions.length - realAssetPositions.length,
       syncedAt: new Date().toISOString(),
       instrumentDebug,
     });

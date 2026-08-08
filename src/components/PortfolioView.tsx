@@ -1804,7 +1804,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <div className="apple-card p-4 space-y-3">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5" /> Connect Broker (US/AU)</span>
               <p className="text-[9px] text-slate-400">
-                Sync real account holdings directly from a broker's API instead of a manual file upload. Only USD portfolios are eligible. Each account maps to one specific portfolio - connect two eToro accounts by picking a different portfolio for each.
+                Sync real account holdings directly from a broker's API instead of a manual file upload. Only USD portfolios are eligible. Each account maps to one specific portfolio - connect two eToro accounts by picking a different portfolio for each. All positions are brought in - CFDs, commodities, and leveraged positions included, tagged by type so they stay distinguishable from genuine stock ownership.
               </p>
               <select
                 value={targetPortfolioId}
@@ -1897,7 +1897,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <div className="text-[9px] text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 rounded p-2 space-y-0.5 font-mono">
                   <p className="font-bold text-slate-700 dark:text-slate-200">Sync breakdown</p>
                   <p>Total positions from eToro: {etoroSyncDebug.totalPositions}</p>
-                  <p>Real Asset (settlementTypeID=1): {etoroSyncDebug.realAssetPositions}</p>
+                  <p>Included positions (all types): {etoroSyncDebug.includedPositions}</p>
                   <p>Consolidated into holdings: {etoroSyncDebug.consolidatedHoldingsCount}</p>
                   {etoroSyncDebug.settlementBreakdown && <p>By type: {JSON.stringify(etoroSyncDebug.settlementBreakdown)}</p>}
                   {etoroSyncDebug.instrumentDebug && etoroSyncDebug.instrumentDebug.resolvedCount < etoroSyncDebug.instrumentDebug.requestedCount && (
