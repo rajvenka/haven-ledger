@@ -1075,7 +1075,7 @@ export function usePaymentState() {
   const [portfolioCashBalances, setPortfolioCashBalances] = useState<any[]>([]);
   const [portfolioBookedPlBaselines, setPortfolioBookedPlBaselines] = useState<any[]>([]);
   const [portfolioProjectedBankBalances, setPortfolioProjectedBankBalances] = useState<any[]>([]);
-  const [etoroCredentials, setEtoroCredentialsState] = useState<any>(null);
+  const [portfolioBrokerConnections, setPortfolioBrokerConnectionsState] = useState<any[]>([]);
   const [portfolioDividends, setPortfolioDividends] = useState<any[]>([]);
   const [portfolioFees, setPortfolioFees] = useState<any[]>([]);
   const [portfolioRecurringPlans, setPortfolioRecurringPlans] = useState<any[]>([]);
@@ -1098,7 +1098,7 @@ export function usePaymentState() {
     // flicker during completely normal use, not just on initial load or workspace switch.
     const isFirstLoadForWorkspace = !loadedPortfolioWorkspaces.current.has(activeWorkspaceId);
     if (isFirstLoadForWorkspace) setPortfolioDataLoading(true);
-    const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: cashBalances }, { data: portfoliosData }, { data: currencyRatesData }, { data: bookedPlBaselinesData }, { data: projectedBankBalancesData }, { data: etoroCredsData }] = await Promise.all([
+    const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: cashBalances }, { data: portfoliosData }, { data: currencyRatesData }, { data: bookedPlBaselinesData }, { data: projectedBankBalancesData }, { data: brokerConnectionsData }] = await Promise.all([
       supabase.from('portfolio_holdings').select('*').eq('workspace_id', activeWorkspaceId).order('buy_date', { ascending: false }),
       supabase.from('portfolio_price_history').select('*').eq('workspace_id', activeWorkspaceId).order('recorded_date', { ascending: false }),
       supabase.from('portfolio_splits').select('*').eq('workspace_id', activeWorkspaceId).order('effective_from'),
@@ -1112,7 +1112,7 @@ export function usePaymentState() {
       supabase.from('workspace_currency_rates').select('*').eq('workspace_id', activeWorkspaceId),
       supabase.from('portfolio_booked_pl_baseline').select('*').eq('workspace_id', activeWorkspaceId),
       supabase.from('portfolio_projected_bank_balance').select('*').eq('workspace_id', activeWorkspaceId),
-      supabase.from('portfolio_etoro_credentials').select('*').eq('workspace_id', activeWorkspaceId).maybeSingle(),
+      supabase.from('portfolio_broker_connections').select('*').eq('workspace_id', activeWorkspaceId),
     ]);
     setPortfolioHoldings(holdings ?? []);
     setPortfolioPriceHistory(priceHistory ?? []);
@@ -1127,7 +1127,7 @@ export function usePaymentState() {
     setWorkspaceCurrencyRates(currencyRatesData ?? []);
     setPortfolioBookedPlBaselines(bookedPlBaselinesData ?? []);
     setPortfolioProjectedBankBalances(projectedBankBalancesData ?? []);
-    setEtoroCredentialsState(etoroCredsData ?? null);
+    setPortfolioBrokerConnectionsState(brokerConnectionsData ?? []);
     loadedPortfolioWorkspaces.current.add(activeWorkspaceId);
     setPortfolioDataLoading(false);
   }, [activeWorkspaceId]);
@@ -1760,29 +1760,36 @@ export function usePaymentState() {
     await setProjectedBankBalance(calculated, portfolioId);
   };
 
-  // eToro API credentials (x-api-key/x-user-key pair) for connecting a real eToro account
-  // rather than manual file uploads. Consistent with this app's established access model:
-  // readable by any workspace member (same as every other piece of workspace data), not
-  // gated behind a service-role-only backend - the actual calls to eToro's API still
-  // happen server-side via a Vercel route, keeping keys out of client-to-eToro network
-  // requests, which is the boundary that matters for external exposure.
-  const setEtoroCredentials = async (apiKey: string, userKey: string, etoroUsername?: string) => {
+  // Broker API connections (eToro/IG/Webull) for a specific portfolio - multiple accounts
+  // of the same broker type are supported by mapping each to its own portfolio, rather than
+  // one connection per workspace. credentials shape differs per broker: eToro/Webull use
+  // static keys, IG deliberately never has a password stored here - only username/api_key
+  // persist, the password itself is asked for fresh on every sync (safer than persisting a
+  // brokerage password, at the cost of re-entering it each time).
+  const setPortfolioBrokerConnection = async (brokerType: 'etoro' | 'ig' | 'webull', credentials: Record<string, string>, portfolioId?: string) => {
     if (!user || !activeWorkspaceId) return;
     const row: any = {
-      workspace_id: activeWorkspaceId, api_key: apiKey, user_key: userKey, etoro_username: etoroUsername ?? null,
+      workspace_id: activeWorkspaceId, portfolio_id: portfolioId ?? null, broker_type: brokerType, credentials,
       created_by: user.id, updated_at: new Date().toISOString(),
     };
-    const { data: existing } = await supabase.from('portfolio_etoro_credentials').select('id').eq('workspace_id', activeWorkspaceId).maybeSingle();
+    let existingQuery = supabase.from('portfolio_broker_connections').select('id').eq('workspace_id', activeWorkspaceId).eq('broker_type', brokerType);
+    existingQuery = portfolioId ? existingQuery.eq('portfolio_id', portfolioId) : existingQuery.is('portfolio_id', null);
+    const { data: existing } = await existingQuery.maybeSingle();
     const { error } = existing
-      ? await supabase.from('portfolio_etoro_credentials').update(row).eq('id', existing.id)
-      : await supabase.from('portfolio_etoro_credentials').insert(row);
+      ? await supabase.from('portfolio_broker_connections').update(row).eq('id', existing.id)
+      : await supabase.from('portfolio_broker_connections').insert(row);
     if (error) throw error;
     await loadPortfolioDetails();
   };
 
-  const deleteEtoroCredentials = async () => {
-    if (!activeWorkspaceId) return;
-    const { error } = await supabase.from('portfolio_etoro_credentials').delete().eq('workspace_id', activeWorkspaceId);
+  const deletePortfolioBrokerConnection = async (id: string) => {
+    const { error } = await supabase.from('portfolio_broker_connections').delete().eq('id', id);
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
+  const markBrokerConnectionSynced = async (id: string) => {
+    const { error } = await supabase.from('portfolio_broker_connections').update({ last_synced_at: new Date().toISOString() }).eq('id', id);
     if (error) throw error;
     await loadPortfolioDetails();
   };
@@ -2015,7 +2022,7 @@ export function usePaymentState() {
     portfolioCashBalances, setPortfolioCashBalance, deletePortfolioCashBalance,
     portfolioBookedPlBaselines, setBookedPlBaseline,
     portfolioProjectedBankBalances, setProjectedBankBalance, recalculateProjectedBankBalance,
-    etoroCredentials, setEtoroCredentials, deleteEtoroCredentials,
+    portfolioBrokerConnections, setPortfolioBrokerConnection, deletePortfolioBrokerConnection, markBrokerConnectionSynced,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
     portfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,

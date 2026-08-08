@@ -28,9 +28,10 @@ interface PortfolioViewProps {
   setBookedPlBaseline?: (amount: number, date: string, portfolioId?: string) => Promise<void>;
   setProjectedBankBalance?: (amount: number, portfolioId?: string) => Promise<void>;
   recalculateProjectedBankBalance?: (portfolioId?: string) => Promise<void>;
-  etoroCredentials?: any;
-  setEtoroCredentials?: (apiKey: string, userKey: string, etoroUsername?: string) => Promise<void>;
-  deleteEtoroCredentials?: () => Promise<void>;
+  portfolioBrokerConnections?: any[];
+  setPortfolioBrokerConnection?: (brokerType: 'etoro' | 'ig' | 'webull', credentials: Record<string, string>, portfolioId?: string) => Promise<void>;
+  deletePortfolioBrokerConnection?: (id: string) => Promise<void>;
+  markBrokerConnectionSynced?: (id: string) => Promise<void>;
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
   deletePortfolioSplit: (id: string) => Promise<void>;
   portfolioHoldings: any[];
@@ -158,7 +159,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     workspaceName, workspaceMembers, isReadOnly, isDataLoading, columnPrefs, onUpdateColumnPrefs,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances, portfolioBookedPlBaselines = [], portfolioProjectedBankBalances = [],
     setPortfolioCashBalance, deletePortfolioCashBalance, setBookedPlBaseline, setProjectedBankBalance, recalculateProjectedBankBalance,
-    etoroCredentials, setEtoroCredentials, deleteEtoroCredentials,
+    portfolioBrokerConnections = [], setPortfolioBrokerConnection, deletePortfolioBrokerConnection, markBrokerConnectionSynced,
     portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     mfHoldingsCache = [], loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
@@ -391,7 +392,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [editingProjectedBankBalance, setEditingProjectedBankBalance] = useState(false);
   const [projectedBankBalanceAmountInput, setProjectedBankBalanceAmountInput] = useState('');
   const [projectedBalancePortfolioId, setProjectedBalancePortfolioId] = useState<string>('');
-  const [etoroEditing, setEtoroEditing] = useState(false);
+  const [brokerConnectPortfolioId, setBrokerConnectPortfolioId] = useState<string>('');
+  const [brokerEditingType, setBrokerEditingType] = useState<'etoro' | 'ig' | 'webull' | null>(null);
   const [etoroApiKeyInput, setEtoroApiKeyInput] = useState('');
   const [etoroUserKeyInput, setEtoroUserKeyInput] = useState('');
   const [etoroSyncing, setEtoroSyncing] = useState(false);
@@ -893,8 +895,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
     }
   };
 
-  const handleEtoroSync = async () => {
-    if (!etoroCredentials) return;
+  const handleEtoroSync = async (connection: any) => {
+    if (!connection) return;
     setEtoroSyncing(true);
     setEtoroSyncError(null);
     setImportPreview(null);
@@ -902,13 +904,15 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const resp = await fetch('/api/portfolio-etoro-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: etoroCredentials.api_key, userKey: etoroCredentials.user_key }),
+        body: JSON.stringify({ apiKey: connection.credentials?.api_key, userKey: connection.credentials?.user_key }),
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data?.error || `eToro sync failed (${resp.status})`);
       setImportTemplate('universal');
+      setImportPortfolioId(connection.portfolio_id ?? '');
       setImportRawParsed(data.holdings);
       setIsImporting(true);
+      await markBrokerConnectionSynced?.(connection.id);
     } catch (err: any) {
       setEtoroSyncError(err?.message || 'Could not sync from eToro.');
     } finally {
@@ -1780,18 +1784,64 @@ export default function PortfolioView(props: PortfolioViewProps) {
       {holdingsTab === 'settings' && (
         <div className="space-y-3">
         {(() => {
-          const isConnected = !!etoroCredentials;
+          // Only USD portfolios are eligible - eToro/IG/Webull are US/AU brokers, this
+          // keeps the feature scoped and avoids confusing INR-broker (Zerodha/Groww) users
+          // with connection options that don't apply to their portfolios.
+          const usdPortfolios = portfolioMode === 'multiple' ? portfolios.filter((p: any) => p.currency === 'USD') : [];
+          if (portfolioMode !== 'multiple' || usdPortfolios.length === 0) return null;
+          const connectionsByPortfolio = new Map<string, any[]>();
+          for (const c of portfolioBrokerConnections) {
+            if (!c.portfolio_id) continue;
+            connectionsByPortfolio.set(c.portfolio_id, [...(connectionsByPortfolio.get(c.portfolio_id) ?? []), c]);
+          }
+          const targetPortfolioId = brokerConnectPortfolioId || usdPortfolios[0]?.id;
+          const existingForTarget = connectionsByPortfolio.get(targetPortfolioId) ?? [];
+          const brokerLabels: Record<string, string> = { etoro: 'eToro', ig: 'IG', webull: 'Webull' };
           return (
             <div className="apple-card p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5" /> Connect eToro</span>
-                {isConnected && <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400">● Connected</span>}
-              </div>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5" /> Connect Broker (US/AU)</span>
               <p className="text-[9px] text-slate-400">
-                Sync real account holdings directly from eToro's API instead of a manual file upload. Only Real Asset positions are pulled in - CFDs and leveraged/margin positions are excluded, since those aren't genuine ownership comparable to a Zerodha/Groww holding.
+                Sync real account holdings directly from a broker's API instead of a manual file upload. Only USD portfolios are eligible. Each account maps to one specific portfolio - connect two eToro accounts by picking a different portfolio for each.
               </p>
-              {etoroEditing ? (
-                <div className="space-y-2">
+              <select
+                value={targetPortfolioId}
+                onChange={(e) => { setBrokerConnectPortfolioId(e.target.value); setBrokerEditingType(null); }}
+                className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+              >
+                {usdPortfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+
+              {existingForTarget.length > 0 && (
+                <div className="space-y-1.5">
+                  {existingForTarget.map((conn: any) => (
+                    <div key={conn.id} className="flex items-center justify-between px-2.5 py-2 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">{brokerLabels[conn.broker_type]}</span>
+                        <span className="text-[9px] text-slate-400 block">{conn.last_synced_at ? `synced ${new Date(conn.last_synced_at).toLocaleString()}` : 'never synced'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {conn.broker_type === 'etoro' && (
+                          <button
+                            onClick={() => handleEtoroSync(conn)}
+                            disabled={etoroSyncing}
+                            className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer"
+                          >
+                            {etoroSyncing ? 'Syncing…' : 'Sync'}
+                          </button>
+                        )}
+                        {conn.broker_type !== 'etoro' && (
+                          <span className="text-[9px] text-amber-500 font-bold">Coming soon</span>
+                        )}
+                        <button onClick={() => runAction(() => deletePortfolioBrokerConnection?.(conn.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {brokerEditingType ? (
+                <div className="space-y-2 pt-1 border-t border-slate-100 dark:border-slate-900">
+                  <span className="text-[9px] font-bold text-slate-500 uppercase">{brokerLabels[brokerEditingType]} credentials</span>
                   <input
                     type="text"
                     value={etoroApiKeyInput}
@@ -1811,8 +1861,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   <div className="flex gap-1.5">
                     <button
                       onClick={() => runAction(async () => {
-                        await setEtoroCredentials?.(etoroApiKeyInput.trim(), etoroUserKeyInput.trim());
-                        setEtoroEditing(false);
+                        await setPortfolioBrokerConnection?.(brokerEditingType, { api_key: etoroApiKeyInput.trim(), user_key: etoroUserKeyInput.trim() }, targetPortfolioId);
+                        setBrokerEditingType(null);
                         setEtoroApiKeyInput('');
                         setEtoroUserKeyInput('');
                       })}
@@ -1820,32 +1870,23 @@ export default function PortfolioView(props: PortfolioViewProps) {
                     >
                       Save
                     </button>
-                    <button onClick={() => { setEtoroEditing(false); setEtoroApiKeyInput(''); setEtoroUserKeyInput(''); }} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
+                    <button onClick={() => { setBrokerEditingType(null); setEtoroApiKeyInput(''); setEtoroUserKeyInput(''); }} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
                       Cancel
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-2">
-                  {isConnected ? (
-                    <>
-                      <button
-                        onClick={handleEtoroSync}
-                        disabled={etoroSyncing}
-                        className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer"
-                      >
-                        {etoroSyncing ? 'Syncing…' : 'Sync from eToro'}
-                      </button>
-                      <button onClick={() => runAction(() => deleteEtoroCredentials?.())} className="px-3 py-2 text-[10px] font-bold text-rose-500 cursor-pointer">Disconnect</button>
-                    </>
-                  ) : (
+                <div className="flex gap-1.5">
+                  {(['etoro', 'ig', 'webull'] as const).filter(bt => !existingForTarget.some((c: any) => c.broker_type === bt)).map(bt => (
                     <button
-                      onClick={() => setEtoroEditing(true)}
-                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer"
+                      key={bt}
+                      onClick={() => bt === 'etoro' ? setBrokerEditingType(bt) : null}
+                      disabled={bt !== 'etoro'}
+                      className="flex-1 py-1.5 bg-slate-100 dark:bg-slate-800 disabled:opacity-40 text-slate-600 dark:text-slate-300 text-[10px] font-bold rounded-lg cursor-pointer"
                     >
-                      Connect eToro Account
+                      + {brokerLabels[bt]}
                     </button>
-                  )}
+                  ))}
                 </div>
               )}
               {etoroSyncError && <p className="text-[10px] text-rose-500">{etoroSyncError}</p>}
