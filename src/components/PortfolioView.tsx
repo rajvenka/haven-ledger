@@ -2011,6 +2011,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   <p>Included positions (all types): {etoroSyncDebug.includedPositions}</p>
                   <p>Consolidated into holdings: {etoroSyncDebug.consolidatedHoldingsCount}</p>
                   {etoroSyncDebug.settlementBreakdown && <p>By type: {JSON.stringify(etoroSyncDebug.settlementBreakdown)}</p>}
+                  {etoroSyncDebug.rawPositionDebug && etoroSyncDebug.rawPositionDebug.length > 0 && (
+                    <p className="break-all">MU raw positions: {JSON.stringify(etoroSyncDebug.rawPositionDebug)}</p>
+                  )}
                   {etoroSyncDebug.instrumentDebug && etoroSyncDebug.instrumentDebug.resolvedCount < etoroSyncDebug.instrumentDebug.requestedCount && (
                     <>
                       <p className="text-amber-600 dark:text-amber-400 pt-1">Symbol resolution: {etoroSyncDebug.instrumentDebug.resolvedCount}/{etoroSyncDebug.instrumentDebug.requestedCount} resolved</p>

@@ -214,9 +214,31 @@ export default async function handler(req: any, res: any) {
       };
     });
 
+    // Raw per-position debug data for symbols under scrutiny - lets us see exactly what
+    // eToro is actually returning field-by-field, rather than guessing at where the
+    // consolidation math is going wrong.
+    const rawPositionDebug = realAssetPositions
+      .filter((pos: any) => {
+        const id = Number(pos.instrumentID);
+        const info = instrumentMap.get(id);
+        return info?.symbol === 'MU';
+      })
+      .map((pos: any) => ({
+        positionID: pos.positionID,
+        units: pos.units,
+        openRate: pos.openRate,
+        amount: pos.amount,
+        initialAmountInDollars: pos.initialAmountInDollars,
+        unitsBaseValueDollars: pos.unitsBaseValueDollars,
+        leverage: pos.leverage,
+        stopLossRate: pos.stopLossRate,
+        settlementTypeID: pos.settlementTypeID,
+      }));
+
     res.status(200).json({
       holdings,
       rawLots,
+      rawPositionDebug,
       totalPositions: allPositions.length,
       includedPositions: realAssetPositions.length,
       consolidatedHoldingsCount: holdings.length,
