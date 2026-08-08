@@ -111,6 +111,30 @@ export default async function handler(req: any, res: any) {
     instrumentDebug.resolvedCount = instrumentMap.size;
     instrumentDebug.requestedCount = uniqueIds.length;
 
+    // Genuine live prices via the dedicated rates endpoint (confirmed correct - eToro's own
+    // API docs explicitly recommend this before order execution "to ensure price accuracy").
+    // unitsBaseValueDollars from the position data itself was being used before as a stand-in
+    // for current price, but produced wrong values (MU showing $218.75 instead of ~$877) -
+    // it isn't actually a reliable live-price field.
+    const ratesResp = await etoroFetch(`/market-data/instruments/rates?instrumentIds=${uniqueIds.join(",")}`, apiKey, userKey);
+    const rateMap = new Map<number, number>();
+    const ratesDebug: any = { status: ratesResp.status, ok: ratesResp.ok };
+    if (ratesResp.ok) {
+      const ratesData = await ratesResp.json();
+      ratesDebug.rateCount = ratesData?.rates?.length ?? 0;
+      ratesDebug.sample = JSON.stringify(ratesData).slice(0, 500);
+      const rateList: any[] = ratesData?.rates ?? [];
+      for (const r of rateList) {
+        const id = r.instrumentID ?? r.instrumentId;
+        // Mid-price between bid/ask when both are present - a reasonable single "current
+        // price" figure; falls back to lastExecution if bid/ask aren't both available.
+        const price = (r.bid != null && r.ask != null) ? (Number(r.bid) + Number(r.ask)) / 2 : Number(r.lastExecution ?? r.bid ?? r.ask ?? 0);
+        if (id != null && price > 0) rateMap.set(Number(id), price);
+      }
+    } else {
+      ratesDebug.errorBody = (await ratesResp.text().catch(() => "")).slice(0, 500);
+    }
+
     // eToro's same-stock-bought-5-times pattern: positions are individual trade entries,
     // not consolidated by instrument - the same stock genuinely can appear as several
     // separate position rows. Consolidated here into one holding per instrument+settlement
@@ -127,7 +151,7 @@ export default async function handler(req: any, res: any) {
     // investment) is eToro's own direct source for "Net Value" - confirmed to vary with
     // stop-loss changes, so it's summed across consolidated lots rather than derived
     // client-side, which is strictly more reliable than a formula.
-    const consolidated = new Map<string, { symbol: string; name: string; exchange: string; source: string; totalUnits: number; totalCost: number; currentValue: number; leverageWeighted: number; stopLossRate: number | null; takeProfitRate: number | null; totalNetValueAmount: number }>();
+    const consolidated = new Map<string, { symbol: string; name: string; exchange: string; source: string; instrumentId: number; totalUnits: number; totalCost: number; leverageWeighted: number; stopLossRate: number | null; takeProfitRate: number | null; totalNetValueAmount: number }>();
     for (const pos of realAssetPositions) {
       const id = Number(pos.instrumentID);
       const settlementKey = String(pos.settlementTypeID ?? 'undefined');
@@ -136,7 +160,6 @@ export default async function handler(req: any, res: any) {
       const source = settlementLabels[settlementKey] ?? `eToro (type ${settlementKey})`;
       const units = Number(pos.units) || 0;
       const openRate = Number(pos.openRate) || 0;
-      const currentValue = Number(pos.unitsBaseValueDollars ?? pos.initialAmountInDollars) || 0;
       const leverage = Number(pos.leverage) || 1;
       const isBuy = pos.isBuy !== false; // default true (long) if not specified
       const posStopLoss = pos.stopLossRate != null ? Number(pos.stopLossRate) : null;
@@ -146,7 +169,6 @@ export default async function handler(req: any, res: any) {
       if (existing) {
         existing.totalUnits += units;
         existing.totalCost += units * openRate;
-        existing.currentValue += currentValue;
         existing.leverageWeighted += units * leverage;
         existing.totalNetValueAmount += posNetValueAmount;
         // Tightest = closest to current price in the direction that matters: for a long
@@ -161,8 +183,8 @@ export default async function handler(req: any, res: any) {
         }
       } else {
         consolidated.set(mapKey, {
-          symbol: info.symbol, name: info.name, exchange: info.exchange, source,
-          totalUnits: units, totalCost: units * openRate, currentValue,
+          symbol: info.symbol, name: info.name, exchange: info.exchange, source, instrumentId: id,
+          totalUnits: units, totalCost: units * openRate,
           leverageWeighted: units * leverage, stopLossRate: posStopLoss, takeProfitRate: posTakeProfit,
           totalNetValueAmount: posNetValueAmount,
         });
@@ -179,7 +201,10 @@ export default async function handler(req: any, res: any) {
         exchange: h.exchange,
         quantity: h.totalUnits,
         buyPrice: h.totalCost / h.totalUnits,
-        currentPrice: h.currentValue / h.totalUnits,
+        // Real live price from the dedicated rates endpoint, not derived from position
+        // data - falls back to average entry price only if the rate genuinely couldn't be
+        // fetched, so the field is never left at zero/undefined.
+        currentPrice: rateMap.get(h.instrumentId) ?? (h.totalCost / h.totalUnits),
         currency: "USD",
         source: h.source,
         etoroNetValueAmount: h.totalNetValueAmount,
@@ -204,7 +229,7 @@ export default async function handler(req: any, res: any) {
         broker: "eToro",
         quantity: Number(pos.units) || 0,
         buyPrice: Number(pos.openRate) || 0,
-        currentPrice: (Number(pos.unitsBaseValueDollars ?? pos.initialAmountInDollars) || 0) / (Number(pos.units) || 1),
+        currentPrice: rateMap.get(Number(pos.instrumentID)) ?? (Number(pos.openRate) || 0),
         leverage: Number(pos.leverage) || 1,
         stopLossRate: pos.stopLossRate != null ? Number(pos.stopLossRate) : undefined,
         takeProfitRate: pos.takeProfitRate != null ? Number(pos.takeProfitRate) : undefined,
@@ -245,6 +270,7 @@ export default async function handler(req: any, res: any) {
       settlementBreakdown,
       syncedAt: new Date().toISOString(),
       instrumentDebug,
+      ratesDebug,
     });
   } catch (error: any) {
     console.error("eToro sync error:", error);

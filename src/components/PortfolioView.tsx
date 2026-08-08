@@ -2039,6 +2039,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   {etoroSyncDebug.rawPositionDebug && etoroSyncDebug.rawPositionDebug.length > 0 && (
                     <p className="break-all">MU raw positions: {JSON.stringify(etoroSyncDebug.rawPositionDebug)}</p>
                   )}
+                  {etoroSyncDebug.ratesDebug && (
+                    <p className="break-all">Rates endpoint: status {etoroSyncDebug.ratesDebug.status}, ok={String(etoroSyncDebug.ratesDebug.ok)}, count={etoroSyncDebug.ratesDebug.rateCount}. {etoroSyncDebug.ratesDebug.errorBody || etoroSyncDebug.ratesDebug.sample}</p>
+                  )}
                   {etoroSyncDebug.instrumentDebug && etoroSyncDebug.instrumentDebug.resolvedCount < etoroSyncDebug.instrumentDebug.requestedCount && (
                     <>
                       <p className="text-amber-600 dark:text-amber-400 pt-1">Symbol resolution: {etoroSyncDebug.instrumentDebug.resolvedCount}/{etoroSyncDebug.instrumentDebug.requestedCount} resolved</p>
