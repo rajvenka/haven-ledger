@@ -86,13 +86,20 @@ export default async function handler(req: any, res: any) {
     if (instrumentsResp.ok) {
       const instrumentsData = await instrumentsResp.json();
       instrumentDebug.rawKeys = instrumentsData && typeof instrumentsData === 'object' ? Object.keys(instrumentsData) : null;
-      instrumentDebug.sample = JSON.stringify(instrumentsData).slice(0, 500);
-      const list: any[] = Array.isArray(instrumentsData) ? instrumentsData : (instrumentsData?.items ?? instrumentsData?.data ?? instrumentsData?.instruments ?? []);
+      instrumentDebug.sample = JSON.stringify(instrumentsData).slice(0, 1500);
+      // Confirmed against a real sync: eToro wraps the array under "instrumentDisplayDatas"
+      // (matching the key the person's own working Python script already used) - not
+      // items/data/instruments, which is why every symbol was resolving to nothing before.
+      const list: any[] = Array.isArray(instrumentsData) ? instrumentsData : (instrumentsData?.instrumentDisplayDatas ?? instrumentsData?.items ?? instrumentsData?.data ?? instrumentsData?.instruments ?? []);
       instrumentDebug.listLength = list.length;
+      if (list.length > 0) instrumentDebug.firstItemKeys = Object.keys(list[0]);
       for (const inst of list) {
-        const id = inst.instrumentId ?? inst.instrumentID ?? inst.id ?? inst.InstrumentID;
-        const symbol = inst.internalSymbolFull ?? inst.symbol ?? inst.symbolFull ?? inst.SymbolFull ?? String(id);
-        const name = inst.displayName ?? inst.name ?? inst.instrumentDisplayName ?? symbol;
+        const id = inst.instrumentID ?? inst.instrumentId ?? inst.id ?? inst.InstrumentID;
+        const name = inst.instrumentDisplayName ?? inst.displayName ?? inst.name ?? `Instrument ${id}`;
+        // symbolFull/symbol weren't visible in the truncated sample from the first real
+        // sync - falls back to the display name if no true ticker field is found, which is
+        // still far more useful than the INSTRUMENT_xxxx placeholder.
+        const symbol = inst.symbolFull ?? inst.internalSymbolFull ?? inst.symbol ?? inst.SymbolFull ?? name;
         const exchange = inst.exchangeName ?? inst.exchange ?? "eToro";
         if (id != null) instrumentMap.set(Number(id), { symbol, name, exchange });
       }

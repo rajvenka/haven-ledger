@@ -1905,6 +1905,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       <p className="text-amber-600 dark:text-amber-400 pt-1">Symbol resolution: {etoroSyncDebug.instrumentDebug.resolvedCount}/{etoroSyncDebug.instrumentDebug.requestedCount} resolved</p>
                       <p>Instruments endpoint: status {etoroSyncDebug.instrumentDebug.status}, ok={String(etoroSyncDebug.instrumentDebug.ok)}</p>
                       {etoroSyncDebug.instrumentDebug.rawKeys && <p>Response keys: {JSON.stringify(etoroSyncDebug.instrumentDebug.rawKeys)}</p>}
+                      {etoroSyncDebug.instrumentDebug.firstItemKeys && <p>First item keys: {JSON.stringify(etoroSyncDebug.instrumentDebug.firstItemKeys)}</p>}
                       {etoroSyncDebug.instrumentDebug.sample && <p className="break-all">Sample: {etoroSyncDebug.instrumentDebug.sample}</p>}
                       {etoroSyncDebug.instrumentDebug.errorBody && <p className="break-all">Error body: {etoroSyncDebug.instrumentDebug.errorBody}</p>}
                     </>
