@@ -810,6 +810,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     qtyChanged: { parsed: ParsedHolding; existing: any; direction: 'increased' | 'reduced' }[];
     priceChanged: { parsed: ParsedHolding; existing: any }[];
     unchanged: number;
+    unchangedWithLiveData: { parsed: ParsedHolding; existing: any }[];
     missing: any[];
   } | null>(null);
   const [importMissingSelected, setImportMissingSelected] = useState<Set<string>>(new Set());
@@ -956,13 +957,23 @@ export default function PortfolioView(props: PortfolioViewProps) {
     const fresh: ParsedHolding[] = [];
     const qtyChanged: { parsed: ParsedHolding; existing: any; direction: 'increased' | 'reduced' }[] = [];
     const priceChanged: { parsed: ParsedHolding; existing: any }[] = [];
+    const unchangedWithLiveData: { parsed: ParsedHolding; existing: any }[] = [];
     let unchanged = 0;
     importRawParsed.forEach(h => {
       const c = classifyImportRow(h, targetPortfolioId);
       if (c.status === 'new') fresh.push(h);
       else if (c.status === 'qty_changed') qtyChanged.push({ parsed: h, existing: c.existing, direction: c.direction });
       else if (c.status === 'price_changed') priceChanged.push({ parsed: h, existing: c.existing });
-      else unchanged++;
+      else {
+        unchanged++;
+        // eToro's current price, stop-loss, leverage, and net value can all change
+        // independently of quantity/average cost - "unchanged" here only means those two
+        // matched, but these live fields would otherwise never get refreshed on a re-sync,
+        // silently going stale even though nothing about the position count looks different.
+        if (h.leverage != null || h.stopLossRate != null || h.etoroNetValueAmount != null) {
+          unchangedWithLiveData.push({ parsed: h, existing: c.existing });
+        }
+      }
     });
     // Holdings that are active, match a broker+holding-type combination actually present in
     // this file (and the target portfolio), but aren't matched by any row in it - the file
@@ -982,7 +993,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         return h.symbol === p.symbol.toUpperCase() && h.holding_type === p.holdingType && !h.folio_number && !p.folioNumber;
       });
     });
-    setImportPreview({ fresh, qtyChanged, priceChanged, unchanged, missing });
+    setImportPreview({ fresh, qtyChanged, priceChanged, unchanged, unchangedWithLiveData, missing });
     setImportMissingSelected(new Set());
     setImportMissingSellPrice(Object.fromEntries(missing.map(h => [h.id, String(Number(h.live_price ?? h.current_price ?? h.buy_price))])));
     setImportReducedOverrides(Object.fromEntries(qtyChanged.filter(qc => qc.direction === 'reduced').map(qc => [
@@ -993,7 +1004,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   }, [importRawParsed, importPortfolioId, portfolioMode]);
 
   const confirmImport = async () => {
-    if (!importPreview || (importPreview.fresh.length === 0 && importPreview.qtyChanged.length === 0 && importPreview.priceChanged.length === 0 && importMissingSelected.size === 0)) return;
+    if (!importPreview || (importPreview.fresh.length === 0 && importPreview.qtyChanged.length === 0 && importPreview.priceChanged.length === 0 && importPreview.unchangedWithLiveData.length === 0 && importMissingSelected.size === 0)) return;
     setImportSaving(true);
     await runAction(async () => {
       if (importPreview.fresh.length > 0) {
@@ -1022,13 +1033,34 @@ export default function PortfolioView(props: PortfolioViewProps) {
           sellPriceForReduced,
           soldItemBuyPrice
         );
+        // The remaining active row keeps the same id after a partial sell/increase - refresh
+        // its live eToro fields too, since reconcilePortfolioHoldingQuantity only handles
+        // quantity/cost-basis reconciliation, not these.
+        if (parsed.leverage != null || parsed.stopLossRate != null || parsed.etoroNetValueAmount != null) {
+          await updatePortfolioHolding(existing.id, {
+            currentPrice: parsed.currentPrice,
+            leverage: parsed.leverage, stopLossRate: parsed.stopLossRate, takeProfitRate: parsed.takeProfitRate, etoroNetValueAmount: parsed.etoroNetValueAmount,
+          });
+        }
       }
       // Same quantity, but the file's average cost differs from what's stored - previously
       // silently missed entirely, since these were classified "unchanged" and skipped. A
       // straight cost-basis correction, no shares actually changed hands, so just update
       // buy_price directly rather than going through the sold-clone reconciliation path.
       for (const { parsed, existing } of importPreview.priceChanged) {
-        await updatePortfolioHolding(existing.id, { buyPrice: parsed.buyPrice });
+        await updatePortfolioHolding(existing.id, {
+          buyPrice: parsed.buyPrice, currentPrice: parsed.currentPrice,
+          leverage: parsed.leverage, stopLossRate: parsed.stopLossRate, takeProfitRate: parsed.takeProfitRate, etoroNetValueAmount: parsed.etoroNetValueAmount,
+        });
+      }
+      // eToro's current price, stop-loss, leverage, and net value can change independently
+      // of quantity/average cost - these otherwise-"unchanged" holdings would never
+      // otherwise get their live fields refreshed on a re-sync.
+      for (const { parsed, existing } of importPreview.unchangedWithLiveData) {
+        await updatePortfolioHolding(existing.id, {
+          currentPrice: parsed.currentPrice,
+          leverage: parsed.leverage, stopLossRate: parsed.stopLossRate, takeProfitRate: parsed.takeProfitRate, etoroNetValueAmount: parsed.etoroNetValueAmount,
+        });
       }
       for (const h of importPreview.missing) {
         if (!importMissingSelected.has(h.id)) continue;
@@ -2650,13 +2682,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       />
                     </>
                   )}
-                  {(importPreview.fresh.length > 0 || importPreview.qtyChanged.length > 0 || importPreview.priceChanged.length > 0 || importMissingSelected.size > 0) && (
+                  {(importPreview.fresh.length > 0 || importPreview.qtyChanged.length > 0 || importPreview.priceChanged.length > 0 || importPreview.unchangedWithLiveData.length > 0 || importMissingSelected.size > 0) && (
                     <button
                       onClick={confirmImport}
                       disabled={importSaving}
                       className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase rounded-lg cursor-pointer"
                     >
-                      {importSaving ? 'Importing…' : `Import ${importPreview.fresh.length} New${importPreview.qtyChanged.length > 0 ? ` + Update ${importPreview.qtyChanged.length}` : ''}${importPreview.priceChanged.length > 0 ? ` + Fix ${importPreview.priceChanged.length} Price${importPreview.priceChanged.length !== 1 ? 's' : ''}` : ''}${importMissingSelected.size > 0 ? ` + Mark ${importMissingSelected.size} Sold` : ''}`}
+                      {importSaving ? 'Importing…' : `Import ${importPreview.fresh.length} New${importPreview.qtyChanged.length > 0 ? ` + Update ${importPreview.qtyChanged.length}` : ''}${importPreview.priceChanged.length > 0 ? ` + Fix ${importPreview.priceChanged.length} Price${importPreview.priceChanged.length !== 1 ? 's' : ''}` : ''}${importPreview.unchangedWithLiveData.length > 0 ? ` + Refresh ${importPreview.unchangedWithLiveData.length} Live` : ''}${importMissingSelected.size > 0 ? ` + Mark ${importMissingSelected.size} Sold` : ''}`}
                     </button>
                   )}
                 </div>

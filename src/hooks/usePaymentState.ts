@@ -1412,6 +1412,7 @@ export function usePaymentState() {
     targetType?: 'price' | 'percent' | null; targetPrice?: number | null; targetPercent?: number | null;
     holdType?: 'days' | 'date' | null; holdDays?: number | null; holdUntilDate?: string | null;
     symbol?: string; broker?: string; exchange?: string; isin?: string | null; buyPrice?: number; buyDate?: string; currency?: string; portfolioId?: string | null;
+    leverage?: number; stopLossRate?: number; takeProfitRate?: number; etoroNetValueAmount?: number;
   }) => {
     const row: any = {};
     if (updates.currentPrice !== undefined) { row.current_price = updates.currentPrice; row.current_price_updated_at = new Date().toISOString(); }
@@ -1437,6 +1438,10 @@ export function usePaymentState() {
     if (updates.buyDate !== undefined) row.buy_date = updates.buyDate;
     if (updates.currency !== undefined) row.currency = updates.currency;
     if (updates.portfolioId !== undefined) row.portfolio_id = updates.portfolioId;
+    if (updates.leverage !== undefined) row.leverage = updates.leverage;
+    if (updates.stopLossRate !== undefined) row.stop_loss_rate = updates.stopLossRate;
+    if (updates.takeProfitRate !== undefined) row.take_profit_rate = updates.takeProfitRate;
+    if (updates.etoroNetValueAmount !== undefined) row.etoro_net_value_amount = updates.etoroNetValueAmount;
 
     // Reference price always tracks whichever capture is chronologically latest - a
     // backdated update (e.g. re-importing an older file) can never move it backwards.
