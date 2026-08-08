@@ -164,7 +164,15 @@ export default async function handler(req: any, res: any) {
       const isBuy = pos.isBuy !== false; // default true (long) if not specified
       const posStopLoss = pos.stopLossRate != null ? Number(pos.stopLossRate) : null;
       const posTakeProfit = pos.takeProfitRate != null ? Number(pos.takeProfitRate) : null;
-      const posNetValueAmount = Number(pos.amount) || 0;
+      // "amount" alone (eToro's reserved-cash figure for the position) isn't the full
+      // picture - confirmed against real data that eToro's displayed Net Value equals the
+      // sum of per-lot amounts PLUS the position's unrealized P/L (the reserved cash figure
+      // doesn't itself reflect how much of it has already been eroded by an open loss, or
+      // added to by an open gain). units already represents full leveraged exposure, so P/L
+      // is (currentPrice - openRate) x units directly, no separate leverage multiplication.
+      const livePrice = rateMap.get(id) ?? openRate;
+      const posPnl = (livePrice - openRate) * units * (isBuy ? 1 : -1);
+      const posNetValueAmount = (Number(pos.amount) || 0) + posPnl;
       const existing = consolidated.get(mapKey);
       if (existing) {
         existing.totalUnits += units;
