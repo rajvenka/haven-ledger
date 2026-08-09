@@ -3360,14 +3360,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                   return <td key="daily_change" className="p-2.5 text-right"><span className="text-slate-300 dark:text-slate-700">—</span></td>;
                                 }
                                 const dc = (Number(h.live_price) - Number(h.previous_close)) * Number(h.quantity);
-                                return <td key="daily_change" className={`p-2.5 text-right font-bold ${dc >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{dc >= 0 ? '+' : ''}{fmt(dc)}</td>;
+                                return <td key="daily_change" className={`p-2.5 text-right font-bold ${dc >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{dc >= 0 ? '+' : ''}{fmtCur(dc, h.currency)}</td>;
                               }
                               case 'since_previous_load': {
                                 if (h.live_price == null) {
                                   return <td key="since_previous_load" className="p-2.5 text-right"><span className="text-slate-300 dark:text-slate-700">—</span></td>;
                                 }
                                 const sl = (Number(h.live_price) - Number(h.current_price ?? h.buy_price)) * Number(h.quantity);
-                                return <td key="since_previous_load" className={`p-2.5 text-right font-bold ${sl >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{sl >= 0 ? '+' : ''}{fmt(sl)}</td>;
+                                return <td key="since_previous_load" className={`p-2.5 text-right font-bold ${sl >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{sl >= 0 ? '+' : ''}{fmtCur(sl, h.currency)}</td>;
                               }
                               case 'invested':
                                 return <td key="invested" className="p-2.5 text-right text-slate-600 dark:text-slate-300">{fmtCur(invested, h.currency)}</td>;
@@ -3395,7 +3395,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                   <td key="since_reference_amount" className="p-2.5 text-right">
                                     {sinceRefAmount !== null ? (
                                       <span className={`font-bold ${sinceRefAmount >= 0 ? 'text-emerald-600' : 'text-rose-500'}`} title={selectedReferenceDate !== 'latest' ? `Price on/before ${selectedReferenceDate} used as baseline` : `Reference: ₹${Number(h.reference_price).toFixed(2)} on ${h.reference_date}`}>
-                                        {sinceRefAmount >= 0 ? '+' : ''}{fmt(sinceRefAmount)}
+                                        {sinceRefAmount >= 0 ? '+' : ''}{fmtCur(sinceRefAmount, h.currency)}
                                       </span>
                                     ) : (
                                       <span className="text-slate-300 dark:text-slate-700">—</span>
