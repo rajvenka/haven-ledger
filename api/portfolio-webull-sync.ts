@@ -100,35 +100,59 @@ export default async function handler(req: any, res: any) {
     const host = REGION_HOSTS[region] || REGION_HOSTS.us;
 
     if (action === "connect") {
-      // Attempts to create a token. If the account doesn't have 2FA enabled, this may not
-      // be required at all - the docs describe it as "required if 2FA enabled" - so this
-      // is attempted first, and a failure here falls back to trying the data calls directly
-      // with just the signed request (no token), surfaced via debug either way.
-      const createResp = await webullFetch("/auth/tokens/create", "POST", host, appKey, appSecret);
-      const createBody = await createResp.text().catch(() => "");
+      // The confirmed-working account endpoints (account/list, account/positions) both use
+      // an /openapi prefix, but the token endpoints' exact path couldn't be confirmed from
+      // Webull's JS-rendered docs or a GitHub source search. Tries the documented-looking
+      // path first, falls back to the /openapi-prefixed variant automatically on a 404 -
+      // whichever actually works, the debug output shows which one succeeded.
+      const tokenPaths = ["/auth/tokens/create", "/openapi/auth/tokens/create"];
+      let createResp: Response | null = null;
+      let createBody = "";
+      let usedPath = "";
+      for (const path of tokenPaths) {
+        const resp = await webullFetch(path, "POST", host, appKey, appSecret);
+        if (resp.status !== 404) {
+          createResp = resp;
+          createBody = await resp.text().catch(() => "");
+          usedPath = path;
+          break;
+        }
+        createResp = resp;
+        usedPath = path;
+      }
       let parsed: any = null;
       try { parsed = JSON.parse(createBody); } catch { /* not json */ }
       res.status(200).json({
-        status: createResp.ok ? "pending_verification" : "create_failed",
+        status: createResp!.ok ? "pending_verification" : "create_failed",
         tokenId: parsed?.token_id ?? parsed?.tokenId ?? parsed?.id ?? null,
         rawStatus: parsed?.status ?? null,
-        debug: { httpStatus: createResp.status, ok: createResp.ok, body: createBody.slice(0, 500), host },
+        debug: { httpStatus: createResp!.status, ok: createResp!.ok, body: createBody.slice(0, 500), host, pathTried: usedPath },
       });
       return;
     }
 
     if (action === "check") {
-      const checkResp = await webullFetch("/auth/tokens/check", "POST", host, appKey, appSecret, undefined, {}, { token_id: tokenId });
-      const checkBody = await checkResp.text().catch(() => "");
+      const tokenPaths = ["/auth/tokens/check", "/openapi/auth/tokens/check"];
+      let checkResp: Response | null = null;
+      let checkBody = "";
+      for (const path of tokenPaths) {
+        const resp = await webullFetch(path, "POST", host, appKey, appSecret, undefined, {}, { token_id: tokenId });
+        if (resp.status !== 404) {
+          checkResp = resp;
+          checkBody = await resp.text().catch(() => "");
+          break;
+        }
+        checkResp = resp;
+      }
       let parsed: any = null;
       try { parsed = JSON.parse(checkBody); } catch { /* not json */ }
       const status = parsed?.status ?? parsed?.token_status ?? null;
-      const verified = status === "verified" || status === "VERIFIED" || status === "success";
+      const verified = status === "verified" || status === "VERIFIED" || status === "success" || status === "NORMAL";
       res.status(200).json({
         verified,
         token: verified ? (parsed?.token ?? parsed?.access_token ?? null) : null,
         expiresAt: parsed?.expire_time ?? parsed?.expires_at ?? null,
-        debug: { httpStatus: checkResp.status, ok: checkResp.ok, body: checkBody.slice(0, 500) },
+        debug: { httpStatus: checkResp!.status, ok: checkResp!.ok, body: checkBody.slice(0, 500) },
       });
       return;
     }
