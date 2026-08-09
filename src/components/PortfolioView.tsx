@@ -2383,7 +2383,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
                     <p className="break-all">MU raw positions: {JSON.stringify(etoroSyncDebug.rawPositionDebug)}</p>
                   )}
                   {etoroSyncDebug.ratesDebug && (
-                    <p className="break-all">Rates endpoint: status {etoroSyncDebug.ratesDebug.status}, ok={String(etoroSyncDebug.ratesDebug.ok)}, count={etoroSyncDebug.ratesDebug.rateCount}. {etoroSyncDebug.ratesDebug.errorBody || etoroSyncDebug.ratesDebug.sample}</p>
+                    <>
+                      {etoroSyncDebug.ratesDebug.webull && (
+                        <p className="break-all">Webull priority pricing: attempted {etoroSyncDebug.ratesDebug.webull.attempted}, resolved {etoroSyncDebug.ratesDebug.webull.resolved}, mapped to {etoroSyncDebug.ratesDebug.webull.mappedToInstruments} instruments</p>
+                      )}
+                      {etoroSyncDebug.ratesDebug.etoro && (
+                        <p className="break-all">eToro rates (fallback): status {etoroSyncDebug.ratesDebug.etoro.status}, ok={String(etoroSyncDebug.ratesDebug.etoro.ok)}, count={etoroSyncDebug.ratesDebug.etoro.rateCount}. {etoroSyncDebug.ratesDebug.etoro.errorBody || etoroSyncDebug.ratesDebug.etoro.sample}</p>
+                      )}
+                    </>
                   )}
                   {etoroSyncDebug.instrumentDebug && etoroSyncDebug.instrumentDebug.resolvedCount < etoroSyncDebug.instrumentDebug.requestedCount && (
                     <>
