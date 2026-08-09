@@ -450,7 +450,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [expandedLotHoldingId, setExpandedLotHoldingId] = useState<string | null>(null);
   const [stopLossAlertExpanded, setStopLossAlertExpanded] = useState(false);
   const [lotsViewActive, setLotsViewActive] = useState(false);
-  const [lotsSortCol, setLotsSortCol] = useState<'symbol' | 'quantity' | 'buy_price' | 'current_price' | 'leverage' | 'stop_loss_rate' | 'distance' | 'net_value'>('distance');
+  const [lotsSortCol, setLotsSortCol] = useState<'symbol' | 'quantity' | 'buy_price' | 'current_price' | 'leverage' | 'stop_loss_rate' | 'distance' | 'net_value' | 'invested' | 'current_value' | 'gain'>('distance');
   const [lotsSortDir, setLotsSortDir] = useState<'asc' | 'desc'>('asc');
   const [manualEntryHoldingId, setManualEntryHoldingId] = useState<string | null>(null);
   const [manualRows, setManualRows] = useState<{ stockName: string; weightPct: string }[]>([{ stockName: '', weightPct: '' }]);
@@ -3080,7 +3080,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 const current = Number(lot.current_price ?? parent.live_price ?? parent.current_price ?? lot.buy_price);
                 const stopLoss = lot.stop_loss_rate != null ? Number(lot.stop_loss_rate) : null;
                 const distancePct = stopLoss != null && current > 0 ? (Math.abs(current - stopLoss) / current) * 100 : null;
-                return { lot, parent, current, stopLoss, distancePct };
+                const qty = Number(lot.quantity);
+                const buyPrice = Number(lot.buy_price);
+                const invested = buyPrice * qty;
+                const currentValue = current * qty;
+                const gain = currentValue - invested;
+                const gainPct = invested > 0 ? (gain / invested) * 100 : 0;
+                return { lot, parent, current, stopLoss, distancePct, invested, currentValue, gain, gainPct };
               })
               .filter((r) => r !== null)
               .sort((a, b) => {
@@ -3093,6 +3099,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   case 'leverage': return ((Number(a.lot.leverage) || 0) - (Number(b.lot.leverage) || 0)) * dir;
                   case 'stop_loss_rate': return ((a.stopLoss ?? 0) - (b.stopLoss ?? 0)) * dir;
                   case 'net_value': return ((Number(a.lot.etoro_net_value_amount) || 0) - (Number(b.lot.etoro_net_value_amount) || 0)) * dir;
+                  case 'invested': return (a.invested - b.invested) * dir;
+                  case 'current_value': return (a.currentValue - b.currentValue) * dir;
+                  case 'gain': return (a.gain - b.gain) * dir;
                   default: return ((a.distancePct ?? Infinity) - (b.distancePct ?? Infinity)) * dir;
                 }
               });
@@ -3116,8 +3125,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-bold text-slate-400 uppercase">
                         {sortHeader('symbol', 'Symbol', 'left')}
                         {sortHeader('quantity', 'Qty')}
-                        {sortHeader('buy_price', 'Entry')}
-                        {sortHeader('current_price', 'Current')}
+                        {sortHeader('buy_price', 'Buy Price')}
+                        {sortHeader('current_price', 'LTP')}
+                        {sortHeader('invested', 'Invested')}
+                        {sortHeader('current_value', 'Cur. Value')}
+                        {sortHeader('gain', 'Net Gain')}
                         {sortHeader('leverage', 'Leverage')}
                         {sortHeader('stop_loss_rate', 'Stop Loss')}
                         {sortHeader('distance', 'Stop Loss % Away')}
@@ -3131,6 +3143,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           <td className="p-2 text-right">{fmtQty(Number(r.lot.quantity))}</td>
                           <td className="p-2 text-right">{fmtCur(Number(r.lot.buy_price), r.parent.currency)}</td>
                           <td className="p-2 text-right">{fmtCur(r.current, r.parent.currency)}</td>
+                          <td className="p-2 text-right text-slate-600 dark:text-slate-300">{fmtCur(r.invested, r.parent.currency)}</td>
+                          <td className="p-2 text-right text-slate-600 dark:text-slate-300">{fmtCur(r.currentValue, r.parent.currency)}</td>
+                          <td className={`p-2 text-right font-bold ${r.gain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{r.gain >= 0 ? '+' : ''}{fmtCur(r.gain, r.parent.currency)} ({r.gain >= 0 ? '+' : ''}{r.gainPct.toFixed(1)}%)</td>
                           <td className="p-2 text-right">{r.lot.leverage != null ? `${Number(r.lot.leverage)}x` : dash}</td>
                           <td className="p-2 text-right">{r.stopLoss != null ? fmtCur(r.stopLoss, r.parent.currency) : dash}</td>
                           <td className={`p-2 text-right font-black ${r.distancePct != null && r.distancePct <= 3 ? 'text-rose-600' : r.distancePct != null && r.distancePct <= 10 ? 'text-amber-600' : 'text-slate-400'}`}>
