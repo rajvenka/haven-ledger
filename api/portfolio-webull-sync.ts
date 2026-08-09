@@ -1,34 +1,45 @@
 // Syncs real account holdings from Webull's official Trading API (app_key/app_secret,
-// individual/own-account model - same pattern as eToro, not the OAuth Connect API meant for
-// registered third-party platforms). Credentials are passed in from the client per-request,
-// same reasoning as the eToro route - this app has no service-role-key pattern anywhere.
+// individual/own-account model - same pattern as eToro). Credentials are passed in from the
+// client per-request, same reasoning as the eToro route - this app has no service-role-key
+// pattern anywhere.
 //
-// Two things are genuinely verified, not guessed: the HMAC-SHA1 request-signing algorithm
-// (tested byte-for-byte against Webull's own documented worked example - exact match on
-// both the canonical string and final signature) and the REST paths/response schema for
-// account list and positions (confirmed directly from Webull's own API reference docs).
-//
-// One thing is NOT fully verified: the exact field names for the token/2FA endpoints
-// (POST /auth/tokens/create, POST /auth/tokens/check) - the docs pages for these render
-// their schema tables client-side in a way this route's docs research couldn't access.
-// Built from the general description (create returns token/expiration/status, status
-// defaults to "pending verification", polled via check until verified) with defensive
-// fallbacks across several plausible field-name variants, and instrumentDebug included in
-// every response so the first real connection attempt shows exactly what Webull actually
-// returns rather than failing silently - same approach that successfully diagnosed and
-// fixed several real eToro field-name mismatches earlier in this project.
+// Everything below is now verified directly against the real, installed
+// webull-openapi-python-sdk source code (pip installed and read directly, not guessed from
+// documentation) - the same SDK the user's own working Python script uses:
+//   - Signing algorithm: HMAC-SHA256 (not SHA1 as earlier docs suggested), SHA256 body hash
+//     (not MD5), Python's urllib.parse.quote(safe='') encoding. Confirmed by generating a
+//     real signature from the actual SDK code with fixed test inputs and reproducing the
+//     exact same signature in this file's implementation - genuine byte-for-byte match, not
+//     a documented example that may have been outdated.
+//   - Token paths: /openapi/auth/token/create, /openapi/auth/token/check (singular "token",
+//     not "tokens" as initially guessed) - read directly from create_token_request.py /
+//     check_token_request.py.
+//   - Account paths: /openapi/account/list (confirmed correct) and /openapi/assets/positions
+//     (NOT /openapi/account/positions as the docs research suggested - read directly from
+//     the SDK's v2 request classes, which is what account_v2.get_account_list() /
+//     get_account_position() actually call).
+//   - Host mapping: read directly from the SDK's own endpoints.json config file.
+// The one thing still not fully confirmed is the exact response field names for
+// positions/account list, since the SDK appears to pass through raw JSON rather than using
+// typed response beans - kept defensive with fallbacks, and full debug output included so
+// any remaining mismatch is immediately visible on the first real sync.
 
 import * as crypto from "crypto";
 
-// Confirmed production hosts for the SDK's known regions - "us" is the one actually in use
-// here. Sandbox is "api.sandbox.webull.com". If a person's actual host differs, this will
-// surface as a clear connection-failure error rather than a silent wrong-region call.
+// Read directly from the SDK's own endpoints.json - not a guess.
 const REGION_HOSTS: Record<string, string> = {
   us: "api.webull.com",
-  au: "api.webull.com.au",
-  jp: "api.webull.co.jp",
   hk: "api.webull.hk",
+  jp: "api.webull.co.jp",
+  sg: "api.webull.com.sg",
+  th: "api.webull.co.th",
+  au: "api.webull.com.au",
   my: "api.webull.com.my",
+  uk: "api.webull-uk.com",
+  br: "api.webull.com",
+  mx: "api.webull.com",
+  za: "api.webull.com.au",
+  eu: "api.webull.eu",
 };
 
 function timestampISO() {
@@ -36,41 +47,59 @@ function timestampISO() {
 }
 
 function nonce() {
-  return crypto.randomBytes(16).toString("hex");
+  return crypto.randomUUID();
 }
 
-// Verified byte-for-byte against Webull's own documented worked example earlier this
-// project - not a guess. Sorts query params + specific headers together, concatenates as
-// "{uri}&k1=v1&k2=v2...", appends the body's uppercase MD5 hex if a body is present,
-// URL-encodes the whole thing, then HMAC-SHA1s it with (appSecret + "&") as the key,
-// base64-encoded.
-function signRequest(uri: string, queryParams: Record<string, string>, host: string, appKey: string, appSecret: string, ts: string, nonceVal: string, body?: string) {
-  const headers: Record<string, string> = {
+// Matches Python's urllib.parse.quote(s, safe='') exactly - alphanumerics and -_.~ are the
+// only characters Python's quote() ever leaves unescaped, regardless of the safe parameter
+// passed (a real, confirmed difference from JS's encodeURIComponent, which also leaves
+// !*'() unescaped).
+function pythonQuote(str: string): string {
+  return Array.from(Buffer.from(str, "utf-8"))
+    .map((byte) => {
+      const ch = String.fromCharCode(byte);
+      if (/[A-Za-z0-9\-_.~]/.test(ch)) return ch;
+      return "%" + byte.toString(16).toUpperCase().padStart(2, "0");
+    })
+    .join("");
+}
+
+// Verified byte-for-byte against a real signature generated directly from the installed
+// webull-openapi-python-sdk source with fixed test inputs - not a guess, not a documented
+// example that may be outdated.
+function signRequest(uri: string, queryParams: Record<string, string>, host: string, appKey: string, appSecret: string, ts: string, nonceVal: string, bodyParams: any) {
+  const signHeaders: Record<string, string> = {
     "x-app-key": appKey,
     "x-timestamp": ts,
     "x-signature-version": "1.0",
-    "x-signature-algorithm": "HMAC-SHA1",
+    "x-signature-algorithm": "HMAC-SHA256",
     "x-signature-nonce": nonceVal,
     host,
   };
-  const allParams: Record<string, string> = { ...queryParams, ...headers };
-  const sortedKeys = Object.keys(allParams).sort();
-  const paramString = sortedKeys.map((k) => `${k}=${allParams[k]}`).join("&");
-  let sourceParam = `${uri}&${paramString}`;
-  if (body && body.length > 0) {
-    const bodyMd5 = crypto.createHash("md5").update(body).digest("hex").toUpperCase();
-    sourceParam += `&${bodyMd5}`;
+  const signParams: Record<string, string> = {};
+  for (const k of Object.keys(signHeaders)) signParams[k.toLowerCase()] = signHeaders[k];
+  for (const k of Object.keys(queryParams)) {
+    signParams[k] = signParams[k] !== undefined ? `${signParams[k]}&${queryParams[k]}` : String(queryParams[k]);
   }
-  const encoded = encodeURIComponent(sourceParam);
-  const signature = crypto.createHmac("sha1", appSecret + "&").update(encoded).digest("base64");
-  return { signature, headers };
+  let bodyString: string | null = null;
+  if (bodyParams !== null && bodyParams !== undefined) {
+    const rawStr = JSON.stringify(bodyParams);
+    bodyString = crypto.createHash("sha256").update(rawStr, "utf-8").digest("hex").toUpperCase();
+  }
+  const sortedKeys = Object.keys(signParams).sort();
+  const sortedArray = sortedKeys.map((k) => `${k}=${signParams[k]}`);
+  let stringToSign = uri || "";
+  stringToSign = stringToSign ? `${stringToSign}&${sortedArray.join("&")}` : sortedArray.join("&");
+  if (bodyString) stringToSign += `&${bodyString}`;
+  const encoded = pythonQuote(stringToSign);
+  const signature = crypto.createHmac("sha256", appSecret + "&").update(encoded, "utf-8").digest("base64");
+  return { signature, headers: signHeaders };
 }
 
-async function webullFetch(path: string, method: "GET" | "POST", host: string, appKey: string, appSecret: string, token?: string, queryParams: Record<string, string> = {}, body?: any) {
+async function webullFetch(path: string, method: "GET" | "POST", host: string, appKey: string, appSecret: string, token?: string, queryParams: Record<string, string> = {}, bodyParams?: any) {
   const ts = timestampISO();
   const nonceVal = nonce();
-  const bodyStr = body ? JSON.stringify(body) : undefined;
-  const { signature, headers } = signRequest(path, queryParams, host, appKey, appSecret, ts, nonceVal, bodyStr);
+  const { signature, headers } = signRequest(path, queryParams, host, appKey, appSecret, ts, nonceVal, bodyParams);
   const qs = Object.keys(queryParams).length > 0 ? "?" + new URLSearchParams(queryParams).toString() : "";
   const resp = await fetch(`https://${host}${path}${qs}`, {
     method,
@@ -80,7 +109,7 @@ async function webullFetch(path: string, method: "GET" | "POST", host: string, a
       "Content-Type": "application/json",
       ...(token ? { "x-access-token": token } : {}),
     },
-    body: bodyStr,
+    body: bodyParams !== undefined ? JSON.stringify(bodyParams) : undefined,
   });
   return resp;
 }
@@ -100,59 +129,35 @@ export default async function handler(req: any, res: any) {
     const host = REGION_HOSTS[region] || REGION_HOSTS.us;
 
     if (action === "connect") {
-      // The confirmed-working account endpoints (account/list, account/positions) both use
-      // an /openapi prefix, but the token endpoints' exact path couldn't be confirmed from
-      // Webull's JS-rendered docs or a GitHub source search. Tries the documented-looking
-      // path first, falls back to the /openapi-prefixed variant automatically on a 404 -
-      // whichever actually works, the debug output shows which one succeeded.
-      const tokenPaths = ["/auth/tokens/create", "/openapi/auth/tokens/create"];
-      let createResp: Response | null = null;
-      let createBody = "";
-      let usedPath = "";
-      for (const path of tokenPaths) {
-        const resp = await webullFetch(path, "POST", host, appKey, appSecret);
-        if (resp.status !== 404) {
-          createResp = resp;
-          createBody = await resp.text().catch(() => "");
-          usedPath = path;
-          break;
-        }
-        createResp = resp;
-        usedPath = path;
-      }
+      // Real path confirmed from create_token_request.py: /openapi/auth/token/create
+      // (singular "token"). Matches CreateTokenRequest().set_token(None) - body is {}
+      // (empty object, not omitted) for a brand new token, confirmed via the real SDK.
+      const createResp = await webullFetch("/openapi/auth/token/create", "POST", host, appKey, appSecret, undefined, {}, {});
+      const createBody = await createResp.text().catch(() => "");
       let parsed: any = null;
       try { parsed = JSON.parse(createBody); } catch { /* not json */ }
       res.status(200).json({
-        status: createResp!.ok ? "pending_verification" : "create_failed",
-        tokenId: parsed?.token_id ?? parsed?.tokenId ?? parsed?.id ?? null,
+        status: createResp.ok ? "pending_verification" : "create_failed",
+        tokenId: parsed?.token_id ?? parsed?.tokenId ?? parsed?.token ?? parsed?.id ?? null,
         rawStatus: parsed?.status ?? null,
-        debug: { httpStatus: createResp!.status, ok: createResp!.ok, body: createBody.slice(0, 500), host, pathTried: usedPath },
+        debug: { httpStatus: createResp.status, ok: createResp.ok, body: createBody.slice(0, 500), host },
       });
       return;
     }
 
     if (action === "check") {
-      const tokenPaths = ["/auth/tokens/check", "/openapi/auth/tokens/check"];
-      let checkResp: Response | null = null;
-      let checkBody = "";
-      for (const path of tokenPaths) {
-        const resp = await webullFetch(path, "POST", host, appKey, appSecret, undefined, {}, { token_id: tokenId });
-        if (resp.status !== 404) {
-          checkResp = resp;
-          checkBody = await resp.text().catch(() => "");
-          break;
-        }
-        checkResp = resp;
-      }
+      // Real path confirmed from check_token_request.py: /openapi/auth/token/check.
+      const checkResp = await webullFetch("/openapi/auth/token/check", "POST", host, appKey, appSecret, undefined, {}, { token: tokenId });
+      const checkBody = await checkResp.text().catch(() => "");
       let parsed: any = null;
       try { parsed = JSON.parse(checkBody); } catch { /* not json */ }
       const status = parsed?.status ?? parsed?.token_status ?? null;
       const verified = status === "verified" || status === "VERIFIED" || status === "success" || status === "NORMAL";
       res.status(200).json({
         verified,
-        token: verified ? (parsed?.token ?? parsed?.access_token ?? null) : null,
+        token: verified ? (parsed?.token ?? parsed?.access_token ?? tokenId) : null,
         expiresAt: parsed?.expire_time ?? parsed?.expires_at ?? null,
-        debug: { httpStatus: checkResp!.status, ok: checkResp!.ok, body: checkBody.slice(0, 500) },
+        debug: { httpStatus: checkResp.status, ok: checkResp.ok, body: checkBody.slice(0, 500) },
       });
       return;
     }
@@ -173,11 +178,17 @@ export default async function handler(req: any, res: any) {
       for (const acct of accounts) {
         const accountId = acct.account_id ?? acct.accountId ?? acct.id;
         if (!accountId) continue;
-        const posResp = await webullFetch("/openapi/account/positions", "GET", host, appKey, appSecret, token, { account_id: String(accountId) });
-        if (!posResp.ok) continue;
+        // Real path confirmed from webull/trade/request/v2/get_account_positions_request.py
+        // (what account_v2.get_account_position() actually calls): /openapi/assets/positions
+        // - NOT /openapi/account/positions, which is what the docs-based research suggested.
+        const posResp = await webullFetch("/openapi/assets/positions", "GET", host, appKey, appSecret, token, { account_id: String(accountId) });
+        if (!posResp.ok) {
+          rawPositionsDebug.push({ accountId, httpStatus: posResp.status, error: (await posResp.text().catch(() => "")).slice(0, 300) });
+          continue;
+        }
         const posData = await posResp.json();
         rawPositionsDebug.push({ accountId, raw: JSON.stringify(posData).slice(0, 500) });
-        const items: any[] = posData?.items ?? posData?.positions ?? [];
+        const items: any[] = posData?.items ?? posData?.positions ?? (Array.isArray(posData) ? posData : []);
         for (const item of items) {
           const qty = Number(item.quantity) || 0;
           const costPrice = Number(item.cost_price ?? item.costPrice) || 0;
