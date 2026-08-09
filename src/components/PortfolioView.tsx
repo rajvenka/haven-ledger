@@ -145,6 +145,24 @@ const computeMarginAmount = (h: any): number | null => {
   if (h.leverage == null || Number(h.leverage) <= 1) return null;
   return (Number(h.buy_price) * Number(h.quantity)) / Number(h.leverage);
 };
+// Real (leverage-aware) investment and current value per holding - for a leveraged
+// position, buy_price x quantity is full market exposure, not actual cash put up; using it
+// for "Total Investment" mixes exposure with real cash for non-leveraged holdings, producing
+// a number that isn't genuinely additive. Investment uses the real margin; Current Value
+// uses margin + real dollar P/L (verified against a real example: margin 103488, P/L
+// -37241, current value 103488 + (-37241) = 66247, confirmed exact). Leverage doesn't
+// reduce dollar P/L - only how much margin was needed - so P/L itself stays the full
+// (current - buy) x qty either way.
+const actualInvestment = (h: any): number => {
+  const margin = computeMarginAmount(h);
+  return margin ?? (Number(h.buy_price) * Number(h.quantity));
+};
+const actualCurrentValue = (h: any): number => {
+  const margin = computeMarginAmount(h);
+  if (margin == null) return Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity);
+  const pnl = (Number(h.live_price ?? h.current_price ?? h.buy_price) - Number(h.buy_price)) * Number(h.quantity);
+  return margin + pnl;
+};
 const fmtQty = (n: number) => Number.isInteger(n) ? String(n) : n.toFixed(2);
 
 // Generic CSV export - takes column headers and row objects keyed by header, handles
@@ -1509,7 +1527,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const totalContributed = headerContributions.reduce((s: number, c: any) => s + Number(c.amount), 0);
   const totalWithdrawn = headerWithdrawals.reduce((s: number, w: any) => s + Number(w.amount), 0);
   const netContributed = totalContributed - totalWithdrawn;
-  const totalInvestedActive = filteredActiveHoldings.reduce((s, h) => s + convHeader(h, Number(h.buy_price) * Number(h.quantity)), 0);
+  const totalInvestedActive = filteredActiveHoldings.reduce((s, h) => s + convHeader(h, actualInvestment(h)), 0);
+  // Raw, full-exposure figures for leveraged holdings specifically - what "Total Stock
+  // Investment"/"Cur. Value" used to incorrectly fold in as if it were real cash/equity.
+  // Shown as its own pair of cards so the full exposure a leveraged position represents is
+  // still visible, just not blended into the "real cash" totals above anymore.
+  const leveragedHoldings = filteredActiveHoldings.filter(h => h.leverage != null && Number(h.leverage) > 1);
+  const totalLeveragedValue = leveragedHoldings.reduce((s, h) => s + convHeader(h, Number(h.buy_price) * Number(h.quantity)), 0);
+  const totalLeveragedCurrentValue = leveragedHoldings.reduce((s, h) => s + convHeader(h, Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity)), 0);
   const totalStockInvestment = totalInvestedActive; // current cost basis of active stock + MF holdings
 
   // Booked P/L computed directly from actual realized sales, not indirectly from cash
@@ -1563,7 +1588,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     const pActiveCostBasis = filteredActiveHoldings.filter((h: any) => (h.portfolio_id ?? null) === (pid ?? null)).reduce((s, h) => s + convHeader(h, Number(h.buy_price) * Number(h.quantity)), 0);
     return total + (pNetContributed - pActiveCostBasis + getPortfolioBookedPL(pid));
   }, 0);
-  const currentValueActive = filteredActiveHoldings.reduce((s, h) => s + convHeader(h, Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity)), 0);
+  const currentValueActive = filteredActiveHoldings.reduce((s, h) => s + convHeader(h, actualCurrentValue(h)), 0);
   const unrealizedGain = currentValueActive - totalInvestedActive;
   const realizedGain = soldHoldings.reduce((s, h) => s + (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity), 0);
   const totalDividends = portfolioDividends.reduce((s, d) => s + Number(d.amount), 0);
@@ -2334,23 +2359,28 @@ export default function PortfolioView(props: PortfolioViewProps) {
           .filter(a => a.distancePct <= STOP_LOSS_WARN_PCT)
           .sort((a, b) => a.distancePct - b.distancePct);
         if (atRisk.length === 0) return null;
-        const shown = stopLossAlertExpanded ? atRisk : atRisk.slice(0, 3);
+        const shown = stopLossAlertExpanded ? atRisk : atRisk.slice(0, 5);
         return (
           <div className="apple-card p-4 space-y-2 border-2 border-rose-200 dark:border-rose-900 bg-rose-50/50 dark:bg-rose-950/20">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
                 <TrendingDown className="w-3.5 h-3.5" /> {atRisk.length} Holding{atRisk.length !== 1 ? 's' : ''} Near Stop Loss
               </span>
-              {atRisk.length > 3 && (
+              {atRisk.length > 5 && (
                 <button onClick={() => setStopLossAlertExpanded(v => !v)} className="text-[9px] font-bold text-rose-500 hover:text-rose-600 cursor-pointer flex items-center gap-0.5">
-                  {stopLossAlertExpanded ? 'Show top 3' : `Show all ${atRisk.length}`} {stopLossAlertExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  {stopLossAlertExpanded ? 'Show top 5' : `Show all ${atRisk.length}`} {stopLossAlertExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                 </button>
               )}
             </div>
-            <div className="space-y-1">
+            <div className={`space-y-1 ${stopLossAlertExpanded ? 'max-h-64 overflow-y-auto pr-1' : ''}`}>
               {shown.map((a, i) => (
                 <div key={i} className="flex items-center justify-between text-[11px] px-2 py-1.5 bg-white dark:bg-slate-950 rounded-lg">
                   <span className="font-bold text-slate-700 dark:text-slate-300">{a.holding.symbol}</span>
+                  {portfolioMode === 'multiple' && (
+                    <span className="text-[9px] font-bold text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30 px-1.5 py-0.5 rounded-full">
+                      {portfolios.find((p: any) => p.id === a.holding.portfolio_id)?.name || 'Unassigned'}
+                    </span>
+                  )}
                   <span className="text-slate-500">Current {fmtCur(a.current, a.holding.currency)} · Stop {fmtCur(a.stopLoss, a.holding.currency)}</span>
                   <span className={`font-black ${a.distancePct <= 3 ? 'text-rose-600' : 'text-amber-600'}`}>{a.distancePct.toFixed(1)}% away</span>
                 </div>
@@ -2423,7 +2453,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         <div className="apple-card p-4">
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Total Stock Investment</span>
           <span className="text-base font-black text-slate-900 dark:text-white">{fmtHeader(totalStockInvestment)}</span>
-          <span className="text-[9px] text-slate-400 block mt-0.5">stock & MF purchase value</span>
+          <span className="text-[9px] text-slate-400 block mt-0.5">stock & MF purchase value - real cash, margin not full exposure for leveraged positions</span>
         </div>
       </div>
 
@@ -2453,6 +2483,21 @@ export default function PortfolioView(props: PortfolioViewProps) {
           <span className="text-[9px] text-slate-400 block mt-0.5">cash + stock value vs. contributed</span>
         </div>
       </div>
+
+      {leveragedHoldings.length > 0 && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="apple-card p-4 bg-amber-50/40 dark:bg-amber-950/10 border-amber-100 dark:border-amber-900/30">
+            <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest block mb-1">Total Leveraged Value</span>
+            <span className="text-base font-black text-slate-900 dark:text-white">{fmtHeader(totalLeveragedValue)}</span>
+            <span className="text-[9px] text-slate-400 block mt-0.5">full exposure across leveraged positions - not real cash</span>
+          </div>
+          <div className="apple-card p-4 bg-amber-50/40 dark:bg-amber-950/10 border-amber-100 dark:border-amber-900/30">
+            <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest block mb-1">Total Leveraged Current Value</span>
+            <span className="text-base font-black text-slate-900 dark:text-white">{fmtHeader(totalLeveragedCurrentValue)}</span>
+            <span className="text-[9px] text-slate-400 block mt-0.5">current full exposure - not real equity</span>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <div className="apple-card p-4">
