@@ -254,6 +254,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [showFilters, setShowFilters] = useState(false);
   const [isCustomizingColumns, setIsCustomizingColumns] = useState(false);
   const [draftColumns, setDraftColumns] = useState<{ key: string; visible: boolean }[]>([]);
+  const [draftShowSourceTags, setDraftShowSourceTags] = useState(false);
+  // Piggybacks on the same columnPrefs array/persistence mechanism via a special key that
+  // isn't a real table column (resolvedColumns safely ignores it, since it won't match any
+  // DEFAULT_COLUMNS entry) - defaults to hidden, unlike every actual column which defaults
+  // to visible, since these badges get cluttered fast with several eToro source tags shown
+  // per row.
+  const showSourceTags = columnPrefs?.find(p => p.key === 'show_source_tags')?.visible ?? false;
 
   // Merge saved prefs with the default set - handles a saved list that's missing a
   // newly-added column (appends it visible) so nothing silently disappears after an update.
@@ -386,6 +393,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
   const openColumnCustomizer = () => {
     setDraftColumns(resolvedColumns.map(c => ({ key: c.key, visible: c.visible })));
+    setDraftShowSourceTags(showSourceTags);
     setIsCustomizingColumns(true);
   };
   const moveDraftColumn = (index: number, direction: -1 | 1) => {
@@ -401,7 +409,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setDraftColumns(prev => prev.map(c => (c.key === key ? { ...c, visible: !c.visible } : c)));
   };
   const saveColumnCustomization = async () => {
-    await runAction(() => onUpdateColumnPrefs?.(draftColumns) ?? Promise.resolve());
+    await runAction(() => onUpdateColumnPrefs?.([...draftColumns, { key: 'show_source_tags', visible: draftShowSourceTags }]) ?? Promise.resolve());
     setIsCustomizingColumns(false);
   };
   const resetColumnCustomization = async () => {
@@ -410,7 +418,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   };
 
   const [wipeConfirmText, setWipeConfirmText] = useState('');
-  const [holdingsTab, setHoldingsTab] = useState<'active' | 'sold' | 'search' | 'mf-holdings' | 'settings'>('active');
+  const [holdingsTab, setHoldingsTab] = useState<'active' | 'sold' | 'search' | 'mf-holdings' | 'settings' | 'lots'>('active');
   const [mfHoldingsSelectedId, setMfHoldingsSelectedId] = useState<string>('all');
   const [mfHoldingsFetchingId, setMfHoldingsFetchingId] = useState<string | null>(null);
   const [mfHoldingsError, setMfHoldingsError] = useState<string | null>(null);
@@ -440,6 +448,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [etoroSyncDebug, setEtoroSyncDebug] = useState<any>(null);
   const [etoroRawLots, setEtoroRawLots] = useState<any[]>([]);
   const [expandedLotHoldingId, setExpandedLotHoldingId] = useState<string | null>(null);
+  const [stopLossAlertExpanded, setStopLossAlertExpanded] = useState(false);
+  const [lotsSortKey, setLotsSortKey] = useState<'distance' | 'symbol' | 'net_value'>('distance');
   const [manualEntryHoldingId, setManualEntryHoldingId] = useState<string | null>(null);
   const [manualRows, setManualRows] = useState<{ stockName: string; weightPct: string }[]>([{ stockName: '', weightPct: '' }]);
   const [manualSaving, setManualSaving] = useState(false);
@@ -624,18 +634,27 @@ export default function PortfolioView(props: PortfolioViewProps) {
     const priceMoves = new Set<string>();
     const portfolioNames = new Set<string>();
     let hasUnclassified = false;
+    // Portfolio names are always computed from every active holding (unfiltered) - the
+    // portfolio pills themselves need to show all portfolios regardless of what's currently
+    // selected, otherwise you couldn't select a different one. Everything else (broker/type
+    // combos, source tags, etc.) is scoped to whichever portfolio(s) are currently
+    // selected, so picking "ETORO" only shows tags that genuinely exist within it, not
+    // every broker across the whole workspace.
+    const selectedPortfolioNames = new Set(Array.from(holdingFilters).filter(f => portfolios.some((p: any) => p.name === f)));
     activeHoldings.forEach(h => {
+      const holdingPortfolioName = portfolioMode === 'multiple' ? (portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned') : null;
+      if (portfolioMode === 'multiple') portfolioNames.add(holdingPortfolioName!);
+      if (selectedPortfolioNames.size > 0 && portfolioMode === 'multiple' && !selectedPortfolioNames.has(holdingPortfolioName!)) return;
       combos.add(`${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`);
       if (h.source) sources.add(h.source); else hasUnclassified = true;
       if (h.change_flag && CHANGE_FLAG_LABELS[h.change_flag]) changes.add(CHANGE_FLAG_LABELS[h.change_flag]);
       const moveLabel = getSinceUploadLabel(h);
       if (moveLabel) priceMoves.add(moveLabel);
-      if (portfolioMode === 'multiple') portfolioNames.add(portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned');
     });
     const sortedSources = Array.from(sources).sort();
     if (hasUnclassified) sortedSources.push(UNCLASSIFIED_LABEL);
     return { combos: Array.from(combos).sort(), sources: sortedSources, changes: Array.from(changes).sort(), priceMoves: Array.from(priceMoves).sort(), portfolioNames: Array.from(portfolioNames).sort() };
-  }, [activeHoldings, portfolioMode, portfolios]);
+  }, [activeHoldings, portfolioMode, portfolios, holdingFilters]);
 
   const toggleHoldingFilter = (value: string) => {
     setHoldingFilters(prev => {
@@ -1560,6 +1579,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
       <div className="flex gap-1.5">
         <button onClick={() => setHoldingsTab('active')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'active' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Active ({activeHoldings.length})</button>
         <button onClick={() => setHoldingsTab('sold')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'sold' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Sold ({soldHoldings.length})</button>
+        {portfolioHoldingLots.length > 0 && (
+          <button onClick={() => setHoldingsTab('lots')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'lots' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Lots ({portfolioHoldingLots.length})</button>
+        )}
         <button onClick={() => setHoldingsTab('search')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${holdingsTab === 'search' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}><Search className="w-3 h-3" /> Quote Search</button>
         <button onClick={() => setHoldingsTab('settings')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${holdingsTab === 'settings' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}><Settings className="w-3 h-3" /> Settings</button>
         {activeHoldings.some(h => h.holding_type === 'mutual_fund') && (
@@ -1899,6 +1921,77 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {holdingsTab === 'lots' && (() => {
+        const holdingById = new Map(activeHoldings.map((h: any) => [h.id, h]));
+        const rows = portfolioHoldingLots
+          .map((lot: any) => {
+            const parent = holdingById.get(lot.holding_id);
+            if (!parent) return null;
+            const current = Number(lot.current_price ?? parent.live_price ?? parent.current_price ?? lot.buy_price);
+            const stopLoss = lot.stop_loss_rate != null ? Number(lot.stop_loss_rate) : null;
+            const distancePct = stopLoss != null && current > 0 ? (Math.abs(current - stopLoss) / current) * 100 : null;
+            return { lot, parent, current, stopLoss, distancePct };
+          })
+          .filter((r): r is NonNullable<typeof r> => r !== null)
+          .sort((a, b) => {
+            if (lotsSortKey === 'distance') return (a.distancePct ?? Infinity) - (b.distancePct ?? Infinity);
+            if (lotsSortKey === 'symbol') return a.parent.symbol.localeCompare(b.parent.symbol);
+            return (Number(b.lot.etoro_net_value_amount) || 0) - (Number(a.lot.etoro_net_value_amount) || 0);
+          });
+        return (
+          <div className="space-y-3">
+            <div className="apple-card p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Full view - every individual lot across all holdings</span>
+                <div className="flex gap-1.5">
+                  {(['distance', 'symbol', 'net_value'] as const).map(key => (
+                    <button
+                      key={key}
+                      onClick={() => setLotsSortKey(key)}
+                      className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${lotsSortKey === key ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+                    >
+                      {key === 'distance' ? 'Sort: % Away' : key === 'symbol' ? 'Sort: Symbol' : 'Sort: Net Value'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="text-[9px] font-bold text-slate-400 uppercase border-b border-slate-100 dark:border-slate-800">
+                      <th className="text-left p-2">Symbol</th>
+                      <th className="text-right p-2">Qty</th>
+                      <th className="text-right p-2">Entry</th>
+                      <th className="text-right p-2">Current</th>
+                      <th className="text-right p-2">Leverage</th>
+                      <th className="text-right p-2">Stop Loss</th>
+                      <th className="text-right p-2">% Away</th>
+                      <th className="text-right p-2">Net Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map(r => (
+                      <tr key={r.lot.id} className="border-b border-slate-50 dark:border-slate-900">
+                        <td className="p-2 font-bold text-slate-700 dark:text-slate-300">{r.parent.symbol}</td>
+                        <td className="p-2 text-right">{fmtQty(Number(r.lot.quantity))}</td>
+                        <td className="p-2 text-right">{fmtCur(Number(r.lot.buy_price), r.parent.currency)}</td>
+                        <td className="p-2 text-right">{fmtCur(r.current, r.parent.currency)}</td>
+                        <td className="p-2 text-right">{r.lot.leverage != null ? `${Number(r.lot.leverage)}x` : '—'}</td>
+                        <td className="p-2 text-right">{r.stopLoss != null ? fmtCur(r.stopLoss, r.parent.currency) : '—'}</td>
+                        <td className={`p-2 text-right font-black ${r.distancePct != null && r.distancePct <= 3 ? 'text-rose-600' : r.distancePct != null && r.distancePct <= 10 ? 'text-amber-600' : 'text-slate-400'}`}>
+                          {r.distancePct != null ? `${r.distancePct.toFixed(1)}%` : '—'}
+                        </td>
+                        <td className="p-2 text-right font-bold text-indigo-600 dark:text-indigo-400">{r.lot.etoro_net_value_amount != null ? fmtCur(Number(r.lot.etoro_net_value_amount), r.parent.currency) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         );
@@ -2287,13 +2380,21 @@ export default function PortfolioView(props: PortfolioViewProps) {
           .filter(a => a.distancePct <= STOP_LOSS_WARN_PCT)
           .sort((a, b) => a.distancePct - b.distancePct);
         if (atRisk.length === 0) return null;
+        const shown = stopLossAlertExpanded ? atRisk : atRisk.slice(0, 3);
         return (
           <div className="apple-card p-4 space-y-2 border-2 border-rose-200 dark:border-rose-900 bg-rose-50/50 dark:bg-rose-950/20">
-            <span className="text-[10px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
-              <TrendingDown className="w-3.5 h-3.5" /> {atRisk.length} Holding{atRisk.length !== 1 ? 's' : ''} Near Stop Loss
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
+                <TrendingDown className="w-3.5 h-3.5" /> {atRisk.length} Holding{atRisk.length !== 1 ? 's' : ''} Near Stop Loss
+              </span>
+              {atRisk.length > 3 && (
+                <button onClick={() => setStopLossAlertExpanded(v => !v)} className="text-[9px] font-bold text-rose-500 hover:text-rose-600 cursor-pointer flex items-center gap-0.5">
+                  {stopLossAlertExpanded ? 'Show top 3' : `Show all ${atRisk.length}`} {stopLossAlertExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+              )}
+            </div>
             <div className="space-y-1">
-              {atRisk.map((a, i) => (
+              {shown.map((a, i) => (
                 <div key={i} className="flex items-center justify-between text-[11px] px-2 py-1.5 bg-white dark:bg-slate-950 rounded-lg">
                   <span className="font-bold text-slate-700 dark:text-slate-300">{a.holding.symbol}</span>
                   <span className="text-slate-500">Current {fmtCur(a.current, a.holding.currency)} · Stop {fmtCur(a.stopLoss, a.holding.currency)}</span>
@@ -2472,14 +2573,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <Download className="w-3.5 h-3.5" /> Export XLSX (by Portfolio)
               </button>
             )}
-            {showMoreActions && (
-              <button
-                onClick={() => { setIsImporting(!isImporting); setImportPreview(null); setImportRawParsed(null); setImportPortfolioConfirmed(false); }}
-                className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-              >
-                <Upload className="w-3.5 h-3.5" /> Import from Broker
-              </button>
-            )}
+            <button
+              onClick={() => { setIsImporting(!isImporting); setImportPreview(null); setImportRawParsed(null); setImportPortfolioConfirmed(false); }}
+              className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+            >
+              <Upload className="w-3.5 h-3.5" /> Import/Sync with Broker
+            </button>
             {showMoreActions && (
               <button
                 onClick={() => { setIsHistoricalMode(!isHistoricalMode); setHistoricalSnapshots([]); setHistoricalResult(null); setHistoricalPortfolioConfirmed(false); }}
@@ -2725,7 +2824,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                             <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
                               {h.symbol}
                               {h.holdingType === 'mutual_fund' && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 rounded-full">MF</span>}
-                              {h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
+                              {showSourceTags && h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
                             </span>
                             <span className="text-slate-400">{h.quantity} @ {fmtCur(h.buyPrice, h.currency || 'INR')}</span>
                           </div>
@@ -3151,7 +3250,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               ) : (
                                 h.holding_type === 'mutual_fund' && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 rounded-full">MF</span>
                               )}
-                              {h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
+                              {showSourceTags && h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
                               {h.price_lookup_failed && <span className="text-[8px] font-black px-1.5 py-0.2 bg-rose-500 text-white rounded-full" title="Last refresh couldn't find this symbol - check Symbol/Exchange via Edit">Symbol Not Found</span>}
                               {h.change_flag && CHANGE_FLAG_LABELS[h.change_flag] && <span className="text-[8px] font-black px-1.5 py-0.2 bg-amber-500 text-white rounded-full">{CHANGE_FLAG_LABELS[h.change_flag]}</span>}
                               {h.currency && h.currency !== 'INR' && <span className="text-[8px] font-black px-1.5 py-0.2 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 rounded-full">{h.currency}</span>}
@@ -3576,7 +3675,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                 </span>
                               )}
                               {h.holding_type === 'mutual_fund' && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 rounded-full">MF</span>}
-                              {h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
+                              {showSourceTags && h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
                               {h.price_lookup_failed && <span className="text-[8px] font-black px-1.5 py-0.2 bg-rose-500 text-white rounded-full" title="Last refresh couldn't find this symbol - check Symbol/Exchange via Edit">Symbol Not Found</span>}
                             </div>
                           </td>
@@ -3703,6 +3802,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <span className="text-xs font-semibold text-slate-500">Instrument</span>
                 <span className="text-[9px] font-bold text-slate-400 uppercase">Always shown</span>
               </div>
+              <label className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg cursor-pointer">
+                <span className="flex items-center gap-2.5">
+                  <input type="checkbox" checked={draftShowSourceTags} onChange={() => setDraftShowSourceTags(v => !v)} className="w-4 h-4 cursor-pointer accent-indigo-600" />
+                  <span className={`text-xs font-semibold ${draftShowSourceTags ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>Show Tags</span>
+                </span>
+                <span className="text-[9px] text-slate-400">e.g. eToro CFD/Leveraged</span>
+              </label>
               {draftColumns.map((col, i) => {
                 const meta = DEFAULT_COLUMNS.find(c => c.key === col.key);
                 return (
