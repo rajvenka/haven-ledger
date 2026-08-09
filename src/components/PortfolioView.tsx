@@ -1065,20 +1065,27 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setWebullSyncing(true);
     setWebullSyncError(null);
     setWebullDebug(null);
+    const startedAt = new Date().toISOString();
     try {
-      const resp = await fetch('/api/portfolio-webull-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'sync',
-          appKey: connection.credentials?.app_key,
-          appSecret: connection.credentials?.app_secret,
-          region: connection.credentials?.region ?? 'us',
-          token: connection.credentials?.token,
-        }),
-      });
-      const data = await resp.json();
-      setWebullDebug({ accountDebug: data.accountDebug, rawPositionsDebug: data.rawPositionsDebug });
+      let resp: Response;
+      try {
+        resp = await fetch('/api/portfolio-webull-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'sync',
+            appKey: connection.credentials?.app_key,
+            appSecret: connection.credentials?.app_secret,
+            region: connection.credentials?.region ?? 'us',
+            token: connection.credentials?.token,
+          }),
+        });
+      } catch (networkErr: any) {
+        setWebullDebug({ startedAt, stage: 'network_error', message: networkErr?.message, name: networkErr?.name });
+        throw new Error(`Network error reaching the sync endpoint: ${networkErr?.message}`);
+      }
+      const data = await resp.json().catch((parseErr: any) => ({ __parseError: parseErr?.message }));
+      setWebullDebug({ startedAt, httpStatus: resp.status, ok: resp.ok, accountDebug: data.accountDebug, rawPositionsDebug: data.rawPositionsDebug, error: data.error });
       if (!resp.ok) throw new Error(data?.error || `Webull sync failed (${resp.status})`);
       setImportTemplate('universal');
       setImportPortfolioId(connection.portfolio_id ?? '');
@@ -1098,26 +1105,40 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setEtoroSyncError(null);
     setEtoroSyncDebug(null);
     setImportPreview(null);
+    const startedAt = new Date().toISOString();
     try {
       // Per discussion, Webull tried first for live pricing when a Webull connection
       // exists anywhere in the workspace (not necessarily the same portfolio) - eToro's
       // own rates endpoint is the fallback for whatever Webull can't price (AU-listed
       // symbols, commodities like Gold, since Webull's Category enum has no AU_STOCK).
       const webullConn = portfolioBrokerConnections.find((c: any) => c.broker_type === 'webull');
-      const resp = await fetch('/api/portfolio-etoro-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKey: connection.credentials?.api_key,
-          userKey: connection.credentials?.user_key,
-          webullAppKey: webullConn?.credentials?.app_key,
-          webullAppSecret: webullConn?.credentials?.app_secret,
-          webullToken: webullConn?.credentials?.token,
-          webullRegion: webullConn?.credentials?.region,
-        }),
-      });
-      const data = await resp.json();
-      if (data?.instrumentDebug || data?.settlementBreakdown) setEtoroSyncDebug(data);
+      let resp: Response;
+      try {
+        resp = await fetch('/api/portfolio-etoro-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            apiKey: connection.credentials?.api_key,
+            userKey: connection.credentials?.user_key,
+            webullAppKey: webullConn?.credentials?.app_key,
+            webullAppSecret: webullConn?.credentials?.app_secret,
+            webullToken: webullConn?.credentials?.token,
+            webullRegion: webullConn?.credentials?.region,
+          }),
+        });
+      } catch (networkErr: any) {
+        // The fetch call itself never completed - a network-level failure that would
+        // otherwise leave no trace at all, since it happens before any response body exists
+        // to inspect.
+        setEtoroSyncDebug({ startedAt, stage: 'network_error', message: networkErr?.message, name: networkErr?.name });
+        throw new Error(`Network error reaching the sync endpoint: ${networkErr?.message}`);
+      }
+      const data = await resp.json().catch((parseErr: any) => ({ __parseError: parseErr?.message }));
+      // Always captured now, not conditionally - previously only set when the response
+      // happened to contain instrumentDebug/settlementBreakdown, so a plain error response
+      // or anything unexpected left nothing visible to copy. Spread directly (not nested)
+      // so the existing field-specific detailed display below still works unchanged.
+      setEtoroSyncDebug({ ...data, __meta: { startedAt, httpStatus: resp.status, ok: resp.ok } });
       setEtoroRawLots(data?.rawLots ?? []);
       if (!resp.ok) throw new Error(data?.error || `eToro sync failed (${resp.status})`);
       setImportTemplate('universal');
@@ -2331,13 +2352,29 @@ export default function PortfolioView(props: PortfolioViewProps) {
               {webullSyncError && <p className="text-[10px] text-rose-500">{webullSyncError}</p>}
               {webullDebug && !brokerEditingType && (
                 <div className="text-[9px] text-slate-500 break-all bg-slate-50 dark:bg-slate-900 rounded p-2 space-y-1">
-                  <p className="font-bold text-slate-600 dark:text-slate-300">Webull sync debug</p>
+                  <div className="flex items-center justify-between">
+                    <p className="font-bold text-slate-600 dark:text-slate-300">Webull sync debug</p>
+                    <button
+                      onClick={() => { navigator.clipboard?.writeText(JSON.stringify(webullDebug, null, 2)); }}
+                      className="px-2 py-0.5 bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded font-sans font-bold cursor-pointer"
+                    >
+                      Copy full log
+                    </button>
+                  </div>
                   <pre className="whitespace-pre-wrap">{JSON.stringify(webullDebug, null, 2)}</pre>
                 </div>
               )}
               {etoroSyncDebug && (
                 <div className="text-[9px] text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 rounded p-2 space-y-0.5 font-mono">
-                  <p className="font-bold text-slate-700 dark:text-slate-200">Sync breakdown</p>
+                  <div className="flex items-center justify-between">
+                    <p className="font-bold text-slate-700 dark:text-slate-200">Sync breakdown</p>
+                    <button
+                      onClick={() => { navigator.clipboard?.writeText(JSON.stringify(etoroSyncDebug, null, 2)); }}
+                      className="px-2 py-0.5 bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded font-sans font-bold cursor-pointer"
+                    >
+                      Copy full log
+                    </button>
+                  </div>
                   <p>Total positions from eToro: {etoroSyncDebug.totalPositions}</p>
                   <p>Included positions (all types): {etoroSyncDebug.includedPositions}</p>
                   <p>Consolidated into holdings: {etoroSyncDebug.consolidatedHoldingsCount}</p>
@@ -2358,6 +2395,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       {etoroSyncDebug.instrumentDebug.errorBody && <p className="break-all">Error body: {etoroSyncDebug.instrumentDebug.errorBody}</p>}
                     </>
                   )}
+                  {etoroSyncDebug.__meta && <p className="text-slate-400">HTTP {etoroSyncDebug.__meta.httpStatus}, ok={String(etoroSyncDebug.__meta.ok)}, at {etoroSyncDebug.__meta.startedAt}</p>}
+                  {etoroSyncDebug.stage === 'network_error' && <p className="text-rose-500">Network error before any response: {etoroSyncDebug.name} - {etoroSyncDebug.message}</p>}
+                  <details className="pt-1">
+                    <summary className="cursor-pointer text-slate-400">Full raw log (click to expand)</summary>
+                    <pre className="whitespace-pre-wrap break-all mt-1">{JSON.stringify(etoroSyncDebug, null, 2)}</pre>
+                  </details>
                 </div>
               )}
             </div>
