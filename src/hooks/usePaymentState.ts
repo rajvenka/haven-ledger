@@ -1886,6 +1886,13 @@ export function usePaymentState() {
         await upsertPortfolioHoldingLots(master.id, lots);
       }
     }
+    // upsertPortfolioHoldingLots writes directly to Supabase but was never refreshing
+    // component state afterward (unlike every other write function in this file) - lots
+    // were genuinely saved correctly, but the frontend's portfolioHoldingLots state never
+    // picked them up until an unrelated action happened to trigger a reload, which is why
+    // the Lots filter pill never appeared even though the data existed. Refreshed once
+    // here rather than per-lot-upsert, since this loop can touch many symbols per sync.
+    await loadPortfolioDetails();
   };
 
   const addPortfolioDividend = async (symbol: string, amount: number, dividendDate: string, holdingId?: string, notes?: string) => {
