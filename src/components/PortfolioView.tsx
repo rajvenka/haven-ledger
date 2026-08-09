@@ -145,23 +145,24 @@ const computeMarginAmount = (h: any): number | null => {
   if (h.leverage == null || Number(h.leverage) <= 1) return null;
   return (Number(h.buy_price) * Number(h.quantity)) / Number(h.leverage);
 };
-// Real (leverage-aware) investment and current value per holding - for a leveraged
-// position, buy_price x quantity is full market exposure, not actual cash put up; using it
-// for "Total Investment" mixes exposure with real cash for non-leveraged holdings, producing
-// a number that isn't genuinely additive. Investment uses the real margin; Current Value
-// uses margin + real dollar P/L (verified against a real example: margin 103488, P/L
-// -37241, current value 103488 + (-37241) = 66247, confirmed exact). Leverage doesn't
-// reduce dollar P/L - only how much margin was needed - so P/L itself stays the full
-// (current - buy) x qty either way.
+// Per detailed clarification: for a leveraged holding, "Total Stock Investment" uses the
+// full eToro Net Value (reserved cash + P/L - h.etoro_net_value_amount, falling back to the
+// verified derivation formula if that field isn't populated), while "Current Holding Value"
+// uses the reserved-cash component alone, backed out by subtracting P/L from that same
+// stored figure. Their difference is then exactly the P/L (verified: Total Stock Investment
+// 16940.23 - Current Holding Value 59079.87 = -42139.64, matching the raw P/L sum exactly) -
+// this is a deliberate relabeling for leveraged portfolios, not the same "investment/current
+// value" meaning as a plain cash holding. Non-leveraged holdings are untouched either way.
+const dollarPnl = (h: any): number => (Number(h.live_price ?? h.current_price ?? h.buy_price) - Number(h.buy_price)) * Number(h.quantity);
 const actualInvestment = (h: any): number => {
-  const margin = computeMarginAmount(h);
-  return margin ?? (Number(h.buy_price) * Number(h.quantity));
+  if (computeMarginAmount(h) == null) return Number(h.buy_price) * Number(h.quantity);
+  const netValue = h.etoro_net_value_amount != null ? Number(h.etoro_net_value_amount) : (computeEtoroNetValue(h) ?? 0);
+  return netValue; // "Total Stock Investment" contribution for a leveraged holding
 };
 const actualCurrentValue = (h: any): number => {
-  const margin = computeMarginAmount(h);
-  if (margin == null) return Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity);
-  const pnl = (Number(h.live_price ?? h.current_price ?? h.buy_price) - Number(h.buy_price)) * Number(h.quantity);
-  return margin + pnl;
+  if (computeMarginAmount(h) == null) return Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity);
+  const netValue = h.etoro_net_value_amount != null ? Number(h.etoro_net_value_amount) : (computeEtoroNetValue(h) ?? 0);
+  return netValue - dollarPnl(h); // "Current Holding Value" contribution - reserved cash alone
 };
 const fmtQty = (n: number) => Number.isInteger(n) ? String(n) : n.toFixed(2);
 
@@ -1568,6 +1569,20 @@ export default function PortfolioView(props: PortfolioViewProps) {
   // already reflected in the number the person typed in, so counting them again on top
   // double-counts them.
   const getPortfolioBookedPL = (pid: string | null) => {
+    const portfolioHoldingsForPid = filteredActiveHoldings.filter((h: any) => (h.portfolio_id ?? null) === (pid ?? null));
+    const isLeveragedPortfolio = portfolioHoldingsForPid.some((h: any) => h.leverage != null && Number(h.leverage) > 1);
+    if (isLeveragedPortfolio) {
+      // Per detailed clarification: Booked P/L for a leveraged portfolio = Initial
+      // Investment (net contributed) - Total Stock Investment - Balance Cash. Balance Cash
+      // is already explicitly zero for leveraged portfolios (see above), so this reduces to
+      // netContributed - Total Stock Investment for that portfolio specifically - a
+      // genuinely different formula from the baseline+realized-sales approach used for
+      // plain cash portfolios, which doesn't apply the same way to a leveraged account.
+      const pNetContributed = portfolioContributions.filter((c: any) => (c.portfolio_id ?? null) === (pid ?? null)).reduce((s: number, c: any) => s + Number(c.amount), 0)
+        - portfolioWithdrawals.filter((w: any) => (w.portfolio_id ?? null) === (pid ?? null)).reduce((s: number, w: any) => s + Number(w.amount), 0);
+      const pTotalStockInvestment = portfolioHoldingsForPid.reduce((s, h) => s + convHeader(h, actualInvestment(h)), 0);
+      return pNetContributed - pTotalStockInvestment;
+    }
     const baseline = portfolioBookedPlBaselines.find((b: any) => (b.portfolio_id ?? null) === (pid ?? null));
     const baselineAmount = baseline ? Number(baseline.baseline_amount) : 0;
     const baselineCutoffDate = baseline ? String(baseline.updated_at).slice(0, 10) : '1900-01-01';
@@ -1588,6 +1603,15 @@ export default function PortfolioView(props: PortfolioViewProps) {
   // personal account that was never logged as a withdrawal.
   const headerPortfolioIdsForCash = selectedHeaderPortfolioIds ?? (portfolioMode === 'multiple' ? portfolios.map((p: any) => p.id) : [null]);
   const balanceCash = headerPortfolioIdsForCash.reduce((total: number, pid: string | null) => {
+    const portfolioHoldingsForPid = filteredActiveHoldings.filter((h: any) => (h.portfolio_id ?? null) === (pid ?? null));
+    // Two distinct calculation patterns: a plain cash portfolio (Zerodha/Groww) keeps the
+    // existing tiered logic entirely unchanged. A leveraged portfolio (any holdings with
+    // leverage set) is a genuinely different kind of account - per detailed clarification,
+    // Balance Cash there has no meaningful "cash remaining" concept without real
+    // contribution tracking for that broker, so it's explicitly zero for now rather than a
+    // misleading auto-calculated figure.
+    const isLeveragedPortfolio = portfolioHoldingsForPid.some((h: any) => h.leverage != null && Number(h.leverage) > 1);
+    if (isLeveragedPortfolio) return total;
     const cashRows = portfolioCashBalances.filter((c: any) => (c.portfolio_id ?? null) === (pid ?? null));
     const cashSum = cashRows.reduce((s: number, c: any) => s + Number(c.amount), 0);
     const cashLatest = cashRows.reduce((latest: string | null, c: any) => (!latest || c.updated_at > latest) ? c.updated_at : latest, null as string | null);
@@ -1604,7 +1628,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     // rather than showing a misleading zero.
     const pNetContributed = portfolioContributions.filter((c: any) => (c.portfolio_id ?? null) === (pid ?? null)).reduce((s: number, c: any) => s + Number(c.amount), 0)
       - portfolioWithdrawals.filter((w: any) => (w.portfolio_id ?? null) === (pid ?? null)).reduce((s: number, w: any) => s + Number(w.amount), 0);
-    const pActiveCostBasis = filteredActiveHoldings.filter((h: any) => (h.portfolio_id ?? null) === (pid ?? null)).reduce((s, h) => s + convHeader(h, actualInvestment(h)), 0);
+    const pActiveCostBasis = portfolioHoldingsForPid.reduce((s, h) => s + convHeader(h, actualInvestment(h)), 0);
     return total + (pNetContributed - pActiveCostBasis + getPortfolioBookedPL(pid));
   }, 0);
   const currentValueActive = filteredActiveHoldings.reduce((s, h) => s + convHeader(h, actualCurrentValue(h)), 0);
@@ -1613,7 +1637,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const totalDividends = portfolioDividends.reduce((s, d) => s + Number(d.amount), 0);
   const totalFees = portfolioFees.reduce((s, f) => s + Number(f.amount), 0);
   const totalInvestedAllTime = totalInvestedActive + soldHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
-  const netGain = (balanceCash + currentValueActive) - netContributed;
+  // Net Gain for a leveraged view = Total Stock Investment - Current Holding Value, which
+  // (per the verified relationship above) equals exactly the raw dollar P/L - a cleaner,
+  // more direct figure than the cash-portfolio formula, which depends on Balance Cash (now
+  // zero for leveraged portfolios and would otherwise distort this).
+  const anyLeveragedInSelection = filteredActiveHoldings.some((h: any) => h.leverage != null && Number(h.leverage) > 1);
+  const netGain = anyLeveragedInSelection ? (totalInvestedActive - currentValueActive) : ((balanceCash + currentValueActive) - netContributed);
 
   // Daily Change compares Live Price against Yahoo's own previous-close reference - only
   // counts holdings that actually have both values (i.e. have been live-refreshed at least
@@ -2477,7 +2506,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         <div className="apple-card p-4">
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Total Stock Investment</span>
           <span className="text-base font-black text-slate-900 dark:text-white">{fmtHeader(totalStockInvestment)}</span>
-          <span className="text-[9px] text-slate-400 block mt-0.5">stock & MF purchase value - real cash, margin not full exposure for leveraged positions</span>
+          <span className="text-[9px] text-slate-400 block mt-0.5">purchase value - Net Value (reserved cash + P&L) for leveraged positions, not full exposure</span>
         </div>
       </div>
 
