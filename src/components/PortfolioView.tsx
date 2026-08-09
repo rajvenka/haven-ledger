@@ -33,6 +33,7 @@ interface PortfolioViewProps {
   deletePortfolioBrokerConnection?: (id: string) => Promise<void>;
   markBrokerConnectionSynced?: (id: string) => Promise<void>;
   syncEtoroHoldingLots?: (symbols: string[], rawLotsBySymbol: Map<string, any[]>, portfolioId?: string) => Promise<void>;
+  portfolioHoldingLots?: any[];
   loadPortfolioHoldingLots?: (holdingId: string) => Promise<any[]>;
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
   deletePortfolioSplit: (id: string) => Promise<void>;
@@ -135,6 +136,14 @@ const computeEtoroNetValue = (h: any): number | null => {
   const lossAtStop = isShort ? (stop - entry) * qty : (entry - stop) * qty;
   return lossAtStop + margin * 0.5;
 };
+// "Investment (No Leverage)" - the actual cash margin put up, static at entry (Invested /
+// leverage). Different from Net Value: this doesn't move with the stop-loss or the current
+// P/L, it's simply "what would this position have cost without leverage" - a stable
+// reference figure, not a live one. Only meaningful for leveraged holdings.
+const computeMarginAmount = (h: any): number | null => {
+  if (h.leverage == null || Number(h.leverage) <= 1) return null;
+  return (Number(h.buy_price) * Number(h.quantity)) / Number(h.leverage);
+};
 const fmtQty = (n: number) => Number.isInteger(n) ? String(n) : n.toFixed(2);
 
 // Generic CSV export - takes column headers and row objects keyed by header, handles
@@ -173,6 +182,7 @@ const DEFAULT_COLUMNS: { key: string; label: string; align: 'text-left' | 'text-
   { key: 'since_reference', label: 'Since Reference (%)', align: 'text-right' },
   { key: 'since_reference_amount', label: 'Since Reference ($)', align: 'text-right' },
   { key: 'net_value', label: 'Net Value (eToro)', align: 'text-right' },
+  { key: 'margin_amount', label: 'Investment (No Leverage)', align: 'text-right' },
 ];
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const memberName = (m: WorkspaceMemberLite) => m.displayName || m.email.split('@')[0];
@@ -183,7 +193,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances, portfolioBookedPlBaselines = [], portfolioProjectedBankBalances = [],
     setPortfolioCashBalance, deletePortfolioCashBalance, setBookedPlBaseline, setProjectedBankBalance, recalculateProjectedBankBalance,
     portfolioBrokerConnections = [], setPortfolioBrokerConnection, deletePortfolioBrokerConnection, markBrokerConnectionSynced,
-    syncEtoroHoldingLots, loadPortfolioHoldingLots,
+    syncEtoroHoldingLots, loadPortfolioHoldingLots, portfolioHoldingLots = [],
     portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     mfHoldingsCache = [], loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
@@ -279,6 +289,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         case 'since_reference': { const pct = getSinceReferencePct(h); return pct !== null ? pct.toFixed(2) : ''; }
         case 'since_reference_amount': { const amt = getSinceReferenceAmount(h); return amt !== null ? amt.toFixed(2) : ''; }
         case 'net_value': { const nv = computeEtoroNetValue(h); return nv !== null ? nv.toFixed(2) : ''; }
+        case 'margin_amount': { const m = computeMarginAmount(h); return m !== null ? m.toFixed(2) : ''; }
         default: return '';
       }
     };
@@ -307,6 +318,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         case 'since_reference': { const pct = getSinceReferencePct(h); return pct !== null ? pct.toFixed(2) : ''; }
         case 'since_reference_amount': { const amt = getSinceReferenceAmount(h); return amt !== null ? amt.toFixed(2) : ''; }
         case 'net_value': { const nv = computeEtoroNetValue(h); return nv !== null ? nv.toFixed(2) : ''; }
+        case 'margin_amount': { const m = computeMarginAmount(h); return m !== null ? m.toFixed(2) : ''; }
         default: return '';
       }
     };
@@ -428,8 +440,6 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [etoroSyncDebug, setEtoroSyncDebug] = useState<any>(null);
   const [etoroRawLots, setEtoroRawLots] = useState<any[]>([]);
   const [expandedLotHoldingId, setExpandedLotHoldingId] = useState<string | null>(null);
-  const [expandedLots, setExpandedLots] = useState<any[]>([]);
-  const [expandedLotsLoading, setExpandedLotsLoading] = useState(false);
   const [manualEntryHoldingId, setManualEntryHoldingId] = useState<string | null>(null);
   const [manualRows, setManualRows] = useState<{ stockName: string; weightPct: string }[]>([{ stockName: '', weightPct: '' }]);
   const [manualSaving, setManualSaving] = useState(false);
@@ -689,6 +699,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
           return h.reference_price != null ? (current - Number(h.reference_price)) * qty : -Infinity;
         }
         case 'net_value': { const nv = computeEtoroNetValue(h); return nv ?? -Infinity; }
+        case 'margin_amount': { const m = computeMarginAmount(h); return m ?? -Infinity; }
         default: return 0;
       }
     };
@@ -929,21 +940,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
     }
   };
 
-  const toggleLotExpand = async (holdingId: string) => {
-    if (expandedLotHoldingId === holdingId) {
-      setExpandedLotHoldingId(null);
-      setExpandedLots([]);
-      return;
-    }
-    setExpandedLotHoldingId(holdingId);
-    setExpandedLots([]);
-    setExpandedLotsLoading(true);
-    try {
-      const lots = await loadPortfolioHoldingLots?.(holdingId) ?? [];
-      setExpandedLots(lots);
-    } finally {
-      setExpandedLotsLoading(false);
-    }
+  const toggleLotExpand = (holdingId: string) => {
+    setExpandedLotHoldingId(prev => prev === holdingId ? null : holdingId);
   };
 
   const handleEtoroSync = async (connection: any) => {
@@ -3123,15 +3121,19 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               >
                                 <ChevronDown className={`w-3 h-3 transition-transform ${expandedHoldingId === h.id ? 'rotate-180' : ''}`} />
                               </button>
-                              {h.broker === 'eToro' && (
-                                <button
-                                  onClick={() => toggleLotExpand(h.id)}
-                                  title="Show individual lots"
-                                  className="text-[8px] font-black px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full cursor-pointer flex items-center gap-0.5"
-                                >
-                                  Lots {expandedLotHoldingId === h.id ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
-                                </button>
-                              )}
+                              {(() => {
+                                const holdingLots = portfolioHoldingLots.filter((l: any) => l.holding_id === h.id);
+                                if (holdingLots.length <= 1) return null;
+                                return (
+                                  <button
+                                    onClick={() => toggleLotExpand(h.id)}
+                                    title="Show individual lots"
+                                    className="text-[8px] font-black px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full cursor-pointer flex items-center gap-0.5"
+                                  >
+                                    Lots ({holdingLots.length}) {expandedLotHoldingId === h.id ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+                                  </button>
+                                );
+                              })()}
                               <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{h.broker}</span>
                               {portfolioMode === 'multiple' && (
                                 <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-500 dark:text-indigo-400 rounded-full">
@@ -3261,8 +3263,16 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               case 'net_value': {
                                 const nv = computeEtoroNetValue(h);
                                 return (
-                                  <td key="net_value" className="p-2.5 text-right" title="Total cash committed to this leveraged position (margin + any maintenance margin for an extended stop-loss)">
+                                  <td key="net_value" className="p-2.5 text-right" title="Total cash committed to this leveraged position (margin + any maintenance margin for an extended stop-loss, plus unrealized P/L)">
                                     {nv !== null ? fmtCur(nv, h.currency) : <span className="text-slate-300 dark:text-slate-700">—</span>}
+                                  </td>
+                                );
+                              }
+                              case 'margin_amount': {
+                                const m = computeMarginAmount(h);
+                                return (
+                                  <td key="margin_amount" className="p-2.5 text-right" title="Actual cash margin put up at entry - Invested / Leverage, static (doesn't move with stop-loss or current P/L)">
+                                    {m !== null ? fmtCur(m, h.currency) : <span className="text-slate-300 dark:text-slate-700">—</span>}
                                   </td>
                                 );
                               }
@@ -3353,34 +3363,31 @@ export default function PortfolioView(props: PortfolioViewProps) {
                             </td>
                           </tr>
                         )}
-                        {expandedLotHoldingId === h.id && (
+                        {expandedLotHoldingId === h.id && (() => {
+                          const holdingLots = portfolioHoldingLots.filter((l: any) => l.holding_id === h.id);
+                          return (
                           <tr>
                             <td colSpan={(isSelectingForTag ? 1 : 0) + 2 + visibleColumns.length} className="p-3 bg-slate-50 dark:bg-slate-900">
-                              {expandedLotsLoading ? (
-                                <p className="text-[10px] text-slate-400">Loading lots…</p>
-                              ) : expandedLots.length === 0 ? (
-                                <p className="text-[10px] text-slate-400">No individual lot detail recorded for this holding yet - try syncing from eToro again.</p>
-                              ) : (
-                                <div className="space-y-1">
-                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{expandedLots.length} individual lot{expandedLots.length !== 1 ? 's' : ''}</span>
-                                  <div className="grid grid-cols-6 gap-2 text-[9px] font-bold text-slate-400 uppercase px-2">
-                                    <span>Qty</span><span>Entry</span><span>Current</span><span>Leverage</span><span>Stop Loss</span><span>Net Value</span>
-                                  </div>
-                                  {expandedLots.map((lot: any) => (
-                                    <div key={lot.id} className="grid grid-cols-6 gap-2 text-[10px] px-2 py-1.5 bg-white dark:bg-slate-950 rounded">
-                                      <span className="font-bold text-slate-700 dark:text-slate-300">{fmtQty(Number(lot.quantity))}</span>
-                                      <span>{fmtCur(Number(lot.buy_price), h.currency)}</span>
-                                      <span>{lot.current_price != null ? fmtCur(Number(lot.current_price), h.currency) : '—'}</span>
-                                      <span>{lot.leverage != null ? `${Number(lot.leverage)}x` : '—'}</span>
-                                      <span>{lot.stop_loss_rate != null ? fmtCur(Number(lot.stop_loss_rate), h.currency) : '—'}</span>
-                                      <span className="font-bold text-indigo-600 dark:text-indigo-400">{lot.etoro_net_value_amount != null ? fmtCur(Number(lot.etoro_net_value_amount), h.currency) : '—'}</span>
-                                    </div>
-                                  ))}
+                              <div className="space-y-1">
+                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{holdingLots.length} individual lots</span>
+                                <div className="grid grid-cols-6 gap-2 text-[9px] font-bold text-slate-400 uppercase px-2">
+                                  <span>Qty</span><span>Entry</span><span>Current</span><span>Leverage</span><span>Stop Loss</span><span>Net Value</span>
                                 </div>
-                              )}
+                                {holdingLots.map((lot: any) => (
+                                  <div key={lot.id} className="grid grid-cols-6 gap-2 text-[10px] px-2 py-1.5 bg-white dark:bg-slate-950 rounded">
+                                    <span className="font-bold text-slate-700 dark:text-slate-300">{fmtQty(Number(lot.quantity))}</span>
+                                    <span>{fmtCur(Number(lot.buy_price), h.currency)}</span>
+                                    <span>{lot.current_price != null ? fmtCur(Number(lot.current_price), h.currency) : '—'}</span>
+                                    <span>{lot.leverage != null ? `${Number(lot.leverage)}x` : '—'}</span>
+                                    <span>{lot.stop_loss_rate != null ? fmtCur(Number(lot.stop_loss_rate), h.currency) : '—'}</span>
+                                    <span className="font-bold text-indigo-600 dark:text-indigo-400">{lot.etoro_net_value_amount != null ? fmtCur(Number(lot.etoro_net_value_amount), h.currency) : '—'}</span>
+                                  </div>
+                                ))}
+                              </div>
                             </td>
                           </tr>
-                        )}
+                          );
+                        })()}
                         </React.Fragment>
                       );
                     })}
