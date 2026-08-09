@@ -188,29 +188,24 @@ export default async function handler(req: any, res: any) {
         }
         const posData = await posResp.json();
         rawPositionsDebug.push({ accountId, raw: JSON.stringify(posData).slice(0, 800) });
+        // Confirmed via a real sync: the response is a direct array (not wrapped in
+        // {items:[...]}), and each position genuinely carries its own currency directly -
+        // exactly as hoped, since a single Webull AU account holds both AUD (ASX-listed)
+        // and USD (US-listed) positions side by side. last_price is also returned directly,
+        // confirmed to match this route's earlier derived-from-P&L calculation exactly
+        // (0.86 + (-51.52/112) = 0.40, matching the real last_price of 0.40) - using the
+        // direct field now instead, simpler and avoids any derivation edge cases.
         const items: any[] = posData?.items ?? posData?.positions ?? (Array.isArray(posData) ? posData : []);
         for (const item of items) {
+          // Only EQUITY for now - options have fundamentally different pricing/risk
+          // characteristics and would need separate handling (this app's holdingType is
+          // stock/mutual_fund only today), so they're excluded rather than misclassified.
+          if (item.instrument_type && item.instrument_type !== "EQUITY") continue;
           const qty = Number(item.quantity) || 0;
-          const costPrice = Number(item.cost_price ?? item.costPrice) || 0;
-          const unrealizedPL = Number(item.unrealized_profit_loss ?? item.unrealizedProfitLoss) || 0;
-          const currentPrice = qty > 0 ? costPrice + unrealizedPL / qty : costPrice;
           if (qty <= 0) continue;
-          // A single Webull AU account can genuinely hold both AU-listed (AUD) and
-          // US-listed (USD) stocks/ETFs/options together - hardcoding one currency would
-          // silently mislabel whichever isn't the account's "home" currency. The SDK has no
-          // typed response parsing for positions (confirmed from source - just raw JSON
-          // pass-through), so the exact field name isn't confirmed yet; checks a direct
-          // currency field first, falls back to inferring from the exchange/market when
-          // present, and defaults to the account's base region currency only as a last
-          // resort - the raw item is included in debug either way so this can be corrected
-          // against real field names on the next sync.
-          const rawCurrency = item.currency ?? item.currency_code ?? item.currencyCode ?? item.trading_currency;
-          const exchangeHint = String(item.exchange ?? item.market ?? item.market_code ?? "").toUpperCase();
-          const regionDefaultCurrency: Record<string, string> = { au: "AUD", uk: "GBP", eu: "EUR", jp: "JPY", hk: "HKD", sg: "SGD", my: "MYR" };
-          const currency = rawCurrency
-            ?? (exchangeHint.includes("ASX") ? "AUD" : exchangeHint.includes("LSE") ? "GBP" : exchangeHint.includes("HKEX") ? "HKD" : null)
-            ?? (["NASDAQ", "NYSE", "AMEX", "US"].some((m) => exchangeHint.includes(m)) ? "USD" : null)
-            ?? regionDefaultCurrency[region] ?? "USD";
+          const costPrice = Number(item.cost_price ?? item.costPrice) || 0;
+          const currentPrice = Number(item.last_price ?? item.lastPrice) || costPrice;
+          const currency = item.currency ?? item.currency_code ?? item.currencyCode ?? "USD";
           holdings.push({
             symbol: item.symbol ?? item.instrument_id ?? item.instrumentId,
             broker: "Webull",
