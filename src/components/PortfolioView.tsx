@@ -461,6 +461,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [brokerConnectPortfolioId, setBrokerConnectPortfolioId] = useState<string>('');
   const [brokerEditingType, setBrokerEditingType] = useState<'etoro' | 'ig' | 'webull' | null>(null);
   const [connectionLabelInput, setConnectionLabelInput] = useState('');
+  const [webullAppKeyInput, setWebullAppKeyInput] = useState('');
+  const [webullAppSecretInput, setWebullAppSecretInput] = useState('');
+  const [webullRegionInput, setWebullRegionInput] = useState('us');
+  const [webullConnectStatus, setWebullConnectStatus] = useState<'idle' | 'connecting' | 'pending_verification' | 'polling' | 'verified' | 'error'>('idle');
+  const [webullTokenId, setWebullTokenId] = useState<string | null>(null);
+  const [webullDebug, setWebullDebug] = useState<any>(null);
+  const [webullSyncing, setWebullSyncing] = useState(false);
+  const [webullSyncError, setWebullSyncError] = useState<string | null>(null);
   const [etoroApiKeyInput, setEtoroApiKeyInput] = useState('');
   const [etoroUserKeyInput, setEtoroUserKeyInput] = useState('');
   const [etoroSyncing, setEtoroSyncing] = useState(false);
@@ -994,6 +1002,94 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
   const toggleLotExpand = (holdingId: string) => {
     setExpandedLotHoldingId(prev => prev === holdingId ? null : holdingId);
+  };
+
+  const handleWebullConnect = async (portfolioId?: string) => {
+    setWebullConnectStatus('connecting');
+    setWebullDebug(null);
+    try {
+      const resp = await fetch('/api/portfolio-webull-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'connect', appKey: webullAppKeyInput.trim(), appSecret: webullAppSecretInput.trim(), region: webullRegionInput }),
+      });
+      const data = await resp.json();
+      setWebullDebug(data.debug ?? null);
+      if (data.status === 'pending_verification' && data.tokenId) {
+        setWebullTokenId(data.tokenId);
+        setWebullConnectStatus('polling');
+        pollWebullToken(data.tokenId, portfolioId, 0);
+      } else if (data.status === 'create_failed') {
+        // Per the docs, token creation is only "required if 2FA enabled" - some accounts
+        // may not need this step at all, so a create failure isn't necessarily fatal, just
+        // surfaced for the person to see what actually happened.
+        setWebullConnectStatus('error');
+      } else {
+        setWebullConnectStatus('error');
+      }
+    } catch (err: any) {
+      setWebullConnectStatus('error');
+      setWebullDebug({ error: err?.message });
+    }
+  };
+
+  const pollWebullToken = async (tokenId: string, portfolioId?: string, attempt = 0) => {
+    if (attempt > 60) { setWebullConnectStatus('error'); return; } // ~300s at 5s intervals, matching Webull's own documented window
+    try {
+      const resp = await fetch('/api/portfolio-webull-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'check', appKey: webullAppKeyInput.trim(), appSecret: webullAppSecretInput.trim(), region: webullRegionInput, tokenId }),
+      });
+      const data = await resp.json();
+      setWebullDebug(data.debug ?? null);
+      if (data.verified && data.token) {
+        setWebullConnectStatus('verified');
+        await runAction(async () => {
+          await setPortfolioBrokerConnection?.('webull', { app_key: webullAppKeyInput.trim(), app_secret: webullAppSecretInput.trim(), region: webullRegionInput, token: data.token, token_expires_at: data.expiresAt ?? null }, portfolioId, connectionLabelInput.trim() || undefined);
+        });
+        setBrokerEditingType(null);
+        setWebullAppKeyInput('');
+        setWebullAppSecretInput('');
+        setConnectionLabelInput('');
+        setWebullConnectStatus('idle');
+        return;
+      }
+      setTimeout(() => pollWebullToken(tokenId, portfolioId, attempt + 1), 5000);
+    } catch {
+      setTimeout(() => pollWebullToken(tokenId, portfolioId, attempt + 1), 5000);
+    }
+  };
+
+  const handleWebullSync = async (connection: any) => {
+    setWebullSyncing(true);
+    setWebullSyncError(null);
+    setWebullDebug(null);
+    try {
+      const resp = await fetch('/api/portfolio-webull-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'sync',
+          appKey: connection.credentials?.app_key,
+          appSecret: connection.credentials?.app_secret,
+          region: connection.credentials?.region ?? 'us',
+          token: connection.credentials?.token,
+        }),
+      });
+      const data = await resp.json();
+      setWebullDebug({ accountDebug: data.accountDebug, rawPositionsDebug: data.rawPositionsDebug });
+      if (!resp.ok) throw new Error(data?.error || `Webull sync failed (${resp.status})`);
+      setImportTemplate('universal');
+      setImportPortfolioId(connection.portfolio_id ?? '');
+      setImportRawParsed(data.holdings ?? []);
+      setIsImporting(true);
+      await markBrokerConnectionSynced?.(connection.id);
+    } catch (err: any) {
+      setWebullSyncError(err?.message || 'Could not sync from Webull.');
+    } finally {
+      setWebullSyncing(false);
+    }
   };
 
   const handleEtoroSync = async (connection: any) => {
@@ -2078,7 +2174,16 @@ export default function PortfolioView(props: PortfolioViewProps) {
                             {etoroSyncing ? 'Syncing…' : 'Sync'}
                           </button>
                         )}
-                        {conn.broker_type !== 'etoro' && (
+                        {conn.broker_type === 'webull' && (
+                          <button
+                            onClick={() => handleWebullSync(conn)}
+                            disabled={webullSyncing}
+                            className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer"
+                          >
+                            {webullSyncing ? 'Syncing…' : 'Sync'}
+                          </button>
+                        )}
+                        {conn.broker_type === 'ig' && (
                           <span className="text-[9px] text-amber-500 font-bold">Coming soon</span>
                         )}
                         <button onClick={() => runAction(() => deletePortfolioBrokerConnection?.(conn.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -2095,39 +2200,93 @@ export default function PortfolioView(props: PortfolioViewProps) {
                     type="text"
                     value={connectionLabelInput}
                     onChange={(e) => setConnectionLabelInput(e.target.value)}
-                    placeholder="Connection name (e.g. eToro-1, eToro-2)"
+                    placeholder={`Connection name (e.g. ${brokerLabels[brokerEditingType]}-1)`}
                     className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
                   />
-                  <input
-                    type="text"
-                    value={etoroApiKeyInput}
-                    onChange={(e) => setEtoroApiKeyInput(e.target.value)}
-                    placeholder="x-api-key"
-                    autoFocus
-                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs font-mono"
-                  />
-                  <input
-                    type="password"
-                    value={etoroUserKeyInput}
-                    onChange={(e) => setEtoroUserKeyInput(e.target.value)}
-                    placeholder="x-user-key"
-                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs font-mono"
-                  />
-                  <p className="text-[9px] text-slate-400">Generate these at api-portal.etoro.com → Settings → Trading → API Key Management. Your account must be verified first.</p>
+                  {brokerEditingType === 'etoro' && (
+                    <>
+                      <input
+                        type="text"
+                        value={etoroApiKeyInput}
+                        onChange={(e) => setEtoroApiKeyInput(e.target.value)}
+                        placeholder="x-api-key"
+                        autoFocus
+                        className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs font-mono"
+                      />
+                      <input
+                        type="password"
+                        value={etoroUserKeyInput}
+                        onChange={(e) => setEtoroUserKeyInput(e.target.value)}
+                        placeholder="x-user-key"
+                        className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs font-mono"
+                      />
+                      <p className="text-[9px] text-slate-400">Generate these at api-portal.etoro.com → Settings → Trading → API Key Management. Your account must be verified first.</p>
+                    </>
+                  )}
+                  {brokerEditingType === 'webull' && (
+                    <>
+                      <input
+                        type="text"
+                        value={webullAppKeyInput}
+                        onChange={(e) => setWebullAppKeyInput(e.target.value)}
+                        placeholder="App Key"
+                        autoFocus
+                        disabled={webullConnectStatus !== 'idle' && webullConnectStatus !== 'error'}
+                        className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs font-mono disabled:opacity-50"
+                      />
+                      <input
+                        type="password"
+                        value={webullAppSecretInput}
+                        onChange={(e) => setWebullAppSecretInput(e.target.value)}
+                        placeholder="App Secret"
+                        disabled={webullConnectStatus !== 'idle' && webullConnectStatus !== 'error'}
+                        className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs font-mono disabled:opacity-50"
+                      />
+                      <select
+                        value={webullRegionInput}
+                        onChange={(e) => setWebullRegionInput(e.target.value)}
+                        disabled={webullConnectStatus !== 'idle' && webullConnectStatus !== 'error'}
+                        className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs disabled:opacity-50"
+                      >
+                        <option value="us">US</option>
+                        <option value="au">Australia</option>
+                        <option value="jp">Japan</option>
+                        <option value="hk">Hong Kong</option>
+                        <option value="my">Malaysia</option>
+                      </select>
+                      <p className="text-[9px] text-slate-400">Generate these under Webull OpenAPI Management → App Management. If your account has 2FA enabled, you'll be asked to approve a request in the Webull mobile app next.</p>
+                      {webullConnectStatus === 'polling' && (
+                        <p className="text-[9px] text-amber-600 dark:text-amber-400 font-bold">Waiting for approval — open the Webull app and approve the request (up to 5 min)…</p>
+                      )}
+                      {webullConnectStatus === 'error' && (
+                        <p className="text-[9px] text-rose-500">Connection attempt failed — see debug details below.</p>
+                      )}
+                      {webullDebug && (
+                        <p className="text-[9px] text-slate-400 break-all bg-slate-50 dark:bg-slate-900 rounded p-2">{JSON.stringify(webullDebug)}</p>
+                      )}
+                    </>
+                  )}
                   <div className="flex gap-1.5">
                     <button
-                      onClick={() => runAction(async () => {
-                        await setPortfolioBrokerConnection?.(brokerEditingType, { api_key: etoroApiKeyInput.trim(), user_key: etoroUserKeyInput.trim() }, targetPortfolioId, connectionLabelInput.trim() || undefined);
-                        setBrokerEditingType(null);
-                        setEtoroApiKeyInput('');
-                        setEtoroUserKeyInput('');
-                        setConnectionLabelInput('');
-                      })}
-                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
+                      onClick={() => {
+                        if (brokerEditingType === 'webull') {
+                          handleWebullConnect(targetPortfolioId);
+                          return;
+                        }
+                        runAction(async () => {
+                          await setPortfolioBrokerConnection?.(brokerEditingType, { api_key: etoroApiKeyInput.trim(), user_key: etoroUserKeyInput.trim() }, targetPortfolioId, connectionLabelInput.trim() || undefined);
+                          setBrokerEditingType(null);
+                          setEtoroApiKeyInput('');
+                          setEtoroUserKeyInput('');
+                          setConnectionLabelInput('');
+                        });
+                      }}
+                      disabled={brokerEditingType === 'webull' && webullConnectStatus !== 'idle' && webullConnectStatus !== 'error'}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
                     >
-                      Save
+                      {brokerEditingType === 'webull' ? (webullConnectStatus === 'polling' ? 'Waiting…' : 'Connect') : 'Save'}
                     </button>
-                    <button onClick={() => { setBrokerEditingType(null); setEtoroApiKeyInput(''); setEtoroUserKeyInput(''); setConnectionLabelInput(''); }} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
+                    <button onClick={() => { setBrokerEditingType(null); setEtoroApiKeyInput(''); setEtoroUserKeyInput(''); setConnectionLabelInput(''); setWebullAppKeyInput(''); setWebullAppSecretInput(''); setWebullConnectStatus('idle'); setWebullDebug(null); }} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
                       Cancel
                     </button>
                   </div>
@@ -2138,12 +2297,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
                     <button
                       key={bt}
                       onClick={() => {
-                        if (bt !== 'etoro') return;
+                        if (bt === 'ig') return;
                         const existingCount = portfolioBrokerConnections.filter((c: any) => c.broker_type === bt).length;
                         setConnectionLabelInput(`${brokerLabels[bt]}-${existingCount + 1}`);
                         setBrokerEditingType(bt);
                       }}
-                      disabled={bt !== 'etoro'}
+                      disabled={bt === 'ig'}
                       className="flex-1 py-1.5 bg-slate-100 dark:bg-slate-800 disabled:opacity-40 text-slate-600 dark:text-slate-300 text-[10px] font-bold rounded-lg cursor-pointer"
                     >
                       + {brokerLabels[bt]}
@@ -2152,6 +2311,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 </div>
               )}
               {etoroSyncError && <p className="text-[10px] text-rose-500">{etoroSyncError}</p>}
+              {webullSyncError && <p className="text-[10px] text-rose-500">{webullSyncError}</p>}
               {etoroSyncDebug && (
                 <div className="text-[9px] text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 rounded p-2 space-y-0.5 font-mono">
                   <p className="font-bold text-slate-700 dark:text-slate-200">Sync breakdown</p>
