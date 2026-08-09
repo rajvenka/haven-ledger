@@ -449,7 +449,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [etoroRawLots, setEtoroRawLots] = useState<any[]>([]);
   const [expandedLotHoldingId, setExpandedLotHoldingId] = useState<string | null>(null);
   const [stopLossAlertExpanded, setStopLossAlertExpanded] = useState(false);
-  const [lotsSortKey, setLotsSortKey] = useState<'distance' | 'symbol' | 'net_value'>('distance');
+  const [lotsViewActive, setLotsViewActive] = useState(false);
+  const [lotsSortCol, setLotsSortCol] = useState<'symbol' | 'quantity' | 'buy_price' | 'current_price' | 'leverage' | 'stop_loss_rate' | 'distance' | 'net_value'>('distance');
+  const [lotsSortDir, setLotsSortDir] = useState<'asc' | 'desc'>('asc');
   const [manualEntryHoldingId, setManualEntryHoldingId] = useState<string | null>(null);
   const [manualRows, setManualRows] = useState<{ stockName: string; weightPct: string }[]>([{ stockName: '', weightPct: '' }]);
   const [manualSaving, setManualSaving] = useState(false);
@@ -662,6 +664,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       if (next.has(value)) next.delete(value); else next.add(value);
       return next;
     });
+    if (!filterOptions.portfolioNames.includes(value)) setLotsViewActive(false);
   };
 
   const filteredActiveHoldings = useMemo(() => {
@@ -1467,6 +1470,17 @@ export default function PortfolioView(props: PortfolioViewProps) {
   // unfiltered totals regardless of what was picked, which looked like the selector wasn't
   // doing anything at the top level.
   const selectedHeaderPortfolioNames = portfolioMode === 'multiple' ? filterOptions.portfolioNames.filter(p => holdingFilters.has(p)) : [];
+  // "Lots" only makes sense for a specific portfolio selection (not "All", since mixing a
+  // Zerodha/Groww portfolio with an eToro one into one flat lots view wouldn't mean
+  // anything), and only when that selection's holdings actually carry lot data - Zerodha
+  // and Webull have no concept of individual lots, so it should never appear for them.
+  const selectedPortfolioIdsForLots = selectedHeaderPortfolioNames.length > 0
+    ? portfolios.filter((p: any) => selectedHeaderPortfolioNames.includes(p.name)).map((p: any) => p.id)
+    : [];
+  const lotsAvailableForSelection = selectedPortfolioIdsForLots.length > 0 && portfolioHoldingLots.some((l: any) => {
+    const parentHolding = activeHoldings.find((h: any) => h.id === l.holding_id);
+    return parentHolding && selectedPortfolioIdsForLots.includes(parentHolding.portfolio_id);
+  });
   const selectedHeaderPortfolioIds = selectedHeaderPortfolioNames.length > 0
     ? portfolios.filter((p: any) => selectedHeaderPortfolioNames.includes(p.name)).map((p: any) => p.id)
     : null;
@@ -1579,9 +1593,6 @@ export default function PortfolioView(props: PortfolioViewProps) {
       <div className="flex gap-1.5">
         <button onClick={() => setHoldingsTab('active')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'active' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Active ({activeHoldings.length})</button>
         <button onClick={() => setHoldingsTab('sold')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'sold' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Sold ({soldHoldings.length})</button>
-        {portfolioHoldingLots.length > 0 && (
-          <button onClick={() => setHoldingsTab('lots')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'lots' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Lots ({portfolioHoldingLots.length})</button>
-        )}
         <button onClick={() => setHoldingsTab('search')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${holdingsTab === 'search' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}><Search className="w-3 h-3" /> Quote Search</button>
         <button onClick={() => setHoldingsTab('settings')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${holdingsTab === 'settings' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}><Settings className="w-3 h-3" /> Settings</button>
         {activeHoldings.some(h => h.holding_type === 'mutual_fund') && (
@@ -1926,76 +1937,6 @@ export default function PortfolioView(props: PortfolioViewProps) {
         );
       })()}
 
-      {holdingsTab === 'lots' && (() => {
-        const holdingById = new Map(activeHoldings.map((h: any) => [h.id, h]));
-        const rows = portfolioHoldingLots
-          .map((lot: any) => {
-            const parent = holdingById.get(lot.holding_id);
-            if (!parent) return null;
-            const current = Number(lot.current_price ?? parent.live_price ?? parent.current_price ?? lot.buy_price);
-            const stopLoss = lot.stop_loss_rate != null ? Number(lot.stop_loss_rate) : null;
-            const distancePct = stopLoss != null && current > 0 ? (Math.abs(current - stopLoss) / current) * 100 : null;
-            return { lot, parent, current, stopLoss, distancePct };
-          })
-          .filter((r): r is NonNullable<typeof r> => r !== null)
-          .sort((a, b) => {
-            if (lotsSortKey === 'distance') return (a.distancePct ?? Infinity) - (b.distancePct ?? Infinity);
-            if (lotsSortKey === 'symbol') return a.parent.symbol.localeCompare(b.parent.symbol);
-            return (Number(b.lot.etoro_net_value_amount) || 0) - (Number(a.lot.etoro_net_value_amount) || 0);
-          });
-        return (
-          <div className="space-y-3">
-            <div className="apple-card p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Full view - every individual lot across all holdings</span>
-                <div className="flex gap-1.5">
-                  {(['distance', 'symbol', 'net_value'] as const).map(key => (
-                    <button
-                      key={key}
-                      onClick={() => setLotsSortKey(key)}
-                      className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${lotsSortKey === key ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
-                    >
-                      {key === 'distance' ? 'Sort: % Away' : key === 'symbol' ? 'Sort: Symbol' : 'Sort: Net Value'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-[11px]">
-                  <thead>
-                    <tr className="text-[9px] font-bold text-slate-400 uppercase border-b border-slate-100 dark:border-slate-800">
-                      <th className="text-left p-2">Symbol</th>
-                      <th className="text-right p-2">Qty</th>
-                      <th className="text-right p-2">Entry</th>
-                      <th className="text-right p-2">Current</th>
-                      <th className="text-right p-2">Leverage</th>
-                      <th className="text-right p-2">Stop Loss</th>
-                      <th className="text-right p-2">% Away</th>
-                      <th className="text-right p-2">Net Value</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map(r => (
-                      <tr key={r.lot.id} className="border-b border-slate-50 dark:border-slate-900">
-                        <td className="p-2 font-bold text-slate-700 dark:text-slate-300">{r.parent.symbol}</td>
-                        <td className="p-2 text-right">{fmtQty(Number(r.lot.quantity))}</td>
-                        <td className="p-2 text-right">{fmtCur(Number(r.lot.buy_price), r.parent.currency)}</td>
-                        <td className="p-2 text-right">{fmtCur(r.current, r.parent.currency)}</td>
-                        <td className="p-2 text-right">{r.lot.leverage != null ? `${Number(r.lot.leverage)}x` : '—'}</td>
-                        <td className="p-2 text-right">{r.stopLoss != null ? fmtCur(r.stopLoss, r.parent.currency) : '—'}</td>
-                        <td className={`p-2 text-right font-black ${r.distancePct != null && r.distancePct <= 3 ? 'text-rose-600' : r.distancePct != null && r.distancePct <= 10 ? 'text-amber-600' : 'text-slate-400'}`}>
-                          {r.distancePct != null ? `${r.distancePct.toFixed(1)}%` : '—'}
-                        </td>
-                        <td className="p-2 text-right font-bold text-indigo-600 dark:text-indigo-400">{r.lot.etoro_net_value_amount != null ? fmtCur(Number(r.lot.etoro_net_value_amount), r.parent.currency) : '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {holdingsTab === 'settings' && (
         <div className="space-y-3">
@@ -3029,7 +2970,18 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
           {(filterOptions.combos.length > 1 || filterOptions.sources.length > 0 || filterOptions.priceMoves.length > 0 || activeHoldings.some(h => h.price_lookup_failed)) && (
             <div className="flex items-center gap-1.5 flex-wrap">
-              <button onClick={() => setHoldingFilters(new Set())} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.size === 0 ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
+              <button onClick={() => { setHoldingFilters(new Set()); setLotsViewActive(false); }} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.size === 0 && !lotsViewActive ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
+              {lotsAvailableForSelection && (
+                <button
+                  onClick={() => {
+                    setHoldingFilters(prev => new Set(Array.from(prev).filter(f => filterOptions.portfolioNames.includes(f))));
+                    setLotsViewActive(true);
+                  }}
+                  className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${lotsViewActive ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}
+                >
+                  Lots
+                </button>
+              )}
               {activeHoldings.some(h => h.price_lookup_failed) && (
                 <button onClick={() => toggleHoldingFilter(SYMBOL_NOT_FOUND_FILTER)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(SYMBOL_NOT_FOUND_FILTER) ? 'bg-rose-600 text-white' : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400'}`}>
                   Symbol Not Found ({activeHoldings.filter(h => h.price_lookup_failed).length})
@@ -3118,6 +3070,81 @@ export default function PortfolioView(props: PortfolioViewProps) {
             );
           })()}
 
+          {lotsViewActive ? (() => {
+            const holdingById = new Map(activeHoldings.map((h) => [h.id, h]));
+            const rows = portfolioHoldingLots
+              .map((lot) => {
+                const parent = holdingById.get(lot.holding_id);
+                if (!parent) return null;
+                if (selectedPortfolioIdsForLots.length > 0 && !selectedPortfolioIdsForLots.includes(parent.portfolio_id)) return null;
+                const current = Number(lot.current_price ?? parent.live_price ?? parent.current_price ?? lot.buy_price);
+                const stopLoss = lot.stop_loss_rate != null ? Number(lot.stop_loss_rate) : null;
+                const distancePct = stopLoss != null && current > 0 ? (Math.abs(current - stopLoss) / current) * 100 : null;
+                return { lot, parent, current, stopLoss, distancePct };
+              })
+              .filter((r) => r !== null)
+              .sort((a, b) => {
+                const dir = lotsSortDir === 'asc' ? 1 : -1;
+                switch (lotsSortCol) {
+                  case 'symbol': return a.parent.symbol.localeCompare(b.parent.symbol) * dir;
+                  case 'quantity': return (Number(a.lot.quantity) - Number(b.lot.quantity)) * dir;
+                  case 'buy_price': return (Number(a.lot.buy_price) - Number(b.lot.buy_price)) * dir;
+                  case 'current_price': return (a.current - b.current) * dir;
+                  case 'leverage': return ((Number(a.lot.leverage) || 0) - (Number(b.lot.leverage) || 0)) * dir;
+                  case 'stop_loss_rate': return ((a.stopLoss ?? 0) - (b.stopLoss ?? 0)) * dir;
+                  case 'net_value': return ((Number(a.lot.etoro_net_value_amount) || 0) - (Number(b.lot.etoro_net_value_amount) || 0)) * dir;
+                  default: return ((a.distancePct ?? Infinity) - (b.distancePct ?? Infinity)) * dir;
+                }
+              });
+            const arrowUp = String.fromCharCode(9650);
+            const arrowDown = String.fromCharCode(9660);
+            const dash = String.fromCharCode(8212);
+            const sortHeader = (col, label, align = 'right') => (
+              <th
+                className={`p-2 ${align === 'left' ? 'text-left' : 'text-right'} cursor-pointer select-none hover:text-indigo-500`}
+                onClick={() => { if (lotsSortCol === col) setLotsSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setLotsSortCol(col); setLotsSortDir('asc'); } }}
+              >
+                {label} {lotsSortCol === col ? (lotsSortDir === 'asc' ? arrowUp : arrowDown) : ''}
+              </th>
+            );
+            return (
+              <div>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Lots ({rows.length}) - click a column to sort</span>
+                <div className="apple-card mt-1.5 overflow-x-auto">
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-bold text-slate-400 uppercase">
+                        {sortHeader('symbol', 'Symbol', 'left')}
+                        {sortHeader('quantity', 'Qty')}
+                        {sortHeader('buy_price', 'Entry')}
+                        {sortHeader('current_price', 'Current')}
+                        {sortHeader('leverage', 'Leverage')}
+                        {sortHeader('stop_loss_rate', 'Stop Loss')}
+                        {sortHeader('distance', 'Stop Loss % Away')}
+                        {sortHeader('net_value', 'Net Value')}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map(r => (
+                        <tr key={r.lot.id} className="border-b border-slate-50 dark:border-slate-900">
+                          <td className="p-2 font-bold text-slate-700 dark:text-slate-300">{r.parent.symbol}</td>
+                          <td className="p-2 text-right">{fmtQty(Number(r.lot.quantity))}</td>
+                          <td className="p-2 text-right">{fmtCur(Number(r.lot.buy_price), r.parent.currency)}</td>
+                          <td className="p-2 text-right">{fmtCur(r.current, r.parent.currency)}</td>
+                          <td className="p-2 text-right">{r.lot.leverage != null ? `${Number(r.lot.leverage)}x` : dash}</td>
+                          <td className="p-2 text-right">{r.stopLoss != null ? fmtCur(r.stopLoss, r.parent.currency) : dash}</td>
+                          <td className={`p-2 text-right font-black ${r.distancePct != null && r.distancePct <= 3 ? 'text-rose-600' : r.distancePct != null && r.distancePct <= 10 ? 'text-amber-600' : 'text-slate-400'}`}>
+                            {r.distancePct != null ? `${r.distancePct.toFixed(1)}%` : dash}
+                          </td>
+                          <td className="p-2 text-right font-bold text-indigo-600 dark:text-indigo-400">{r.lot.etoro_net_value_amount != null ? fmtCur(Number(r.lot.etoro_net_value_amount), r.parent.currency) : dash}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })() : (
           <div>
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Active ({filteredActiveHoldings.length}{holdingFilters.size > 0 ? ` of ${activeHoldings.length}` : ''})</span>
@@ -3497,6 +3524,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
               )}
             </div>
           </div>
+          )}
       </div>
 
         </>
