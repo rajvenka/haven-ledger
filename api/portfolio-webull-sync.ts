@@ -162,6 +162,44 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
+    // Verified against the real SDK: GetSnapshotRequest -> GET /openapi/market-data/stock/
+    // snapshot?symbols=A,B,C&category=US_STOCK. Signature confirmed byte-for-byte against a
+    // real signature generated from the installed SDK for this exact endpoint+params
+    // combination (not just the token endpoint tested earlier) - this also caught a real
+    // nuance: bodyParams must be omitted (undefined), not passed as {}, for a GET-only
+    // request with no body, since {} vs undefined changes the signature. Category has no
+    // AU_STOCK option in the SDK's own enum (only US/HK/CN markets) - AU-listed symbols
+    // won't resolve through this endpoint, only US_STOCK/US_ETF/etc.
+    if (action === "quotes") {
+      const { symbols, category } = req.body || {};
+      if (!Array.isArray(symbols) || symbols.length === 0) {
+        res.status(400).json({ error: "Provide a non-empty 'symbols' array." });
+        return;
+      }
+      const quoteResp = await webullFetch("/openapi/market-data/stock/snapshot", "GET", host, appKey, appSecret, token, {
+        symbols: symbols.join(","),
+        category: category || "US_STOCK",
+      });
+      const quoteBody = await quoteResp.text().catch(() => "");
+      if (!quoteResp.ok) {
+        res.status(quoteResp.status).json({ error: `Webull snapshot returned ${quoteResp.status}`, debug: { body: quoteBody.slice(0, 500), host } });
+        return;
+      }
+      let quoteData: any = null;
+      try { quoteData = JSON.parse(quoteBody); } catch { /* not json */ }
+      const items: any[] = Array.isArray(quoteData) ? quoteData : (quoteData?.items ?? quoteData?.data ?? []);
+      const prices: Record<string, { price: number; changeRatio?: number; bid?: number; ask?: number }> = {};
+      for (const item of items) {
+        const sym = (item.symbol ?? "").toString().toUpperCase();
+        const price = Number(item.price ?? item.close ?? item.last ?? item.trade_price);
+        if (sym && price > 0) {
+          prices[sym] = { price, changeRatio: item.change_ratio != null ? Number(item.change_ratio) : undefined, bid: item.bid != null ? Number(item.bid) : undefined, ask: item.ask != null ? Number(item.ask) : undefined };
+        }
+      }
+      res.status(200).json({ prices, debug: { rawSample: quoteBody.slice(0, 500), itemCount: items.length } });
+      return;
+    }
+
     if (action === "sync") {
       const listResp = await webullFetch("/openapi/account/list", "GET", host, appKey, appSecret, token);
       if (!listResp.ok) {
