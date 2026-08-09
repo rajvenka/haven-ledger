@@ -187,7 +187,7 @@ export default async function handler(req: any, res: any) {
           continue;
         }
         const posData = await posResp.json();
-        rawPositionsDebug.push({ accountId, raw: JSON.stringify(posData).slice(0, 500) });
+        rawPositionsDebug.push({ accountId, raw: JSON.stringify(posData).slice(0, 800) });
         const items: any[] = posData?.items ?? posData?.positions ?? (Array.isArray(posData) ? posData : []);
         for (const item of items) {
           const qty = Number(item.quantity) || 0;
@@ -195,15 +195,31 @@ export default async function handler(req: any, res: any) {
           const unrealizedPL = Number(item.unrealized_profit_loss ?? item.unrealizedProfitLoss) || 0;
           const currentPrice = qty > 0 ? costPrice + unrealizedPL / qty : costPrice;
           if (qty <= 0) continue;
+          // A single Webull AU account can genuinely hold both AU-listed (AUD) and
+          // US-listed (USD) stocks/ETFs/options together - hardcoding one currency would
+          // silently mislabel whichever isn't the account's "home" currency. The SDK has no
+          // typed response parsing for positions (confirmed from source - just raw JSON
+          // pass-through), so the exact field name isn't confirmed yet; checks a direct
+          // currency field first, falls back to inferring from the exchange/market when
+          // present, and defaults to the account's base region currency only as a last
+          // resort - the raw item is included in debug either way so this can be corrected
+          // against real field names on the next sync.
+          const rawCurrency = item.currency ?? item.currency_code ?? item.currencyCode ?? item.trading_currency;
+          const exchangeHint = String(item.exchange ?? item.market ?? item.market_code ?? "").toUpperCase();
+          const regionDefaultCurrency: Record<string, string> = { au: "AUD", uk: "GBP", eu: "EUR", jp: "JPY", hk: "HKD", sg: "SGD", my: "MYR" };
+          const currency = rawCurrency
+            ?? (exchangeHint.includes("ASX") ? "AUD" : exchangeHint.includes("LSE") ? "GBP" : exchangeHint.includes("HKEX") ? "HKD" : null)
+            ?? (["NASDAQ", "NYSE", "AMEX", "US"].some((m) => exchangeHint.includes(m)) ? "USD" : null)
+            ?? regionDefaultCurrency[region] ?? "USD";
           holdings.push({
             symbol: item.symbol ?? item.instrument_id ?? item.instrumentId,
             broker: "Webull",
             holdingType: "stock" as const,
-            exchange: "Webull",
+            exchange: item.exchange ?? item.market ?? "Webull",
             quantity: qty,
             buyPrice: costPrice,
             currentPrice,
-            currency: "USD",
+            currency,
             source: `Webull ${region || "us"}`,
           });
         }
