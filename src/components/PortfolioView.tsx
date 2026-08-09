@@ -1585,7 +1585,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     // rather than showing a misleading zero.
     const pNetContributed = portfolioContributions.filter((c: any) => (c.portfolio_id ?? null) === (pid ?? null)).reduce((s: number, c: any) => s + Number(c.amount), 0)
       - portfolioWithdrawals.filter((w: any) => (w.portfolio_id ?? null) === (pid ?? null)).reduce((s: number, w: any) => s + Number(w.amount), 0);
-    const pActiveCostBasis = filteredActiveHoldings.filter((h: any) => (h.portfolio_id ?? null) === (pid ?? null)).reduce((s, h) => s + convHeader(h, Number(h.buy_price) * Number(h.quantity)), 0);
+    const pActiveCostBasis = filteredActiveHoldings.filter((h: any) => (h.portfolio_id ?? null) === (pid ?? null)).reduce((s, h) => s + convHeader(h, actualInvestment(h)), 0);
     return total + (pNetContributed - pActiveCostBasis + getPortfolioBookedPL(pid));
   }, 0);
   const currentValueActive = filteredActiveHoldings.reduce((s, h) => s + convHeader(h, actualCurrentValue(h)), 0);
@@ -1600,10 +1600,15 @@ export default function PortfolioView(props: PortfolioViewProps) {
   // counts holdings that actually have both values (i.e. have been live-refreshed at least
   // once). Since Previous Load compares Live Price against the file-sourced LTP instead,
   // showing movement since your last broker upload rather than since yesterday's market close.
-  const holdingsWithDailyChange = activeHoldings.filter(h => h.live_price != null && h.previous_close != null);
-  const dailyChange = holdingsWithDailyChange.reduce((s, h) => s + (Number(h.live_price) - Number(h.previous_close)) * Number(h.quantity), 0);
-  const holdingsWithLoadChange = activeHoldings.filter(h => h.live_price != null);
-  const sincePreviousLoadChange = holdingsWithLoadChange.reduce((s, h) => s + (Number(h.live_price) - Number(h.current_price ?? h.buy_price)) * Number(h.quantity), 0);
+  // Fixed to use filteredActiveHoldings (respects the selected portfolio/broker filter) and
+  // convHeader (proper multi-currency handling) - previously used the full unfiltered
+  // activeHoldings with no currency conversion at all, so this card never reacted to the
+  // portfolio selection and would have silently mixed currencies together once eToro
+  // holdings had live_price populated.
+  const holdingsWithDailyChange = filteredActiveHoldings.filter(h => h.live_price != null && h.previous_close != null);
+  const dailyChange = holdingsWithDailyChange.reduce((s, h) => s + convHeader(h, (Number(h.live_price) - Number(h.previous_close)) * Number(h.quantity)), 0);
+  const holdingsWithLoadChange = filteredActiveHoldings.filter(h => h.live_price != null);
+  const sincePreviousLoadChange = holdingsWithLoadChange.reduce((s, h) => s + convHeader(h, (Number(h.live_price) - Number(h.current_price ?? h.buy_price)) * Number(h.quantity)), 0);
   const returnPct = netContributed > 0 ? (netGain / netContributed) * 100 : 0;
 
   return (
@@ -2506,9 +2511,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <>
               <span className={`text-base font-black flex items-center gap-1 ${dailyChange >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
                 {dailyChange >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                {fmt(Math.abs(dailyChange))}
+                {fmtHeader(Math.abs(dailyChange))}
               </span>
-              <span className="text-[9px] text-slate-400 block mt-0.5">vs. previous close ({holdingsWithDailyChange.length} of {activeHoldings.length})</span>
+              <span className="text-[9px] text-slate-400 block mt-0.5">vs. previous close ({holdingsWithDailyChange.length} of {filteredActiveHoldings.length})</span>
             </>
           ) : (
             <span className="text-sm text-slate-300 dark:text-slate-700">— refresh prices to see this</span>
@@ -2520,9 +2525,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <>
               <span className={`text-base font-black flex items-center gap-1 ${sincePreviousLoadChange >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
                 {sincePreviousLoadChange >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                {fmt(Math.abs(sincePreviousLoadChange))}
+                {fmtHeader(Math.abs(sincePreviousLoadChange))}
               </span>
-              <span className="text-[9px] text-slate-400 block mt-0.5">live price vs. LTP ({holdingsWithLoadChange.length} of {activeHoldings.length})</span>
+              <span className="text-[9px] text-slate-400 block mt-0.5">live price vs. LTP ({holdingsWithLoadChange.length} of {filteredActiveHoldings.length})</span>
             </>
           ) : (
             <span className="text-sm text-slate-300 dark:text-slate-700">— refresh prices to see this</span>

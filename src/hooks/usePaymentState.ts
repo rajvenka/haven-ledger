@@ -1743,7 +1743,7 @@ export function usePaymentState() {
     if (!user || !activeWorkspaceId) return;
     const contribQuery = supabase.from('portfolio_contributions').select('amount').eq('workspace_id', activeWorkspaceId);
     const withdrawQuery = supabase.from('portfolio_withdrawals').select('amount').eq('workspace_id', activeWorkspaceId);
-    const activeQuery = supabase.from('portfolio_holdings').select('buy_price,quantity').eq('workspace_id', activeWorkspaceId).eq('status', 'active');
+    const activeQuery = supabase.from('portfolio_holdings').select('buy_price,quantity,leverage').eq('workspace_id', activeWorkspaceId).eq('status', 'active');
     const soldQuery = supabase.from('portfolio_holdings').select('buy_price,quantity,sold_price,sold_date').eq('workspace_id', activeWorkspaceId).eq('status', 'sold');
     const baselineQuery = supabase.from('portfolio_booked_pl_baseline').select('baseline_amount,updated_at').eq('workspace_id', activeWorkspaceId);
     const [contribRes, withdrawRes, activeRes, soldRes, baselineRes] = await Promise.all([
@@ -1755,7 +1755,15 @@ export function usePaymentState() {
     ]);
     const netContributed = (contribRes.data ?? []).reduce((s, c: any) => s + Number(c.amount), 0)
       - (withdrawRes.data ?? []).reduce((s, w: any) => s + Number(w.amount), 0);
-    const activeCostBasis = (activeRes.data ?? []).reduce((s, h: any) => s + Number(h.buy_price) * Number(h.quantity), 0);
+    // Leverage-aware, matching the header cards' fix - for a leveraged holding, buy_price x
+    // quantity is full market exposure, not real cash committed. Using full exposure here
+    // was inflating "cost basis" for any leveraged position, which fed directly into
+    // Balance Cash and Net Gain being wrong too, since both derive from this figure.
+    const activeCostBasis = (activeRes.data ?? []).reduce((s, h: any) => {
+      const leverage = h.leverage != null ? Number(h.leverage) : 1;
+      const exposure = Number(h.buy_price) * Number(h.quantity);
+      return s + (leverage > 1 ? exposure / leverage : exposure);
+    }, 0);
     const baseline = baselineRes.data?.[0];
     const baselineAmount = baseline ? Number(baseline.baseline_amount) : 0;
     // Same fix as the header's getPortfolioBookedPL - uses the baseline's actual save
