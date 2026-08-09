@@ -1895,6 +1895,24 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
+  // Daily Change and Since Previous Load both require live_price to compute anything at
+  // all - confirmed directly that eToro holdings never had this populated at all, since the
+  // regular import path only ever sets current_price. Reuses updatePortfolioHoldingLivePrice
+  // (the same function Refresh Prices already uses for Zerodha/Groww) fed with the real
+  // rate already fetched during eToro sync. previous_close isn't available from eToro's
+  // rates endpoint, so Daily Change specifically stays unavailable for eToro even after
+  // this - only Since Previous Load becomes meaningful.
+  const syncEtoroLivePrices = async (symbolToPrice: Map<string, number>, portfolioId?: string) => {
+    if (!activeWorkspaceId || symbolToPrice.size === 0) return;
+    let query = supabase.from('portfolio_holdings').select('id, symbol').eq('workspace_id', activeWorkspaceId).eq('broker', 'eToro').eq('status', 'active');
+    query = portfolioId ? query.eq('portfolio_id', portfolioId) : query.is('portfolio_id', null);
+    const { data: rows } = await query;
+    for (const row of rows ?? []) {
+      const price = symbolToPrice.get(row.symbol);
+      if (price != null) await updatePortfolioHoldingLivePrice(row.id, price);
+    }
+  };
+
   const addPortfolioDividend = async (symbol: string, amount: number, dividendDate: string, holdingId?: string, notes?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const { error } = await supabase.from('portfolio_dividends').insert({
@@ -2125,7 +2143,7 @@ export function usePaymentState() {
     portfolioProjectedBankBalances, setProjectedBankBalance, recalculateProjectedBankBalance,
     portfolioBrokerConnections, setPortfolioBrokerConnection, deletePortfolioBrokerConnection, markBrokerConnectionSynced,
     portfolioHoldingLots,
-    upsertPortfolioHoldingLots, loadPortfolioHoldingLots, syncEtoroHoldingLots,
+    upsertPortfolioHoldingLots, loadPortfolioHoldingLots, syncEtoroHoldingLots, syncEtoroLivePrices,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
     portfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,

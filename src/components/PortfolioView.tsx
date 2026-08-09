@@ -33,6 +33,7 @@ interface PortfolioViewProps {
   deletePortfolioBrokerConnection?: (id: string) => Promise<void>;
   markBrokerConnectionSynced?: (id: string) => Promise<void>;
   syncEtoroHoldingLots?: (symbols: string[], rawLotsBySymbol: Map<string, any[]>, portfolioId?: string) => Promise<void>;
+  syncEtoroLivePrices?: (symbolToPrice: Map<string, number>, portfolioId?: string) => Promise<void>;
   portfolioHoldingLots?: any[];
   loadPortfolioHoldingLots?: (holdingId: string) => Promise<any[]>;
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
@@ -193,7 +194,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances, portfolioBookedPlBaselines = [], portfolioProjectedBankBalances = [],
     setPortfolioCashBalance, deletePortfolioCashBalance, setBookedPlBaseline, setProjectedBankBalance, recalculateProjectedBankBalance,
     portfolioBrokerConnections = [], setPortfolioBrokerConnection, deletePortfolioBrokerConnection, markBrokerConnectionSynced,
-    syncEtoroHoldingLots, loadPortfolioHoldingLots, portfolioHoldingLots = [],
+    syncEtoroHoldingLots, syncEtoroLivePrices, loadPortfolioHoldingLots, portfolioHoldingLots = [],
     portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     mfHoldingsCache = [], loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
@@ -1150,6 +1151,18 @@ export default function PortfolioView(props: PortfolioViewProps) {
           }
           await syncEtoroHoldingLots?.(Array.from(rawLotsBySymbol.keys()), rawLotsBySymbol, portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined);
         } catch (err: any) { stepErrors.push(`Individual lots: ${err?.message || 'failed'}`); }
+        // Daily Change and Since Previous Load both require live_price to compute anything
+        // at all - eToro holdings never had this field populated at all before (confirmed
+        // directly in the database), which is why those two metrics showed nothing useful
+        // for eToro. Reuses the same function the Refresh Prices feature already uses for
+        // Zerodha/Groww, fed with the real rate already fetched during sync. previous_close
+        // isn't available from eToro's rates endpoint, so Daily Change specifically stays
+        // unavailable ("-") for eToro holdings even after this - only Since Previous Load
+        // becomes meaningful.
+        try {
+          const etoroSymbolToPrice = new Map<string, number>((importRawParsed ?? []).filter(h => h.currentPrice != null).map(h => [h.symbol, h.currentPrice as number]));
+          await syncEtoroLivePrices?.(etoroSymbolToPrice, portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined);
+        } catch (err: any) { stepErrors.push(`Live prices: ${err?.message || 'failed'}`); }
         setEtoroRawLots([]);
       }
       // Surfaced rather than thrown, so a partial failure among 60+ holdings doesn't hide
