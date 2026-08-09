@@ -893,6 +893,16 @@ export default function PortfolioView(props: PortfolioViewProps) {
       // Groww MF: the same fund name can appear more than once under different folios
       // (e.g. one External, one bought via the app) - folio number is what's actually unique.
       if (parsed.folioNumber && h.folio_number) return h.folio_number === parsed.folioNumber && h.symbol === parsed.symbol.toUpperCase();
+      // A single broker (e.g. eToro) can genuinely hold the same symbol as two distinct
+      // positions - a CFD and a Real Asset stock purchase, confirmed as a real case (MU,
+      // META, NKE, ORCL, SNAP all had this). Without checking source too, both would match
+      // the same first existing row here, leaving the second existing row for that symbol
+      // permanently orphaned - never reconciled or refreshed on any future sync, silently
+      // going stale forever. Only applied when both sides actually carry a source value,
+      // so this doesn't change matching for brokers that never set one.
+      if (parsed.source && h.source) {
+        return h.symbol === parsed.symbol.toUpperCase() && h.holding_type === parsed.holdingType && h.source === parsed.source && !h.folio_number && !parsed.folioNumber;
+      }
       return h.symbol === parsed.symbol.toUpperCase() && h.holding_type === parsed.holdingType && !h.folio_number && !parsed.folioNumber;
     });
     if (!existing) return { status: 'new' };

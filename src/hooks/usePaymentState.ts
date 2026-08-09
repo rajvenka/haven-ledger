@@ -1883,13 +1883,22 @@ export function usePaymentState() {
   // practice not to block on, but worth knowing.
   const syncEtoroHoldingLots = async (symbols: string[], rawLotsBySymbol: Map<string, any[]>, portfolioId?: string) => {
     if (!activeWorkspaceId || symbols.length === 0) return;
-    let query = supabase.from('portfolio_holdings').select('id, symbol').eq('workspace_id', activeWorkspaceId).eq('broker', 'eToro').eq('status', 'active');
+    let query = supabase.from('portfolio_holdings').select('id, symbol, source').eq('workspace_id', activeWorkspaceId).eq('broker', 'eToro').eq('status', 'active');
     query = portfolioId ? query.eq('portfolio_id', portfolioId) : query.is('portfolio_id', null);
     const { data: masterRows } = await query;
     if (!masterRows) return;
     for (const symbol of symbols) {
-      const master = masterRows.find((r: any) => r.symbol === symbol.toUpperCase());
+      // A single symbol can have multiple master rows (a CFD position and a Real Asset
+      // position for the same underlying stock are genuinely different holdings) - matching
+      // by symbol alone here would map lots for both onto whichever row happened to come
+      // first, corrupting the second one's lot data. lots grouped by symbol all share the
+      // same source (they came from the same settlement-type group in the sync response),
+      // so use the first lot's source to pick the correct master row when more than one
+      // candidate shares this symbol.
+      const candidates = masterRows.filter((r: any) => r.symbol === symbol.toUpperCase());
       const lots = rawLotsBySymbol.get(symbol);
+      const lotSource = lots?.[0]?.source;
+      const master = candidates.length > 1 && lotSource ? candidates.find((r: any) => r.source === lotSource) ?? candidates[0] : candidates[0];
       if (master && lots) {
         await upsertPortfolioHoldingLots(master.id, lots);
       }
