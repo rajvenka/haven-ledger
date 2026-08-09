@@ -242,6 +242,8 @@ export default async function handler(req: any, res: any) {
         stopLossRate: pos.stopLossRate != null ? Number(pos.stopLossRate) : undefined,
         takeProfitRate: pos.takeProfitRate != null ? Number(pos.takeProfitRate) : undefined,
         etoroNetValueAmount: Number(pos.amount) || 0,
+        totalFees: Number(pos.totalFees) || 0,
+        totalExternalFees: Number(pos.totalExternalFees) || 0,
         openDate: pos.openDateTime ?? undefined,
         source: settlementLabels[settlementKey] ?? `eToro (type ${settlementKey})`,
       };

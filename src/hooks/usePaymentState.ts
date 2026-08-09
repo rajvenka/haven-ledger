@@ -1814,12 +1814,14 @@ export function usePaymentState() {
   const upsertPortfolioHoldingLots = async (holdingId: string, lots: {
     externalPositionId: string; broker: string; quantity: number; buyPrice: number; currentPrice?: number;
     leverage?: number; stopLossRate?: number; takeProfitRate?: number; etoroNetValueAmount?: number; openDate?: string; source?: string;
+    totalFees?: number; totalExternalFees?: number;
   }[]) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     const keepIds = lots.map(l => l.externalPositionId).filter(Boolean);
     if (keepIds.length > 0) {
       await supabase.from('portfolio_holding_lots').delete().eq('holding_id', holdingId).not('external_position_id', 'in', `(${keepIds.join(',')})`);
     }
+    const today = new Date().toISOString().slice(0, 10);
     for (const lot of lots) {
       if (!lot.externalPositionId) continue;
       const row: any = {
@@ -1830,10 +1832,29 @@ export function usePaymentState() {
         updated_at: new Date().toISOString(),
       };
       const { data: existing } = await supabase.from('portfolio_holding_lots').select('id').eq('holding_id', holdingId).eq('external_position_id', lot.externalPositionId).maybeSingle();
-      const { error } = existing
-        ? await supabase.from('portfolio_holding_lots').update(row).eq('id', existing.id)
-        : await supabase.from('portfolio_holding_lots').insert(row);
-      if (error) throw error;
+      let lotId: string | undefined = existing?.id;
+      if (existing) {
+        const { error } = await supabase.from('portfolio_holding_lots').update(row).eq('id', existing.id);
+        if (error) throw error;
+      } else {
+        const { data: inserted, error } = await supabase.from('portfolio_holding_lots').insert(row).select('id').single();
+        if (error) throw error;
+        lotId = inserted?.id;
+      }
+      // Snapshot approach, same principle as price history - one row per lot per day,
+      // upserted rather than appended freely, so a re-sync on the same day updates that
+      // day's figure instead of creating duplicates.
+      if (lotId && (lot.totalFees != null || lot.totalExternalFees != null)) {
+        const feeRow = {
+          holding_lot_id: lotId, workspace_id: activeWorkspaceId,
+          total_fees: lot.totalFees ?? 0, total_external_fees: lot.totalExternalFees ?? 0, recorded_date: today,
+        };
+        const { data: existingSnapshot } = await supabase.from('portfolio_holding_fee_snapshots').select('id').eq('holding_lot_id', lotId).eq('recorded_date', today).maybeSingle();
+        const { error: feeError } = existingSnapshot
+          ? await supabase.from('portfolio_holding_fee_snapshots').update(feeRow).eq('id', existingSnapshot.id)
+          : await supabase.from('portfolio_holding_fee_snapshots').insert(feeRow);
+        if (feeError) throw feeError;
+      }
     }
   };
 
