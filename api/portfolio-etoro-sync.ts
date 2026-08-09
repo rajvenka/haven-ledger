@@ -10,6 +10,8 @@
 // with fallbacks, but should be verified against a real sync and adjusted if eToro's actual
 // response differs from the documented schema.
 
+import * as crypto from "crypto";
+
 const ETORO_BASE = "https://public-api.etoro.com/api/v1";
 
 function uuid() {
@@ -32,6 +34,57 @@ async function etoroFetch(path: string, apiKey: string, userKey: string) {
   return resp;
 }
 
+// Webull priority-source signing, duplicated from the verified implementation in
+// api/portfolio-webull-sync.ts (Vercel functions are isolated per file) - already confirmed
+// byte-for-byte against the real installed SDK, so copying is low-risk. Used here to try
+// Webull's market data as the primary live-price source for eToro's US-listed holdings
+// (Webull's own Category enum has no AU_STOCK option, so AU-listed/commodity symbols like
+// Gold fall through to eToro's own rates endpoint regardless).
+const WEBULL_REGION_HOSTS: Record<string, string> = {
+  us: "api.webull.com", hk: "api.webull.hk", jp: "api.webull.co.jp", sg: "api.webull.com.sg",
+  th: "api.webull.co.th", au: "api.webull.com.au", my: "api.webull.com.my", uk: "api.webull-uk.com", eu: "api.webull.eu",
+};
+function webullPythonQuote(str: string): string {
+  return Array.from(Buffer.from(str, "utf-8")).map((byte) => {
+    const ch = String.fromCharCode(byte);
+    if (/[A-Za-z0-9\-_.~]/.test(ch)) return ch;
+    return "%" + byte.toString(16).toUpperCase().padStart(2, "0");
+  }).join("");
+}
+async function webullSnapshotFetch(host: string, appKey: string, appSecret: string, token: string | undefined, symbols: string[]): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+  if (symbols.length === 0) return result;
+  const uri = "/openapi/market-data/stock/snapshot";
+  const queryParams = { symbols: symbols.join(","), category: "US_STOCK" };
+  const ts = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+  const nonceVal = crypto.randomUUID();
+  const signHeaders: Record<string, string> = {
+    "x-app-key": appKey, "x-timestamp": ts, "x-signature-version": "1.0",
+    "x-signature-algorithm": "HMAC-SHA256", "x-signature-nonce": nonceVal, host,
+  };
+  const signParams: Record<string, string> = {};
+  for (const k of Object.keys(signHeaders)) signParams[k.toLowerCase()] = signHeaders[k];
+  for (const k of Object.keys(queryParams)) signParams[k] = (queryParams as any)[k];
+  const sortedKeys = Object.keys(signParams).sort();
+  const stringToSign = `${uri}&${sortedKeys.map((k) => `${k}=${signParams[k]}`).join("&")}`;
+  const signature = crypto.createHmac("sha256", appSecret + "&").update(webullPythonQuote(stringToSign), "utf-8").digest("base64");
+  const qs = new URLSearchParams(queryParams).toString();
+  try {
+    const resp = await fetch(`https://${host}${uri}?${qs}`, {
+      headers: { ...signHeaders, "x-signature": signature, "Content-Type": "application/json", ...(token ? { "x-access-token": token } : {}) },
+    });
+    if (!resp.ok) return result;
+    const data = await resp.json();
+    const items: any[] = Array.isArray(data) ? data : (data?.items ?? data?.data ?? []);
+    for (const item of items) {
+      const sym = (item.symbol ?? "").toString().toUpperCase();
+      const price = Number(item.price ?? item.close ?? item.last ?? item.trade_price);
+      if (sym && price > 0) result.set(sym, price);
+    }
+  } catch { /* Webull unreachable/erroring - falls through to eToro's own rates, not fatal */ }
+  return result;
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -39,7 +92,7 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { apiKey, userKey } = req.body || {};
+    const { apiKey, userKey, webullAppKey, webullAppSecret, webullToken, webullRegion } = req.body || {};
     if (!apiKey || !userKey) {
       res.status(400).json({ error: "Missing eToro API credentials. Connect your eToro account first under Settings." });
       return;
@@ -116,23 +169,45 @@ export default async function handler(req: any, res: any) {
     // unitsBaseValueDollars from the position data itself was being used before as a stand-in
     // for current price, but produced wrong values (MU showing $218.75 instead of ~$877) -
     // it isn't actually a reliable live-price field.
-    const ratesResp = await etoroFetch(`/market-data/instruments/rates?instrumentIds=${uniqueIds.join(",")}`, apiKey, userKey);
     const rateMap = new Map<number, number>();
-    const ratesDebug: any = { status: ratesResp.status, ok: ratesResp.ok };
-    if (ratesResp.ok) {
-      const ratesData = await ratesResp.json();
-      ratesDebug.rateCount = ratesData?.rates?.length ?? 0;
-      ratesDebug.sample = JSON.stringify(ratesData).slice(0, 500);
-      const rateList: any[] = ratesData?.rates ?? [];
-      for (const r of rateList) {
-        const id = r.instrumentID ?? r.instrumentId;
-        // Mid-price between bid/ask when both are present - a reasonable single "current
-        // price" figure; falls back to lastExecution if bid/ask aren't both available.
-        const price = (r.bid != null && r.ask != null) ? (Number(r.bid) + Number(r.ask)) / 2 : Number(r.lastExecution ?? r.bid ?? r.ask ?? 0);
-        if (id != null && price > 0) rateMap.set(Number(id), price);
+    const ratesDebug: any = {};
+
+    // Per discussion, Webull tried first as the priority price source when a Webull
+    // connection is available in the same workspace (passed in by the frontend, since this
+    // route has no DB access of its own) - only covers US-listed symbols (Webull's own
+    // Category enum has no AU_STOCK option), so AU-listed/commodity symbols like Gold still
+    // fall through to eToro's own rates endpoint below regardless.
+    if (webullAppKey && webullAppSecret) {
+      const webullHost = WEBULL_REGION_HOSTS[webullRegion] || WEBULL_REGION_HOSTS.us;
+      const idToSymbol = new Map(Array.from(instrumentMap.entries()).map(([id, info]) => [id, info.symbol]));
+      const symbolsToTry = Array.from(new Set(Array.from(idToSymbol.values())));
+      const webullPrices = await webullSnapshotFetch(webullHost, webullAppKey, webullAppSecret, webullToken, symbolsToTry);
+      for (const [id, symbol] of Array.from(idToSymbol.entries())) {
+        const price = webullPrices.get(symbol.toUpperCase());
+        if (price != null) rateMap.set(id, price);
       }
-    } else {
-      ratesDebug.errorBody = (await ratesResp.text().catch(() => "")).slice(0, 500);
+      ratesDebug.webull = { attempted: symbolsToTry.length, resolved: webullPrices.size, mappedToInstruments: rateMap.size };
+    }
+
+    const stillNeeded = uniqueIds.filter((id) => !rateMap.has(id));
+    if (stillNeeded.length > 0) {
+      const ratesResp = await etoroFetch(`/market-data/instruments/rates?instrumentIds=${stillNeeded.join(",")}`, apiKey, userKey);
+      ratesDebug.etoro = { status: ratesResp.status, ok: ratesResp.ok };
+      if (ratesResp.ok) {
+        const ratesData = await ratesResp.json();
+        ratesDebug.etoro.rateCount = ratesData?.rates?.length ?? 0;
+        ratesDebug.etoro.sample = JSON.stringify(ratesData).slice(0, 500);
+        const rateList: any[] = ratesData?.rates ?? [];
+        for (const r of rateList) {
+          const id = r.instrumentID ?? r.instrumentId;
+          // Mid-price between bid/ask when both are present - a reasonable single "current
+          // price" figure; falls back to lastExecution if bid/ask aren't both available.
+          const price = (r.bid != null && r.ask != null) ? (Number(r.bid) + Number(r.ask)) / 2 : Number(r.lastExecution ?? r.bid ?? r.ask ?? 0);
+          if (id != null && price > 0 && !rateMap.has(Number(id))) rateMap.set(Number(id), price);
+        }
+      } else {
+        ratesDebug.etoro.errorBody = (await ratesResp.text().catch(() => "")).slice(0, 500);
+      }
     }
 
     // eToro's same-stock-bought-5-times pattern: positions are individual trade entries,

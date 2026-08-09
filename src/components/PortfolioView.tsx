@@ -1099,10 +1099,22 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setEtoroSyncDebug(null);
     setImportPreview(null);
     try {
+      // Per discussion, Webull tried first for live pricing when a Webull connection
+      // exists anywhere in the workspace (not necessarily the same portfolio) - eToro's
+      // own rates endpoint is the fallback for whatever Webull can't price (AU-listed
+      // symbols, commodities like Gold, since Webull's Category enum has no AU_STOCK).
+      const webullConn = portfolioBrokerConnections.find((c: any) => c.broker_type === 'webull');
       const resp = await fetch('/api/portfolio-etoro-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: connection.credentials?.api_key, userKey: connection.credentials?.user_key }),
+        body: JSON.stringify({
+          apiKey: connection.credentials?.api_key,
+          userKey: connection.credentials?.user_key,
+          webullAppKey: webullConn?.credentials?.app_key,
+          webullAppSecret: webullConn?.credentials?.app_secret,
+          webullToken: webullConn?.credentials?.token,
+          webullRegion: webullConn?.credentials?.region,
+        }),
       });
       const data = await resp.json();
       if (data?.instrumentDebug || data?.settlementBreakdown) setEtoroSyncDebug(data);
