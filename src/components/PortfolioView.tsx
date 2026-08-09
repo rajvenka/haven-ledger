@@ -3233,27 +3233,29 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                   </button>
                                 );
                               })()}
-                              <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{h.broker}</span>
+                              {showSourceTags && <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{h.broker}</span>}
                               {portfolioMode === 'multiple' && (
                                 <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-500 dark:text-indigo-400 rounded-full">
                                   {portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned'}
                                 </span>
                               )}
                               {!isReadOnly ? (
-                                <button
-                                  onClick={() => runAction(() => updatePortfolioHolding(h.id, { holdingType: h.holding_type === 'mutual_fund' ? 'stock' : 'mutual_fund' }))}
-                                  title="Click to switch between Stock and Mutual Fund"
-                                  className={`text-[8px] font-bold px-1.5 py-0.2 rounded-full cursor-pointer ${h.holding_type === 'mutual_fund' ? 'bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400' : 'bg-slate-50 dark:bg-slate-900 text-slate-400 border border-slate-200 dark:border-slate-800'}`}
-                                >
-                                  {h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}
-                                </button>
+                                (showSourceTags || h.holding_type === 'mutual_fund') && (
+                                  <button
+                                    onClick={() => runAction(() => updatePortfolioHolding(h.id, { holdingType: h.holding_type === 'mutual_fund' ? 'stock' : 'mutual_fund' }))}
+                                    title="Click to switch between Stock and Mutual Fund"
+                                    className={`text-[8px] font-bold px-1.5 py-0.2 rounded-full cursor-pointer ${h.holding_type === 'mutual_fund' ? 'bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400' : 'bg-slate-50 dark:bg-slate-900 text-slate-400 border border-slate-200 dark:border-slate-800'}`}
+                                  >
+                                    {h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}
+                                  </button>
+                                )
                               ) : (
                                 h.holding_type === 'mutual_fund' && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 rounded-full">MF</span>
                               )}
                               {showSourceTags && h.source && <span className="text-[8px] font-bold px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-full">{h.source}</span>}
                               {h.price_lookup_failed && <span className="text-[8px] font-black px-1.5 py-0.2 bg-rose-500 text-white rounded-full" title="Last refresh couldn't find this symbol - check Symbol/Exchange via Edit">Symbol Not Found</span>}
-                              {h.change_flag && CHANGE_FLAG_LABELS[h.change_flag] && <span className="text-[8px] font-black px-1.5 py-0.2 bg-amber-500 text-white rounded-full">{CHANGE_FLAG_LABELS[h.change_flag]}</span>}
-                              {h.currency && h.currency !== 'INR' && <span className="text-[8px] font-black px-1.5 py-0.2 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 rounded-full">{h.currency}</span>}
+                              {showSourceTags && h.change_flag && CHANGE_FLAG_LABELS[h.change_flag] && <span className="text-[8px] font-black px-1.5 py-0.2 bg-amber-500 text-white rounded-full">{CHANGE_FLAG_LABELS[h.change_flag]}</span>}
+                              {showSourceTags && h.currency && h.currency !== 'INR' && <span className="text-[8px] font-black px-1.5 py-0.2 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 rounded-full">{h.currency}</span>}
                             </div>
                             {(targetPrice || holdUntil) && (
                               <div className="flex items-center gap-2 mt-1">
