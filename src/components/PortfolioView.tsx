@@ -2312,6 +2312,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
               )}
               {etoroSyncError && <p className="text-[10px] text-rose-500">{etoroSyncError}</p>}
               {webullSyncError && <p className="text-[10px] text-rose-500">{webullSyncError}</p>}
+              {webullDebug && !brokerEditingType && (
+                <div className="text-[9px] text-slate-500 break-all bg-slate-50 dark:bg-slate-900 rounded p-2 space-y-1">
+                  <p className="font-bold text-slate-600 dark:text-slate-300">Webull sync debug</p>
+                  <pre className="whitespace-pre-wrap">{JSON.stringify(webullDebug, null, 2)}</pre>
+                </div>
+              )}
               {etoroSyncDebug && (
                 <div className="text-[9px] text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 rounded p-2 space-y-0.5 font-mono">
                   <p className="font-bold text-slate-700 dark:text-slate-200">Sync breakdown</p>
