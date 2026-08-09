@@ -1921,12 +1921,26 @@ export function usePaymentState() {
   // this - only Since Previous Load becomes meaningful.
   const syncEtoroLivePrices = async (symbolToPrice: Map<string, number>, portfolioId?: string) => {
     if (!activeWorkspaceId || symbolToPrice.size === 0) return;
+    // Case-insensitive lookup - the DB's symbol column is always uppercased on write
+    // (bulkAddPortfolioHoldings/updatePortfolioHolding both call .toUpperCase()), but the
+    // parsed symbol coming directly from eToro's instrument data isn't guaranteed to
+    // already be uppercase, which would silently fail an exact-case Map lookup with no
+    // error thrown - exactly matching the observed symptom (live_price staying null with
+    // no visible failure anywhere).
+    const upperSymbolToPrice = new Map(Array.from(symbolToPrice.entries()).map(([sym, price]) => [sym.toUpperCase(), price]));
     let query = supabase.from('portfolio_holdings').select('id, symbol').eq('workspace_id', activeWorkspaceId).eq('broker', 'eToro').eq('status', 'active');
     query = portfolioId ? query.eq('portfolio_id', portfolioId) : query.is('portfolio_id', null);
     const { data: rows } = await query;
+    let updated = 0;
     for (const row of rows ?? []) {
-      const price = symbolToPrice.get(row.symbol);
-      if (price != null) await updatePortfolioHoldingLivePrice(row.id, price);
+      const price = upperSymbolToPrice.get(row.symbol.toUpperCase());
+      if (price != null) { await updatePortfolioHoldingLivePrice(row.id, price); updated++; }
+    }
+    // Thrown (not just logged) so it surfaces via confirmImport's stepErrors to the person,
+    // rather than silently doing nothing the way this step did before with no visibility at
+    // all into whether it ran, found rows, or matched anything.
+    if (updated === 0 && (rows?.length ?? 0) > 0) {
+      throw new Error(`0 of ${rows!.length} eToro holdings matched a price (checked portfolio ${portfolioId ?? 'default'})`);
     }
   };
 
