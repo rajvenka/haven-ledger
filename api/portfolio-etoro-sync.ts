@@ -51,9 +51,10 @@ function webullPythonQuote(str: string): string {
     return "%" + byte.toString(16).toUpperCase().padStart(2, "0");
   }).join("");
 }
-async function webullSnapshotFetch(host: string, appKey: string, appSecret: string, token: string | undefined, symbols: string[]): Promise<Map<string, number>> {
+async function webullSnapshotFetch(host: string, appKey: string, appSecret: string, token: string | undefined, symbols: string[]): Promise<{ prices: Map<string, number>; debug: any }> {
   const result = new Map<string, number>();
-  if (symbols.length === 0) return result;
+  const debug: any = { symbolCount: symbols.length, hasToken: !!token };
+  if (symbols.length === 0) return { prices: result, debug };
   const uri = "/openapi/market-data/stock/snapshot";
   const queryParams = { symbols: symbols.join(","), category: "US_STOCK" };
   const ts = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -73,16 +74,24 @@ async function webullSnapshotFetch(host: string, appKey: string, appSecret: stri
     const resp = await fetch(`https://${host}${uri}?${qs}`, {
       headers: { ...signHeaders, "x-signature": signature, "Content-Type": "application/json", ...(token ? { "x-access-token": token } : {}) },
     });
-    if (!resp.ok) return result;
-    const data = await resp.json();
+    const bodyText = await resp.text().catch(() => "");
+    debug.httpStatus = resp.status;
+    debug.ok = resp.ok;
+    debug.bodySample = bodyText.slice(0, 500);
+    if (!resp.ok) return { prices: result, debug };
+    let data: any = null;
+    try { data = JSON.parse(bodyText); } catch { debug.parseError = true; }
     const items: any[] = Array.isArray(data) ? data : (data?.items ?? data?.data ?? []);
+    debug.itemCount = items.length;
     for (const item of items) {
       const sym = (item.symbol ?? "").toString().toUpperCase();
       const price = Number(item.price ?? item.close ?? item.last ?? item.trade_price);
       if (sym && price > 0) result.set(sym, price);
     }
-  } catch { /* Webull unreachable/erroring - falls through to eToro's own rates, not fatal */ }
-  return result;
+  } catch (err: any) {
+    debug.caughtError = err?.message;
+  }
+  return { prices: result, debug };
 }
 
 export default async function handler(req: any, res: any) {
@@ -181,12 +190,12 @@ export default async function handler(req: any, res: any) {
       const webullHost = WEBULL_REGION_HOSTS[webullRegion] || WEBULL_REGION_HOSTS.us;
       const idToSymbol = new Map(Array.from(instrumentMap.entries()).map(([id, info]) => [id, info.symbol]));
       const symbolsToTry = Array.from(new Set(Array.from(idToSymbol.values())));
-      const webullPrices = await webullSnapshotFetch(webullHost, webullAppKey, webullAppSecret, webullToken, symbolsToTry);
+      const { prices: webullPrices, debug: webullFetchDebug } = await webullSnapshotFetch(webullHost, webullAppKey, webullAppSecret, webullToken, symbolsToTry);
       for (const [id, symbol] of Array.from(idToSymbol.entries())) {
         const price = webullPrices.get(symbol.toUpperCase());
         if (price != null) rateMap.set(id, price);
       }
-      ratesDebug.webull = { attempted: symbolsToTry.length, resolved: webullPrices.size, mappedToInstruments: rateMap.size };
+      ratesDebug.webull = { attempted: symbolsToTry.length, resolved: webullPrices.size, mappedToInstruments: rateMap.size, host: webullHost, ...webullFetchDebug };
     }
 
     const stillNeeded = uniqueIds.filter((id) => !rateMap.has(id));
