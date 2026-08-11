@@ -235,17 +235,21 @@ export default async function handler(req: any, res: any) {
         // direct field now instead, simpler and avoids any derivation edge cases.
         const items: any[] = posData?.items ?? posData?.positions ?? (Array.isArray(posData) ? posData : []);
         for (const item of items) {
-          // Only EQUITY for now - options have fundamentally different pricing/risk
-          // characteristics and would need separate handling (this app's holdingType is
-          // stock/mutual_fund only today), so they're excluded rather than misclassified.
-          if (item.instrument_type && item.instrument_type !== "EQUITY") continue;
+          // Quick-include for options per user request: shown as a stock-type row rather
+          // than excluded, but tagged clearly since this app's holdingType has no real
+          // options model (strike/expiry/contract multiplier) - quantity/price are passed
+          // through exactly as Webull returns them (likely contracts and per-contract
+          // price, not shares/share-price), so downstream $ totals for these rows may not
+          // mean the same thing as they do for an equity row. Proper options support
+          // (separate holdingType, correct contract math) is a bigger follow-up if needed.
+          const isOption = !!item.instrument_type && item.instrument_type !== "EQUITY";
           const qty = Number(item.quantity) || 0;
           if (qty <= 0) continue;
           const costPrice = Number(item.cost_price ?? item.costPrice) || 0;
           const currentPrice = Number(item.last_price ?? item.lastPrice) || costPrice;
           const currency = item.currency ?? item.currency_code ?? item.currencyCode ?? "USD";
           holdings.push({
-            symbol: item.symbol ?? item.instrument_id ?? item.instrumentId,
+            symbol: item.symbol ?? item.instrument_id ?? item.instrumentId ?? item.option_symbol ?? item.optionSymbol,
             broker: "Webull",
             holdingType: "stock" as const,
             exchange: item.exchange ?? item.market ?? "Webull",
@@ -253,7 +257,9 @@ export default async function handler(req: any, res: any) {
             buyPrice: costPrice,
             currentPrice,
             currency,
-            source: `Webull ${region || "us"}`,
+            source: isOption
+              ? `Webull ${region || "us"} · Options (${item.instrument_type}) - qty/price as reported by Webull, may be per-contract`
+              : `Webull ${region || "us"}`,
           });
         }
       }
