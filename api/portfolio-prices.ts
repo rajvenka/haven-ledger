@@ -9,12 +9,13 @@ async function fetchYahooPrice(yahooSymbol: string) {
     `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}`,
     { headers: { "User-Agent": "Mozilla/5.0" } }
   );
-  if (!resp.ok) return { price: null, previousClose: null, error: `Yahoo returned ${resp.status}` };
+  if (!resp.ok) return { price: null, previousClose: null, currency: null, error: `Yahoo returned ${resp.status}` };
   const data = await resp.json();
   const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
   const previousClose = data?.chart?.result?.[0]?.meta?.chartPreviousClose ?? data?.chart?.result?.[0]?.meta?.previousClose;
-  if (typeof price !== "number") return { price: null, previousClose: null, error: "No price found for this symbol" };
-  return { price, previousClose: typeof previousClose === "number" ? previousClose : null, error: null };
+  const currency = data?.chart?.result?.[0]?.meta?.currency ?? null;
+  if (typeof price !== "number") return { price: null, previousClose: null, currency: null, error: "No price found for this symbol" };
+  return { price, previousClose: typeof previousClose === "number" ? previousClose : null, currency, error: null };
 }
 
 export default async function handler(req: any, res: any) {
@@ -31,14 +32,18 @@ export default async function handler(req: any, res: any) {
     }
 
     const results = await Promise.all(
-      symbols.slice(0, 250).map(async ({ symbol, exchange }: { symbol: string; exchange: string }) => {
-        // Only NSE/BSE (India) need a Yahoo suffix appended - US exchanges (NASDAQ, NYSE)
-        // and others use the plain symbol as-is. Previously this defaulted to ".NS" for
-        // anything that wasn't literally "BSE", which silently broke every non-Indian
-        // exchange (e.g. AAPL on NASDAQ became the invalid "AAPL.NS").
+      symbols.slice(0, 250).map(async ({ symbol, exchange, currency }: { symbol: string; exchange: string; currency?: string }) => {
+        // Only NSE/BSE (India) and ASX (Australia) need a Yahoo suffix appended - US exchanges
+        // (NASDAQ, NYSE) and others use the plain symbol as-is. Previously this defaulted to
+        // ".NS" for anything that wasn't literally "BSE", which silently broke every
+        // non-Indian exchange (e.g. AAPL on NASDAQ became the invalid "AAPL.NS").
         const isIndianExchange = exchange === "NSE" || exchange === "BSE";
-        const alreadySuffixed = /\.(NS|BO)$/i.test(symbol);
-        const primarySuffix = exchange === "BSE" ? ".BO" : isIndianExchange ? ".NS" : "";
+        // AUD is the reliable signal for ASX-listed holdings (Webull AU positions carry
+        // currency directly from the API) - exchange alone can't be trusted since
+        // Webull's exchange field isn't always a clean "ASX" string.
+        const isAsxListed = currency === "AUD" || exchange === "ASX";
+        const alreadySuffixed = /\.(NS|BO|AX)$/i.test(symbol);
+        const primarySuffix = exchange === "BSE" ? ".BO" : isIndianExchange ? ".NS" : isAsxListed ? ".AX" : "";
         const primarySymbol = alreadySuffixed || !primarySuffix ? symbol : `${symbol}${primarySuffix}`;
 
         try {
@@ -55,6 +60,14 @@ export default async function handler(req: any, res: any) {
           }
           if (result.price == null) {
             return { symbol, exchange, price: null, previousClose: null, error: result.error };
+          }
+          // Currency guard: if we know the holding's real currency (e.g. AUD from a Webull
+          // AU position) and Yahoo's match came back in a different currency, this is almost
+          // certainly a wrong-market collision (a bare ticker matching a same-symbol US
+          // listing instead of the actual ASX one) rather than a real price - reject it
+          // instead of silently writing a wrong-currency number into live_price.
+          if (currency && result.currency && result.currency.toUpperCase() !== currency.toUpperCase()) {
+            return { symbol, exchange, price: null, previousClose: null, error: `Currency mismatch: expected ${currency}, Yahoo returned ${result.currency} for "${primarySymbol}" - likely wrong market` };
           }
           return { symbol, exchange, price: result.price, previousClose: result.previousClose, error: null };
         } catch (err: any) {

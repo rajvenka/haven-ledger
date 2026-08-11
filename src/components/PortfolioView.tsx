@@ -1374,7 +1374,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const updatePromises: Promise<void>[] = [];
 
       if (refreshable.length > 0) {
-        const symbols = refreshable.map(h => ({ symbol: h.ticker ?? h.symbol, exchange: h.exchange }));
+        const symbols = refreshable.map(h => ({ symbol: h.ticker ?? h.symbol, exchange: h.exchange, currency: h.currency }));
         const resp = await fetch('/api/portfolio-prices', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
