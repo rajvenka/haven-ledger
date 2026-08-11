@@ -190,6 +190,7 @@ function downloadCsv(filename: string, headers: string[], rows: (string | number
 // Instrument is always shown, pinned first - everything else is configurable (show/hide + reorder).
 const DEFAULT_COLUMNS: { key: string; label: string; align: 'text-left' | 'text-right' }[] = [
   { key: 'quantity', label: 'Qty', align: 'text-right' },
+  { key: 'currency', label: 'Currency', align: 'text-right' },
   { key: 'buy_price', label: 'Buy Price', align: 'text-right' },
   { key: 'current_price', label: 'LTP', align: 'text-right' },
   { key: 'live_price', label: 'Live Price', align: 'text-right' },
@@ -304,6 +305,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     const getValue = (col: typeof visibleColumns[0], h: any): string | number => {
       switch (col.key) {
         case 'quantity': return h.quantity;
+        case 'currency': return h.currency || '';
         case 'buy_price': return Number(h.buy_price).toFixed(2);
         case 'current_price': return Number(h.current_price ?? h.buy_price).toFixed(2);
         case 'live_price': return h.live_price != null ? Number(h.live_price).toFixed(2) : '';
@@ -333,6 +335,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     const getValue = (col: typeof visibleColumns[0], h: any): string | number => {
       switch (col.key) {
         case 'quantity': return h.quantity;
+        case 'currency': return h.currency || '';
         case 'buy_price': return Number(h.buy_price).toFixed(2);
         case 'current_price': return Number(h.current_price ?? h.buy_price).toFixed(2);
         case 'live_price': return h.live_price != null ? Number(h.live_price).toFixed(2) : '';
@@ -724,6 +727,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       switch (sortField) {
         case 'symbol': return h.symbol;
         case 'quantity': return Number(h.quantity);
+        case 'currency': return h.currency || '';
         case 'buy_price': return Number(h.buy_price);
         case 'current_price': return Number(h.current_price ?? h.buy_price);
         case 'live_price': return Number(h.live_price ?? h.current_price ?? h.buy_price);
@@ -3691,6 +3695,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                 );
                               case 'buy_price':
                                 return <td key="buy_price" className="p-2.5 text-right text-slate-600 dark:text-slate-300">{fmtCur(Number(h.buy_price), h.currency)}</td>;
+                              case 'currency':
+                                return <td key="currency" className="p-2.5 text-right text-slate-500 dark:text-slate-400 font-semibold">{h.currency || '—'}</td>;
                               case 'current_price':
                                 return (
                                   <td key="current_price" className="p-2.5 text-right">
