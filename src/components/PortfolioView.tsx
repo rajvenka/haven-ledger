@@ -1668,8 +1668,21 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const headerCashBalances = selectedHeaderPortfolioIds ? portfolioCashBalances.filter((c: any) => selectedHeaderPortfolioIds.includes(c.portfolio_id)) : portfolioCashBalances;
   const singleHeaderPortfolio = selectedHeaderPortfolioNames.length === 1 ? portfolios.find((p: any) => p.name === selectedHeaderPortfolioNames[0]) : null;
   const headerDisplayCurrency = singleHeaderPortfolio ? singleHeaderPortfolio.currency : baseCurrency;
-  const headerHoldingCurrency = (h: any) => portfolios.find((p: any) => p.id === h.portfolio_id)?.currency || h.currency || 'INR';
-  const convHeader = (h: any, val: number) => (portfolioMode === 'multiple' && !singleHeaderPortfolio) ? convertToBase(val, headerHoldingCurrency(h), headerDisplayCurrency, workspaceCurrencyRates) : val;
+  // Prefer the holding's own currency (accurate per-holding, e.g. Webull correctly tags
+  // AUD for ASX-listed positions vs USD for US-listed ones within the same account) over
+  // the portfolio's assigned currency, which was previously used first and silently
+  // mislabeled every non-default-currency holding in a mixed portfolio.
+  const headerHoldingCurrency = (h: any) => h.currency || portfolios.find((p: any) => p.id === h.portfolio_id)?.currency || 'INR';
+  // Convert whenever the holding's real currency differs from the display currency -
+  // previously this only ran when multiple portfolios were being aggregated together,
+  // which meant a single mixed-currency portfolio (Webull holding both AUD and USD
+  // positions) got summed as if every value were already in the same unit. convertToBase
+  // is a no-op when currencies already match, so this is strictly additive for anyone
+  // whose portfolios are genuinely single-currency - nothing changes for them.
+  const convHeader = (h: any, val: number) => {
+    const from = headerHoldingCurrency(h);
+    return from === headerDisplayCurrency ? val : convertToBase(val, from, headerDisplayCurrency, workspaceCurrencyRates);
+  };
   const fmtHeader = (n: number) => portfolioMode === 'multiple' ? fmtCur(n, headerDisplayCurrency) : fmt(n);
 
   const totalContributed = headerContributions.reduce((s: number, c: any) => s + Number(c.amount), 0);
@@ -3368,8 +3381,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
               ? portfolios.find((p: any) => p.name === selectedPortfolioNames[0])
               : null;
             const subtotalCurrency = singlePortfolioSelected ? singlePortfolioSelected.currency : baseCurrency;
-            const holdingCurrency = (h: any) => portfolios.find((p: any) => p.id === h.portfolio_id)?.currency || h.currency || 'INR';
-            const conv = (h: any, val: number) => (portfolioMode === 'multiple' && !singlePortfolioSelected) ? convertToBase(val, holdingCurrency(h), subtotalCurrency, workspaceCurrencyRates) : val;
+            const holdingCurrency = (h: any) => h.currency || portfolios.find((p: any) => p.id === h.portfolio_id)?.currency || 'INR';
+            const conv = (h: any, val: number) => {
+              const from = holdingCurrency(h);
+              return from === subtotalCurrency ? val : convertToBase(val, from, subtotalCurrency, workspaceCurrencyRates);
+            };
             const fmtSub = (n: number) => portfolioMode === 'multiple' ? fmtCur(n, subtotalCurrency) : fmt(n);
             const subInvested = filteredActiveHoldings.reduce((s, h) => s + conv(h, Number(h.buy_price) * Number(h.quantity)), 0);
             const subCurrent = filteredActiveHoldings.reduce((s, h) => s + conv(h, Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity)), 0);
@@ -3965,8 +3981,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
               ? portfolios.find((p: any) => p.name === selectedSoldPortfolios[0])
               : null;
             const soldDisplayCurrency = singleSoldPortfolio ? singleSoldPortfolio.currency : baseCurrency;
-            const soldHoldingCurrency = (h: any) => portfolios.find((p: any) => p.id === h.portfolio_id)?.currency || h.currency || 'INR';
-            const convSold = (h: any, val: number) => (portfolioMode === 'multiple' && !singleSoldPortfolio) ? convertToBase(val, soldHoldingCurrency(h), soldDisplayCurrency, workspaceCurrencyRates) : val;
+            const soldHoldingCurrency = (h: any) => h.currency || portfolios.find((p: any) => p.id === h.portfolio_id)?.currency || 'INR';
+            const convSold = (h: any, val: number) => {
+              const from = soldHoldingCurrency(h);
+              return from === soldDisplayCurrency ? val : convertToBase(val, from, soldDisplayCurrency, workspaceCurrencyRates);
+            };
             const fmtSold = (n: number) => portfolioMode === 'multiple' ? fmtCur(n, soldDisplayCurrency) : fmt(n);
             const buyValue = filteredSoldHoldings.reduce((s, h) => s + convSold(h, Number(h.buy_price) * Number(h.quantity)), 0);
             const soldValue = filteredSoldHoldings.reduce((s, h) => s + convSold(h, Number(h.sold_price) * Number(h.quantity)), 0);
