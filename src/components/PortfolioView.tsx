@@ -1362,8 +1362,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
       } else {
         scopedHoldings = activeHoldings;
       }
-      const refreshable = scopedHoldings.filter(h => h.holding_type !== 'mutual_fund' && h.ticker);
-      const skippedNoTicker = scopedHoldings.filter(h => h.holding_type !== 'mutual_fund' && !h.ticker).length;
+      // Falls back to symbol when ticker is still null - covers rows inserted before the
+      // ticker fix for eToro/Webull, so a plain Refresh click backfills them too rather than
+      // silently skipping every pre-existing row until a fresh sync happens.
+      const refreshable = scopedHoldings.filter(h => h.holding_type !== 'mutual_fund' && (h.ticker || h.symbol));
+      const skippedNoTicker = scopedHoldings.filter(h => h.holding_type !== 'mutual_fund' && !h.ticker && !h.symbol).length;
       const mutualFunds = scopedHoldings.filter(h => h.holding_type === 'mutual_fund');
 
       let succeeded = 0;
@@ -1371,7 +1374,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const updatePromises: Promise<void>[] = [];
 
       if (refreshable.length > 0) {
-        const symbols = refreshable.map(h => ({ symbol: h.ticker, exchange: h.exchange }));
+        const symbols = refreshable.map(h => ({ symbol: h.ticker ?? h.symbol, exchange: h.exchange }));
         const resp = await fetch('/api/portfolio-prices', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

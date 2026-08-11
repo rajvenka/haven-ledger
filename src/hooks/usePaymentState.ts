@@ -1147,7 +1147,10 @@ export function usePaymentState() {
     const { data: inserted, error } = await supabase.from('portfolio_holdings').insert({
       workspace_id: activeWorkspaceId, created_by: user?.id ?? null, portfolio_id: holding.portfolioId ?? null,
       holding_type: holding.holdingType ?? 'stock', broker: holding.broker, symbol: holding.symbol.toUpperCase(), isin: holding.isin ?? null, exchange: holding.exchange,
-      ticker: holding.broker === 'Zerodha' ? holding.symbol.toUpperCase() : null,
+      // Ticker used to only ever get set for Zerodha, which meant eToro/Webull holdings
+      // were silently invisible to the Refresh Prices button (it filters on `h.ticker`
+      // being truthy) - now set for any broker with a real tradeable symbol.
+      ticker: ['Zerodha', 'eToro', 'Webull'].includes(holding.broker) ? holding.symbol.toUpperCase() : null,
       quantity: holding.quantity, buy_price: holding.buyPrice, buy_date: holding.buyDate, currency: holding.currency ?? 'INR',
       current_price: holding.currentPrice ?? null, current_price_updated_at: holding.currentPrice != null ? new Date().toISOString() : null,
       reference_price: holding.currentPrice ?? holding.buyPrice, reference_date: new Date().toISOString().slice(0, 10),
@@ -1173,13 +1176,21 @@ export function usePaymentState() {
     const rows = holdings.map(h => ({
       workspace_id: activeWorkspaceId, created_by: user?.id ?? null, portfolio_id: portfolioId ?? null,
       holding_type: h.holdingType, broker: h.broker, symbol: h.symbol.toUpperCase(), isin: h.isin ?? null, folio_number: h.folioNumber ?? null, exchange: h.exchange,
-      ticker: h.broker === 'Zerodha' ? h.symbol.toUpperCase() : null,
+      ticker: ['Zerodha', 'eToro', 'Webull'].includes(h.broker) ? h.symbol.toUpperCase() : null,
       quantity: h.quantity, buy_price: h.buyPrice, buy_date: h.buyDate,
       current_price: h.currentPrice ?? null, current_price_updated_at: h.currentPrice != null ? new Date().toISOString() : null,
       reference_price: h.currentPrice ?? h.buyPrice, reference_date: new Date().toISOString().slice(0, 10),
       source: h.source ?? null, change_flag: 'added', currency: h.currency ?? 'INR',
       leverage: h.leverage ?? null, stop_loss_rate: h.stopLossRate ?? null, take_profit_rate: h.takeProfitRate ?? null,
       etoro_net_value_amount: h.etoroNetValueAmount ?? null,
+      // Populate live_price right at insert time for eToro/Webull (both are leveraged
+      // brokers whose sync always supplies a real currentPrice) - previously this column
+      // stayed null until the separate syncEtoroLivePrices follow-up ran, which required
+      // matching freshly-inserted rows back by symbol after the fact. Writing it here
+      // removes that whole second lookup step as a point of failure for the initial fill.
+      ...(['eToro', 'Webull'].includes(h.broker) && h.currentPrice != null
+        ? { live_price: h.currentPrice, live_price_updated_at: new Date().toISOString() }
+        : {}),
     }));
     const { data: inserted, error } = await supabase.from('portfolio_holdings').insert(rows).select('id, current_price');
     if (error) throw error;
@@ -1350,7 +1361,7 @@ export function usePaymentState() {
           workspace_id: activeWorkspaceId, created_by: user?.id ?? null, portfolio_id: portfolioId ?? null,
           holding_type: first.row.holdingType, broker: first.row.broker, symbol: first.row.symbol.toUpperCase(),
           isin: first.row.isin ?? null, folio_number: first.row.folioNumber ?? null, exchange: first.row.exchange,
-          ticker: first.row.broker === 'Zerodha' ? first.row.symbol.toUpperCase() : null,
+          ticker: ['Zerodha', 'eToro', 'Webull'].includes(first.row.broker) ? first.row.symbol.toUpperCase() : null,
           quantity: first.row.quantity, buy_price: first.row.buyPrice, buy_date: first.date,
           current_price: first.row.currentPrice ?? first.row.buyPrice, current_price_updated_at: new Date().toISOString(),
           source: first.row.source ?? null, change_flag: 'added',
