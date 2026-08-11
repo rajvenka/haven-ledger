@@ -1253,10 +1253,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
           // The remaining active row keeps the same id after a partial sell/increase -
           // refresh its live eToro fields too, since reconcilePortfolioHoldingQuantity only
           // handles quantity/cost-basis reconciliation, not these.
-          if (parsed.leverage != null || parsed.stopLossRate != null || parsed.etoroNetValueAmount != null) {
+          if (parsed.leverage != null || parsed.stopLossRate != null || parsed.etoroNetValueAmount != null || (parsed.currency && parsed.currency !== existing.currency)) {
             await updatePortfolioHolding(existing.id, {
               currentPrice: parsed.currentPrice,
               leverage: parsed.leverage, stopLossRate: parsed.stopLossRate, takeProfitRate: parsed.takeProfitRate, etoroNetValueAmount: parsed.etoroNetValueAmount,
+              currency: parsed.currency,
             });
           }
         } catch (err: any) { stepErrors.push(`${parsed.symbol} (qty change): ${err?.message || 'failed'}`); }
@@ -1270,6 +1271,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
           await updatePortfolioHolding(existing.id, {
             buyPrice: parsed.buyPrice, currentPrice: parsed.currentPrice,
             leverage: parsed.leverage, stopLossRate: parsed.stopLossRate, takeProfitRate: parsed.takeProfitRate, etoroNetValueAmount: parsed.etoroNetValueAmount,
+            currency: parsed.currency,
           });
         } catch (err: any) { stepErrors.push(`${parsed.symbol} (price change): ${err?.message || 'failed'}`); }
       }
@@ -1281,6 +1283,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
           await updatePortfolioHolding(existing.id, {
             currentPrice: parsed.currentPrice,
             leverage: parsed.leverage, stopLossRate: parsed.stopLossRate, takeProfitRate: parsed.takeProfitRate, etoroNetValueAmount: parsed.etoroNetValueAmount,
+            currency: parsed.currency,
           });
         } catch (err: any) { stepErrors.push(`${parsed.symbol} (live refresh): ${err?.message || 'failed'}`); }
       }
