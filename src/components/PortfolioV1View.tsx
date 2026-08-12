@@ -616,7 +616,7 @@ export default function PortfolioV1View({
     const rows = tableRows.slice();
     const val = (r: TableRow) => {
       const h = r.h;
-      const qty = r.lotQty ?? Number(h.quantity) || 0;
+      const qty = (r.lotQty ?? Number(h.quantity)) || 0;
       const buy = r.lot ? Number(r.lot.buy_price) : Number(h.buy_price);
       const live = r.lot ? Number(r.lot.current_price ?? h.live_price ?? h.current_price ?? buy) : livePrice(h);
       switch (sortKey) {
@@ -1292,7 +1292,7 @@ export default function PortfolioV1View({
               ) : (
                 sortedTableRows.map((row) => {
                   const { h, lot, stop: lotStop, lotQty, dist: lotDist, rowKey } = row;
-                  const qty = lotQty != null ? lotQty : Number(h.quantity) || 0;
+                  const qty = lotQty != null ? lotQty : (Number(h.quantity) || 0);
                   const buy = lot ? Number(lot.buy_price) : Number(h.buy_price);
                   const live = lot
                     ? Number(lot.current_price ?? h.live_price ?? h.current_price ?? buy) || 0
