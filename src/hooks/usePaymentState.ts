@@ -1487,7 +1487,15 @@ export function usePaymentState() {
     leverage?: number; stopLossRate?: number; takeProfitRate?: number; etoroNetValueAmount?: number;
   }) => {
     const row: any = {};
-    if (updates.currentPrice !== undefined) { row.current_price = updates.currentPrice; row.current_price_updated_at = new Date().toISOString(); }
+    if (updates.currentPrice !== undefined) {
+      row.current_price = updates.currentPrice;
+      row.current_price_updated_at = new Date().toISOString();
+      // Broker syncs (Webull options, eToro, etc.) pass LTP as currentPrice — also stamp
+      // live_price so the UI's live_price ?? current_price path shows the correct figure
+      // immediately without waiting for a separate Yahoo refresh.
+      row.live_price = updates.currentPrice;
+      row.live_price_updated_at = new Date().toISOString();
+    }
     if (updates.status !== undefined) row.status = updates.status;
     if (updates.soldPrice !== undefined) row.sold_price = updates.soldPrice;
     if (updates.soldDate !== undefined) row.sold_date = updates.soldDate;
