@@ -51,7 +51,6 @@ import { RecurringPayment } from './types';
 import AgentAssistant from './components/AgentAssistant';
 import FamilyChatAssistant from './components/FamilyChatAssistant';
 import ProfileScopeModal from './components/ProfileScopeModal';
-import OnboardingView from './components/OnboardingView';
 import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import RewardsTracker from './components/RewardsTracker';
 import PortfolioView from './components/PortfolioView';
@@ -273,6 +272,21 @@ export default function App() {
     // Only auto-show when the profile explicitly says the tour is incomplete.
     if (userProfile.hasCompletedTour === false) setShowTour(true);
   }, [isLoaded, userProfile]);
+
+  // Auto-create a default family workspace when the user has none.
+  // Replaces the old "Initialize Your Vault" personal-vs-family picker.
+  const autoCreatingWorkspace = React.useRef(false);
+  React.useEffect(() => {
+    if (!user || !isLoaded) return;
+    if (workspaces.length > 0) return;
+    if (incomingInvitations.length > 0) return; // let them accept an invite first
+    if (autoCreatingWorkspace.current) return;
+    autoCreatingWorkspace.current = true;
+    setWorkspaceMode('family').catch((err) => {
+      console.error('Auto-create workspace failed:', err);
+      autoCreatingWorkspace.current = false;
+    });
+  }, [user, isLoaded, workspaces.length, incomingInvitations.length, setWorkspaceMode]);
 
   // Applies the saved landing-page preference when switching into a workspace - guards
   // against a stale preference pointing at a page the plan no longer grants (e.g. if
@@ -518,20 +532,15 @@ export default function App() {
     );
   }
 
-  // 2.5 Onboarding: user is authenticated but has no workspace yet - gated on isLoaded so
-  // this only shows once we've actually confirmed zero workspaces, not just "haven't
-  // finished the initial fetch yet" (workspaces starts as an empty array before that fetch
-  // resolves, which was briefly flashing this screen for returning users on every load).
-  if (user && isLoaded && workspaces.length === 0) {
-    // If they were invited to a workspace, show that first - don't force them into
-    // creating their own when they're actually here to join someone else's.
+  // 2.5 No workspace yet (auto-create runs in effect above).
+    if (user && isLoaded && workspaces.length === 0) {
     if (incomingInvitations.length > 0) {
       return (
         <IPhoneFrame>
           <div className="flex-1 flex flex-col justify-center px-6 py-10 bg-slate-50 dark:bg-slate-900 gap-4">
             <div className="text-center space-y-1.5 mb-2">
               <h2 className="text-base font-black text-slate-900 dark:text-white">You've Been Invited</h2>
-              <p className="text-[11px] text-slate-400 font-semibold">Accept to join, or create your own workspace instead.</p>
+              <p className="text-[11px] text-slate-400 font-semibold">Accept to join a workspace.</p>
             </div>
             {incomingInvitations.map(inv => (
               <div key={inv.id} className="bg-white dark:bg-slate-950 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3">
@@ -545,19 +554,15 @@ export default function App() {
                 </div>
               </div>
             ))}
-            <details className="text-center">
-              <summary className="text-[10px] text-indigo-500 font-bold cursor-pointer list-none">Prefer to create your own workspace instead?</summary>
-              <div className="mt-3">
-                <OnboardingView onSelectMode={setWorkspaceMode} isSyncing={isSyncing} canCreateBusiness={userProfile?.isSuperAdmin || userProfile?.canCreateBusiness} />
-              </div>
-            </details>
           </div>
         </IPhoneFrame>
       );
     }
     return (
       <IPhoneFrame>
-        <OnboardingView onSelectMode={setWorkspaceMode} isSyncing={isSyncing} canCreateBusiness={userProfile?.isSuperAdmin || userProfile?.canCreateBusiness} />
+        <div className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-slate-900 h-full">
+          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+        </div>
       </IPhoneFrame>
     );
   }
