@@ -259,14 +259,18 @@ export default function App() {
     return workspaceGrants && planIncludes;
   };
 
-  // Auto-starts the guided tour once for first-time users (has_completed_tour false),
-  // after their profile has actually loaded so we don't fire on a transient empty state.
+  // Auto-starts the guided tour once for first-time users. Uses localStorage as an
+  // immediate guard so a skipped/finished tour never reappears even if the profile
+  // write is slow or fails — previously it could pop up on every reload.
   const [showTour, setShowTour] = useState(false);
   const hasAutoStartedTour = React.useRef(false);
   useEffect(() => {
     if (!isLoaded || !userProfile) return;
     if (hasAutoStartedTour.current) return;
     hasAutoStartedTour.current = true;
+    const localDone = localStorage.getItem('haven_tour_done') === '1';
+    if (localDone || userProfile.hasCompletedTour === true) return;
+    // Only auto-show when the profile explicitly says the tour is incomplete.
     if (userProfile.hasCompletedTour === false) setShowTour(true);
   }, [isLoaded, userProfile]);
 
@@ -565,8 +569,8 @@ export default function App() {
       <div className="flex-1 flex flex-row h-full bg-slate-50 dark:bg-slate-900 relative overflow-hidden text-left">
         
         {/* Persistent Desktop Sidebar Navigation (Hidden on Mobile) */}
-        <aside className="hidden md:flex flex-col w-64 h-dvh bg-white dark:bg-slate-950 border-r border-slate-150/80 dark:border-slate-900 shrink-0 z-20 select-none p-6">
-          <div className="flex-1 min-h-0 overflow-y-auto space-y-6">
+        <aside className="hidden md:flex flex-col w-56 h-dvh bg-white dark:bg-slate-950 border-r border-slate-150/80 dark:border-slate-900 shrink-0 z-20 select-none p-4">
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-4">
             {/* Elegant Header with Logo & Status */}
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white font-black shadow-md shadow-indigo-500/20 dark:shadow-indigo-950/40 relative">
@@ -1580,7 +1584,7 @@ export default function App() {
           <div className="md:hidden shrink-0" style={{ height: 'calc(env(safe-area-inset-top) + 3.75rem)' }} />
 
           {/* Dynamic page content body */}
-          <main className="flex-1 overflow-hidden flex flex-col">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col min-h-0">
             {activeTab === 'summary' && hasFeature('core') ? (
               <Dashboard 
                 payments={payments}
@@ -2456,7 +2460,7 @@ export default function App() {
           <AppTour
             onNavigate={(tab) => setActiveTab(tab as any)}
             onOpenMobileMenu={setIsMobileMenuOpen}
-            onFinish={() => { setShowTour(false); markTourCompleted(); }}
+            onFinish={() => { setShowTour(false); try { localStorage.setItem('haven_tour_done', '1'); } catch {} markTourCompleted(); }}
             hasFeature={hasFeature}
           />
         )}
