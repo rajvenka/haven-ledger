@@ -55,6 +55,7 @@ import OnboardingView from './components/OnboardingView';
 import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import RewardsTracker from './components/RewardsTracker';
 import PortfolioView from './components/PortfolioView';
+import PortfolioV1View from './components/PortfolioV1View';
 import InvestmentPlanView from './components/InvestmentPlanView';
 import ReportsView from './components/ReportsView';
 import IncomeView from './components/IncomeView';
@@ -236,7 +237,7 @@ export default function App() {
     return hash.includes('type=invite') || hash.includes('type=recovery');
   });
 
-  const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'configure' | 'account' | 'history' | 'ai' | 'income' | 'rewards' | 'portfolio' | 'investment_plan' | 'reports' | 'admin_users'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'configure' | 'account' | 'history' | 'ai' | 'income' | 'rewards' | 'portfolio' | 'portfolio_v1' | 'investment_plan' | 'reports' | 'admin_users'>('summary');
   const lastLandingWorkspaceId = React.useRef<string | null>(null);
   const [settingsSubTab, setSettingsSubTab] = useState<'preferences' | 'team'>('preferences');
   const [isAgentOpen, setIsAgentOpen] = useState(false);
@@ -817,6 +818,24 @@ export default function App() {
                   </button>
 
                   <button
+                    id="tour-tab-portfolio_v1-desktop"
+                    onClick={() => setActiveTab('portfolio_v1')}
+                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                      activeTab === 'portfolio_v1'
+                        ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Briefcase className="w-4 h-4 shrink-0 opacity-80" />
+                      <span>Portfolio_V1</span>
+                    </div>
+                    {activeTab === 'portfolio_v1' && (
+                      <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
+                    )}
+                  </button>
+
+                  <button
                     id="tour-tab-investment_plan-desktop"
                     onClick={() => setActiveTab('investment_plan')}
                     className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
@@ -1238,6 +1257,24 @@ export default function App() {
                           <span>Portfolio</span>
                         </div>
                         {activeTab === 'portfolio' && (
+                          <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
+                        )}
+                      </button>
+
+                      <button
+                        id="tour-tab-portfolio_v1-mobile"
+                        onClick={() => { setActiveTab('portfolio_v1'); setIsMobileMenuOpen(false); }}
+                        className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                          activeTab === 'portfolio_v1'
+                            ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Briefcase className="w-4.5 h-4.5 shrink-0 opacity-80" />
+                          <span>Portfolio_V1</span>
+                        </div>
+                        {activeTab === 'portfolio_v1' && (
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                         )}
                       </button>
@@ -1732,6 +1769,22 @@ export default function App() {
                 portfolioFees={portfolioFees}
                 addPortfolioFee={addPortfolioFee}
                 deletePortfolioFee={deletePortfolioFee}
+              />
+                        ) : activeTab === 'portfolio_v1' ? (
+              <PortfolioV1View
+                isReadOnly={isReadOnly}
+                isDataLoading={portfolioDataLoading}
+                baseCurrency={activeWorkspace?.baseCurrency}
+                portfolios={portfolios}
+                portfolioMode={activeWorkspace?.portfolioMode}
+                portfolioHoldings={portfolioHoldings}
+                portfolioCashBalances={portfolioCashBalances}
+                portfolioBrokerConnections={portfolioBrokerConnections}
+                setPortfolioBrokerConnection={setPortfolioBrokerConnection}
+                deletePortfolioBrokerConnection={deletePortfolioBrokerConnection}
+                markBrokerConnectionSynced={markBrokerConnectionSynced}
+                updatePortfolioHoldingLivePrice={updatePortfolioHoldingLivePrice}
+                markPriceLookupFailed={markPriceLookupFailed}
               />
             ) : activeTab === 'investment_plan' ? (
               <InvestmentPlanView
