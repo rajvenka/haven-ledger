@@ -245,9 +245,12 @@ export function usePaymentState() {
     })();
   }, [user, refreshWorkspaces]);
 
+  const paymentsLoadGen = useRef(0);
   const reloadData = useCallback(async () => {
     if (!user) return;
-    const wsFilter = activeWorkspaceId ? `workspace_id.eq.${activeWorkspaceId}` : `user_id.eq.${user.id},workspace_id.is.null`;
+    const wsId = activeWorkspaceId;
+    const gen = ++paymentsLoadGen.current;
+    const wsFilter = wsId ? `workspace_id.eq.${wsId}` : `user_id.eq.${user.id},workspace_id.is.null`;
     const [{ data: pays }, { data: hist }, { data: cts }, { data: notifs }, { data: rewards }] = await Promise.all([
       supabase.from('recurring_payments').select('*').or(wsFilter).order('sort_order', { ascending: true, nullsFirst: false }),
       supabase.from('payment_history').select('*').or(wsFilter).order('paid_date', { ascending: false }),
@@ -255,11 +258,16 @@ export function usePaymentState() {
       supabase.from('app_notifications').select('*').eq('user_id', user.id).order('date', { ascending: false }).limit(50),
       supabase.from('reward_perks').select('*').or(wsFilter).order('application_date', { ascending: false }),
     ]);
-    setAllPayments((pays ?? []).map(rowToPayment));
-    setAllHistory((hist ?? []).map(rowToHistory));
-    if (cts && cts.length > 0) {
-      setCountries(cts.map(rowToCountry));
-    } else if (cts && cts.length === 0) {
+    if (gen !== paymentsLoadGen.current) return; // stale — user switched workspace mid-fetch
+    const scopeRows = (rows: any[] | null | undefined) =>
+      !wsId ? (rows ?? []) : (rows ?? []).filter((r: any) => r.workspace_id === wsId || r.workspace_id == null);
+    setAllPayments(scopeRows(pays).map(rowToPayment));
+    setAllHistory(scopeRows(hist).map(rowToHistory));
+    const scopedCts = scopeRows(cts);
+    const scopedRewards = scopeRows(rewards);
+    if (scopedCts.length > 0) {
+      setCountries(scopedCts.map(rowToCountry));
+    } else if ((cts ?? []).length === 0) {
       // First time for this user/workspace: seed the defaults as real rows so they're manageable (incl. deletable) like any other currency.
       const seedRows = INITIAL_COUNTRIES.map(c => ({
         name: c.name, currency: c.currency, symbol: c.symbol, flag: c.flag, rate_to_aud: c.rateToAUD, user_id: user.id, workspace_id: activeWorkspaceId,
@@ -268,7 +276,7 @@ export function usePaymentState() {
       if (seeded && seeded.length > 0) setCountries(seeded.map(rowToCountry));
     }
     setNotifications((notifs ?? []).map(rowToNotification));
-    setRewardsPerks((rewards ?? []).map(rowToReward));
+    setRewardsPerks(scopedRewards.map(rowToReward));
   }, [user, activeWorkspaceId]);
 
   useEffect(() => { if (isLoaded) reloadData(); }, [isLoaded, activeWorkspaceId, reloadData]);
@@ -447,11 +455,20 @@ export function usePaymentState() {
 
   const switchWorkspace = async (workspaceId: string) => {
     if (!user) return;
+    if (workspaceId === activeWorkspaceId) return;
     setIsSyncing(true);
     try {
+      // Drop current workspace data immediately so the UI cannot show mixed holdings
+      // from kumar-raj while raj-sasi is loading (or vice versa).
+      portfolioLoadGen.current += 1;
+      clearPortfolioState();
+      setAllPayments([]);
+      setAllHistory([]);
       setActiveWorkspaceId(workspaceId);
       await supabase.from('profiles').update({ active_workspace_id: workspaceId }).eq('id', user.id);
       await refreshWorkspaces(user.id, workspaceId);
+      // Effects on activeWorkspaceId will reload payments + portfolio; force portfolio too.
+      await loadPortfolioDetails();
     } finally {
       setIsSyncing(false);
     }
@@ -1088,55 +1105,80 @@ export function usePaymentState() {
   const [mfHoldingsCache, setMfHoldingsCache] = useState<any[]>([]);
   const [portfolioDataLoading, setPortfolioDataLoading] = useState(true);
   const loadedPortfolioWorkspaces = useRef<Set<string>>(new Set());
+  // Bumps on every workspace change so a slow response from workspace A cannot
+  // overwrite state after the user has already switched to workspace B.
+  const portfolioLoadGen = useRef(0);
+
+  const clearPortfolioState = useCallback(() => {
+    setPortfolioHoldings([]); setPortfolioPriceHistory([]); setPortfolioSplits([]);
+    setPortfolioContributions([]); setPortfolioWithdrawals([]);
+    setPortfolioDividends([]); setPortfolioFees([]); setPortfolioRecurringPlans([]);
+    setPortfolioCashBalances([]); setPortfolios([]); setWorkspaceCurrencyRates([]);
+    setPortfolioBookedPlBaselines([]); setPortfolioProjectedBankBalances([]);
+    setPortfolioBrokerConnectionsState([]); setPortfolioHoldingLotsState([]);
+  }, []);
 
   const loadPortfolioDetails = useCallback(async () => {
     if (!activeWorkspaceId) {
-      setPortfolioHoldings([]); setPortfolioPriceHistory([]); setPortfolioSplits([]); setPortfolioContributions([]); setPortfolioWithdrawals([]);
-      setPortfolioDividends([]); setPortfolioFees([]); setPortfolioRecurringPlans([]); setPortfolioCashBalances([]); setPortfolios([]); setWorkspaceCurrencyRates([]);
+      clearPortfolioState();
       setPortfolioDataLoading(false);
       return;
     }
+    const wsId = activeWorkspaceId;
+    const gen = ++portfolioLoadGen.current;
+
+    // Immediately drop previous workspace data so UI never mixes kumar-raj with raj-sasi.
+    clearPortfolioState();
+
     // Only show the full-page spinner the first time this workspace's portfolio data loads -
     // every mutation (price update, add holding, mark transferred, etc.) also calls this to
     // refresh state, and showing the spinner on every one of those was causing a visible
     // flicker during completely normal use, not just on initial load or workspace switch.
-    const isFirstLoadForWorkspace = !loadedPortfolioWorkspaces.current.has(activeWorkspaceId);
+    const isFirstLoadForWorkspace = !loadedPortfolioWorkspaces.current.has(wsId);
     if (isFirstLoadForWorkspace) setPortfolioDataLoading(true);
+
+    const scope = <T extends { workspace_id?: string }>(rows: T[] | null | undefined): T[] =>
+      (rows ?? []).filter(r => !r.workspace_id || r.workspace_id === wsId);
+
     const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: cashBalances }, { data: portfoliosData }, { data: currencyRatesData }, { data: bookedPlBaselinesData }, { data: projectedBankBalancesData }, { data: brokerConnectionsData }, { data: holdingLotsData }] = await Promise.all([
-      supabase.from('portfolio_holdings').select('*').eq('workspace_id', activeWorkspaceId).order('buy_date', { ascending: false }),
-      supabase.from('portfolio_price_history').select('*').eq('workspace_id', activeWorkspaceId).order('recorded_date', { ascending: false }),
-      supabase.from('portfolio_splits').select('*').eq('workspace_id', activeWorkspaceId).order('effective_from'),
-      supabase.from('portfolio_contributions').select('*').eq('workspace_id', activeWorkspaceId).order('contribution_date', { ascending: false }),
-      supabase.from('portfolio_withdrawals').select('*').eq('workspace_id', activeWorkspaceId).order('withdrawal_date', { ascending: false }),
-      supabase.from('portfolio_dividends').select('*').eq('workspace_id', activeWorkspaceId).order('dividend_date', { ascending: false }),
-      supabase.from('portfolio_fees').select('*').eq('workspace_id', activeWorkspaceId).order('fee_date', { ascending: false }),
-      supabase.from('portfolio_recurring_plans').select('*').eq('workspace_id', activeWorkspaceId).order('created_at'),
-      supabase.from('portfolio_cash_balances').select('*').eq('workspace_id', activeWorkspaceId).order('location'),
-      supabase.from('portfolios').select('*').eq('workspace_id', activeWorkspaceId).order('created_at'),
-      supabase.from('workspace_currency_rates').select('*').eq('workspace_id', activeWorkspaceId),
-      supabase.from('portfolio_booked_pl_baseline').select('*').eq('workspace_id', activeWorkspaceId),
-      supabase.from('portfolio_projected_bank_balance').select('*').eq('workspace_id', activeWorkspaceId),
-      supabase.from('portfolio_broker_connections').select('*').eq('workspace_id', activeWorkspaceId),
-      supabase.from('portfolio_holding_lots').select('*').eq('workspace_id', activeWorkspaceId).order('open_date', { ascending: false }),
+      supabase.from('portfolio_holdings').select('*').eq('workspace_id', wsId).order('buy_date', { ascending: false }),
+      supabase.from('portfolio_price_history').select('*').eq('workspace_id', wsId).order('recorded_date', { ascending: false }),
+      supabase.from('portfolio_splits').select('*').eq('workspace_id', wsId).order('effective_from'),
+      supabase.from('portfolio_contributions').select('*').eq('workspace_id', wsId).order('contribution_date', { ascending: false }),
+      supabase.from('portfolio_withdrawals').select('*').eq('workspace_id', wsId).order('withdrawal_date', { ascending: false }),
+      supabase.from('portfolio_dividends').select('*').eq('workspace_id', wsId).order('dividend_date', { ascending: false }),
+      supabase.from('portfolio_fees').select('*').eq('workspace_id', wsId).order('fee_date', { ascending: false }),
+      supabase.from('portfolio_recurring_plans').select('*').eq('workspace_id', wsId).order('created_at'),
+      supabase.from('portfolio_cash_balances').select('*').eq('workspace_id', wsId).order('location'),
+      supabase.from('portfolios').select('*').eq('workspace_id', wsId).order('created_at'),
+      supabase.from('workspace_currency_rates').select('*').eq('workspace_id', wsId),
+      supabase.from('portfolio_booked_pl_baselines').select('*').eq('workspace_id', wsId),
+      supabase.from('portfolio_projected_bank_balances').select('*').eq('workspace_id', wsId),
+      supabase.from('portfolio_broker_connections').select('*').eq('workspace_id', wsId),
+      supabase.from('portfolio_holding_lots').select('*').eq('workspace_id', wsId).order('open_date', { ascending: false }),
     ]);
-    setPortfolioHoldings(holdings ?? []);
-    setPortfolioPriceHistory(priceHistory ?? []);
-    setPortfolioSplits(splits ?? []);
-    setPortfolioContributions(contributions ?? []);
-    setPortfolioWithdrawals(withdrawals ?? []);
-    setPortfolioDividends(dividends ?? []);
-    setPortfolioFees(fees ?? []);
-    setPortfolioRecurringPlans(plans ?? []);
-    setPortfolioCashBalances(cashBalances ?? []);
-    setPortfolios(portfoliosData ?? []);
-    setWorkspaceCurrencyRates(currencyRatesData ?? []);
-    setPortfolioBookedPlBaselines(bookedPlBaselinesData ?? []);
-    setPortfolioProjectedBankBalances(projectedBankBalancesData ?? []);
-    setPortfolioBrokerConnectionsState(brokerConnectionsData ?? []);
-    setPortfolioHoldingLotsState(holdingLotsData ?? []);
-    loadedPortfolioWorkspaces.current.add(activeWorkspaceId);
+
+    // Stale response from a previous workspace — discard.
+    if (gen !== portfolioLoadGen.current) return;
+
+    setPortfolioHoldings(scope(holdings));
+    setPortfolioPriceHistory(scope(priceHistory));
+    setPortfolioSplits(scope(splits));
+    setPortfolioContributions(scope(contributions));
+    setPortfolioWithdrawals(scope(withdrawals));
+    setPortfolioDividends(scope(dividends));
+    setPortfolioFees(scope(fees));
+    setPortfolioRecurringPlans(scope(plans));
+    setPortfolioCashBalances(scope(cashBalances));
+    setPortfolios(scope(portfoliosData));
+    setWorkspaceCurrencyRates(scope(currencyRatesData));
+    setPortfolioBookedPlBaselines(scope(bookedPlBaselinesData));
+    setPortfolioProjectedBankBalances(scope(projectedBankBalancesData));
+    setPortfolioBrokerConnectionsState(scope(brokerConnectionsData));
+    setPortfolioHoldingLotsState(scope(holdingLotsData));
+    loadedPortfolioWorkspaces.current.add(wsId);
     setPortfolioDataLoading(false);
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceId, clearPortfolioState]);
 
   useEffect(() => { if (isLoaded) loadPortfolioDetails(); }, [isLoaded, loadPortfolioDetails]);
 
