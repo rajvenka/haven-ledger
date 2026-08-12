@@ -235,19 +235,19 @@ export default async function handler(req: any, res: any) {
         // direct field now instead, simpler and avoids any derivation edge cases.
         const items: any[] = posData?.items ?? posData?.positions ?? (Array.isArray(posData) ? posData : []);
         for (const item of items) {
-          // Options: Webull returns quantity as contracts and price as per-share.
-          // Equity options are almost always 100-share contracts, so we multiply both
-          // cost and last price by 100 so current_value / gain math matches the real
-          // notional. Tagged as holdingType "options" so the UI can show a clear badge
-          // instead of a long source string that gets truncated.
-          const isOption = !!item.instrument_type && item.instrument_type !== "EQUITY";
+          // Options: Webull returns quantity as # of contracts and cost/last as
+          // premium *per share*. Equity options are 100-share contracts, so we store
+          // price as premium × 100 (per-contract notional). Example the user confirmed:
+          //   live premium 32.92  → store/display 3292
+          //   buy  premium 53.30  → store/display 5330
+          // quantity stays as contracts; value = qty × price = contracts × (prem×100).
+          // Only instrument_type === OPTION gets the multiplier (not FUTURES/CRYPTO/EVENT).
+          const instType = String(item.instrument_type ?? item.instrumentType ?? '').toUpperCase();
+          const isOption = instType === 'OPTION' || instType === 'OPTIONS';
           const qty = Number(item.quantity) || 0;
           if (qty <= 0) continue;
           const rawCost = Number(item.cost_price ?? item.costPrice) || 0;
           const rawLast = Number(item.last_price ?? item.lastPrice) || rawCost;
-          // Standard equity option multiplier. If Webull ever returns a different
-          // multiplier field we can use it; for now *100 is the correct default for
-          // AAPL/META-style equity options the user reported.
           const multiplier = isOption ? 100 : 1;
           const costPrice = rawCost * multiplier;
           const currentPrice = rawLast * multiplier;
