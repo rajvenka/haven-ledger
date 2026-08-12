@@ -225,7 +225,16 @@ export default async function handler(req: any, res: any) {
           continue;
         }
         const posData = await posResp.json();
-        rawPositionsDebug.push({ accountId, raw: JSON.stringify(posData).slice(0, 800) });
+        rawPositionsDebug.push({
+          accountId,
+          itemCount: Array.isArray(posData) ? posData.length : (posData?.items?.length ?? posData?.positions?.length ?? 0),
+          raw: JSON.stringify(posData).slice(0, 2500),
+          sampleKeys: (() => {
+            const arr = posData?.items ?? posData?.positions ?? (Array.isArray(posData) ? posData : []);
+            const first = arr[0];
+            return first ? Object.keys(first) : [];
+          })(),
+        });
         // Confirmed via a real sync: the response is a direct array (not wrapped in
         // {items:[...]}), and each position genuinely carries its own currency directly -
         // exactly as hoped, since a single Webull AU account holds both AUD (ASX-listed)
@@ -238,22 +247,47 @@ export default async function handler(req: any, res: any) {
           // Options: Webull returns quantity as # of contracts and cost/last as
           // premium *per share*. Equity options are 100-share contracts, so we store
           // price as premium × 100 (per-contract notional). Example the user confirmed:
-          //   live premium 32.92  → store/display 3292
-          //   buy  premium 53.30  → store/display 5330
+          //   live premium 32.92  → store/display buy LTP as 3292
+          //   buy  premium 53.30  → store/display buy price as 5330
           // quantity stays as contracts; value = qty × price = contracts × (prem×100).
           // Only instrument_type === OPTION gets the multiplier (not FUTURES/CRYPTO/EVENT).
           const instType = String(item.instrument_type ?? item.instrumentType ?? '').toUpperCase();
           const isOption = instType === 'OPTION' || instType === 'OPTIONS';
           const qty = Number(item.quantity) || 0;
           if (qty <= 0) continue;
-          const rawCost = Number(item.cost_price ?? item.costPrice) || 0;
+          const rawCost = Number(item.cost_price ?? item.costPrice ?? item.unit_cost ?? item.unitCost) || 0;
           const rawLast = Number(item.last_price ?? item.lastPrice) || rawCost;
           const multiplier = isOption ? 100 : 1;
-          const costPrice = rawCost * multiplier;
-          const currentPrice = rawLast * multiplier;
+          // Insert these exact numbers on sync — buy_price + current/live LTP.
+          const costPrice = Number((rawCost * multiplier).toFixed(4));
+          const currentPrice = Number((rawLast * multiplier).toFixed(4));
           const currency = item.currency ?? item.currency_code ?? item.currencyCode ?? "USD";
+
+          // Webull often returns symbol = underlying only (e.g. "AAPL") for every option.
+          // Two AAPL calls would then collapse into one row on import. Build a unique
+          // contract symbol from strike / expiry / type / position_id when needed.
+          const underlying = String(
+            item.symbol ?? item.option_symbol ?? item.optionSymbol ?? item.instrument_id ?? item.instrumentId ?? "OPT"
+          ).toUpperCase().trim();
+          const strike = item.strike_price ?? item.strikePrice ?? item.strike;
+          const expiry = item.option_expire_date ?? item.optionExpireDate ?? item.expire_date ?? item.expireDate ?? item.init_exp_date;
+          const optType = String(item.option_type ?? item.optionType ?? "").toUpperCase(); // CALL / PUT
+          const posId = String(item.position_id ?? item.positionId ?? item.id ?? "").slice(-8);
+          let symbol = underlying;
+          if (isOption) {
+            const parts: string[] = [underlying];
+            if (optType === "CALL" || optType === "PUT") parts.push(optType === "CALL" ? "C" : "P");
+            if (strike != null && String(strike).trim() !== "") parts.push(String(strike));
+            if (expiry) parts.push(String(expiry).slice(0, 10));
+            // If we still only have the underlying (no strike/expiry), append position id
+            // so two different contracts never share the same symbol key.
+            if (parts.length === 1 && posId) parts.push(posId);
+            else if (parts.length === 1) parts.push("OPT");
+            symbol = parts.join(" ");
+          }
+
           holdings.push({
-            symbol: item.symbol ?? item.instrument_id ?? item.instrumentId ?? item.option_symbol ?? item.optionSymbol,
+            symbol,
             broker: "Webull",
             holdingType: (isOption ? "options" : "stock") as "options" | "stock",
             exchange: item.exchange ?? item.market ?? "Webull",
@@ -261,9 +295,12 @@ export default async function handler(req: any, res: any) {
             buyPrice: costPrice,
             currentPrice,
             currency,
+            // Distinct source per contract helps import matching when symbols still collide.
             source: isOption
-              ? `Webull · Options`
+              ? `Webull · Options${posId ? ` · ${posId}` : ""}`
               : `Webull ${region || "us"}`,
+            // Pass through for debug / future lot rows
+            externalId: item.position_id ?? item.positionId ?? item.id ?? undefined,
           });
         }
       }
