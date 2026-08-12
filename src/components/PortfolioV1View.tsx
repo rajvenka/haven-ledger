@@ -804,6 +804,16 @@ export default function PortfolioV1View({
       // Prefer explicit connection_label field (Webull) over auto book-based label
       const explicitLabel = String(credFields.connection_label || '').trim();
       const finalLabel = explicitLabel || label;
+      if (finalLabel) {
+        const taken = (portfolioBrokerConnections || []).some(
+          (c: any) => String(c.connection_label || '').trim().toLowerCase() === finalLabel.toLowerCase()
+        );
+        if (taken) {
+          setConnectError(`Connection name "${finalLabel}" is already used — pick a unique label`);
+          setConnectBusy(false);
+          return;
+        }
+      }
 
       if (selectedBroker === 'groww') {
         const resp = await fetch('/api/portfolio-groww-sync', {
