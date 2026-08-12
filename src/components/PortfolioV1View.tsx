@@ -24,6 +24,8 @@ import {
   Layers,
   Globe2,
   Sparkles,
+  Columns3,
+  Settings2,
 } from 'lucide-react';
 
 type BrokerType = 'etoro' | 'ig' | 'webull' | 'zerodha' | 'groww';
@@ -181,6 +183,25 @@ const CATEGORY_META: Record<
   },
 };
 
+
+const HOLDING_COLUMNS: { key: string; label: string; defaultOn: boolean; desktopOnly?: boolean }[] = [
+  { key: 'type', label: 'Type', defaultOn: true },
+  { key: 'portfolio', label: 'Portfolio', defaultOn: true, desktopOnly: true },
+  { key: 'broker', label: 'Broker', defaultOn: true, desktopOnly: true },
+  { key: 'qty', label: 'Qty', defaultOn: true },
+  { key: 'buy', label: 'Buy', defaultOn: false, desktopOnly: true },
+  { key: 'live', label: 'Live', defaultOn: true },
+  { key: 'day', label: 'Day %', defaultOn: true, desktopOnly: true },
+  { key: 'value', label: 'Value', defaultOn: true },
+  { key: 'pnl', label: 'P&L %', defaultOn: true },
+  { key: 'pnl_amt', label: 'P&L $', defaultOn: false, desktopOnly: true },
+  { key: 'stop', label: 'Stop loss', defaultOn: true, desktopOnly: true },
+  { key: 'lev', label: 'Lev', defaultOn: true, desktopOnly: true },
+  { key: 'currency', label: 'Ccy', defaultOn: false, desktopOnly: true },
+];
+
+const DEFAULT_COLS = new Set(HOLDING_COLUMNS.filter((c) => c.defaultOn).map((c) => c.key));
+
 function money(n: number, currency = 'INR') {
   if (!Number.isFinite(n)) return '—';
   try {
@@ -321,6 +342,29 @@ export default function PortfolioV1View({
   const [expandedCategory, setExpandedCategory] = useState<CategoryId | null>(null);
   const [holdingsExpanded, setHoldingsExpanded] = useState(true);
   const [showSlOnly, setShowSlOnly] = useState(false);
+  const [colsOpen, setColsOpen] = useState(false);
+  const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem('portfolio_v1_cols');
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr) && arr.length) return new Set(arr);
+      }
+    } catch { /* ignore */ }
+    return new Set(DEFAULT_COLS);
+  });
+  const toggleCol = (key: string) => {
+    setVisibleCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      try {
+        localStorage.setItem('portfolio_v1_cols', JSON.stringify(Array.from(next)));
+      } catch { /* ignore */ }
+      return next;
+    });
+  };
+  const colOn = (key: string) => visibleCols.has(key);
 
   const [connectOpen, setConnectOpen] = useState(false);
   const [connectStep, setConnectStep] = useState<'pick' | 'creds'>('pick');
@@ -817,135 +861,284 @@ export default function PortfolioV1View({
         ))}
       </div>
 
-      {/* Connections */}
-      {(portfolioBrokerConnections || []).length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {(portfolioBrokerConnections || []).map((c: any) => {
-            const pName = c.portfolio_id ? portfolios.find((p: any) => p.id === c.portfolio_id)?.name : null;
-            return (
-              <span
-                key={c.id}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
-              >
-                <Link2 className="w-3 h-3" />
-                {c.connection_label || c.broker_type}
-                {pName ? ` · ${pName}` : ''}
-              </span>
-            );
-          })}
-        </div>
-      )}
 
-      {/* Holdings */}
+      {/* Holdings — type filters above table; connectors at bottom */}
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
-        <button
-          type="button"
-          onClick={() => setHoldingsExpanded((v) => !v)}
-          className="w-full flex items-center justify-between px-4 py-3"
-        >
-          <h2 className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
-            Holdings · {filtered.length}
-            {categoryFilter !== 'All' ? ` · ${CATEGORY_META[categoryFilter].label}` : ''}
-          </h2>
-          <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${holdingsExpanded ? 'rotate-90' : ''}`} />
-        </button>
-        {holdingsExpanded && (
-          <div className="border-t border-slate-100 dark:border-slate-800 max-h-[32rem] overflow-auto">
-            <div className="hidden sm:grid grid-cols-[minmax(8rem,1.5fr)_repeat(6,minmax(0,1fr))] gap-2 px-4 py-2 text-[9px] font-black uppercase tracking-wider text-slate-400 sticky top-0 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800">
-              <span>Symbol</span>
-              <span className="text-right">Qty</span>
-              <span className="text-right">Live</span>
-              <span className="text-right">Value</span>
-              <span className="text-right">P&amp;L</span>
-              <span className="text-right">Stop</span>
-              <span className="text-right">Lev</span>
-            </div>
-            {filtered.length === 0 ? (
-              <p className="text-[11px] text-slate-400 text-center py-10">No rows for this filter</p>
-            ) : (
-              filtered
-                .slice()
-                .sort((a, b) => marketValue(b) - marketValue(a))
-                .map((h) => {
-                  const p = pnlPct(h);
-                  const d = dayChangePct(h);
-                  const stop = h.stop_loss_rate != null ? Number(h.stop_loss_rate) : null;
-                  const dist = stopLossDistancePct(h);
-                  const lev = h.leverage != null ? Number(h.leverage) : null;
-                  const ccy = h.currency || baseCurrency;
-                  const cat = classifyHolding(h);
-                  return (
-                    <div
-                      key={h.id}
-                      className="px-3 sm:px-4 py-2.5 border-b border-slate-50 dark:border-slate-800/80 sm:grid sm:grid-cols-[minmax(8rem,1.5fr)_repeat(6,minmax(0,1fr))] sm:gap-2 sm:items-center"
+        <div className="px-3 sm:px-4 py-3 border-b border-slate-100 dark:border-slate-800 space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setHoldingsExpanded((v) => !v)}
+              className="flex items-center gap-2 min-w-0"
+            >
+              <h2 className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                Holdings · {filtered.length}
+              </h2>
+              <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform shrink-0 ${holdingsExpanded ? 'rotate-90' : ''}`} />
+            </button>
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setColsOpen((v) => !v)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+              >
+                <Columns3 className="w-3.5 h-3.5" />
+                Columns
+              </button>
+              {colsOpen && (
+                <div className="absolute right-0 top-full mt-1 z-20 w-48 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl p-2">
+                  <p className="text-[9px] font-black uppercase text-slate-400 px-2 py-1">Desktop columns</p>
+                  {HOLDING_COLUMNS.map((c) => (
+                    <label
+                      key={c.key}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer text-[11px] font-bold text-slate-700 dark:text-slate-200"
                     >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <p className="text-[12px] font-bold text-slate-900 dark:text-white truncate">
-                            {h.ticker || h.symbol}
-                          </p>
-                          <span className={`shrink-0 text-[8px] font-black px-1.5 py-0.5 rounded-full ${CATEGORY_META[cat].chip} opacity-90`}>
+                      <input
+                        type="checkbox"
+                        checked={colOn(c.key)}
+                        onChange={() => toggleCol(c.key)}
+                        className="rounded border-slate-300"
+                      />
+                      {c.label}
+                      {c.desktopOnly && <span className="text-[8px] text-slate-400 font-bold">desk</span>}
+                    </label>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVisibleCols(new Set(DEFAULT_COLS));
+                      try {
+                        localStorage.setItem('portfolio_v1_cols', JSON.stringify(Array.from(DEFAULT_COLS)));
+                      } catch { /* ignore */ }
+                    }}
+                    className="w-full mt-1 text-[10px] font-bold text-indigo-600 py-1"
+                  >
+                    Reset defaults
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Filter by type — primary control above the table */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+            <span className="shrink-0 text-[8px] font-black uppercase tracking-wider text-slate-400">Type</span>
+            <button
+              type="button"
+              onClick={() => {
+                setCategoryFilter('All');
+                setExpandedCategory(null);
+              }}
+              className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                categoryFilter === 'All'
+                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+              }`}
+            >
+              All types
+            </button>
+            {categoryCards.map(({ id, stats, meta }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  setCategoryFilter(id);
+                  setExpandedCategory(id);
+                }}
+                className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                  categoryFilter === id ? meta.chip : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                }`}
+              >
+                {meta.label} · {stats.count}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {holdingsExpanded && (
+          <div className="max-h-[32rem] overflow-auto">
+            {/* Desktop table */}
+            <div className="hidden sm:block min-w-full">
+              <div className="flex gap-2 px-4 py-2 text-[9px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800 sticky top-0 bg-white dark:bg-slate-900">
+                <span className="min-w-[8rem] flex-1">Symbol</span>
+                {colOn('type') && <span className="w-16 shrink-0">Type</span>}
+                {colOn('portfolio') && multiPortfolio && <span className="w-20 shrink-0">Portfolio</span>}
+                {colOn('broker') && <span className="w-16 shrink-0">Broker</span>}
+                {colOn('qty') && <span className="w-14 shrink-0 text-right">Qty</span>}
+                {colOn('buy') && <span className="w-16 shrink-0 text-right">Buy</span>}
+                {colOn('live') && <span className="w-16 shrink-0 text-right">Live</span>}
+                {colOn('day') && <span className="w-12 shrink-0 text-right">Day</span>}
+                {colOn('value') && <span className="w-20 shrink-0 text-right">Value</span>}
+                {colOn('pnl') && <span className="w-14 shrink-0 text-right">P&amp;L%</span>}
+                {colOn('pnl_amt') && <span className="w-16 shrink-0 text-right">P&amp;L$</span>}
+                {colOn('stop') && <span className="w-16 shrink-0 text-right">Stop</span>}
+                {colOn('lev') && <span className="w-10 shrink-0 text-right">Lev</span>}
+                {colOn('currency') && <span className="w-10 shrink-0 text-right">Ccy</span>}
+              </div>
+              {filtered.length === 0 ? (
+                <p className="text-[11px] text-slate-400 text-center py-10">No rows for this type filter</p>
+              ) : (
+                filtered
+                  .slice()
+                  .sort((a, b) => marketValue(b) - marketValue(a))
+                  .map((h) => {
+                    const p = pnlPct(h);
+                    const d = dayChangePct(h);
+                    const stop = h.stop_loss_rate != null ? Number(h.stop_loss_rate) : null;
+                    const dist = stopLossDistancePct(h);
+                    const lev = h.leverage != null ? Number(h.leverage) : null;
+                    const ccy = h.currency || baseCurrency;
+                    const cat = classifyHolding(h);
+                    return (
+                      <div
+                        key={h.id}
+                        className="flex gap-2 px-4 py-2.5 items-center border-b border-slate-50 dark:border-slate-800/80 text-[11px]"
+                      >
+                        <div className="min-w-[8rem] flex-1 min-w-0">
+                          <p className="font-bold text-slate-900 dark:text-white truncate">{h.ticker || h.symbol}</p>
+                        </div>
+                        {colOn('type') && (
+                          <span className={`w-16 shrink-0 text-[8px] font-black px-1 py-0.5 rounded text-center ${CATEGORY_META[cat].chip}`}>
                             {CATEGORY_META[cat].label.split('·').pop()?.trim()}
                           </span>
-                        </div>
-                        <p className="text-[9px] text-slate-400 truncate">
-                          {multiPortfolio ? portfolioNameOf(h, portfolios) : h.broker}
-                          {multiPortfolio ? ` · ${h.broker}` : ''}
-                        </p>
-                        <div className="sm:hidden mt-1 flex justify-between">
-                          <span className="text-[12px] font-bold tabular-nums">{money(marketValue(h), ccy)}</span>
-                          <span className={`text-[11px] font-black tabular-nums ${p >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                            {pct(p)}
+                        )}
+                        {colOn('portfolio') && multiPortfolio && (
+                          <span className="w-20 shrink-0 text-slate-500 truncate text-[10px]">{portfolioNameOf(h, portfolios)}</span>
+                        )}
+                        {colOn('broker') && (
+                          <span className="w-16 shrink-0 text-slate-500 truncate text-[10px]">{h.broker}</span>
+                        )}
+                        {colOn('qty') && (
+                          <span className="w-14 shrink-0 text-right tabular-nums text-slate-600">
+                            {Number(h.quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                           </span>
+                        )}
+                        {colOn('buy') && (
+                          <span className="w-16 shrink-0 text-right tabular-nums text-slate-600">{moneyPrecise(Number(h.buy_price), ccy)}</span>
+                        )}
+                        {colOn('live') && (
+                          <span className="w-16 shrink-0 text-right tabular-nums text-slate-600">{moneyPrecise(livePrice(h), ccy)}</span>
+                        )}
+                        {colOn('day') && (
+                          <span className={`w-12 shrink-0 text-right tabular-nums font-bold ${d == null ? 'text-slate-300' : d >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {d == null ? '—' : pct(d)}
+                          </span>
+                        )}
+                        {colOn('value') && (
+                          <span className="w-20 shrink-0 text-right tabular-nums font-bold">{money(marketValue(h), ccy)}</span>
+                        )}
+                        {colOn('pnl') && (
+                          <span className={`w-14 shrink-0 text-right tabular-nums font-bold ${p >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{pct(p)}</span>
+                        )}
+                        {colOn('pnl_amt') && (
+                          <span className={`w-16 shrink-0 text-right tabular-nums font-bold ${pnl(h) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {moneyPrecise(pnl(h), ccy)}
+                          </span>
+                        )}
+                        {colOn('stop') && (
+                          <span className="w-16 shrink-0 text-right">
+                            {stop != null && stop > 0 ? (
+                              <>
+                                <span className="tabular-nums font-bold block">{moneyPrecise(stop, ccy)}</span>
+                                {dist != null && (
+                                  <span className={`text-[9px] font-bold ${dist < 0 ? 'text-rose-600' : dist < 5 ? 'text-amber-600' : 'text-slate-400'}`}>
+                                    {dist < 0 ? 'Past' : `${dist.toFixed(1)}%`}
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </span>
+                        )}
+                        {colOn('lev') && (
+                          <span className="w-10 shrink-0 text-right text-slate-500">{lev != null && lev > 1 ? `${lev}x` : '—'}</span>
+                        )}
+                        {colOn('currency') && (
+                          <span className="w-10 shrink-0 text-right text-slate-400 font-bold">{ccy}</span>
+                        )}
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+
+            {/* Mobile cards — fixed essential fields */}
+            <div className="sm:hidden divide-y divide-slate-100 dark:divide-slate-800">
+              {filtered.length === 0 ? (
+                <p className="text-[11px] text-slate-400 text-center py-10">No rows for this type filter</p>
+              ) : (
+                filtered
+                  .slice()
+                  .sort((a, b) => marketValue(b) - marketValue(a))
+                  .map((h) => {
+                    const p = pnlPct(h);
+                    const d = dayChangePct(h);
+                    const stop = h.stop_loss_rate != null ? Number(h.stop_loss_rate) : null;
+                    const dist = stopLossDistancePct(h);
+                    const ccy = h.currency || baseCurrency;
+                    const cat = classifyHolding(h);
+                    return (
+                      <div key={h.id} className="px-3 py-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[13px] font-bold truncate">{h.ticker || h.symbol}</p>
+                              <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full ${CATEGORY_META[cat].chip}`}>
+                                {CATEGORY_META[cat].label.split('·').pop()?.trim()}
+                              </span>
+                            </div>
+                            <p className="text-[9px] text-slate-400 truncate">
+                              {h.broker}
+                              {multiPortfolio ? ` · ${portfolioNameOf(h, portfolios)}` : ''}
+                              {' · '}
+                              {Number(h.quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })} qty
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-[13px] font-bold tabular-nums">{money(marketValue(h), ccy)}</p>
+                            <p className={`text-[11px] font-black tabular-nums ${p >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                              {pct(p)}
+                              {d != null ? ` · d ${pct(d)}` : ''}
+                            </p>
+                          </div>
                         </div>
                         {stop != null && stop > 0 && (
-                          <p className="sm:hidden text-[10px] font-bold text-amber-700 mt-0.5">
+                          <p className="mt-1 text-[10px] font-bold text-amber-700">
                             SL {moneyPrecise(stop, ccy)}
                             {dist != null ? ` · ${dist < 0 ? 'past' : `${dist.toFixed(1)}% away`}` : ''}
                           </p>
                         )}
                       </div>
-                      <p className="hidden sm:block text-right text-[11px] tabular-nums text-slate-600">
-                        {Number(h.quantity).toLocaleString(undefined, { maximumFractionDigits: 4 })}
-                      </p>
-                      <p className="hidden sm:block text-right text-[11px] tabular-nums text-slate-600">
-                        {moneyPrecise(livePrice(h), ccy)}
-                        {d != null && (
-                          <span className={`block text-[9px] font-bold ${d >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                            {pct(d)}
-                          </span>
-                        )}
-                      </p>
-                      <p className="hidden sm:block text-right text-[11px] font-bold tabular-nums">
-                        {money(marketValue(h), ccy)}
-                      </p>
-                      <p className={`hidden sm:block text-right text-[11px] font-bold tabular-nums ${p >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {pct(p)}
-                      </p>
-                      <div className="hidden sm:block text-right">
-                        {stop != null && stop > 0 ? (
-                          <>
-                            <p className="text-[11px] font-bold tabular-nums">{moneyPrecise(stop, ccy)}</p>
-                            {dist != null && (
-                              <p className={`text-[9px] font-bold ${dist < 0 ? 'text-rose-600' : dist < 5 ? 'text-amber-600' : 'text-slate-400'}`}>
-                                {dist < 0 ? 'Past' : `${dist.toFixed(1)}%`}
-                              </p>
-                            )}
-                          </>
-                        ) : (
-                          <span className="text-slate-300 text-[10px]">—</span>
-                        )}
-                      </div>
-                      <p className="hidden sm:block text-right text-[11px] text-slate-500">
-                        {lev != null && lev > 1 ? `${lev}x` : '—'}
-                      </p>
-                    </div>
-                  );
-                })
-            )}
+                    );
+                  })
+              )}
+            </div>
           </div>
         )}
       </div>
+
+      {/* Broker connections — below table, not as type filters */}
+      {(portfolioBrokerConnections || []).length > 0 && (
+        <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 px-3 py-2">
+          <p className="text-[8px] font-black uppercase tracking-wider text-slate-400 mb-1.5">Connected brokers</p>
+          <div className="flex flex-wrap gap-1.5">
+            {(portfolioBrokerConnections || []).map((c: any) => {
+              const pName = c.portfolio_id ? portfolios.find((p: any) => p.id === c.portfolio_id)?.name : null;
+              return (
+                <span
+                  key={c.id}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-50 dark:bg-slate-800/80 text-slate-500"
+                >
+                  <Link2 className="w-3 h-3" />
+                  {c.connection_label || c.broker_type}
+                  {pName ? ` · ${pName}` : ''}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Connect modal */}
       {connectOpen && (
