@@ -96,6 +96,51 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
+    // ---------- live quotes (last_price + previous close) ----------
+    // Verified against the official kiteconnect SDK: GET /quote?i=EXCHANGE:SYMBOL (repeated
+    // per instrument), auth same as sync. This is Zerodha's own live feed - more accurate
+    // than routing Zerodha holdings through the general Yahoo-based refresh, and it's the
+    // only source that gives a real previous-close for these holdings without extra work.
+    if (action === "quote") {
+      const apiKey = String(body.apiKey || "").trim();
+      const accessToken = String(body.accessToken || "").trim();
+      const instruments: string[] = Array.isArray(body.instruments) ? body.instruments.filter(Boolean) : [];
+      if (!apiKey || !accessToken) {
+        res.status(400).json({ error: "apiKey and accessToken are required" });
+        return;
+      }
+      if (instruments.length === 0) {
+        res.status(200).json({ quotes: {} });
+        return;
+      }
+      // Kite's own limit is 500 instruments per /quote call - chunk defensively rather than
+      // assume a single portfolio always stays under that.
+      const chunks: string[][] = [];
+      for (let i = 0; i < instruments.length; i += 500) chunks.push(instruments.slice(i, i + 500));
+
+      const quotes: Record<string, { lastPrice: number; previousClose: number | null }> = {};
+      const debug: any = { startedAt: new Date().toISOString(), instrumentCount: instruments.length, chunkCount: chunks.length };
+      for (const chunk of chunks) {
+        const qs = chunk.map((sym) => `i=${encodeURIComponent(sym)}`).join("&");
+        const resp = await kiteGet(`/quote?${qs}`, apiKey, accessToken);
+        if (!resp.ok) {
+          debug.lastError = { status: resp.status, bodySample: resp.bodySample };
+          continue;
+        }
+        const data = resp.data?.data ?? {};
+        for (const key of Object.keys(data)) {
+          const item = data[key];
+          const lastPrice = Number(item?.last_price);
+          const previousClose = Number(item?.ohlc?.close);
+          if (Number.isFinite(lastPrice) && lastPrice > 0) {
+            quotes[key] = { lastPrice, previousClose: Number.isFinite(previousClose) && previousClose > 0 ? previousClose : null };
+          }
+        }
+      }
+      res.status(200).json({ quotes, matchedCount: Object.keys(quotes).length, debug });
+      return;
+    }
+
     // ---------- sync holdings ----------
     if (action === "sync") {
       const apiKey = String(body.apiKey || "").trim();

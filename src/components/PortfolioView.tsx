@@ -1493,8 +1493,57 @@ export default function PortfolioView(props: PortfolioViewProps) {
       let failed = 0;
       const updatePromises: Promise<void>[] = [];
 
-      if (refreshable.length > 0) {
-        const symbols = refreshable.map(h => ({ symbol: h.ticker ?? h.symbol, exchange: h.exchange, currency: h.currency }));
+      // Zerodha holdings with a live Kite Connect account get their price from Zerodha's own
+      // /quote endpoint - more accurate than the general Yahoo path, no exchange-suffix
+      // guessing, and it's the only source that supplies a real previous close for these
+      // rows (Daily Change works for Zerodha without extra work). Falls back to Yahoo for
+      // any Zerodha holding without a matching connection (CSV-only imports).
+      const zerodhaConnections = portfolioBrokerConnections.filter((c: any) => c.broker_type === 'zerodha' && c.credentials?.api_key && c.credentials?.access_token);
+      const zerodhaConnFor = (h: any) => zerodhaConnections.find((c: any) => (c.portfolio_id || null) === (h.portfolio_id || null)) ?? zerodhaConnections.find((c: any) => !c.portfolio_id);
+      const instrumentKey = (h: any) => `${h.exchange || 'NSE'}:${h.ticker ?? h.symbol}`;
+
+      const zerodhaGroups = new Map<string, { conn: any; holdings: any[] }>();
+      const yahooHoldings: any[] = [];
+      for (const h of refreshable) {
+        const conn = h.broker === 'Zerodha' ? zerodhaConnFor(h) : null;
+        if (conn) {
+          if (!zerodhaGroups.has(conn.id)) zerodhaGroups.set(conn.id, { conn, holdings: [] });
+          zerodhaGroups.get(conn.id)!.holdings.push(h);
+        } else {
+          yahooHoldings.push(h);
+        }
+      }
+
+      for (const { conn, holdings } of zerodhaGroups.values()) {
+        try {
+          const instruments = holdings.map(instrumentKey);
+          const qResp = await fetch('/api/portfolio-zerodha-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'quote', apiKey: conn.credentials.api_key, accessToken: conn.credentials.access_token, instruments }),
+          });
+          const qData = await qResp.json().catch(() => ({}));
+          if (!qResp.ok) throw new Error(qData?.error || 'Zerodha quote failed');
+          holdings.forEach((h) => {
+            const q = qData.quotes?.[instrumentKey(h)];
+            if (q?.lastPrice != null) {
+              updatePromises.push(updatePortfolioHoldingLivePrice(h.id, q.lastPrice, q.previousClose ?? null));
+              succeeded++;
+            } else {
+              updatePromises.push(markPriceLookupFailed(h.id));
+              failed++;
+            }
+          });
+        } catch {
+          // Connection likely has an expired daily access_token - fall back to Yahoo for
+          // this batch rather than failing these holdings outright, so a stale Zerodha
+          // token degrades gracefully instead of blocking the whole refresh.
+          yahooHoldings.push(...holdings);
+        }
+      }
+
+      if (yahooHoldings.length > 0) {
+        const symbols = yahooHoldings.map(h => ({ symbol: h.ticker ?? h.symbol, exchange: h.exchange, currency: h.currency }));
         const resp = await fetch('/api/portfolio-prices', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1508,7 +1557,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         // workspace do), since .find() would always return the first match and the other
         // copy's live_price would never get updated.
         results.forEach((r: any, i: number) => {
-          const holding = refreshable[i];
+          const holding = yahooHoldings[i];
           if (!holding) return;
           if (r.price != null) {
             updatePromises.push(updatePortfolioHoldingLivePrice(holding.id, r.price, r.previousClose ?? null));
