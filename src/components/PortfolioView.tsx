@@ -2565,17 +2565,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
       {holdingsTab === 'settings' && (
         <div className="space-y-3">
         {(() => {
-          // USD + AUD portfolios are eligible (eToro USD, Webull AU/US). INR books use
-          // Zerodha/Groww sections below. Also show in single-portfolio mode so a sole
-          // AUD/USD book can still connect Webull/eToro.
-          const eligiblePortfolios = portfolioMode === 'multiple'
-            ? portfolios.filter((p: any) => {
-                const c = String(p.currency || '').toUpperCase();
-                return c === 'USD' || c === 'AUD';
-              })
-            : portfolios.length > 0
-              ? portfolios
-              : [{ id: '', name: 'Workspace', currency: baseCurrency || 'USD' }];
+          // All portfolios (INR / USD / AUD / …). Connected brokers for the selected book
+          // are greyed out; other connectors stay available. Labels must be unique.
+          const eligiblePortfolios = portfolios.length > 0
+            ? portfolios
+            : [{ id: '', name: 'Workspace', currency: baseCurrency || 'INR' }];
           if (eligiblePortfolios.length === 0) return null;
           const connectionsByPortfolio = new Map<string, any[]>();
           for (const c of portfolioBrokerConnections) {
@@ -2584,12 +2578,18 @@ export default function PortfolioView(props: PortfolioViewProps) {
           }
           const targetPortfolioId = brokerConnectPortfolioId || eligiblePortfolios[0]?.id || '';
           const existingForTarget = connectionsByPortfolio.get(targetPortfolioId) ?? [];
+          const connectedTypes = new Set(existingForTarget.map((c: any) => String(c.broker_type || '').toLowerCase()));
           const brokerLabels: Record<string, string> = { etoro: 'eToro', ig: 'IG', webull: 'Webull' };
+          const labelTaken = (label: string) => {
+            const n = label.trim().toLowerCase();
+            if (!n) return false;
+            return portfolioBrokerConnections.some((c: any) => String(c.connection_label || '').trim().toLowerCase() === n);
+          };
           return (
             <div className="apple-card p-4 space-y-3">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5" /> Connect Broker (US/AU)</span>
               <p className="text-[9px] text-slate-400">
-                Sync real account holdings from a broker API (Webull AU/US, eToro). USD and AUD portfolios are eligible. Use a connection name (e.g. Webull-Sasi) so multiple accounts can map to different books. Options, CFDs and equities are all imported.
+                Sync holdings from Webull / eToro into any portfolio (INR, USD, AUD, …). Connected brokers for the selected book are greyed out. Connection name must be unique (e.g. Webull-Sasi).
               </p>
               {portfolioMode === 'multiple' && (
               <select
@@ -2646,9 +2646,16 @@ export default function PortfolioView(props: PortfolioViewProps) {
                     type="text"
                     value={connectionLabelInput}
                     onChange={(e) => setConnectionLabelInput(e.target.value)}
-                    placeholder={`Connection name (e.g. ${brokerLabels[brokerEditingType]}-1)`}
-                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                    placeholder={`Connection name (e.g. ${brokerLabels[brokerEditingType]}-Sasi)`}
+                    className={`w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border rounded-md text-xs ${
+                      connectionLabelInput.trim() && labelTaken(connectionLabelInput)
+                        ? 'border-rose-400 dark:border-rose-600'
+                        : 'border-slate-200 dark:border-slate-800'
+                    }`}
                   />
+                  {connectionLabelInput.trim() && labelTaken(connectionLabelInput) && (
+                    <p className="text-[9px] text-rose-500 font-bold">Name already used — pick a unique label</p>
+                  )}
                   {brokerEditingType === 'etoro' && (
                     <>
                       <input
@@ -2715,12 +2722,17 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   <div className="flex gap-1.5">
                     <button
                       onClick={() => {
+                        const lbl = connectionLabelInput.trim();
+                        if (lbl && labelTaken(lbl)) {
+                          setWebullSyncError('Connection name already used — pick a unique label');
+                          return;
+                        }
                         if (brokerEditingType === 'webull') {
                           handleWebullConnect(targetPortfolioId);
                           return;
                         }
                         runAction(async () => {
-                          await setPortfolioBrokerConnection?.(brokerEditingType, { api_key: etoroApiKeyInput.trim(), user_key: etoroUserKeyInput.trim() }, targetPortfolioId, connectionLabelInput.trim() || undefined);
+                          await setPortfolioBrokerConnection?.(brokerEditingType, { api_key: etoroApiKeyInput.trim(), user_key: etoroUserKeyInput.trim() }, targetPortfolioId, lbl || undefined);
                           setBrokerEditingType(null);
                           setEtoroApiKeyInput('');
                           setEtoroUserKeyInput('');
@@ -2739,21 +2751,32 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 </div>
               ) : (
                 <div className="flex gap-1.5">
-                  {(['etoro', 'ig', 'webull'] as const).map(bt => (
-                    <button
-                      key={bt}
-                      onClick={() => {
-                        if (bt === 'ig') return;
-                        const existingCount = portfolioBrokerConnections.filter((c: any) => c.broker_type === bt).length;
-                        setConnectionLabelInput(`${brokerLabels[bt]}-${existingCount + 1}`);
-                        setBrokerEditingType(bt);
-                      }}
-                      disabled={bt === 'ig'}
-                      className="flex-1 py-1.5 bg-slate-100 dark:bg-slate-800 disabled:opacity-40 text-slate-600 dark:text-slate-300 text-[10px] font-bold rounded-lg cursor-pointer"
-                    >
-                      + {brokerLabels[bt]}
-                    </button>
-                  ))}
+                  {(['etoro', 'ig', 'webull'] as const).map(bt => {
+                    const already = connectedTypes.has(bt);
+                    const disabled = bt === 'ig' || already;
+                    return (
+                      <button
+                        key={bt}
+                        onClick={() => {
+                          if (disabled) return;
+                          const existingCount = portfolioBrokerConnections.filter((c: any) => c.broker_type === bt).length;
+                          setConnectionLabelInput(`${brokerLabels[bt]}-${existingCount + 1}`);
+                          setBrokerEditingType(bt);
+                        }}
+                        disabled={disabled}
+                        title={already ? 'Already connected on this book' : bt === 'ig' ? 'Coming soon' : `Connect ${brokerLabels[bt]}`}
+                        className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg ${
+                          already
+                            ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-60'
+                            : disabled
+                              ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 opacity-40 cursor-not-allowed'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        {already ? `✓ ${brokerLabels[bt]}` : `+ ${brokerLabels[bt]}`}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
               {etoroSyncError && <p className="text-[10px] text-rose-500">{etoroSyncError}</p>}
@@ -2822,11 +2845,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
           );
         })()}
 
-        {/* Connect Broker (India) — Zerodha Kite Connect. Parallel to US/AU; does not replace CSV import. */}
+        {/* Connect Broker (India) — Zerodha / Groww. Shown for every portfolio (INR or otherwise). */}
         {(() => {
-          const inrPortfolios = portfolioMode === 'multiple' ? portfolios.filter((p: any) => p.currency === 'INR') : [];
-          // Also show in single-portfolio mode when base is INR / no multi portfolios
-          const showIndia = portfolioMode === 'multiple' ? inrPortfolios.length > 0 : true;
+          const inrPortfolios = portfolioMode === 'multiple'
+            ? (portfolios.length > 0 ? portfolios : [])
+            : portfolios;
+          const showIndia = true;
           if (!showIndia) return null;
           const connectionsByPortfolio = new Map<string, any[]>();
           const growwByPortfolio = new Map<string, any[]>();
