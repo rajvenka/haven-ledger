@@ -46,6 +46,18 @@ function normalizeYahooSymbol(raw: string): string {
     // Mirae midcap 150 ETF trading symbol variants
     "MAM150ETF": "MID150",
     "MAM150": "MID150",
+    // Commodities: bare "GOLD" on Yahoo is a ~$40 equity, NOT spot gold (~$4k+/oz).
+    // Map eToro/commodity names to the COMEX continuous future so Refresh Prices is sane.
+    "GOLD": "GC=F",
+    "XAU": "GC=F",
+    "XAUUSD": "GC=F",
+    "SPOTGOLD": "GC=F",
+    "SILVER": "SI=F",
+    "XAG": "SI=F",
+    "XAGUSD": "SI=F",
+    "OIL": "CL=F",
+    "CRUDEOIL": "CL=F",
+    "BRENT": "BZ=F",
   };
   // Alias lookup without hyphens; return value is the Yahoo base ticker
   const compact = s.replace(/[^A-Z0-9]/g, "");
@@ -97,7 +109,7 @@ export default async function handler(req: any, res: any) {
         // currency directly from the API) - exchange alone can't be trusted since
         // Webull's exchange field is sometimes a market code rather than "ASX".
         const isAsxListed = rawCurrency === "AUD" || rawExchange === "ASX";
-        const alreadySuffixed = /\.(NS|BO|AX)$/i.test(rawSymbol);
+        const alreadySuffixed = /\.(NS|BO|AX)$/i.test(rawSymbol) || rawSymbol.includes("=");
 
         let primarySuffix = "";
         if (!alreadySuffixed) {
