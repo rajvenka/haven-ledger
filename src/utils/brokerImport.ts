@@ -19,7 +19,7 @@ export interface ParsedHolding {
   matchKey?: string;
 }
 
-export type BrokerTemplate = 'zerodha' | 'groww_stocks' | 'groww_mf' | 'universal';
+export type BrokerTemplate = 'zerodha' | 'groww_stocks' | 'groww_mf' | 'stake' | 'universal';
 export const UNIVERSAL_TEMPLATE_HEADERS = ['Broker', 'Holding Type', 'Symbol', 'ISIN', 'Exchange', 'Quantity', 'Buy Price', 'Current Price', 'Currency', 'Source', 'Folio Number'];
 export const UNIVERSAL_TEMPLATE_EXAMPLE_ROW = ['eToro', 'Stock', 'AAPL', '', 'NASDAQ', 10, 150.25, 175.50, 'USD', '', ''];
 
@@ -67,6 +67,104 @@ function parseZerodhaSheet(rows: any[][], holdingType: 'stock' | 'mutual_fund'):
     .filter(h => h.quantity > 0);
 }
 
+
+/** Stake (AU) Portfolio Valuation export.
+ * Single sheet typically has sections:
+ *   Aus Equities: Symbol | Name | Weighting | Units | Mkt. Price | Mkt. Value
+ *   Wall St Equities: Symbol | Name | Weighting | Units | Mkt. Price | Mkt. Value (US$) | Mkt. Value (A$)
+ * No average cost — buyPrice is set to market price (P&L starts at 0 until you edit cost).
+ */
+function parseStakeRows(rows: any[][]): ParsedHolding[] {
+  const results: ParsedHolding[] = [];
+  let i = 0;
+  while (i < rows.length) {
+    const row = rows[i] || [];
+    const cells = row.map((c: any) => String(c ?? '').trim());
+    const joined = cells.join(' ').toLowerCase();
+    const isAus = cells.some((c: string) => /^aus equities$/i.test(c)) || joined.includes('aus equities');
+    const isWall = cells.some((c: string) => /wall\s*st equities/i.test(c)) || joined.includes('wall st equities');
+    if (!isAus && !isWall) { i++; continue; }
+
+    const section: 'aus' | 'wall' = isWall ? 'wall' : 'aus';
+    let headerIdx = -1;
+    for (let j = i; j < Math.min(i + 8, rows.length); j++) {
+      const r = rows[j] || [];
+      if (r.some((c: any) => typeof c === 'string' && String(c).trim() === 'Symbol')) {
+        headerIdx = j;
+        break;
+      }
+    }
+    if (headerIdx === -1) { i++; continue; }
+
+    const headers = (rows[headerIdx] || []).map((h: any) => String(h ?? '').trim());
+    const idxSymbol = headers.findIndex(h => /^symbol$/i.test(h));
+    const idxUnits = headers.findIndex(h => /^units$/i.test(h) || /^qty$/i.test(h) || /^quantity$/i.test(h));
+    const idxMktPrice = headers.findIndex(h => /^mkt\.?\s*price$/i.test(h) || /^market price$/i.test(h));
+    const idxMktValUsd = headers.findIndex(h => /mkt\.?\s*value\s*\(us\$\)/i.test(h));
+    const idxMktVal = headers.findIndex(h => /^mkt\.?\s*value$/i.test(h) || /^market value$/i.test(h));
+    const idxName = headers.findIndex(h => /^name$/i.test(h));
+
+    let r = headerIdx + 1;
+    for (; r < rows.length; r++) {
+      const data = rows[r] || [];
+      const dataJoined = data.map((c: any) => String(c ?? '').trim()).join(' ').toLowerCase();
+      if (
+        dataJoined.includes('aus equities') ||
+        dataJoined.includes('wall st equities') ||
+        dataJoined.includes('disclaimer') ||
+        dataJoined.includes('glossary')
+      ) {
+        break;
+      }
+      const sym = idxSymbol >= 0 ? String(data[idxSymbol] ?? '').trim() : '';
+      if (!sym || /equities|disclaimer|glossary|summary|report type/i.test(sym)) continue;
+      const units = idxUnits >= 0 ? Number(data[idxUnits]) || 0 : 0;
+      if (units <= 0) continue;
+
+      let mktPrice = idxMktPrice >= 0 ? Number(data[idxMktPrice]) || 0 : 0;
+      if (!mktPrice && idxMktVal >= 0) {
+        const mv = Number(data[idxMktVal]) || 0;
+        if (mv > 0) mktPrice = mv / units;
+      }
+
+      if (section === 'aus') {
+        if (!mktPrice) continue;
+        results.push({
+          broker: 'Stake',
+          holdingType: 'stock',
+          symbol: sym.toUpperCase(),
+          exchange: 'ASX',
+          quantity: units,
+          buyPrice: mktPrice,
+          currentPrice: mktPrice,
+          currency: 'AUD',
+          source: idxName >= 0 && data[idxName] ? String(data[idxName]).trim() : undefined,
+        });
+      } else {
+        let usdPrice = mktPrice;
+        if (idxMktValUsd >= 0) {
+          const mvUsd = Number(data[idxMktValUsd]) || 0;
+          if (mvUsd > 0) usdPrice = mvUsd / units;
+        }
+        if (!usdPrice) continue;
+        results.push({
+          broker: 'Stake',
+          holdingType: 'stock',
+          symbol: sym.toUpperCase(),
+          exchange: 'US',
+          quantity: units,
+          buyPrice: usdPrice,
+          currentPrice: usdPrice,
+          currency: 'USD',
+          source: idxName >= 0 && data[idxName] ? String(data[idxName]).trim() : undefined,
+        });
+      }
+    }
+    i = r;
+  }
+  return results;
+}
+
 export async function parseBrokerFile(file: File, template: BrokerTemplate): Promise<ParsedHolding[]> {
   const buf = await file.arrayBuffer();
   const workbook = XLSX.read(buf, { type: 'array' });
@@ -87,6 +185,18 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
       results.push(...parseZerodhaSheet(rows, 'mutual_fund'));
     }
     if (results.length === 0) throw new Error("Couldn't find any holdings - is this a Zerodha holdings export?");
+    return results;
+  }
+
+  if (template === 'stake') {
+    const results: ParsedHolding[] = [];
+    for (const sheetName of workbook.SheetNames) {
+      const sheetRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: null }) as any[][];
+      results.push(...parseStakeRows(sheetRows));
+    }
+    if (results.length === 0) {
+      throw new Error("Couldn't find Stake holdings — expect Aus Equities / Wall St Equities with Symbol, Units, Mkt. Price.");
+    }
     return results;
   }
 
@@ -168,6 +278,38 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
 // processed as a historical timeline. Zerodha embeds it in the sheet ("...as on
 // YYYY-MM-DD"); Groww embeds it in the filename (DD-MM-YYYY).
 export function extractFileDate(fileName: string, workbook: XLSX.WorkBook, template: BrokerTemplate): string | null {
+  if (template === 'stake') {
+    // PORTFOLIO_VALUATION_YYYY-MM-DD-....xlsx or "as at YYYY-MM-DD" / Statement Date in sheet
+    const fromName = fileName.match(/(20\d{2}-\d{2}-\d{2})/);
+    if (fromName) return fromName[1];
+    for (const sheetName of workbook.SheetNames) {
+      const sheetRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: null }) as any[][];
+      for (const row of sheetRows) {
+        for (let c = 0; c < (row?.length || 0); c++) {
+          const cell = row[c];
+          if (typeof cell !== 'string') continue;
+          const lower = cell.toLowerCase();
+          const mAt = cell.match(/as at\s+(20\d{2}-\d{2}-\d{2})/i);
+          if (mAt) return mAt[1];
+          if (/statement date/i.test(cell)) {
+            const next = row[c + 1];
+            if (next != null) {
+              const s = String(next).trim();
+              const iso = s.match(/(20\d{2}-\d{2}-\d{2})/);
+              if (iso) return iso[1];
+              const dmy = s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](20\d{2})/);
+              if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+            }
+          }
+          if (lower.includes('valuation') || lower.includes('statement')) {
+            const iso = cell.match(/(20\d{2}-\d{2}-\d{2})/);
+            if (iso) return iso[1];
+          }
+        }
+      }
+    }
+    return null;
+  }
   if (template === 'zerodha') {
     for (const sheetName of workbook.SheetNames) {
       const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: null }) as any[][];
