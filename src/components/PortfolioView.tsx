@@ -2565,18 +2565,30 @@ export default function PortfolioView(props: PortfolioViewProps) {
       {holdingsTab === 'settings' && (
         <div className="space-y-3">
         {(() => {
-          // All portfolios (INR / USD / AUD / …). Connected brokers for the selected book
-          // are greyed out; other connectors stay available. Labels must be unique.
-          const eligiblePortfolios = portfolios.length > 0
-            ? portfolios
-            : [{ id: '', name: 'Workspace', currency: baseCurrency || 'INR' }];
-          if (eligiblePortfolios.length === 0) return null;
+          // Option A: US/AU section — only USD + AUD portfolios (eToro, Webull).
+          // Connected brokers for the selected book are greyed out; labels must be unique.
+          const eligiblePortfolios = portfolioMode === 'multiple'
+            ? portfolios.filter((p: any) => {
+                const c = String(p.currency || '').toUpperCase();
+                return c === 'USD' || c === 'AUD';
+              })
+            : portfolios.filter((p: any) => {
+                const c = String(p.currency || baseCurrency || '').toUpperCase();
+                return c === 'USD' || c === 'AUD';
+              });
+          // Single-portfolio mode with USD/AUD base: still show using synthetic workspace entry
+          const usAuList = eligiblePortfolios.length > 0
+            ? eligiblePortfolios
+            : (portfolioMode !== 'multiple' && ['USD', 'AUD'].includes(String(baseCurrency || '').toUpperCase())
+                ? [{ id: '', name: 'Workspace', currency: baseCurrency }]
+                : []);
+          if (usAuList.length === 0) return null;
           const connectionsByPortfolio = new Map<string, any[]>();
           for (const c of portfolioBrokerConnections) {
             const key = c.portfolio_id || '';
             connectionsByPortfolio.set(key, [...(connectionsByPortfolio.get(key) ?? []), c]);
           }
-          const targetPortfolioId = brokerConnectPortfolioId || eligiblePortfolios[0]?.id || '';
+          const targetPortfolioId = brokerConnectPortfolioId || usAuList[0]?.id || '';
           const existingForTarget = connectionsByPortfolio.get(targetPortfolioId) ?? [];
           const connectedTypes = new Set(existingForTarget.map((c: any) => String(c.broker_type || '').toLowerCase()));
           const brokerLabels: Record<string, string> = { etoro: 'eToro', ig: 'IG', webull: 'Webull' };
@@ -2589,7 +2601,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <div className="apple-card p-4 space-y-3">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5" /> Connect Broker (US/AU)</span>
               <p className="text-[9px] text-slate-400">
-                Sync holdings from Webull / eToro into any portfolio (INR, USD, AUD, …). Connected brokers for the selected book are greyed out. Connection name must be unique (e.g. Webull-Sasi).
+                Sync holdings from Webull / eToro into USD or AUD portfolios. Connected brokers for the selected book are greyed out. Connection name must be unique (e.g. Webull-Sasi).
               </p>
               {portfolioMode === 'multiple' && (
               <select
@@ -2597,7 +2609,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 onChange={(e) => { setBrokerConnectPortfolioId(e.target.value); setBrokerEditingType(null); }}
                 className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
               >
-                {eligiblePortfolios.map((p: any) => <option key={p.id || 'ws'} value={p.id}>{p.name}{p.currency ? ` (${p.currency})` : ''}</option>)}
+                {usAuList.map((p: any) => <option key={p.id || 'ws'} value={p.id}>{p.name}{p.currency ? ` (${p.currency})` : ''}</option>)}
               </select>
               )}
 
@@ -2845,13 +2857,19 @@ export default function PortfolioView(props: PortfolioViewProps) {
           );
         })()}
 
-        {/* Connect Broker (India) — Zerodha / Groww. Shown for every portfolio (INR or otherwise). */}
+        {/* Connect Broker (India) — Zerodha / Groww. Option A: INR portfolios only. */}
         {(() => {
           const inrPortfolios = portfolioMode === 'multiple'
-            ? (portfolios.length > 0 ? portfolios : [])
-            : portfolios;
-          const showIndia = true;
+            ? portfolios.filter((p: any) => String(p.currency || '').toUpperCase() === 'INR')
+            : portfolios.filter((p: any) => String(p.currency || baseCurrency || '').toUpperCase() === 'INR');
+          const showIndia = portfolioMode === 'multiple'
+            ? inrPortfolios.length > 0
+            : (inrPortfolios.length > 0 || String(baseCurrency || '').toUpperCase() === 'INR');
           if (!showIndia) return null;
+          // single mode with INR base but empty portfolios list
+          const indiaList = inrPortfolios.length > 0
+            ? inrPortfolios
+            : [{ id: '', name: 'Workspace', currency: 'INR' }];
           const connectionsByPortfolio = new Map<string, any[]>();
           const growwByPortfolio = new Map<string, any[]>();
           for (const c of portfolioBrokerConnections) {
@@ -2864,7 +2882,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             }
           }
           const targetPortfolioId = portfolioMode === 'multiple'
-            ? (zerodhaConnectPortfolioId || inrPortfolios[0]?.id)
+            ? (zerodhaConnectPortfolioId || indiaList[0]?.id)
             : undefined;
           const existingForTarget = connectionsByPortfolio.get(targetPortfolioId || '__default__') ?? [];
           const growwExisting = growwByPortfolio.get(targetPortfolioId || '__default__') ?? [];
@@ -2872,16 +2890,16 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <div className="apple-card p-4 space-y-3">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5" /> Connect Broker (India)</span>
               <p className="text-[9px] text-slate-400">
-                Sync stocks from Zerodha (Kite) and Groww (Trade API). Mutual funds: Zerodha API or CSV; Groww MF via CSV only.
+                Sync stocks from Zerodha (Kite) and Groww (Trade API) into INR portfolios. Mutual funds: Zerodha API or CSV; Groww MF via CSV only.
                 Access tokens expire daily — reconnect or re-sync when a token error appears.
               </p>
-              {portfolioMode === 'multiple' && inrPortfolios.length > 0 && (
+              {portfolioMode === 'multiple' && indiaList.length > 0 && (
                 <select
                   value={targetPortfolioId}
                   onChange={(e) => { setZerodhaConnectPortfolioId(e.target.value); setIndiaBrokerEditing(false); }}
                   className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
                 >
-                  {inrPortfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {indiaList.map((p: any) => <option key={p.id || 'ws'} value={p.id}>{p.name}{p.currency ? ` (${p.currency})` : ''}</option>)}
                 </select>
               )}
 
