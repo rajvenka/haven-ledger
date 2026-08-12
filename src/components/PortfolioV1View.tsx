@@ -109,6 +109,8 @@ const BROKER_META: Record<
     fields: [
       { key: 'app_key', label: 'App Key', placeholder: 'Webull app key' },
       { key: 'app_secret', label: 'App Secret', placeholder: 'Webull app secret', secret: true },
+      { key: 'region', label: 'Region', placeholder: 'au / us / hk (default au)' },
+      { key: 'connection_label', label: 'Connection name', placeholder: 'e.g. Webull-Sasi' },
     ],
   },
 };
@@ -787,7 +789,7 @@ export default function PortfolioV1View({
     setConnectOk(null);
     try {
       const meta = BROKER_META[selectedBroker];
-      const missing = meta.fields.filter((f) => f.key !== 'access_token' && !String(credFields[f.key] || '').trim());
+      const missing = meta.fields.filter((f) => f.key !== 'access_token' && f.key !== 'region' && f.key !== 'connection_label' && !String(credFields[f.key] || '').trim());
       if (missing.length) {
         setConnectError(`Fill in: ${missing.map((m) => m.label).join(', ')}`);
         setConnectBusy(false);
@@ -798,6 +800,10 @@ export default function PortfolioV1View({
         multiPortfolio && portfolioId
           ? `${meta.label} · ${portfolios.find((p: any) => p.id === portfolioId)?.name || ''}`.trim()
           : meta.label;
+
+      // Prefer explicit connection_label field (Webull) over auto book-based label
+      const explicitLabel = String(credFields.connection_label || '').trim();
+      const finalLabel = explicitLabel || label;
 
       if (selectedBroker === 'groww') {
         const resp = await fetch('/api/portfolio-groww-sync', {
@@ -823,14 +829,61 @@ export default function PortfolioV1View({
             access_token: data.accessToken || '',
           },
           portfolioId,
-          label
+          finalLabel
+        );
+      } else if (selectedBroker === 'webull') {
+        // Full Webull OpenAPI connect: create token → poll until verified → store token
+        const region = (credFields.region || 'au').trim().toLowerCase() || 'au';
+        const appKey = credFields.app_key.trim();
+        const appSecret = credFields.app_secret.trim();
+        setConnectOk('Webull: starting verification — approve on your phone if prompted…');
+        const connectResp = await fetch('/api/portfolio-webull-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'connect', appKey, appSecret, region }),
+        });
+        const connectData = await connectResp.json().catch(() => ({}));
+        if (!(connectData.status === 'pending_verification' && connectData.tokenId)) {
+          setConnectError(connectData.error || connectData.debug?.message || 'Webull connect failed — check app key/secret/region');
+          setConnectBusy(false);
+          return;
+        }
+        let token: string | null = null;
+        let expiresAt: string | null = null;
+        for (let attempt = 0; attempt < 60; attempt++) {
+          await new Promise((r) => setTimeout(r, 5000));
+          const checkResp = await fetch('/api/portfolio-webull-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'check', appKey, appSecret, region, tokenId: connectData.tokenId }),
+          });
+          const checkData = await checkResp.json().catch(() => ({}));
+          if (checkData.verified && checkData.token) {
+            token = checkData.token;
+            expiresAt = checkData.expiresAt ?? null;
+            break;
+          }
+          setConnectOk(`Webull: waiting for approval… (${attempt + 1}/60)`);
+        }
+        if (!token) {
+          setConnectError('Webull verification timed out. Open the Webull app and approve, then try again.');
+          setConnectBusy(false);
+          return;
+        }
+        await setPortfolioBrokerConnection(
+          'webull',
+          { app_key: appKey, app_secret: appSecret, region, token, token_expires_at: expiresAt },
+          portfolioId,
+          finalLabel
         );
       } else {
-        await setPortfolioBrokerConnection(selectedBroker, { ...credFields }, portfolioId, label);
+        const { connection_label: _cl, ...creds } = credFields as any;
+        await setPortfolioBrokerConnection(selectedBroker, { ...creds }, portfolioId, finalLabel);
       }
-      setConnectOk(`${label} saved. Use Sync on this connection to pull live prices.`);
+      setConnectOk(`${finalLabel} saved. Use Sync on this connection to pull holdings / live prices.`);
       setConnectStep('pick');
       setSelectedBroker(null);
+      setCredFields({});
     } catch (e: any) {
       setConnectError(e?.message || 'Could not save connection');
     } finally {
@@ -924,6 +977,25 @@ export default function PortfolioV1View({
           const q = data.quotes?.[key];
           if (q?.lastPrice != null) priceBySymbol.set(String(h.ticker || h.symbol).toUpperCase(), Number(q.lastPrice));
         });
+      } else if (type === 'webull') {
+        const resp = await fetch('/api/portfolio-webull-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'sync',
+            appKey: cred.app_key,
+            appSecret: cred.app_secret,
+            region: cred.region || 'au',
+            token: cred.token,
+          }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data?.error || `Webull sync failed (${resp.status})`);
+        for (const h of data.holdings || []) {
+          const sym = String(h.symbol || '').toUpperCase();
+          const px = Number(h.currentPrice);
+          if (sym && Number.isFinite(px) && px > 0) priceBySymbol.set(sym, px);
+        }
       } else {
         throw new Error(`Live sync for ${type} is not wired in V1 yet — use classic Portfolio.`);
       }
