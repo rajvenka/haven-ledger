@@ -2565,32 +2565,41 @@ export default function PortfolioView(props: PortfolioViewProps) {
       {holdingsTab === 'settings' && (
         <div className="space-y-3">
         {(() => {
-          // Only USD portfolios are eligible - eToro/IG/Webull are US/AU brokers, this
-          // keeps the feature scoped and avoids confusing INR-broker (Zerodha/Groww) users
-          // with connection options that don't apply to their portfolios.
-          const usdPortfolios = portfolioMode === 'multiple' ? portfolios.filter((p: any) => p.currency === 'USD') : [];
-          if (portfolioMode !== 'multiple' || usdPortfolios.length === 0) return null;
+          // USD + AUD portfolios are eligible (eToro USD, Webull AU/US). INR books use
+          // Zerodha/Groww sections below. Also show in single-portfolio mode so a sole
+          // AUD/USD book can still connect Webull/eToro.
+          const eligiblePortfolios = portfolioMode === 'multiple'
+            ? portfolios.filter((p: any) => {
+                const c = String(p.currency || '').toUpperCase();
+                return c === 'USD' || c === 'AUD';
+              })
+            : portfolios.length > 0
+              ? portfolios
+              : [{ id: '', name: 'Workspace', currency: baseCurrency || 'USD' }];
+          if (eligiblePortfolios.length === 0) return null;
           const connectionsByPortfolio = new Map<string, any[]>();
           for (const c of portfolioBrokerConnections) {
-            if (!c.portfolio_id) continue;
-            connectionsByPortfolio.set(c.portfolio_id, [...(connectionsByPortfolio.get(c.portfolio_id) ?? []), c]);
+            const key = c.portfolio_id || '';
+            connectionsByPortfolio.set(key, [...(connectionsByPortfolio.get(key) ?? []), c]);
           }
-          const targetPortfolioId = brokerConnectPortfolioId || usdPortfolios[0]?.id;
+          const targetPortfolioId = brokerConnectPortfolioId || eligiblePortfolios[0]?.id || '';
           const existingForTarget = connectionsByPortfolio.get(targetPortfolioId) ?? [];
           const brokerLabels: Record<string, string> = { etoro: 'eToro', ig: 'IG', webull: 'Webull' };
           return (
             <div className="apple-card p-4 space-y-3">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5" /> Connect Broker (US/AU)</span>
               <p className="text-[9px] text-slate-400">
-                Sync real account holdings directly from a broker's API instead of a manual file upload. Only USD portfolios are eligible. Each account maps to one specific portfolio - connect two eToro accounts by picking a different portfolio for each. All positions are brought in - CFDs, commodities, and leveraged positions included, tagged by type so they stay distinguishable from genuine stock ownership.
+                Sync real account holdings from a broker API (Webull AU/US, eToro). USD and AUD portfolios are eligible. Use a connection name (e.g. Webull-Sasi) so multiple accounts can map to different books. Options, CFDs and equities are all imported.
               </p>
+              {portfolioMode === 'multiple' && (
               <select
                 value={targetPortfolioId}
                 onChange={(e) => { setBrokerConnectPortfolioId(e.target.value); setBrokerEditingType(null); }}
                 className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
               >
-                {usdPortfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {eligiblePortfolios.map((p: any) => <option key={p.id || 'ws'} value={p.id}>{p.name}{p.currency ? ` (${p.currency})` : ''}</option>)}
               </select>
+              )}
 
               {existingForTarget.length > 0 && (
                 <div className="space-y-1.5">
@@ -2730,7 +2739,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 </div>
               ) : (
                 <div className="flex gap-1.5">
-                  {(['etoro', 'ig', 'webull'] as const).filter(bt => !existingForTarget.some((c: any) => c.broker_type === bt)).map(bt => (
+                  {(['etoro', 'ig', 'webull'] as const).map(bt => (
                     <button
                       key={bt}
                       onClick={() => {
