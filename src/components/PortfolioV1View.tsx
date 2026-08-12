@@ -315,7 +315,8 @@ export default function PortfolioV1View({
   portfolioBrokerConnections = [],
   setPortfolioBrokerConnection,
 }: Props) {
-  const [portfolioFilter, setPortfolioFilter] = useState<string>('All');
+  // Multi-portfolio workspaces: default is one book, never a silent combined total.
+  const [portfolioFilter, setPortfolioFilter] = useState<string>('__pending__');
   const [brokerFilter, setBrokerFilter] = useState<string>('All');
   const [categoryFilter, setCategoryFilter] = useState<CategoryId | 'All'>('All');
   const [expandedCategory, setExpandedCategory] = useState<CategoryId | null>(null);
@@ -340,11 +341,16 @@ export default function PortfolioV1View({
 
   const scoped = useMemo(() => {
     return active.filter((h: any) => {
-      if (portfolioFilter !== 'All' && String(h.portfolio_id || '') !== portfolioFilter) return false;
+      // Multi-portfolio: only the selected book. "All" does not merge rows into category tiles.
+      if (multiPortfolio && effectivePortfolioFilter !== 'All') {
+        if (String(h.portfolio_id || '') !== effectivePortfolioFilter) return false;
+      } else if (multiPortfolio && effectivePortfolioFilter === 'All') {
+        return false;
+      }
       if (brokerFilter !== 'All' && String(h.broker) !== brokerFilter) return false;
       return true;
     });
-  }, [active, portfolioFilter, brokerFilter]);
+  }, [active, multiPortfolio, effectivePortfolioFilter, brokerFilter]);
 
   const classified = useMemo(() => {
     const map: Record<CategoryId, any[]> = {
@@ -405,13 +411,36 @@ export default function PortfolioV1View({
   const portfoliosPresent = useMemo(() => {
     const ids = new Set(active.map((h: any) => h.portfolio_id).filter(Boolean));
     const seen = new Set<string>();
-    return (portfolios || []).filter((p: any) => {
-      if (!ids.has(p.id) && !multiPortfolio) return false;
+    // Workspace portfolio list is the source of truth for allocated books
+    const base =
+      multiPortfolio && (portfolios || []).length > 0
+        ? portfolios || []
+        : (portfolios || []).filter((p: any) => ids.has(p.id));
+    return base.filter((p: any) => {
       if (seen.has(p.id)) return false;
       seen.add(p.id);
       return true;
     });
   }, [active, portfolios, multiPortfolio]);
+
+  // One portfolio at a time. Pending → first allocated book.
+  const effectivePortfolioFilter = useMemo(() => {
+    if (!multiPortfolio) return 'All';
+    if (portfolioFilter === '__pending__') {
+      return portfoliosPresent[0]?.id || 'All';
+    }
+    return portfolioFilter;
+  }, [multiPortfolio, portfolioFilter, portfoliosPresent]);
+
+  // Overview cards when user explicitly chooses "All books" — separate tiles, not one sum
+  const perPortfolioStats = useMemo(() => {
+    return portfoliosPresent.map((p: any) => {
+      const rows = active.filter(
+        (h: any) => String(h.portfolio_id || '') === p.id && (brokerFilter === 'All' || String(h.broker) === brokerFilter)
+      );
+      return { portfolio: p, stats: summarizeBucket(rows), holdings: rows };
+    });
+  }, [portfoliosPresent, active, brokerFilter]);
 
   const ranked = useMemo(() => {
     const rows = filtered.map((h) => ({ h, p: pnlPct(h), dollar: pnl(h) })).filter((x) => Number.isFinite(x.p));
@@ -559,12 +588,13 @@ export default function PortfolioV1View({
                 type="button"
                 onClick={() => setPortfolioFilter('All')}
                 className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                  portfolioFilter === 'All'
+                  effectivePortfolioFilter === 'All'
                     ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
                     : 'bg-white/80 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700'
                 }`}
+                title="Overview of each book separately — values are never added together"
               >
-                All
+                Overview
               </button>
               {portfoliosPresent.map((p: any) => (
                 <button
@@ -572,7 +602,7 @@ export default function PortfolioV1View({
                   type="button"
                   onClick={() => setPortfolioFilter(p.id)}
                   className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                    portfolioFilter === p.id
+                    effectivePortfolioFilter === p.id
                       ? 'bg-violet-600 text-white'
                       : 'bg-white/80 dark:bg-slate-800 text-violet-600 border border-violet-200 dark:border-violet-900'
                   }`}
@@ -624,7 +654,58 @@ export default function PortfolioV1View({
         </div>
       </div>
 
-      {/* Category tiles — ultimate product map */}
+      {/* Multi-portfolio overview: one card per book — never a single combined total */}
+      {multiPortfolio && effectivePortfolioFilter === 'All' && (
+        <div className="space-y-2">
+          <p className="text-[11px] text-slate-500 px-0.5">
+            Each portfolio is a separate book (member allocation). Select a book for product tiles and holdings — totals are not merged.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {perPortfolioStats.map(({ portfolio, stats, holdings }) => {
+              const primary = stats.primary;
+              return (
+                <button
+                  key={portfolio.id}
+                  type="button"
+                  onClick={() => setPortfolioFilter(portfolio.id)}
+                  className="text-left rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 hover:ring-2 hover:ring-violet-400 transition-shadow"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[14px] font-black text-slate-900 dark:text-white">{portfolio.name}</p>
+                    <span className="text-[10px] font-bold text-slate-400">{stats.count} holdings</span>
+                  </div>
+                  {primary ? (
+                    <div className="mt-2 flex items-baseline justify-between">
+                      <p className="text-xl font-black tabular-nums text-slate-900 dark:text-white">
+                        {money(primary.market, primary.currency)}
+                      </p>
+                      <p className={`text-[12px] font-bold tabular-nums ${primary.pnlPct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {pct(primary.pnlPct)}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-[11px] text-slate-400">No holdings in this book</p>
+                  )}
+                  {stats.byCurrency.length > 1 && (
+                    <div className="mt-2 space-y-0.5">
+                      {stats.byCurrency.map((c) => (
+                        <div key={c.currency} className="flex justify-between text-[10px] text-slate-500">
+                          <span className="font-bold">{c.currency}</span>
+                          <span className="tabular-nums">{money(c.market, c.currency)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="mt-2 text-[10px] font-bold text-violet-600">Open book →</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Category tiles — only when a single book is in scope */}
+      {!(multiPortfolio && effectivePortfolioFilter === 'All') && (
       <div>
         <div className="flex items-center justify-between mb-2 px-0.5">
           <h2 className="text-[11px] font-black uppercase tracking-wider text-slate-500">Markets & products</h2>
@@ -737,6 +818,7 @@ export default function PortfolioV1View({
           </p>
         )}
       </div>
+      )}
 
       {/* Near SL */}
       {tightStops.length > 0 && (
