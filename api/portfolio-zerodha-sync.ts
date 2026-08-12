@@ -215,7 +215,12 @@ export default async function handler(req: any, res: any) {
               const avg = Number(m.average_price || 0);
               const lastPrice = Number(m.last_price || 0);
               return {
-                symbol: String(m.tradingsymbol || m.folio || "").toUpperCase(),
+                // 'fund' carries the human-readable scheme name (e.g. "Quant Small Cap Fund
+                // Direct Growth"); tradingsymbol for MF is an AMC-internal code that's often
+                // indistinguishable from the ISIN itself - since 'symbol' is the only field
+                // the rest of the app actually renders as the holding's label (unlike 'name',
+                // which nothing downstream reads), this must be the fund name, not the code.
+                symbol: String(m.fund || m.tradingsymbol || m.folio || "").trim(),
                 name: String(m.fund || m.tradingsymbol || ""),
                 broker: "Zerodha",
                 holdingType: "mutual_fund" as const,
@@ -226,7 +231,7 @@ export default async function handler(req: any, res: any) {
                 currency: "INR",
                 isin: m.isin || undefined,
                 source: "Zerodha API (MF)",
-                matchKey: `zerodha_mf_${m.tradingsymbol || m.folio}`,
+                matchKey: `zerodha_mf_${m.isin || m.tradingsymbol || m.folio}`,
               };
             })
             .filter(Boolean);
