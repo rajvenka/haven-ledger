@@ -191,18 +191,27 @@ export default async function handler(req: any, res: any) {
     // Taking Webull here was overwriting the correct eToro rate with a garbage stock price.
     const WEBULL_SKIP = new Set([
       "GOLD", "SILVER", "OIL", "NATGAS", "COPPER", "PLATINUM", "PALLADIUM",
-      "XAU", "XAG", "XAUUSD", "XAGUSD", "BRENT", "WTI",
+      "XAU", "XAG", "XAUUSD", "XAGUSD", "BRENT", "WTI", "GC=F", "SI=F", "CL=F",
     ]);
+    const isCommoditySymbol = (raw: string, name?: string) => {
+      const s = String(raw || "").trim().toUpperCase().replace(/[^A-Z0-9=]/g, "");
+      if (WEBULL_SKIP.has(s)) return true;
+      return /\b(gold|silver|oil|brent|natgas|copper|platinum|palladium)\b/i.test(
+        `${raw || ""} ${name || ""}`
+      );
+    };
     if (webullAppKey && webullAppSecret) {
       const webullHost = WEBULL_REGION_HOSTS[webullRegion] || WEBULL_REGION_HOSTS.us;
-      const idToSymbol = new Map(Array.from(instrumentMap.entries()).map(([id, info]) => [id, info.symbol]));
+      const idToInfo = new Map(Array.from(instrumentMap.entries()).map(([id, info]) => [id, info]));
       const symbolsToTry = Array.from(new Set(
-        Array.from(idToSymbol.values()).filter((s) => s && !WEBULL_SKIP.has(String(s).toUpperCase()))
+        Array.from(idToInfo.values())
+          .filter((info) => info?.symbol && !isCommoditySymbol(info.symbol, info.name))
+          .map((info) => info.symbol)
       ));
       const { prices: webullPrices, debug: webullFetchDebug } = await webullSnapshotFetch(webullHost, webullAppKey, webullAppSecret, webullToken, symbolsToTry);
-      for (const [id, symbol] of Array.from(idToSymbol.entries())) {
-        if (WEBULL_SKIP.has(String(symbol).toUpperCase())) continue;
-        const price = webullPrices.get(symbol.toUpperCase());
+      for (const [id, info] of Array.from(idToInfo.entries())) {
+        if (isCommoditySymbol(info.symbol, info.name)) continue;
+        const price = webullPrices.get(String(info.symbol).toUpperCase());
         if (price != null) rateMap.set(id, price);
       }
       ratesDebug.webull = { attempted: symbolsToTry.length, resolved: webullPrices.size, mappedToInstruments: rateMap.size, host: webullHost, skippedCommodities: true, ...webullFetchDebug };
