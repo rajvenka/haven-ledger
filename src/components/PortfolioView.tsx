@@ -29,7 +29,7 @@ interface PortfolioViewProps {
   setProjectedBankBalance?: (amount: number, portfolioId?: string) => Promise<void>;
   recalculateProjectedBankBalance?: (portfolioId?: string) => Promise<void>;
   portfolioBrokerConnections?: any[];
-  setPortfolioBrokerConnection?: (brokerType: 'etoro' | 'ig' | 'webull' | 'zerodha', credentials: Record<string, string>, portfolioId?: string, connectionLabel?: string) => Promise<void>;
+  setPortfolioBrokerConnection?: (brokerType: 'etoro' | 'ig' | 'webull' | 'zerodha' | 'groww', credentials: Record<string, string>, portfolioId?: string, connectionLabel?: string) => Promise<void>;
   deletePortfolioBrokerConnection?: (id: string) => Promise<void>;
   markBrokerConnectionSynced?: (id: string) => Promise<void>;
   syncEtoroHoldingLots?: (symbols: string[], rawLotsBySymbol: Map<string, any[]>, portfolioId?: string) => Promise<void>;
@@ -488,6 +488,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [zerodhaSyncError, setZerodhaSyncError] = useState<string | null>(null);
   const [zerodhaDebug, setZerodhaDebug] = useState<any>(null);
   const [zerodhaConnectPortfolioId, setZerodhaConnectPortfolioId] = useState('');
+  // Groww Trade API (India) — stocks only; MF stays on CSV import
+  const [growwApiKeyInput, setGrowwApiKeyInput] = useState('');
+  const [growwApiSecretInput, setGrowwApiSecretInput] = useState('');
+  const [growwConnectStatus, setGrowwConnectStatus] = useState<'idle' | 'saving' | 'ready' | 'error'>('idle');
+  const [growwSyncing, setGrowwSyncing] = useState(false);
+  const [growwSyncError, setGrowwSyncError] = useState<string | null>(null);
+  const [growwDebug, setGrowwDebug] = useState<any>(null);
+  const [growwEditing, setGrowwEditing] = useState(false);
   const [indiaBrokerEditing, setIndiaBrokerEditing] = useState(false);
   const [expandedLotHoldingId, setExpandedLotHoldingId] = useState<string | null>(null);
   const [stopLossAlertExpanded, setStopLossAlertExpanded] = useState(false);
@@ -1213,6 +1221,113 @@ export default function PortfolioView(props: PortfolioViewProps) {
       setZerodhaSyncError(err?.message || 'Could not sync from Zerodha.');
     } finally {
       setZerodhaSyncing(false);
+    }
+  };
+
+
+  const handleGrowwSaveConnection = async (portfolioId?: string) => {
+    if (!growwApiKeyInput.trim() || !growwApiSecretInput.trim()) {
+      setGrowwSyncError('API Key and API Secret are required');
+      return;
+    }
+    setGrowwConnectStatus('saving');
+    setGrowwSyncError(null);
+    try {
+      // Verify credentials by obtaining an access token immediately
+      const resp = await fetch('/api/portfolio-groww-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'exchange',
+          apiKey: growwApiKeyInput.trim(),
+          apiSecret: growwApiSecretInput.trim(),
+        }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      setGrowwDebug(data);
+      if (!resp.ok || !data.accessToken) {
+        setGrowwConnectStatus('error');
+        setGrowwSyncError(data.error || 'Could not validate Groww credentials');
+        return;
+      }
+      await runAction(async () => {
+        await setPortfolioBrokerConnection?.(
+          'groww',
+          {
+            api_key: growwApiKeyInput.trim(),
+            api_secret: growwApiSecretInput.trim(),
+            access_token: data.accessToken,
+          },
+          portfolioId,
+          connectionLabelInput.trim() || undefined,
+        );
+      });
+      setGrowwApiKeyInput('');
+      setGrowwApiSecretInput('');
+      setGrowwConnectStatus('idle');
+      setGrowwEditing(false);
+      setConnectionLabelInput('');
+    } catch (err: any) {
+      setGrowwConnectStatus('error');
+      setGrowwSyncError(err?.message || 'Could not save Groww connection');
+    }
+  };
+
+  const handleGrowwSync = async (connection: any) => {
+    if (!connection) return;
+    setGrowwSyncing(true);
+    setGrowwSyncError(null);
+    setGrowwDebug(null);
+    setImportPreview(null);
+    try {
+      const resp = await fetch('/api/portfolio-groww-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'sync',
+          apiKey: connection.credentials?.api_key,
+          apiSecret: connection.credentials?.api_secret,
+          accessToken: connection.credentials?.access_token,
+        }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      setGrowwDebug(data);
+      if (!resp.ok) {
+        throw new Error(data.error || `Groww sync failed (${resp.status})`);
+      }
+      // Persist refreshed access token when returned
+      if (data.accessToken && data.accessToken !== connection.credentials?.access_token) {
+        try {
+          await setPortfolioBrokerConnection?.(
+            'groww',
+            {
+              ...connection.credentials,
+              access_token: data.accessToken,
+            },
+            connection.portfolio_id || undefined,
+            connection.connection_label || undefined,
+          );
+        } catch { /* non-fatal */ }
+      }
+      const holdings = (data.holdings || []).map((h: any) => ({
+        ...h,
+        buyDate: todayStr(),
+      }));
+      const targetPid = connection.portfolio_id || undefined;
+      if (portfolioMode === 'multiple' && targetPid) {
+        setImportPortfolioId(targetPid);
+        setImportPortfolioConfirmed(true);
+      }
+      setImportTemplate('groww_stocks');
+      setImportSourceTag('Groww API');
+      setImportBuyDate(todayStr());
+      setImportRawParsed(holdings);
+      setIsImporting(true);
+      await markBrokerConnectionSynced?.(connection.id);
+    } catch (err: any) {
+      setGrowwSyncError(err?.message || 'Could not sync from Groww.');
+    } finally {
+      setGrowwSyncing(false);
     }
   };
 
@@ -2606,21 +2721,27 @@ export default function PortfolioView(props: PortfolioViewProps) {
           const showIndia = portfolioMode === 'multiple' ? inrPortfolios.length > 0 : true;
           if (!showIndia) return null;
           const connectionsByPortfolio = new Map<string, any[]>();
+          const growwByPortfolio = new Map<string, any[]>();
           for (const c of portfolioBrokerConnections) {
-            if (c.broker_type !== 'zerodha') continue;
             const key = c.portfolio_id || '__default__';
-            connectionsByPortfolio.set(key, [...(connectionsByPortfolio.get(key) ?? []), c]);
+            if (c.broker_type === 'zerodha') {
+              connectionsByPortfolio.set(key, [...(connectionsByPortfolio.get(key) ?? []), c]);
+            }
+            if (c.broker_type === 'groww') {
+              growwByPortfolio.set(key, [...(growwByPortfolio.get(key) ?? []), c]);
+            }
           }
           const targetPortfolioId = portfolioMode === 'multiple'
             ? (zerodhaConnectPortfolioId || inrPortfolios[0]?.id)
             : undefined;
           const existingForTarget = connectionsByPortfolio.get(targetPortfolioId || '__default__') ?? [];
+          const growwExisting = growwByPortfolio.get(targetPortfolioId || '__default__') ?? [];
           return (
             <div className="apple-card p-4 space-y-3">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5" /> Connect Broker (India)</span>
               <p className="text-[9px] text-slate-400">
-                Sync equity, positions and mutual funds from Zerodha via Kite Connect. CSV import still works — this is an additional option.
-                Access tokens expire daily; reconnect when Sync fails with a token error.
+                Sync stocks from Zerodha (Kite) and Groww (Trade API). Mutual funds: Zerodha API or CSV; Groww MF via CSV only.
+                Access tokens expire daily — reconnect or re-sync when a token error appears.
               </p>
               {portfolioMode === 'multiple' && inrPortfolios.length > 0 && (
                 <select
@@ -2781,6 +2902,127 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   <details>
                     <summary className="cursor-pointer text-slate-400">Full raw log</summary>
                     <pre className="whitespace-pre-wrap break-all mt-1">{JSON.stringify(zerodhaDebug, null, 2)}</pre>
+                  </details>
+                </div>
+              )}
+
+              {/* Groww */}
+              {growwExisting.length > 0 && (
+                <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <span className="text-[9px] font-bold text-emerald-600 uppercase">Groww</span>
+                  {growwExisting.map((conn: any) => (
+                    <div key={conn.id} className="flex items-center justify-between px-2.5 py-2 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200 truncate">
+                          {conn.connection_label || 'Groww'}
+                        </p>
+                        <p className="text-[9px] text-slate-400">
+                          {conn.last_synced_at ? `Synced ${new Date(conn.last_synced_at).toLocaleString()}` : 'Not synced yet'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          disabled={growwSyncing}
+                          onClick={() => handleGrowwSync(conn)}
+                          className="px-2 py-1 bg-emerald-600 text-white text-[9px] font-bold rounded-md cursor-pointer disabled:opacity-50"
+                        >
+                          {growwSyncing ? 'Syncing…' : 'Refresh'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deletePortfolioBrokerConnection?.(conn.id)}
+                          className="px-2 py-1 text-rose-500 text-[9px] font-bold cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {growwEditing ? (
+                <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <span className="text-[9px] font-bold text-emerald-600 uppercase">Connect Groww</span>
+                  <input
+                    type="text"
+                    placeholder="Connection name (e.g. Groww-1)"
+                    value={connectionLabelInput}
+                    onChange={(e) => setConnectionLabelInput(e.target.value)}
+                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                  />
+                  <input
+                    type="password"
+                    placeholder="Groww API Key"
+                    value={growwApiKeyInput}
+                    onChange={(e) => setGrowwApiKeyInput(e.target.value)}
+                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                  />
+                  <input
+                    type="password"
+                    placeholder="Groww API Secret"
+                    value={growwApiSecretInput}
+                    onChange={(e) => setGrowwApiSecretInput(e.target.value)}
+                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                  />
+                  <p className="text-[9px] text-slate-400">Stocks only via API. Mutual funds: use CSV import (groww_mf).</p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleGrowwSaveConnection(targetPortfolioId)}
+                      disabled={growwConnectStatus === 'saving' || !growwApiKeyInput.trim() || !growwApiSecretInput.trim()}
+                      className="flex-1 py-1.5 bg-emerald-600 text-white text-[10px] font-bold rounded-lg cursor-pointer disabled:opacity-50"
+                    >
+                      {growwConnectStatus === 'saving' ? 'Validating…' : 'Save Groww'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGrowwEditing(false);
+                        setGrowwApiKeyInput('');
+                        setGrowwApiSecretInput('');
+                        setGrowwConnectStatus('idle');
+                        setGrowwSyncError(null);
+                        setConnectionLabelInput('');
+                      }}
+                      className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                growwExisting.length === 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const existingCount = portfolioBrokerConnections.filter((c: any) => c.broker_type === 'groww').length;
+                      setConnectionLabelInput(`Groww-${existingCount + 1}`);
+                      setGrowwEditing(true);
+                    }}
+                    className="w-full py-1.5 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold rounded-lg cursor-pointer"
+                  >
+                    + Groww
+                  </button>
+                )
+              )}
+              {growwSyncError && <p className="text-[10px] text-rose-500">{growwSyncError}</p>}
+              {growwDebug && !growwEditing && (
+                <div className="text-[9px] text-slate-500 break-all bg-slate-50 dark:bg-slate-900 rounded p-2 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold">Groww sync log</span>
+                    <button
+                      type="button"
+                      onClick={() => { navigator.clipboard?.writeText(JSON.stringify(growwDebug, null, 2)); }}
+                      className="text-emerald-600 text-[9px] font-bold cursor-pointer"
+                    >
+                      Copy full log
+                    </button>
+                  </div>
+                  {growwDebug.equityCount != null && <p>Equity: {growwDebug.equityCount} (MF: use CSV)</p>}
+                  <details>
+                    <summary className="cursor-pointer text-slate-400">Full raw log</summary>
+                    <pre className="whitespace-pre-wrap break-all mt-1">{JSON.stringify(growwDebug, null, 2)}</pre>
                   </details>
                 </div>
               )}
