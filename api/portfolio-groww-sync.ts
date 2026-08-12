@@ -1,10 +1,12 @@
 // Groww Trade API sync.
 // Auth: API Key + Secret → short-lived access token via SHA256 checksum.
 // Holdings: GET /v1/holdings/user (stocks in DEMAT only — no MF holdings endpoint).
+// Live data: GET /v1/live-data/ltp (batch LTP, up to 50 instruments per call).
 //
 // Actions:
 //   exchange - exchanges apiKey + apiSecret for access_token
 //   sync     - obtains a fresh token (or uses provided one) and fetches equity holdings
+//   ltp      - batch last-traded prices for exchange_symbols (e.g. NSE_RELIANCE)
 
 import * as crypto from "crypto";
 
@@ -72,6 +74,40 @@ async function growwGet(path: string, accessToken: string) {
   return { ok: resp.ok, status: resp.status, data, bodySample: text.slice(0, 800) };
 }
 
+/** Resolve a usable access token: prefer fresh exchange when key+secret present. */
+async function resolveAccessToken(
+  apiKey: string,
+  apiSecret: string,
+  accessToken: string,
+  debug: any
+): Promise<{ accessToken: string | null; error?: string; status?: number }> {
+  if (apiKey && apiSecret) {
+    const tokenResult = await growwExchangeToken(apiKey, apiSecret);
+    debug.tokenExchange = {
+      status: tokenResult.status,
+      ok: tokenResult.ok,
+      bodySample: tokenResult.bodySample,
+    };
+    if (tokenResult.ok && tokenResult.accessToken) {
+      return { accessToken: tokenResult.accessToken };
+    }
+    if (!accessToken) {
+      return {
+        accessToken: null,
+        status: tokenResult.status || 401,
+        error:
+          tokenResult.data?.error?.message ||
+          tokenResult.data?.message ||
+          "Failed to obtain Groww access token. Approve the API key for today on Groww Cloud, then retry.",
+      };
+    }
+  }
+  if (!accessToken) {
+    return { accessToken: null, status: 400, error: "No access token available" };
+  }
+  return { accessToken };
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -110,6 +146,104 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
+    // ---------- live LTP (batch, up to 50 instruments per Groww call) ----------
+    // Body: { action: 'ltp', apiKey?, apiSecret?, accessToken?, instruments: string[] }
+    // instruments: trading symbols like "RELIANCE" or "NSE:RELIANCE" or "NSE_RELIANCE"
+    // Returns: { prices: { "NSE_RELIANCE": 2334.2, ... }, accessToken, debug }
+    if (action === "ltp") {
+      const apiKey = String(body.apiKey || "").trim();
+      const apiSecret = String(body.apiSecret || "").trim();
+      let accessToken = String(body.accessToken || "").trim();
+      const rawInstruments: string[] = Array.isArray(body.instruments) ? body.instruments : [];
+
+      if (!apiKey && !accessToken) {
+        res.status(400).json({ error: "apiKey (with apiSecret) or accessToken is required" });
+        return;
+      }
+      if (rawInstruments.length === 0) {
+        res.status(200).json({ prices: {}, matchedCount: 0 });
+        return;
+      }
+
+      const debug: any = { startedAt: new Date().toISOString(), requestedCount: rawInstruments.length };
+      const resolved = await resolveAccessToken(apiKey, apiSecret, accessToken, debug);
+      if (!resolved.accessToken) {
+        res.status(resolved.status || 401).json({ error: resolved.error, debug });
+        return;
+      }
+      accessToken = resolved.accessToken;
+
+      // Normalise to Groww exchange_symbols form: NSE_RELIANCE / BSE_SENSEX
+      const toGrowwKey = (raw: string): string => {
+        const s = String(raw || "").trim().toUpperCase();
+        if (!s) return "";
+        if (s.includes("_") && (s.startsWith("NSE_") || s.startsWith("BSE_"))) return s;
+        if (s.includes(":")) {
+          const [ex, sym] = s.split(":");
+          return `${ex === "BSE" ? "BSE" : "NSE"}_${sym}`;
+        }
+        // Bare ticker → assume NSE (matches most India holdings)
+        return `NSE_${s}`;
+      };
+
+      const keys = rawInstruments.map(toGrowwKey).filter(Boolean);
+      const prices: Record<string, number> = {};
+      // Groww allows up to 50 symbols per LTP call
+      const chunkSize = 50;
+      for (let i = 0; i < keys.length; i += chunkSize) {
+        const chunk = keys.slice(i, i + chunkSize);
+        const qs = new URLSearchParams();
+        qs.set("segment", "CASH");
+        // Docs show exchange_symbols as repeated / comma-separated list
+        qs.set("exchange_symbols", chunk.join(","));
+        const path = `/v1/live-data/ltp?${qs.toString()}`;
+        let ltpResp = await growwGet(path, accessToken);
+        debug[`ltpChunk${i / chunkSize}`] = {
+          status: ltpResp.status,
+          ok: ltpResp.ok,
+          bodySample: ltpResp.bodySample,
+          requested: chunk,
+        };
+
+        // Stale token → re-exchange once and retry this chunk
+        if (!ltpResp.ok && (ltpResp.status === 401 || ltpResp.status === 403) && apiKey && apiSecret) {
+          const retry = await growwExchangeToken(apiKey, apiSecret);
+          debug.tokenRetry = { status: retry.status, ok: retry.ok };
+          if (retry.ok && retry.accessToken) {
+            accessToken = retry.accessToken;
+            ltpResp = await growwGet(path, accessToken);
+            debug[`ltpChunk${i / chunkSize}Retry`] = {
+              status: ltpResp.status,
+              ok: ltpResp.ok,
+              bodySample: ltpResp.bodySample,
+            };
+          }
+        }
+
+        if (!ltpResp.ok) {
+          // Don't abort the whole batch — return whatever we have so far; caller falls back to Yahoo
+          continue;
+        }
+
+        const payload = ltpResp.data?.payload ?? ltpResp.data?.data ?? ltpResp.data ?? {};
+        // payload is typically { "NSE_RELIANCE": 2334.2, ... }
+        for (const [k, v] of Object.entries(payload)) {
+          const n = Number(v);
+          if (Number.isFinite(n) && n > 0) {
+            prices[k.toUpperCase()] = n;
+          }
+        }
+      }
+
+      res.status(200).json({
+        prices,
+        matchedCount: Object.keys(prices).length,
+        accessToken,
+        debug,
+      });
+      return;
+    }
+
     // ---------- sync holdings ----------
     if (action === "sync") {
       const apiKey = String(body.apiKey || "").trim();
@@ -123,32 +257,12 @@ export default async function handler(req: any, res: any) {
 
       const debug: any = { startedAt: new Date().toISOString() };
 
-      // Prefer a fresh token when we have key+secret (Groww tokens need daily approval).
-      if (apiKey && apiSecret) {
-        const tokenResult = await growwExchangeToken(apiKey, apiSecret);
-        debug.tokenExchange = {
-          status: tokenResult.status,
-          ok: tokenResult.ok,
-          bodySample: tokenResult.bodySample,
-        };
-        if (tokenResult.ok && tokenResult.accessToken) {
-          accessToken = tokenResult.accessToken;
-        } else if (!accessToken) {
-          res.status(tokenResult.status || 401).json({
-            error:
-              tokenResult.data?.error?.message ||
-              tokenResult.data?.message ||
-              "Failed to obtain Groww access token. Approve the API key for today on Groww Cloud, then retry.",
-            debug,
-          });
-          return;
-        }
-      }
-
-      if (!accessToken) {
-        res.status(400).json({ error: "No access token available" });
+      const resolved = await resolveAccessToken(apiKey, apiSecret, accessToken, debug);
+      if (!resolved.accessToken) {
+        res.status(resolved.status || 401).json({ error: resolved.error, debug });
         return;
       }
+      accessToken = resolved.accessToken;
 
       const holdingsResp = await growwGet("/v1/holdings/user", accessToken);
       debug.holdings = {
