@@ -944,9 +944,12 @@ export default function PortfolioV1View({
             {tightStops.slice(0, 12).map(({ h, dist, stop, qty, lotId }) => (
               <div
                 key={`${h.id}-${lotId || stop}`}
-                className="shrink-0 rounded-xl bg-white dark:bg-slate-900 border border-amber-100 dark:border-amber-900/40 px-2.5 py-1.5 min-w-[7.5rem]"
+                className="shrink-0 rounded-xl bg-white dark:bg-slate-900 border border-amber-100 dark:border-amber-900/40 px-2.5 py-1.5 min-w-[8rem] max-w-[10rem]"
               >
                 <p className="text-[11px] font-bold truncate">{h.ticker || h.symbol}</p>
+                <p className="text-[9px] text-indigo-600 dark:text-indigo-400 font-bold truncate">
+                  {portfolioNameOf(h, portfolios)}
+                </p>
                 <p className="text-[9px] text-slate-400">
                   SL {stop}
                   {qty > 0 ? ` · ${qty} qty` : ''}
