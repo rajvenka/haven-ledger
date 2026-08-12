@@ -382,14 +382,18 @@ export default function PortfolioV1View({
     [portfolioHoldings]
   );
 
-  const scoped = useMemo(() => {
-    return active.filter((h: any) => {
-      if (portfolioFilter !== 'All' && String(h.portfolio_id || '') !== portfolioFilter) return false;
-      if (brokerFilter !== 'All' && String(h.broker) !== brokerFilter) return false;
-      return true;
-    });
-  }, [active, portfolioFilter, brokerFilter]);
+  // Book first — all filters below refresh from this slice only
+  const bookScoped = useMemo(() => {
+    if (portfolioFilter === 'All') return active;
+    return active.filter((h: any) => String(h.portfolio_id || '') === portfolioFilter);
+  }, [active, portfolioFilter]);
 
+  const scoped = useMemo(() => {
+    if (brokerFilter === 'All') return bookScoped;
+    return bookScoped.filter((h: any) => String(h.broker) === brokerFilter);
+  }, [bookScoped, brokerFilter]);
+
+  // Type / market tiles: driven by book (and broker if selected)
   const classified = useMemo(() => {
     const map: Record<CategoryId, any[]> = {
       india_mf: [],
@@ -406,6 +410,14 @@ export default function PortfolioV1View({
     });
     return map;
   }, [scoped]);
+
+  const selectPortfolioBook = (id: string) => {
+    setPortfolioFilter(id);
+    setBrokerFilter('All');
+    setCategoryFilter('All');
+    setExpandedCategory(null);
+    setShowSlOnly(false);
+  };
 
   const categoryOrder: CategoryId[] = [
     'india_mf',
@@ -440,16 +452,17 @@ export default function PortfolioV1View({
     return list;
   }, [scoped, categoryFilter, showSlOnly]);
 
+  // Broker chips follow the selected book only
   const brokersPresent = useMemo(() => {
     const s = new Set<string>();
-    active.forEach((h: any) => h.broker && s.add(String(h.broker)));
+    bookScoped.forEach((h: any) => h.broker && s.add(String(h.broker)));
     return Array.from(s).sort();
-  }, [active]);
+  }, [bookScoped]);
 
-  // Stop-loss UI is eToro CFD-focused — only show when eToro is in the current workspace data
+  // SL only when eToro exists in the selected book
   const hasEtoro = useMemo(
-    () => active.some((h: any) => String(h.broker || '').toLowerCase() === 'etoro'),
-    [active]
+    () => bookScoped.some((h: any) => String(h.broker || '').toLowerCase() === 'etoro'),
+    [bookScoped]
   );
 
   const portfoliosPresent = useMemo(() => {
@@ -607,20 +620,20 @@ export default function PortfolioV1View({
               </span>
               <button
                 type="button"
-                onClick={() => setPortfolioFilter('All')}
+                onClick={() => selectPortfolioBook('All')}
                 className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${
                   portfolioFilter === 'All'
                     ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
                     : 'bg-white/80 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700'
                 }`}
               >
-                All
+                All books
               </button>
               {portfoliosPresent.map((p: any) => (
                 <button
                   key={p.id}
                   type="button"
-                  onClick={() => setPortfolioFilter(p.id)}
+                  onClick={() => selectPortfolioBook(p.id)}
                   className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${
                     portfolioFilter === p.id
                       ? 'bg-violet-600 text-white'
@@ -651,7 +664,11 @@ export default function PortfolioV1View({
               <button
                 key={b}
                 type="button"
-                onClick={() => setBrokerFilter(b)}
+                onClick={() => {
+                  setBrokerFilter(b);
+                  setCategoryFilter('All');
+                  setExpandedCategory(null);
+                }}
                 className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${
                   brokerFilter === b
                     ? 'bg-indigo-600 text-white'
@@ -661,6 +678,19 @@ export default function PortfolioV1View({
                 {b}
               </button>
             ))}
+            {brokerFilter !== 'All' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBrokerFilter('All');
+                  setCategoryFilter('All');
+                  setExpandedCategory(null);
+                }}
+                className="shrink-0 px-2 py-1 text-[10px] font-bold text-indigo-600"
+              >
+                Clear broker
+              </button>
+            )}
             {hasEtoro && (
               <button
                 type="button"
