@@ -674,7 +674,7 @@ export default function PortfolioV1View({
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-3 sm:px-5 pt-2 sm:pt-3 pb-24 sm:pb-6 space-y-3 sm:space-y-4">
+    <div className="w-full max-w-none px-3 sm:px-4 pt-2 sm:pt-3 pb-24 sm:pb-6 space-y-3 sm:space-y-4">
       {/* Hero */}
       <div className="relative w-full overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950/30 p-3 sm:p-4">
         <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-indigo-400/10 blur-3xl pointer-events-none" />
