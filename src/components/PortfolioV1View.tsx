@@ -48,6 +48,8 @@ interface Props {
   portfolios?: any[];
   portfolioMode?: string;
   portfolioHoldings?: any[];
+  /** eToro (and similar) per-position lots — one symbol can have many lots, each with its own stop. */
+  portfolioHoldingLots?: any[];
   portfolioCashBalances?: any[];
   portfolioBrokerConnections?: any[];
   setPortfolioBrokerConnection?: (
@@ -335,8 +337,10 @@ export default function PortfolioV1View({
   portfolios = [],
   portfolioMode,
   portfolioHoldings = [],
+  portfolioHoldingLots = [],
   portfolioBrokerConnections = [],
   setPortfolioBrokerConnection,
+  deletePortfolioBrokerConnection,
 }: Props) {
   const [portfolioFilter, setPortfolioFilter] = useState<string>('All');
   const [brokerFilter, setBrokerFilter] = useState<string>('All');
@@ -380,6 +384,40 @@ export default function PortfolioV1View({
   const [connectOk, setConnectOk] = useState<string | null>(null);
 
   const multiPortfolio = portfolioMode === 'multiple' || (portfolios || []).length > 1;
+
+  // Lots keyed by parent holding — Netflix with 5 eToro positions => 5 lot rows, each SL.
+  const lotsByHoldingId = useMemo(() => {
+    const m = new Map<string, any[]>();
+    for (const lot of portfolioHoldingLots || []) {
+      const id = String(lot.holding_id || '');
+      if (!id) continue;
+      if (!m.has(id)) m.set(id, []);
+      m.get(id)!.push(lot);
+    }
+    return m;
+  }, [portfolioHoldingLots]);
+
+  /** Prefer per-lot stops when present; otherwise fall back to consolidated holding stop. */
+  function stopsForHolding(h: any): { stop: number; qty: number; live: number; dist: number; lotId?: string }[] {
+    const lots = lotsByHoldingId.get(String(h.id)) || [];
+    const lotStops = lots
+      .map((lot) => {
+        const stop = lot.stop_loss_rate != null ? Number(lot.stop_loss_rate) : NaN;
+        if (!Number.isFinite(stop) || stop <= 0) return null;
+        const live = Number(lot.current_price ?? h.live_price ?? h.current_price ?? lot.buy_price ?? h.buy_price) || 0;
+        if (live <= 0) return null;
+        const dist = ((live - stop) / live) * 100;
+        return { stop, qty: Number(lot.quantity) || 0, live, dist, lotId: String(lot.id || lot.external_position_id || '') };
+      })
+      .filter(Boolean) as { stop: number; qty: number; live: number; dist: number; lotId?: string }[];
+    if (lotStops.length > 0) return lotStops.sort((a, b) => a.dist - b.dist);
+    const stop = h.stop_loss_rate != null ? Number(h.stop_loss_rate) : NaN;
+    if (!Number.isFinite(stop) || stop <= 0) return [];
+    const live = livePrice(h);
+    if (live <= 0) return [];
+    return [{ stop, qty: Number(h.quantity) || 0, live, dist: ((live - stop) / live) * 100 }];
+  }
+
 
   // Desktop table columns — rebuilt whenever the user toggles Columns so widths reflow.
   const desktopCols = useMemo(() => {
@@ -506,9 +544,11 @@ export default function PortfolioV1View({
   const filtered = useMemo(() => {
     let list = scoped;
     if (categoryFilter !== 'All') list = list.filter((h) => classifyHolding(h) === categoryFilter);
-    if (showSlOnly) list = list.filter((h) => h.stop_loss_rate != null && Number(h.stop_loss_rate) > 0);
+    if (showSlOnly) {
+      list = list.filter((h) => stopsForHolding(h).length > 0);
+    }
     return list;
-  }, [scoped, categoryFilter, showSlOnly]);
+  }, [scoped, categoryFilter, showSlOnly, lotsByHoldingId]);
 
   // Broker chips follow the selected book only
   const brokersPresent = useMemo(() => {
@@ -543,17 +583,17 @@ export default function PortfolioV1View({
     };
   }, [filtered, moversMode]);
 
+  // Near-SL list is per *lot* (position), not per consolidated symbol —
+  // Netflix with 5 different stops shows as 5 rows when each is within 8%.
   const tightStops = useMemo(() => {
-    return filtered
-      .map((h) => {
-        const dist = stopLossDistancePct(h);
-        if (dist == null) return null;
-        return { h, dist, stop: Number(h.stop_loss_rate) };
-      })
-      .filter(Boolean)
-      .sort((a: any, b: any) => a.dist - b.dist)
-      .filter((x: any) => x.dist < 8) as { h: any; dist: number; stop: number }[];
-  }, [filtered]);
+    const rows: { h: any; dist: number; stop: number; qty: number; lotId?: string }[] = [];
+    for (const h of filtered) {
+      for (const s of stopsForHolding(h)) {
+        if (s.dist < 8) rows.push({ h, dist: s.dist, stop: s.stop, qty: s.qty, lotId: s.lotId });
+      }
+    }
+    return rows.sort((a, b) => a.dist - b.dist);
+  }, [filtered, lotsByHoldingId]);
 
   const openConnect = () => {
     setConnectOpen(true);
@@ -901,13 +941,16 @@ export default function PortfolioV1View({
             </p>
           </div>
           <div className="flex gap-2 overflow-x-auto no-scrollbar">
-            {tightStops.slice(0, 10).map(({ h, dist, stop }) => (
+            {tightStops.slice(0, 12).map(({ h, dist, stop, qty, lotId }) => (
               <div
-                key={h.id}
-                className="shrink-0 rounded-xl bg-white dark:bg-slate-900 border border-amber-100 dark:border-amber-900/40 px-2.5 py-1.5 min-w-[7rem]"
+                key={`${h.id}-${lotId || stop}`}
+                className="shrink-0 rounded-xl bg-white dark:bg-slate-900 border border-amber-100 dark:border-amber-900/40 px-2.5 py-1.5 min-w-[7.5rem]"
               >
                 <p className="text-[11px] font-bold truncate">{h.ticker || h.symbol}</p>
-                <p className="text-[9px] text-slate-400">SL {stop}</p>
+                <p className="text-[9px] text-slate-400">
+                  SL {stop}
+                  {qty > 0 ? ` · ${qty} qty` : ''}
+                </p>
                 <p className={`text-[11px] font-black ${dist < 0 ? 'text-rose-600' : 'text-amber-600'}`}>
                   {dist < 0 ? 'Past SL' : `${dist.toFixed(1)}% away`}
                 </p>
@@ -1149,20 +1192,31 @@ export default function PortfolioV1View({
                           {moneyPrecise(pnl(h), ccy)}
                         </span>
                       ),
-                      stop: (
-                        stop != null ? (
-                          <span className="tabular-nums text-slate-600">
-                            {moneyPrecise(stop, ccy)}
-                            {dist != null && (
-                              <span className={`block text-[9px] ${dist < 0 ? 'text-rose-600' : 'text-amber-600'}`}>
-                                {dist < 0 ? 'past' : `${dist.toFixed(1)}%`}
+                      stop: (() => {
+                        const stops = stopsForHolding(h);
+                        if (stops.length === 0) return <span className="text-slate-300">—</span>;
+                        if (stops.length === 1) {
+                          const s = stops[0];
+                          return (
+                            <span className="tabular-nums text-slate-600">
+                              {moneyPrecise(s.stop, ccy)}
+                              <span className={`block text-[9px] ${s.dist < 0 ? 'text-rose-600' : 'text-amber-600'}`}>
+                                {s.dist < 0 ? 'past' : `${s.dist.toFixed(1)}%`}
                               </span>
-                            )}
+                            </span>
+                          );
+                        }
+                        // Multiple positions — show tightest SL + count (e.g. Netflix ×5)
+                        const tightest = stops[0];
+                        return (
+                          <span className="tabular-nums text-slate-600" title={stops.map((s) => `SL ${s.stop} (${s.qty} qty, ${s.dist.toFixed(1)}%)`).join('\n')}>
+                            {moneyPrecise(tightest.stop, ccy)}
+                            <span className="block text-[9px] text-amber-600">
+                              {stops.length} pos · {tightest.dist < 0 ? 'past' : `${tightest.dist.toFixed(1)}%`}
+                            </span>
                           </span>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )
-                      ),
+                        );
+                      })(),
                       lev: <span className="text-slate-500">{lev != null && lev > 1 ? `${lev}x` : '—'}</span>,
                       currency: <span className="text-slate-400 font-bold">{ccy}</span>,
                     };
