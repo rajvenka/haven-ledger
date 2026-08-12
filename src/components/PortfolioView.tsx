@@ -1584,6 +1584,22 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setRefreshingPrices(true);
     setPriceRefreshSummary(null);
     await runAction(async () => {
+      try {
+        await refreshAllPricesInner(scope);
+      } catch (err: any) {
+        // Surface directly into the price-refresh summary, not just formError - a failure
+        // here (e.g. the Yahoo fallback request itself erroring) was previously only
+        // visible via a differently-located error banner that's easy to miss, making a
+        // real failure look identical to "nothing happened."
+        setPriceRefreshSummary(`Refresh failed: ${err?.message || 'unknown error'}`);
+        throw err;
+      }
+    });
+    setRefreshingPrices(false);
+  };
+
+  const refreshAllPricesInner = async (scope: 'active' | 'sold' = 'active') => {
+    {
       // Only holdings with a real ticker set can be looked up - Zerodha's symbol is
       // always a valid ticker, Groww's file only gives a company name so it needs one
       // entered manually (via the expand panel) before it can be refreshed.
@@ -1727,8 +1743,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
           ? `Live price updated for ${succeeded}${skipNote}${mfNote} · delayed a few minutes, not real-time`
           : `Live price updated for ${succeeded}, couldn't find ${failed}${skipNote}${mfNote} · delayed a few minutes, not real-time`
       );
-    });
-    setRefreshingPrices(false);
+    }
   };
 
   // Auto-refresh once when the page loads, if prices look stale - saves a manual click most of
