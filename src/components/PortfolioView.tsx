@@ -1638,6 +1638,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             body: JSON.stringify({ action: 'quote', apiKey: conn.credentials.api_key, accessToken: conn.credentials.access_token, instruments }),
           });
           const qData = await qResp.json().catch(() => ({}));
+          setZerodhaDebug({ context: 'refresh_prices', httpStatus: qResp.status, ok: qResp.ok, requestedInstruments: instruments, ...qData });
           if (!qResp.ok) throw new Error(qData?.error || 'Zerodha quote failed');
           holdings.forEach((h) => {
             const q = qData.quotes?.[instrumentKey(h)];
@@ -1649,10 +1650,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
               failed++;
             }
           });
-        } catch {
-          // Connection likely has an expired daily access_token - fall back to Yahoo for
-          // this batch rather than failing these holdings outright, so a stale Zerodha
-          // token degrades gracefully instead of blocking the whole refresh.
+        } catch (err: any) {
+          // Connection likely has an expired daily access_token, or a network-level failure
+          // before any HTTP response - fall back to Yahoo for this batch rather than failing
+          // these holdings outright, but capture what actually happened so it's visible
+          // instead of a silent, indistinguishable-from-nothing failure.
+          setZerodhaDebug({ context: 'refresh_prices', error: err?.message || String(err), fellBackToYahoo: true, instrumentCount: holdings.length });
           yahooHoldings.push(...holdings);
         }
       }
