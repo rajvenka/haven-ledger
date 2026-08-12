@@ -4022,43 +4022,45 @@ export default function PortfolioView(props: PortfolioViewProps) {
           )}
 
           {(filterOptions.combos.length > 1 || filterOptions.sources.length > 0 || filterOptions.priceMoves.length > 0 || activeHoldings.some(h => h.price_lookup_failed)) && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <button onClick={() => { setHoldingFilters(new Set()); setLotsViewActive(false); }} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.size === 0 && !lotsViewActive ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
-              {lotsAvailableForSelection && (
-                <button
-                  onClick={() => {
-                    setHoldingFilters(prev => new Set(Array.from(prev).filter(f => filterOptions.portfolioNames.includes(f))));
-                    setLotsViewActive(true);
-                  }}
-                  className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${lotsViewActive ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}
-                >
-                  Lots
-                </button>
-              )}
-              {activeHoldings.some(h => h.price_lookup_failed) && (
-                <button onClick={() => toggleHoldingFilter(SYMBOL_NOT_FOUND_FILTER)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(SYMBOL_NOT_FOUND_FILTER) ? 'bg-rose-600 text-white' : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400'}`}>
-                  Symbol Not Found ({activeHoldings.filter(h => h.price_lookup_failed).length})
-                </button>
-              )}
-              {filterOptions.combos.map(c => (
-                <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${brokerPillClass(c, holdingFilters.has(c))}`}>{c}</button>
-              ))}
-              {showFilters && filterOptions.sources.map(s => (
-                <button key={s} onClick={() => toggleHoldingFilter(s)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(s) ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}>{s}</button>
-              ))}
-              {showFilters && filterOptions.changes.map(c => (
-                <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(c) ? 'bg-amber-500 text-white' : 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400'}`}>{c}</button>
-              ))}
-              {showFilters && filterOptions.priceMoves.map(p => (
-                <button key={p} onClick={() => toggleHoldingFilter(p)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(p) ? (p === 'Price Up (Live)' ? 'bg-emerald-600 text-white' : 'bg-rose-500 text-white') : (p === 'Price Up (Live)' ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400')}`}>{p}</button>
-              ))}
+            <div className="flex flex-col gap-1.5">
+              {/* Row 1 — Brokers (All + broker/type combos) */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[8px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 mr-0.5 select-none">Broker</span>
+                <button onClick={() => { setHoldingFilters(new Set()); setLotsViewActive(false); }} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.size === 0 && !lotsViewActive ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
+                {lotsAvailableForSelection && (
+                  <button
+                    onClick={() => {
+                      setHoldingFilters(prev => new Set(Array.from(prev).filter(f => filterOptions.portfolioNames.includes(f))));
+                      setLotsViewActive(true);
+                    }}
+                    className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${lotsViewActive ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}
+                  >
+                    Lots
+                  </button>
+                )}
+                {filterOptions.combos.map(c => (
+                  <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${brokerPillClass(c, holdingFilters.has(c))}`}>{c}</button>
+                ))}
+                {activeHoldings.some(h => h.price_lookup_failed) && (
+                  <button onClick={() => toggleHoldingFilter(SYMBOL_NOT_FOUND_FILTER)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(SYMBOL_NOT_FOUND_FILTER) ? 'bg-rose-600 text-white' : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400'}`}>
+                    Symbol Not Found ({activeHoldings.filter(h => h.price_lookup_failed).length})
+                  </button>
+                )}
+              </div>
+              {/* Row 2 — Tags, change flags, live price moves */}
               {(filterOptions.sources.length > 0 || filterOptions.changes.length > 0 || filterOptions.priceMoves.length > 0) && (
-                <button
-                  onClick={() => setShowFilters(!showFilters)}
-                  className="px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center gap-0.5"
-                >
-                  {showFilters ? 'Hide' : 'More'} <ChevronDown className={`w-2.5 h-2.5 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-                </button>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[8px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 mr-0.5 select-none">Filters</span>
+                  {filterOptions.sources.map(s => (
+                    <button key={s} onClick={() => toggleHoldingFilter(s)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(s) ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}>{s}</button>
+                  ))}
+                  {filterOptions.changes.map(c => (
+                    <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(c) ? 'bg-amber-500 text-white' : 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400'}`}>{c}</button>
+                  ))}
+                  {filterOptions.priceMoves.map(p => (
+                    <button key={p} onClick={() => toggleHoldingFilter(p)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(p) ? (p === 'Price Up (Live)' ? 'bg-emerald-600 text-white' : 'bg-rose-500 text-white') : (p === 'Price Up (Live)' ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400')}`}>{p}</button>
+                  ))}
+                </div>
               )}
             </div>
           )}
