@@ -176,10 +176,11 @@ export default async function handler(req: any, res: any) {
 
       const holdings = rawHoldings
         .map((h) => {
+          // Official Kite guidance: total = quantity + t1_quantity + mtf.quantity.
+          // used_quantity is collateral/blocked subset of quantity — adding it double-counts.
           const qty =
             Number(h.quantity || 0) +
             Number(h.t1_quantity || 0) +
-            Number(h.used_quantity || 0) +
             Number(h?.mtf?.quantity || 0);
           if (qty <= 0) return null;
           const avg = Number(h.average_price || 0);
