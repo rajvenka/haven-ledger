@@ -225,15 +225,25 @@ export default async function handler(req: any, res: any) {
           continue;
         }
         const posData = await posResp.json();
+        const arr = posData?.items ?? posData?.positions ?? (Array.isArray(posData) ? posData : []);
+        const optionSamples = arr
+          .filter((it: any) => String(it.instrument_type ?? it.instrumentType ?? "").toUpperCase().includes("OPTION"))
+          .map((it: any) => ({
+            symbol: it.symbol,
+            instrument_type: it.instrument_type ?? it.instrumentType,
+            quantity: it.quantity,
+            cost_price: it.cost_price ?? it.costPrice,
+            last_price: it.last_price ?? it.lastPrice,
+            position_id: it.position_id ?? it.positionId,
+            keys: Object.keys(it),
+          }));
         rawPositionsDebug.push({
           accountId,
-          itemCount: Array.isArray(posData) ? posData.length : (posData?.items?.length ?? posData?.positions?.length ?? 0),
+          itemCount: arr.length,
+          optionCount: optionSamples.length,
+          optionSamples,
           raw: JSON.stringify(posData).slice(0, 2500),
-          sampleKeys: (() => {
-            const arr = posData?.items ?? posData?.positions ?? (Array.isArray(posData) ? posData : []);
-            const first = arr[0];
-            return first ? Object.keys(first) : [];
-          })(),
+          sampleKeys: arr[0] ? Object.keys(arr[0]) : [],
         });
         // Confirmed via a real sync: the response is a direct array (not wrapped in
         // {items:[...]}), and each position genuinely carries its own currency directly -
@@ -263,26 +273,27 @@ export default async function handler(req: any, res: any) {
           const currentPrice = Number((rawLast * multiplier).toFixed(4));
           const currency = item.currency ?? item.currency_code ?? item.currencyCode ?? "USD";
 
-          // Webull often returns symbol = underlying only (e.g. "AAPL") for every option.
-          // Two AAPL calls would then collapse into one row on import. Build a unique
-          // contract symbol from strike / expiry / type / position_id when needed.
+          // Webull often returns symbol = underlying only (e.g. "AAPL") for every option,
+          // and this positions endpoint does NOT include strike / expiry / option_type
+          // (confirmed via rawPositionsDebug sampleKeys). Two AAPL options would collapse
+          // into one import row unless we uniquify with position_id.
           const underlying = String(
             item.symbol ?? item.option_symbol ?? item.optionSymbol ?? item.instrument_id ?? item.instrumentId ?? "OPT"
           ).toUpperCase().trim();
           const strike = item.strike_price ?? item.strikePrice ?? item.strike;
           const expiry = item.option_expire_date ?? item.optionExpireDate ?? item.expire_date ?? item.expireDate ?? item.init_exp_date;
           const optType = String(item.option_type ?? item.optionType ?? "").toUpperCase(); // CALL / PUT
-          const posId = String(item.position_id ?? item.positionId ?? item.id ?? "").slice(-8);
+          const fullPosId = String(item.position_id ?? item.positionId ?? item.id ?? "");
+          const posId = fullPosId.slice(-8) || fullPosId;
           let symbol = underlying;
           if (isOption) {
-            const parts: string[] = [underlying];
+            const parts: string[] = [underlying, "OPT"];
             if (optType === "CALL" || optType === "PUT") parts.push(optType === "CALL" ? "C" : "P");
             if (strike != null && String(strike).trim() !== "") parts.push(String(strike));
             if (expiry) parts.push(String(expiry).slice(0, 10));
-            // If we still only have the underlying (no strike/expiry), append position id
-            // so two different contracts never share the same symbol key.
-            if (parts.length === 1 && posId) parts.push(posId);
-            else if (parts.length === 1) parts.push("OPT");
+            // Always append short position id so contracts stay unique even when
+            // strike/expiry are missing from the API payload.
+            if (posId) parts.push(posId);
             symbol = parts.join(" ");
           }
 
