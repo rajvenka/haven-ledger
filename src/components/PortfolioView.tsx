@@ -1608,24 +1608,27 @@ export default function PortfolioView(props: PortfolioViewProps) {
       let failed = 0;
       const updatePromises: Promise<void>[] = [];
 
-      // Zerodha holdings with a live Kite Connect account get their price from Zerodha's own
-      // /quote endpoint - more accurate than the general Yahoo path, no exchange-suffix
-      // guessing, and it's the only source that supplies a real previous close for these
-      // rows (Daily Change works for Zerodha without extra work). Falls back to Yahoo for
-      // any Zerodha holding without a matching connection (CSV-only imports).
+      // Live price chain: Zerodha quote → Groww LTP → Yahoo.
+      // Zerodha: best for Zerodha-connected holdings (real previous close for Daily Change).
+      // Groww: stocks LTP via /v1/live-data/ltp when a Groww connection exists - helps
+      // India tickers (e.g. TVSMOTOR) that Yahoo may miss if exchange/suffix was wrong.
+      // Yahoo: always the final backup for anything still unmatched.
       const zerodhaConnections = portfolioBrokerConnections.filter((c: any) => c.broker_type === 'zerodha' && c.credentials?.api_key && c.credentials?.access_token);
+      const growwConnections = portfolioBrokerConnections.filter((c: any) => c.broker_type === 'groww' && (c.credentials?.api_key || c.credentials?.access_token));
       const zerodhaConnFor = (h: any) => zerodhaConnections.find((c: any) => (c.portfolio_id || null) === (h.portfolio_id || null)) ?? zerodhaConnections.find((c: any) => !c.portfolio_id);
+      const growwConnFor = (h: any) => growwConnections.find((c: any) => (c.portfolio_id || null) === (h.portfolio_id || null)) ?? growwConnections.find((c: any) => !c.portfolio_id) ?? growwConnections[0];
       const instrumentKey = (h: any) => `${h.exchange || 'NSE'}:${h.ticker ?? h.symbol}`;
+      const tickerOf = (h: any) => String(h.ticker ?? h.symbol ?? '').trim().toUpperCase();
 
       const zerodhaGroups = new Map<string, { conn: any; holdings: any[] }>();
-      const yahooHoldings: any[] = [];
+      let remaining: any[] = [];
       for (const h of refreshable) {
         const conn = h.broker === 'Zerodha' ? zerodhaConnFor(h) : null;
         if (conn) {
           if (!zerodhaGroups.has(conn.id)) zerodhaGroups.set(conn.id, { conn, holdings: [] });
           zerodhaGroups.get(conn.id)!.holdings.push(h);
         } else {
-          yahooHoldings.push(h);
+          remaining.push(h);
         }
       }
 
@@ -1645,18 +1648,89 @@ export default function PortfolioView(props: PortfolioViewProps) {
               updatePromises.push(updatePortfolioHoldingLivePrice(h.id, q.lastPrice, q.previousClose ?? null));
               succeeded++;
             } else {
-              updatePromises.push(markPriceLookupFailed(h.id));
-              failed++;
+              // No quote for this instrument - try Groww/Yahoo next instead of failing now.
+              remaining.push(h);
             }
           });
         } catch {
-          // Connection likely has an expired daily access_token - fall back to Yahoo for
-          // this batch rather than failing these holdings outright, so a stale Zerodha
-          // token degrades gracefully instead of blocking the whole refresh.
-          yahooHoldings.push(...holdings);
+          // Expired daily access_token or network - degrade to Groww/Yahoo for this batch.
+          remaining.push(...holdings);
         }
       }
 
+      // Groww LTP for remaining holdings when a Groww connection is available.
+      // Prefer Groww-broker rows, but any remaining India cash ticker can use LTP
+      // (Groww keys are NSE_SYMBOL / BSE_SYMBOL). Unmatched stay in remaining → Yahoo.
+      if (remaining.length > 0 && growwConnections.length > 0) {
+        const stillAfterGroww: any[] = [];
+        // Group by connection so multi-portfolio Groww accounts stay scoped.
+        const growwGroups = new Map<string, { conn: any; holdings: any[] }>();
+        for (const h of remaining) {
+          const conn = growwConnFor(h);
+          if (!conn) {
+            stillAfterGroww.push(h);
+            continue;
+          }
+          if (!growwGroups.has(conn.id)) growwGroups.set(conn.id, { conn, holdings: [] });
+          growwGroups.get(conn.id)!.holdings.push(h);
+        }
+
+        for (const { conn, holdings } of growwGroups.values()) {
+          try {
+            const instruments = holdings.map((h) => {
+              const t = tickerOf(h);
+              const ex = String(h.exchange || 'NSE').toUpperCase();
+              if (t.startsWith('NSE_') || t.startsWith('BSE_')) return t;
+              if (t.includes(':')) {
+                const [a, b] = t.split(':');
+                return `${a}_${b}`;
+              }
+              return `${ex === 'BSE' ? 'BSE' : 'NSE'}_${t}`;
+            });
+            const ltpResp = await fetch('/api/portfolio-groww-sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'ltp',
+                apiKey: conn.credentials?.api_key,
+                apiSecret: conn.credentials?.api_secret,
+                accessToken: conn.credentials?.access_token,
+                instruments,
+              }),
+            });
+            const ltpData = await ltpResp.json().catch(() => ({}));
+            if (!ltpResp.ok) throw new Error(ltpData?.error || 'Groww LTP failed');
+            // Persist refreshed access_token when Groww returned a new one
+            if (ltpData.accessToken && ltpData.accessToken !== conn.credentials?.access_token) {
+              try {
+                await setPortfolioBrokerConnection?.(
+                  'groww',
+                  { ...conn.credentials, access_token: ltpData.accessToken },
+                  conn.portfolio_id || undefined,
+                  conn.connection_label || undefined,
+                );
+              } catch { /* non-fatal */ }
+            }
+            const prices: Record<string, number> = ltpData.prices || {};
+            holdings.forEach((h, i) => {
+              const key = instruments[i];
+              const price = prices[key] ?? prices[tickerOf(h)] ?? prices[`NSE_${tickerOf(h)}`] ?? prices[`BSE_${tickerOf(h)}`];
+              if (price != null && Number(price) > 0) {
+                updatePromises.push(updatePortfolioHoldingLivePrice(h.id, Number(price), null));
+                succeeded++;
+              } else {
+                stillAfterGroww.push(h);
+              }
+            });
+          } catch {
+            // Groww token/API issue - fall through to Yahoo for this batch
+            stillAfterGroww.push(...holdings);
+          }
+        }
+        remaining = stillAfterGroww;
+      }
+
+      const yahooHoldings = remaining;
       if (yahooHoldings.length > 0) {
         const symbols = yahooHoldings.map(h => ({ symbol: h.ticker ?? h.symbol, exchange: h.exchange, currency: h.currency }));
         const resp = await fetch('/api/portfolio-prices', {
