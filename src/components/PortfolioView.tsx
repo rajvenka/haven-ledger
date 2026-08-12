@@ -1618,7 +1618,22 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const zerodhaConnFor = (h: any) => zerodhaConnections.find((c: any) => (c.portfolio_id || null) === (h.portfolio_id || null)) ?? zerodhaConnections.find((c: any) => !c.portfolio_id);
       const growwConnFor = (h: any) => growwConnections.find((c: any) => (c.portfolio_id || null) === (h.portfolio_id || null)) ?? growwConnections.find((c: any) => !c.portfolio_id) ?? growwConnections[0];
       const instrumentKey = (h: any) => `${h.exchange || 'NSE'}:${h.ticker ?? h.symbol}`;
-      const tickerOf = (h: any) => String(h.ticker ?? h.symbol ?? '').trim().toUpperCase();
+      const tickerOf = (h: any) => {
+        let s = String(h.ticker ?? h.symbol ?? '').trim().toUpperCase();
+        s = s.replace(/\*+$/g, '').trim();
+        // Zerodha style "MIRAEAMC - MAFANG" / "ZERODHAAMC - SML100CASE" → pure ticker
+        if (s.includes(' - ')) {
+          const parts = s.split(' - ').map((p: string) => p.trim()).filter(Boolean);
+          if (parts.length >= 2) s = parts[parts.length - 1];
+        }
+        const compact = s.replace(/\b(ETF|BEES)\b/g, '').replace(/[^A-Z0-9]/g, '');
+        const aliases: Record<string, string> = {
+          NASDAQ100: 'MON100', NASDAQ100ETF: 'MON100', MOTILALOSNASDAQ100ETF: 'MON100',
+          MOTILALOSNASDAQ100: 'MON100', MAM150ETF: 'MID150', MAM150: 'MID150',
+        };
+        if (aliases[compact]) return aliases[compact];
+        return compact || s;
+      };
 
       const zerodhaGroups = new Map<string, { conn: any; holdings: any[] }>();
       let remaining: any[] = [];
