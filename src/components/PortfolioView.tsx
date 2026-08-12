@@ -1608,45 +1608,24 @@ export default function PortfolioView(props: PortfolioViewProps) {
       let failed = 0;
       const updatePromises: Promise<void>[] = [];
 
-      // Live price chain: Zerodha quote → Groww LTP → Yahoo.
-      // Zerodha: best for Zerodha-connected holdings (real previous close for Daily Change).
-      // Groww: stocks LTP via /v1/live-data/ltp when a Groww connection exists - helps
-      // India tickers (e.g. TVSMOTOR) that Yahoo may miss if exchange/suffix was wrong.
-      // Yahoo: always the final backup for anything still unmatched.
+      // Zerodha holdings with a live Kite Connect account get their price from Zerodha's own
+      // /quote endpoint - more accurate than the general Yahoo path, no exchange-suffix
+      // guessing, and it's the only source that supplies a real previous close for these
+      // rows (Daily Change works for Zerodha without extra work). Falls back to Yahoo for
+      // any Zerodha holding without a matching connection (CSV-only imports).
       const zerodhaConnections = portfolioBrokerConnections.filter((c: any) => c.broker_type === 'zerodha' && c.credentials?.api_key && c.credentials?.access_token);
-      const growwConnections = portfolioBrokerConnections.filter((c: any) => c.broker_type === 'groww' && (c.credentials?.api_key || c.credentials?.access_token));
       const zerodhaConnFor = (h: any) => zerodhaConnections.find((c: any) => (c.portfolio_id || null) === (h.portfolio_id || null)) ?? zerodhaConnections.find((c: any) => !c.portfolio_id);
-      const growwConnFor = (h: any) => growwConnections.find((c: any) => (c.portfolio_id || null) === (h.portfolio_id || null)) ?? growwConnections.find((c: any) => !c.portfolio_id) ?? growwConnections[0];
       const instrumentKey = (h: any) => `${h.exchange || 'NSE'}:${h.ticker ?? h.symbol}`;
-      const tickerOf = (h: any) => {
-        let s = String(h.ticker ?? h.symbol ?? '').trim().toUpperCase();
-        s = s.replace(/\*+$/g, '').trim();
-        // Zerodha style "MIRAEAMC - MAFANG" → pure ticker. Keep "SSEGL-SM" intact
-        // (hyphen is part of NSE SME symbols; only split on " - " with spaces).
-        if (s.includes(' - ')) {
-          const parts = s.split(' - ').map((p: string) => p.trim()).filter(Boolean);
-          if (parts.length >= 2) s = parts[parts.length - 1];
-        }
-        s = s.replace(/\b(ETF|BEES)\b/g, '').replace(/\s+/g, '').trim() || s;
-        const compact = s.replace(/[^A-Z0-9]/g, '');
-        const aliases: Record<string, string> = {
-          NASDAQ100: 'MON100', NASDAQ100ETF: 'MON100', MOTILALOSNASDAQ100ETF: 'MON100',
-          MOTILALOSNASDAQ100: 'MON100', MAM150ETF: 'MID150', MAM150: 'MID150',
-        };
-        if (aliases[compact]) return aliases[compact];
-        // Preserve hyphens for SME tickers (SSEGL-SM, TAC-SM)
-        return s.replace(/[^A-Z0-9-]/g, '') || s;
-      };
 
       const zerodhaGroups = new Map<string, { conn: any; holdings: any[] }>();
-      let remaining: any[] = [];
+      const yahooHoldings: any[] = [];
       for (const h of refreshable) {
         const conn = h.broker === 'Zerodha' ? zerodhaConnFor(h) : null;
         if (conn) {
           if (!zerodhaGroups.has(conn.id)) zerodhaGroups.set(conn.id, { conn, holdings: [] });
           zerodhaGroups.get(conn.id)!.holdings.push(h);
         } else {
-          remaining.push(h);
+          yahooHoldings.push(h);
         }
       }
 
@@ -1666,89 +1645,18 @@ export default function PortfolioView(props: PortfolioViewProps) {
               updatePromises.push(updatePortfolioHoldingLivePrice(h.id, q.lastPrice, q.previousClose ?? null));
               succeeded++;
             } else {
-              // No quote for this instrument - try Groww/Yahoo next instead of failing now.
-              remaining.push(h);
+              updatePromises.push(markPriceLookupFailed(h.id));
+              failed++;
             }
           });
         } catch {
-          // Expired daily access_token or network - degrade to Groww/Yahoo for this batch.
-          remaining.push(...holdings);
+          // Connection likely has an expired daily access_token - fall back to Yahoo for
+          // this batch rather than failing these holdings outright, so a stale Zerodha
+          // token degrades gracefully instead of blocking the whole refresh.
+          yahooHoldings.push(...holdings);
         }
       }
 
-      // Groww LTP for remaining holdings when a Groww connection is available.
-      // Prefer Groww-broker rows, but any remaining India cash ticker can use LTP
-      // (Groww keys are NSE_SYMBOL / BSE_SYMBOL). Unmatched stay in remaining → Yahoo.
-      if (remaining.length > 0 && growwConnections.length > 0) {
-        const stillAfterGroww: any[] = [];
-        // Group by connection so multi-portfolio Groww accounts stay scoped.
-        const growwGroups = new Map<string, { conn: any; holdings: any[] }>();
-        for (const h of remaining) {
-          const conn = growwConnFor(h);
-          if (!conn) {
-            stillAfterGroww.push(h);
-            continue;
-          }
-          if (!growwGroups.has(conn.id)) growwGroups.set(conn.id, { conn, holdings: [] });
-          growwGroups.get(conn.id)!.holdings.push(h);
-        }
-
-        for (const { conn, holdings } of growwGroups.values()) {
-          try {
-            const instruments = holdings.map((h) => {
-              const t = tickerOf(h);
-              const ex = String(h.exchange || 'NSE').toUpperCase();
-              if (t.startsWith('NSE_') || t.startsWith('BSE_')) return t;
-              if (t.includes(':')) {
-                const [a, b] = t.split(':');
-                return `${a}_${b}`;
-              }
-              return `${ex === 'BSE' ? 'BSE' : 'NSE'}_${t}`;
-            });
-            const ltpResp = await fetch('/api/portfolio-groww-sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'ltp',
-                apiKey: conn.credentials?.api_key,
-                apiSecret: conn.credentials?.api_secret,
-                accessToken: conn.credentials?.access_token,
-                instruments,
-              }),
-            });
-            const ltpData = await ltpResp.json().catch(() => ({}));
-            if (!ltpResp.ok) throw new Error(ltpData?.error || 'Groww LTP failed');
-            // Persist refreshed access_token when Groww returned a new one
-            if (ltpData.accessToken && ltpData.accessToken !== conn.credentials?.access_token) {
-              try {
-                await setPortfolioBrokerConnection?.(
-                  'groww',
-                  { ...conn.credentials, access_token: ltpData.accessToken },
-                  conn.portfolio_id || undefined,
-                  conn.connection_label || undefined,
-                );
-              } catch { /* non-fatal */ }
-            }
-            const prices: Record<string, number> = ltpData.prices || {};
-            holdings.forEach((h, i) => {
-              const key = instruments[i];
-              const price = prices[key] ?? prices[tickerOf(h)] ?? prices[`NSE_${tickerOf(h)}`] ?? prices[`BSE_${tickerOf(h)}`];
-              if (price != null && Number(price) > 0) {
-                updatePromises.push(updatePortfolioHoldingLivePrice(h.id, Number(price), null));
-                succeeded++;
-              } else {
-                stillAfterGroww.push(h);
-              }
-            });
-          } catch {
-            // Groww token/API issue - fall through to Yahoo for this batch
-            stillAfterGroww.push(...holdings);
-          }
-        }
-        remaining = stillAfterGroww;
-      }
-
-      const yahooHoldings = remaining;
       if (yahooHoldings.length > 0) {
         const symbols = yahooHoldings.map(h => ({ symbol: h.ticker ?? h.symbol, exchange: h.exchange, currency: h.currency }));
         const resp = await fetch('/api/portfolio-prices', {
@@ -2186,7 +2094,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const returnPct = netContributed > 0 ? (netGain / netContributed) * 100 : 0;
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-5 text-left bg-slate-50 dark:bg-slate-900">
+    <div className="flex-1 flex flex-col overflow-y-auto px-3 sm:px-4 pt-3 pb-24 md:pb-4 space-y-5 text-left bg-slate-50 dark:bg-slate-900">
       {/* Header */}
       <div className="flex items-center gap-2">
         <Briefcase className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
@@ -4022,45 +3930,43 @@ export default function PortfolioView(props: PortfolioViewProps) {
           )}
 
           {(filterOptions.combos.length > 1 || filterOptions.sources.length > 0 || filterOptions.priceMoves.length > 0 || activeHoldings.some(h => h.price_lookup_failed)) && (
-            <div className="flex flex-col gap-1.5">
-              {/* Row 1 — Brokers (All + broker/type combos) */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[8px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 mr-0.5 select-none">Broker</span>
-                <button onClick={() => { setHoldingFilters(new Set()); setLotsViewActive(false); }} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.size === 0 && !lotsViewActive ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
-                {lotsAvailableForSelection && (
-                  <button
-                    onClick={() => {
-                      setHoldingFilters(prev => new Set(Array.from(prev).filter(f => filterOptions.portfolioNames.includes(f))));
-                      setLotsViewActive(true);
-                    }}
-                    className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${lotsViewActive ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}
-                  >
-                    Lots
-                  </button>
-                )}
-                {filterOptions.combos.map(c => (
-                  <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${brokerPillClass(c, holdingFilters.has(c))}`}>{c}</button>
-                ))}
-                {activeHoldings.some(h => h.price_lookup_failed) && (
-                  <button onClick={() => toggleHoldingFilter(SYMBOL_NOT_FOUND_FILTER)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(SYMBOL_NOT_FOUND_FILTER) ? 'bg-rose-600 text-white' : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400'}`}>
-                    Symbol Not Found ({activeHoldings.filter(h => h.price_lookup_failed).length})
-                  </button>
-                )}
-              </div>
-              {/* Row 2 — Tags, change flags, live price moves */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button onClick={() => { setHoldingFilters(new Set()); setLotsViewActive(false); }} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.size === 0 && !lotsViewActive ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
+              {lotsAvailableForSelection && (
+                <button
+                  onClick={() => {
+                    setHoldingFilters(prev => new Set(Array.from(prev).filter(f => filterOptions.portfolioNames.includes(f))));
+                    setLotsViewActive(true);
+                  }}
+                  className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${lotsViewActive ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}
+                >
+                  Lots
+                </button>
+              )}
+              {activeHoldings.some(h => h.price_lookup_failed) && (
+                <button onClick={() => toggleHoldingFilter(SYMBOL_NOT_FOUND_FILTER)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(SYMBOL_NOT_FOUND_FILTER) ? 'bg-rose-600 text-white' : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400'}`}>
+                  Symbol Not Found ({activeHoldings.filter(h => h.price_lookup_failed).length})
+                </button>
+              )}
+              {filterOptions.combos.map(c => (
+                <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${brokerPillClass(c, holdingFilters.has(c))}`}>{c}</button>
+              ))}
+              {showFilters && filterOptions.sources.map(s => (
+                <button key={s} onClick={() => toggleHoldingFilter(s)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(s) ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}>{s}</button>
+              ))}
+              {showFilters && filterOptions.changes.map(c => (
+                <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(c) ? 'bg-amber-500 text-white' : 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400'}`}>{c}</button>
+              ))}
+              {showFilters && filterOptions.priceMoves.map(p => (
+                <button key={p} onClick={() => toggleHoldingFilter(p)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(p) ? (p === 'Price Up (Live)' ? 'bg-emerald-600 text-white' : 'bg-rose-500 text-white') : (p === 'Price Up (Live)' ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400')}`}>{p}</button>
+              ))}
               {(filterOptions.sources.length > 0 || filterOptions.changes.length > 0 || filterOptions.priceMoves.length > 0) && (
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[8px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 mr-0.5 select-none">Filters</span>
-                  {filterOptions.sources.map(s => (
-                    <button key={s} onClick={() => toggleHoldingFilter(s)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(s) ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}>{s}</button>
-                  ))}
-                  {filterOptions.changes.map(c => (
-                    <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(c) ? 'bg-amber-500 text-white' : 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400'}`}>{c}</button>
-                  ))}
-                  {filterOptions.priceMoves.map(p => (
-                    <button key={p} onClick={() => toggleHoldingFilter(p)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(p) ? (p === 'Price Up (Live)' ? 'bg-emerald-600 text-white' : 'bg-rose-500 text-white') : (p === 'Price Up (Live)' ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400')}`}>{p}</button>
-                  ))}
-                </div>
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center gap-0.5"
+                >
+                  {showFilters ? 'Hide' : 'More'} <ChevronDown className={`w-2.5 h-2.5 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+                </button>
               )}
             </div>
           )}
