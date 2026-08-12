@@ -186,19 +186,52 @@ export default function PortfolioV1View({
     let mv = 0;
     let day = 0;
     let dayBasis = 0;
+    const byCurrency: Record<
+      string,
+      { invested: number; market: number; pnl: number; dayPnl: number; dayBasis: number; count: number }
+    > = {};
+
     filtered.forEach((h: any) => {
-      inv += invested(h);
-      mv += marketValue(h);
+      const ccy = String(h.currency || baseCurrency || 'INR').toUpperCase();
+      if (!byCurrency[ccy]) {
+        byCurrency[ccy] = { invested: 0, market: 0, pnl: 0, dayPnl: 0, dayBasis: 0, count: 0 };
+      }
+      const invH = invested(h);
+      const mvH = marketValue(h);
+      inv += invH;
+      mv += mvH;
+      byCurrency[ccy].invested += invH;
+      byCurrency[ccy].market += mvH;
+      byCurrency[ccy].pnl += mvH - invH;
+      byCurrency[ccy].count += 1;
       const d = dayChangePct(h);
       if (d != null) {
-        const v = marketValue(h);
+        const v = mvH;
         day += (d / 100) * v;
         dayBasis += v;
+        byCurrency[ccy].dayPnl += (d / 100) * v;
+        byCurrency[ccy].dayBasis += v;
       }
     });
+
     const cash = (portfolioCashBalances || [])
       .filter((c: any) => brokerFilter === 'All' || String(c.location || c.broker || '') === brokerFilter)
       .reduce((s: number, c: any) => s + Number(c.amount || 0), 0);
+
+    const currencyTiles = Object.entries(byCurrency)
+      .map(([currency, v]) => ({
+        currency,
+        invested: v.invested,
+        market: v.market,
+        total: v.market,
+        pnl: v.pnl,
+        pnlPct: v.invested > 0 ? (v.pnl / v.invested) * 100 : 0,
+        dayPnl: v.dayPnl,
+        dayPct: v.dayBasis > 0 ? (v.dayPnl / v.dayBasis) * 100 : 0,
+        count: v.count,
+      }))
+      .sort((a, b) => b.market - a.market);
+
     return {
       invested: inv,
       market: mv,
@@ -209,8 +242,10 @@ export default function PortfolioV1View({
       dayPnl: day,
       dayPct: dayBasis > 0 ? (day / dayBasis) * 100 : 0,
       count: filtered.length,
+      currencyTiles,
+      multiCurrency: currencyTiles.length > 1,
     };
-  }, [filtered, portfolioCashBalances, brokerFilter]);
+  }, [filtered, portfolioCashBalances, brokerFilter, baseCurrency]);
 
   const ranked = useMemo(() => {
     const withPnl = filtered
@@ -392,51 +427,121 @@ export default function PortfolioV1View({
         </div>
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4 col-span-2 sm:col-span-1">
-          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Total value</p>
-          <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1 tabular-nums">
-            {money(summary.total, baseCurrency)}
+      {/* Summary cards — multi-currency (e.g. Webull AUD + USD) gets one tile stack per currency */}
+      {summary.multiCurrency ? (
+        <div className="space-y-2">
+          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 px-0.5">
+            Values by currency · not converted to {baseCurrency}
           </p>
-          <p className="text-[10px] text-slate-400 mt-1">
-            {summary.count} holdings
-            {summary.cash > 0 ? ` · cash ${money(summary.cash, baseCurrency)}` : ''}
-          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+            {summary.currencyTiles.map((tile) => (
+              <div
+                key={tile.currency}
+                className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4"
+              >
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                    {tile.currency}
+                  </span>
+                  <span className="text-[10px] text-slate-400">{tile.count} holdings</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Total value</p>
+                    <p className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mt-0.5 tabular-nums">
+                      {money(tile.total, tile.currency)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Invested</p>
+                    <p className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mt-0.5 tabular-nums">
+                      {money(tile.invested, tile.currency)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Unrealised P&amp;L</p>
+                    <p
+                      className={`text-base sm:text-lg font-black mt-0.5 tabular-nums ${
+                        tile.pnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                      }`}
+                    >
+                      {money(tile.pnl, tile.currency)}
+                    </p>
+                    <p className={`text-[10px] font-bold ${tile.pnlPct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {pct(tile.pnlPct)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Day move</p>
+                    <p
+                      className={`text-base sm:text-lg font-black mt-0.5 tabular-nums ${
+                        tile.dayPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                      }`}
+                    >
+                      {money(tile.dayPnl, tile.currency)}
+                    </p>
+                    <p className={`text-[10px] font-bold ${tile.dayPct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {pct(tile.dayPct)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4">
-          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Invested</p>
-          <p className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mt-1 tabular-nums">
-            {money(summary.invested, baseCurrency)}
-          </p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+          {(() => {
+            const ccy = summary.currencyTiles[0]?.currency || baseCurrency;
+            return (
+              <>
+                <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4 col-span-2 sm:col-span-1">
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Total value</p>
+                  <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1 tabular-nums">
+                    {money(summary.total, ccy)}
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    {summary.count} holdings
+                    {summary.cash > 0 ? ` · cash ${money(summary.cash, ccy)}` : ''}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4">
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Invested</p>
+                  <p className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mt-1 tabular-nums">
+                    {money(summary.invested, ccy)}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4">
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Unrealised P&amp;L</p>
+                  <p
+                    className={`text-lg sm:text-xl font-black mt-1 tabular-nums ${
+                      summary.pnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                    }`}
+                  >
+                    {money(summary.pnl, ccy)}
+                  </p>
+                  <p className={`text-[10px] font-bold ${summary.pnlPct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {pct(summary.pnlPct)}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4">
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Day move</p>
+                  <p
+                    className={`text-lg sm:text-xl font-black mt-1 tabular-nums ${
+                      summary.dayPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                    }`}
+                  >
+                    {money(summary.dayPnl, ccy)}
+                  </p>
+                  <p className={`text-[10px] font-bold ${summary.dayPct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {pct(summary.dayPct)}
+                  </p>
+                </div>
+              </>
+            );
+          })()}
         </div>
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4">
-          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Unrealised P&amp;L</p>
-          <p
-            className={`text-lg sm:text-xl font-black mt-1 tabular-nums ${
-              summary.pnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
-            }`}
-          >
-            {money(summary.pnl, baseCurrency)}
-          </p>
-          <p className={`text-[10px] font-bold ${summary.pnlPct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-            {pct(summary.pnlPct)}
-          </p>
-        </div>
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4">
-          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Day move</p>
-          <p
-            className={`text-lg sm:text-xl font-black mt-1 tabular-nums ${
-              summary.dayPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
-            }`}
-          >
-            {money(summary.dayPnl, baseCurrency)}
-          </p>
-          <p className={`text-[10px] font-bold ${summary.dayPct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-            {pct(summary.dayPct)}
-          </p>
-        </div>
-      </div>
+      )}
 
       {/* Gainers / Losers */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
