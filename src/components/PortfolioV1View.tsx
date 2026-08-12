@@ -607,9 +607,9 @@ export default function PortfolioV1View({
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-3 sm:px-4 pt-2 sm:pt-3 pb-24 sm:pb-6 space-y-3 sm:space-y-4">
+    <div className="w-full max-w-6xl mx-auto px-3 sm:px-5 pt-2 sm:pt-3 pb-24 sm:pb-6 space-y-3 sm:space-y-4">
       {/* Hero */}
-      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950/30 p-3 sm:p-4">
+      <div className="relative w-full overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950/30 p-3 sm:p-4">
         <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-indigo-400/10 blur-3xl pointer-events-none" />
         <div className="relative flex items-start justify-between gap-3">
           <div>
@@ -739,7 +739,7 @@ export default function PortfolioV1View({
       </div>
 
       {/* Category tiles — ultimate product map */}
-      <div>
+      <div className="w-full">
         <div className="flex items-center justify-between mb-1.5 px-0.5">
           <h2 className="text-[11px] font-black uppercase tracking-wider text-slate-500">Markets & products</h2>
           {categoryFilter !== 'All' && (
@@ -755,7 +755,19 @@ export default function PortfolioV1View({
             </button>
           )}
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+        <div
+          className="grid gap-2.5"
+          style={{
+            gridTemplateColumns:
+              categoryCards.length <= 1
+                ? '1fr'
+                : categoryCards.length === 2
+                  ? 'repeat(2, minmax(0, 1fr))'
+                  : categoryCards.length === 3
+                    ? 'repeat(3, minmax(0, 1fr))'
+                    : 'repeat(auto-fit, minmax(140px, 1fr))',
+          }}
+        >
           {categoryCards.map(({ id, holdings, stats, meta }) => {
             const selected = categoryFilter === id;
             const expanded = expandedCategory === id;
@@ -879,7 +891,7 @@ export default function PortfolioV1View({
       )}
 
       {/* Gainers / losers */}
-      <div className="space-y-2">
+      <div className="space-y-2 w-full">
         <div className="flex items-center justify-between gap-2 px-0.5">
           <p className="text-[11px] font-black uppercase tracking-wider text-slate-500">Movers</p>
           <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5">
@@ -907,14 +919,14 @@ export default function PortfolioV1View({
             </button>
           </div>
         </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
         {[
           { title: 'Top gainers', icon: <TrendingUp className="w-4 h-4 text-emerald-500" />, rows: ranked.gainers, good: true },
           { title: 'Top losers', icon: <TrendingDown className="w-4 h-4 text-rose-500" />, rows: ranked.losers, good: false },
         ].map((block) => (
           <div
             key={block.title}
-            className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4"
+            className="w-full rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3 sm:p-4"
           >
             <div className="flex items-center gap-1.5 mb-2">
               {block.icon}
@@ -956,7 +968,7 @@ export default function PortfolioV1View({
       </div>
 
       {/* Holdings — type filters above table; connectors at bottom */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+      <div className="w-full rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 overflow-hidden shadow-sm">
         <div className="px-3 sm:px-4 py-3 border-b border-slate-100 dark:border-slate-800 space-y-2.5">
           <div className="flex items-center justify-between gap-2">
             <button
