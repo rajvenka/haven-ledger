@@ -1621,18 +1621,21 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const tickerOf = (h: any) => {
         let s = String(h.ticker ?? h.symbol ?? '').trim().toUpperCase();
         s = s.replace(/\*+$/g, '').trim();
-        // Zerodha style "MIRAEAMC - MAFANG" / "ZERODHAAMC - SML100CASE" → pure ticker
+        // Zerodha style "MIRAEAMC - MAFANG" → pure ticker. Keep "SSEGL-SM" intact
+        // (hyphen is part of NSE SME symbols; only split on " - " with spaces).
         if (s.includes(' - ')) {
           const parts = s.split(' - ').map((p: string) => p.trim()).filter(Boolean);
           if (parts.length >= 2) s = parts[parts.length - 1];
         }
-        const compact = s.replace(/\b(ETF|BEES)\b/g, '').replace(/[^A-Z0-9]/g, '');
+        s = s.replace(/\b(ETF|BEES)\b/g, '').replace(/\s+/g, '').trim() || s;
+        const compact = s.replace(/[^A-Z0-9]/g, '');
         const aliases: Record<string, string> = {
           NASDAQ100: 'MON100', NASDAQ100ETF: 'MON100', MOTILALOSNASDAQ100ETF: 'MON100',
           MOTILALOSNASDAQ100: 'MON100', MAM150ETF: 'MID150', MAM150: 'MID150',
         };
         if (aliases[compact]) return aliases[compact];
-        return compact || s;
+        // Preserve hyphens for SME tickers (SSEGL-SM, TAC-SM)
+        return s.replace(/[^A-Z0-9-]/g, '') || s;
       };
 
       const zerodhaGroups = new Map<string, { conn: any; holdings: any[] }>();
