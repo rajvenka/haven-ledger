@@ -117,6 +117,22 @@ const convertToBase = (amount: number, fromCurrency: string, baseCurrency: strin
   if (!rate) return amount;
   return amount * rate;
 };
+
+// eToro commodities/CFDs must never go through Yahoo/Webull equity snapshots.
+// Yahoo "GOLD" resolves to a ~$40 equity ticker; eToro Gold is spot-style (thousands/oz).
+const COMMODITY_SYMBOLS = new Set([
+  'GOLD', 'SILVER', 'OIL', 'NATGAS', 'COPPER', 'PLATINUM', 'PALLADIUM',
+  'XAU', 'XAG', 'XAUUSD', 'XAGUSD', 'BRENT', 'WTI', 'GC=F', 'SI=F', 'CL=F',
+]);
+
+function isCommodityHolding(h: any): boolean {
+  const sym = String(h.ticker || h.symbol || '').trim().toUpperCase().replace(/[^A-Z0-9=]/g, '');
+  if (COMMODITY_SYMBOLS.has(sym)) return true;
+  return /\b(gold|silver|oil|brent|natgas|copper|platinum|palladium)\b/i.test(
+    String(h.symbol || h.name || h.ticker || '')
+  );
+}
+
 // eToro "Net Value" - total cash committed to a leveraged position. eToro's own API
 // returns this directly per position as "amount" (distinct from initialAmountInDollars,
 // which stays fixed at the original investment) - confirmed to vary with stop-loss changes,
@@ -1623,9 +1639,17 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const zerodhaGroups = new Map<string, { conn: any; holdings: any[] }>();
       const growwGroups = new Map<string, { conn: any; holdings: any[] }>();
       const yahooHoldings: any[] = [];
+      let skippedCommodities = 0;
       for (const h of refreshable) {
+        // eToro commodities keep the rate set at sync time (eToro /rates). Yahoo/Webull
+        // map GOLD/SILVER to unrelated equities (~$40) and would overwrite the real price.
+        const brokerLower = String(h.broker || '').toLowerCase();
+        if ((brokerLower.includes('etoro') || String(h.source || '').toLowerCase().includes('etoro')) && isCommodityHolding(h)) {
+          skippedCommodities++;
+          continue;
+        }
         const zConn = h.broker === 'Zerodha' ? zerodhaConnFor(h) : null;
-        const gConn = !zConn && String(h.broker || '').toLowerCase() === 'groww' ? growwConnFor(h) : null;
+        const gConn = !zConn && brokerLower === 'groww' ? growwConnFor(h) : null;
         if (zConn) {
           if (!zerodhaGroups.has(zConn.id)) zerodhaGroups.set(zConn.id, { conn: zConn, holdings: [] });
           zerodhaGroups.get(zConn.id)!.holdings.push(h);
@@ -1774,11 +1798,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
         return;
       }
       const skipNote = skippedNoTicker > 0 ? ` · ${skippedNoTicker} skipped (no ticker set)` : '';
+      const commodityNote = skippedCommodities > 0 ? ` · ${skippedCommodities} eToro commodity kept (eToro rate)` : '';
       const mfNote = mutualFunds.length > 0 ? ` · MF NAV: ${mfSucceeded} updated${mfFailed > 0 ? `, ${mfFailed} not matched` : ''}` : '';
       setPriceRefreshSummary(
         failed === 0
-          ? `Live price updated for ${succeeded}${skipNote}${mfNote}${rateLimitedNote} · delayed a few minutes, not real-time`
-          : `Live price updated for ${succeeded}, couldn't find ${failed}${skipNote}${mfNote}${rateLimitedNote} · delayed a few minutes, not real-time`
+          ? `Live price updated for ${succeeded}${skipNote}${commodityNote}${mfNote}${rateLimitedNote} · delayed a few minutes, not real-time`
+          : `Live price updated for ${succeeded}, couldn't find ${failed}${skipNote}${commodityNote}${mfNote}${rateLimitedNote} · delayed a few minutes, not real-time`
       );
     });
     setRefreshingPrices(false);
