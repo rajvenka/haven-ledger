@@ -29,7 +29,7 @@ interface PortfolioViewProps {
   setProjectedBankBalance?: (amount: number, portfolioId?: string) => Promise<void>;
   recalculateProjectedBankBalance?: (portfolioId?: string) => Promise<void>;
   portfolioBrokerConnections?: any[];
-  setPortfolioBrokerConnection?: (brokerType: 'etoro' | 'ig' | 'webull', credentials: Record<string, string>, portfolioId?: string, connectionLabel?: string) => Promise<void>;
+  setPortfolioBrokerConnection?: (brokerType: 'etoro' | 'ig' | 'webull' | 'zerodha', credentials: Record<string, string>, portfolioId?: string, connectionLabel?: string) => Promise<void>;
   deletePortfolioBrokerConnection?: (id: string) => Promise<void>;
   markBrokerConnectionSynced?: (id: string) => Promise<void>;
   syncEtoroHoldingLots?: (symbols: string[], rawLotsBySymbol: Map<string, any[]>, portfolioId?: string) => Promise<void>;
@@ -462,7 +462,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [projectedBankBalanceAmountInput, setProjectedBankBalanceAmountInput] = useState('');
   const [projectedBalancePortfolioId, setProjectedBalancePortfolioId] = useState<string>('');
   const [brokerConnectPortfolioId, setBrokerConnectPortfolioId] = useState<string>('');
-  const [brokerEditingType, setBrokerEditingType] = useState<'etoro' | 'ig' | 'webull' | null>(null);
+  const [brokerEditingType, setBrokerEditingType] = useState<'etoro' | 'ig' | 'webull' | 'zerodha' | null>(null);
   const [connectionLabelInput, setConnectionLabelInput] = useState('');
   const [webullAppKeyInput, setWebullAppKeyInput] = useState('');
   const [webullAppSecretInput, setWebullAppSecretInput] = useState('');
@@ -478,6 +478,17 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [etoroSyncError, setEtoroSyncError] = useState<string | null>(null);
   const [etoroSyncDebug, setEtoroSyncDebug] = useState<any>(null);
   const [etoroRawLots, setEtoroRawLots] = useState<any[]>([]);
+  // Zerodha Kite Connect (India) — parallel to eToro connect; does not replace CSV import
+  const [zerodhaApiKeyInput, setZerodhaApiKeyInput] = useState('');
+  const [zerodhaApiSecretInput, setZerodhaApiSecretInput] = useState('');
+  const [zerodhaRequestTokenInput, setZerodhaRequestTokenInput] = useState('');
+  const [zerodhaAccessTokenInput, setZerodhaAccessTokenInput] = useState('');
+  const [zerodhaConnectStatus, setZerodhaConnectStatus] = useState<'idle' | 'exchanging' | 'ready' | 'error'>('idle');
+  const [zerodhaSyncing, setZerodhaSyncing] = useState(false);
+  const [zerodhaSyncError, setZerodhaSyncError] = useState<string | null>(null);
+  const [zerodhaDebug, setZerodhaDebug] = useState<any>(null);
+  const [zerodhaConnectPortfolioId, setZerodhaConnectPortfolioId] = useState('');
+  const [indiaBrokerEditing, setIndiaBrokerEditing] = useState(false);
   const [expandedLotHoldingId, setExpandedLotHoldingId] = useState<string | null>(null);
   const [stopLossAlertExpanded, setStopLossAlertExpanded] = useState(false);
   const [lotsViewActive, setLotsViewActive] = useState(false);
@@ -1100,6 +1111,108 @@ export default function PortfolioView(props: PortfolioViewProps) {
       setWebullSyncError(err?.message || 'Could not sync from Webull.');
     } finally {
       setWebullSyncing(false);
+    }
+  };
+
+  const handleZerodhaExchange = async () => {
+    setZerodhaConnectStatus('exchanging');
+    setZerodhaSyncError(null);
+    setZerodhaDebug(null);
+    try {
+      const resp = await fetch('/api/portfolio-zerodha-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'exchange',
+          apiKey: zerodhaApiKeyInput.trim(),
+          apiSecret: zerodhaApiSecretInput.trim(),
+          requestToken: zerodhaRequestTokenInput.trim(),
+        }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      setZerodhaDebug(data);
+      if (!resp.ok || !data.accessToken) {
+        setZerodhaConnectStatus('error');
+        setZerodhaSyncError(data.error || 'Token exchange failed');
+        return;
+      }
+      setZerodhaAccessTokenInput(data.accessToken);
+      setZerodhaConnectStatus('ready');
+    } catch (err: any) {
+      setZerodhaConnectStatus('error');
+      setZerodhaSyncError(err?.message || 'Token exchange failed');
+    }
+  };
+
+  const handleZerodhaSaveConnection = async (portfolioId?: string) => {
+    if (!zerodhaApiKeyInput.trim() || !zerodhaAccessTokenInput.trim()) {
+      setZerodhaSyncError('API Key and Access Token are required');
+      return;
+    }
+    await runAction(async () => {
+      await setPortfolioBrokerConnection?.(
+        'zerodha',
+        {
+          api_key: zerodhaApiKeyInput.trim(),
+          api_secret: zerodhaApiSecretInput.trim() || '',
+          access_token: zerodhaAccessTokenInput.trim(),
+        },
+        portfolioId,
+        connectionLabelInput.trim() || undefined,
+      );
+      setIndiaBrokerEditing(false);
+      setZerodhaApiKeyInput('');
+      setZerodhaApiSecretInput('');
+      setZerodhaRequestTokenInput('');
+      setZerodhaAccessTokenInput('');
+      setZerodhaConnectStatus('idle');
+      setConnectionLabelInput('');
+    });
+  };
+
+  const handleZerodhaSync = async (connection: any) => {
+    if (!connection) return;
+    setZerodhaSyncing(true);
+    setZerodhaSyncError(null);
+    setZerodhaDebug(null);
+    setImportPreview(null);
+    try {
+      const resp = await fetch('/api/portfolio-zerodha-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'sync',
+          apiKey: connection.credentials?.api_key,
+          accessToken: connection.credentials?.access_token,
+          includeMf: true,
+        }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      setZerodhaDebug(data);
+      if (!resp.ok) {
+        throw new Error(data.error || `Zerodha sync failed (${resp.status})`);
+      }
+      const holdings = (data.holdings || []).map((h: any) => ({
+        ...h,
+        buyDate: todayStr(),
+      }));
+      // Feed the same import preview pipeline used by CSV / eToro.
+      // useEffect on importRawParsed builds fresh/qtyChanged/missing etc.
+      const targetPid = connection.portfolio_id || undefined;
+      if (portfolioMode === 'multiple' && targetPid) {
+        setImportPortfolioId(targetPid);
+        setImportPortfolioConfirmed(true);
+      }
+      setImportTemplate('zerodha');
+      setImportSourceTag('Zerodha API');
+      setImportBuyDate(todayStr());
+      setImportRawParsed(holdings);
+      setIsImporting(true);
+      await markBrokerConnectionSynced?.(connection.id);
+    } catch (err: any) {
+      setZerodhaSyncError(err?.message || 'Could not sync from Zerodha.');
+    } finally {
+      setZerodhaSyncing(false);
     }
   };
 
@@ -2436,6 +2549,196 @@ export default function PortfolioView(props: PortfolioViewProps) {
             </div>
           );
         })()}
+
+        {/* Connect Broker (India) — Zerodha Kite Connect. Parallel to US/AU; does not replace CSV import. */}
+        {(() => {
+          const inrPortfolios = portfolioMode === 'multiple' ? portfolios.filter((p: any) => p.currency === 'INR') : [];
+          // Also show in single-portfolio mode when base is INR / no multi portfolios
+          const showIndia = portfolioMode === 'multiple' ? inrPortfolios.length > 0 : true;
+          if (!showIndia) return null;
+          const connectionsByPortfolio = new Map<string, any[]>();
+          for (const c of portfolioBrokerConnections) {
+            if (c.broker_type !== 'zerodha') continue;
+            const key = c.portfolio_id || '__default__';
+            connectionsByPortfolio.set(key, [...(connectionsByPortfolio.get(key) ?? []), c]);
+          }
+          const targetPortfolioId = portfolioMode === 'multiple'
+            ? (zerodhaConnectPortfolioId || inrPortfolios[0]?.id)
+            : undefined;
+          const existingForTarget = connectionsByPortfolio.get(targetPortfolioId || '__default__') ?? [];
+          return (
+            <div className="apple-card p-4 space-y-3">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5" /> Connect Broker (India)</span>
+              <p className="text-[9px] text-slate-400">
+                Sync equity, positions and mutual funds from Zerodha via Kite Connect. CSV import still works — this is an additional option.
+                Access tokens expire daily; reconnect when Sync fails with a token error.
+              </p>
+              {portfolioMode === 'multiple' && inrPortfolios.length > 0 && (
+                <select
+                  value={targetPortfolioId}
+                  onChange={(e) => { setZerodhaConnectPortfolioId(e.target.value); setIndiaBrokerEditing(false); }}
+                  className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                >
+                  {inrPortfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              )}
+
+              {existingForTarget.length > 0 && (
+                <div className="space-y-1.5">
+                  {existingForTarget.map((conn: any) => (
+                    <div key={conn.id} className="flex items-center justify-between px-2.5 py-2 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">{conn.connection_label || 'Zerodha'}</span>
+                        <span className="text-[9px] text-slate-400 block">{conn.last_synced_at ? `synced ${new Date(conn.last_synced_at).toLocaleString()}` : 'never synced'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleZerodhaSync(conn)}
+                          disabled={zerodhaSyncing}
+                          className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer"
+                        >
+                          {zerodhaSyncing ? 'Syncing…' : 'Sync'}
+                        </button>
+                        <button onClick={() => runAction(() => deletePortfolioBrokerConnection?.(conn.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {indiaBrokerEditing ? (
+                <div className="space-y-2 pt-1 border-t border-slate-100 dark:border-slate-900">
+                  <span className="text-[9px] font-bold text-slate-500 uppercase">Zerodha (Kite Connect) credentials</span>
+                  <input
+                    type="text"
+                    value={connectionLabelInput}
+                    onChange={(e) => setConnectionLabelInput(e.target.value)}
+                    placeholder="Connection name (e.g. Zerodha-1)"
+                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={zerodhaApiKeyInput}
+                    onChange={(e) => setZerodhaApiKeyInput(e.target.value)}
+                    placeholder="API Key"
+                    autoFocus
+                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs font-mono"
+                  />
+                  <input
+                    type="password"
+                    value={zerodhaApiSecretInput}
+                    onChange={(e) => setZerodhaApiSecretInput(e.target.value)}
+                    placeholder="API Secret"
+                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs font-mono"
+                  />
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const key = zerodhaApiKeyInput.trim();
+                        if (!key) return;
+                        window.open(`https://kite.zerodha.com/connect/login?v=3&api_key=${encodeURIComponent(key)}`, '_blank');
+                      }}
+                      className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[9px] font-bold rounded-lg cursor-pointer"
+                    >
+                      Open Kite login
+                    </button>
+                  </div>
+                  <p className="text-[9px] text-slate-400">
+                    1) Open Kite login → sign in → after redirect, copy the <code className="font-mono">request_token</code> from the URL.
+                    2) Paste it below and click Exchange. 3) Save connection.
+                  </p>
+                  <input
+                    type="text"
+                    value={zerodhaRequestTokenInput}
+                    onChange={(e) => setZerodhaRequestTokenInput(e.target.value)}
+                    placeholder="request_token (from redirect URL)"
+                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleZerodhaExchange}
+                    disabled={zerodhaConnectStatus === 'exchanging' || !zerodhaRequestTokenInput.trim()}
+                    className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer"
+                  >
+                    {zerodhaConnectStatus === 'exchanging' ? 'Exchanging…' : 'Exchange → access token'}
+                  </button>
+                  <input
+                    type="password"
+                    value={zerodhaAccessTokenInput}
+                    onChange={(e) => setZerodhaAccessTokenInput(e.target.value)}
+                    placeholder="access_token (filled after exchange, or paste if you already have one)"
+                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs font-mono"
+                  />
+                  {zerodhaConnectStatus === 'ready' && (
+                    <p className="text-[9px] text-emerald-600 font-bold">Access token ready — click Save.</p>
+                  )}
+                  {zerodhaDebug && (
+                    <p className="text-[9px] text-slate-400 break-all bg-slate-50 dark:bg-slate-900 rounded p-2">{JSON.stringify(zerodhaDebug)}</p>
+                  )}
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => handleZerodhaSaveConnection(targetPortfolioId)}
+                      disabled={!zerodhaApiKeyInput.trim() || !zerodhaAccessTokenInput.trim()}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIndiaBrokerEditing(false);
+                        setZerodhaApiKeyInput('');
+                        setZerodhaApiSecretInput('');
+                        setZerodhaRequestTokenInput('');
+                        setZerodhaAccessTokenInput('');
+                        setZerodhaConnectStatus('idle');
+                        setZerodhaDebug(null);
+                        setConnectionLabelInput('');
+                      }}
+                      className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                existingForTarget.length === 0 && (
+                  <button
+                    onClick={() => {
+                      const existingCount = portfolioBrokerConnections.filter((c: any) => c.broker_type === 'zerodha').length;
+                      setConnectionLabelInput(`Zerodha-${existingCount + 1}`);
+                      setIndiaBrokerEditing(true);
+                    }}
+                    className="w-full py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-bold rounded-lg cursor-pointer"
+                  >
+                    + Zerodha
+                  </button>
+                )
+              )}
+              {zerodhaSyncError && <p className="text-[10px] text-rose-500">{zerodhaSyncError}</p>}
+              {zerodhaDebug && !indiaBrokerEditing && (
+                <div className="text-[9px] text-slate-500 break-all bg-slate-50 dark:bg-slate-900 rounded p-2 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold">Zerodha sync log</span>
+                    <button
+                      type="button"
+                      onClick={() => { navigator.clipboard?.writeText(JSON.stringify(zerodhaDebug, null, 2)); }}
+                      className="text-indigo-500 text-[9px] font-bold cursor-pointer"
+                    >
+                      Copy full log
+                    </button>
+                  </div>
+                  {zerodhaDebug.equityCount != null && <p>Equity: {zerodhaDebug.equityCount}, MF: {zerodhaDebug.mfCount}, Positions: {zerodhaDebug.positionCount}</p>}
+                  <details>
+                    <summary className="cursor-pointer text-slate-400">Full raw log</summary>
+                    <pre className="whitespace-pre-wrap break-all mt-1">{JSON.stringify(zerodhaDebug, null, 2)}</pre>
+                  </details>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         <div className="apple-card p-4 space-y-3">
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Banknote className="w-3.5 h-3.5" /> Cash Balance</span>
           <p className="text-[9px] text-slate-400">

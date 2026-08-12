@@ -1796,7 +1796,7 @@ export function usePaymentState() {
   // static keys, IG deliberately never has a password stored here - only username/api_key
   // persist, the password itself is asked for fresh on every sync (safer than persisting a
   // brokerage password, at the cost of re-entering it each time).
-  const setPortfolioBrokerConnection = async (brokerType: 'etoro' | 'ig' | 'webull', credentials: Record<string, string>, portfolioId?: string, connectionLabel?: string) => {
+  const setPortfolioBrokerConnection = async (brokerType: 'etoro' | 'ig' | 'webull' | 'zerodha', credentials: Record<string, string>, portfolioId?: string, connectionLabel?: string) => {
     if (!user || !activeWorkspaceId) return;
     const row: any = {
       workspace_id: activeWorkspaceId, portfolio_id: portfolioId ?? null, broker_type: brokerType, credentials,
