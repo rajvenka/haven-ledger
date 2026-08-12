@@ -18,6 +18,42 @@ async function fetchYahooPrice(yahooSymbol: string) {
   return { price, previousClose: typeof previousClose === "number" ? previousClose : null, currency, error: null };
 }
 
+/** Turn broker display symbols into Yahoo-friendly tickers.
+ *  Zerodha often stores "MIRAEAMC - MAFANG*" / "MOTILAL OS NASDAQ100 ETF*" instead of
+ *  the pure NSE code. Strip noise, take the segment after " - ", apply known aliases.
+ */
+function normalizeYahooSymbol(raw: string): string {
+  let s = String(raw || "").trim().toUpperCase();
+  if (!s) return s;
+  // Already a Yahoo-suffixed symbol
+  if (/\.(NS|BO|AX)$/i.test(s)) return s;
+  s = s.replace(/\*+$/g, "").trim();
+  // "MIRAEAMC - MAFANG" / "ZERODHAAMC - SML100CASE" → last segment
+  if (s.includes(" - ")) {
+    const parts = s.split(" - ").map((p) => p.trim()).filter(Boolean);
+    if (parts.length >= 2) s = parts[parts.length - 1];
+  }
+  // Drop leftover company noise words
+  s = s.replace(/\b(ETF|BEES)\b/g, "").replace(/\s+/g, "").trim() || s;
+
+  const aliases: Record<string, string> = {
+    // Motilal Oswal Nasdaq 100 ETF
+    "NASDAQ100": "MON100",
+    "NASDAQ100ETF": "MON100",
+    "MOTILALOSNASDAQ100ETF": "MON100",
+    "MOTILALOSNASDAQ100": "MON100",
+    // Mirae midcap 150 ETF trading symbol variants
+    "MAM150ETF": "MID150",
+    "MAM150": "MID150",
+  };
+  const compact = s.replace(/[^A-Z0-9]/g, "");
+  if (aliases[compact]) return aliases[compact];
+  if (aliases[s]) return aliases[s];
+  // Prefer alphanumerics-only ticker when we stripped spaces
+  return compact || s;
+}
+
+
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -33,7 +69,9 @@ export default async function handler(req: any, res: any) {
 
     const results = await Promise.all(
       symbols.slice(0, 250).map(async ({ symbol, exchange, currency }: { symbol: string; exchange: string; currency?: string }) => {
-        const rawSymbol = String(symbol || "").trim();
+        // Normalize Zerodha-style "AMC - TICKER*" / long ETF names before suffixing
+        const rawSymbol = normalizeYahooSymbol(String(symbol || "").trim());
+        const originalSymbol = String(symbol || "").trim();
         const rawExchange = String(exchange || "").trim().toUpperCase();
         const rawCurrency = currency ? String(currency).trim().toUpperCase() : "";
 
@@ -101,7 +139,7 @@ export default async function handler(req: any, res: any) {
 
           if (result.price == null) {
             return {
-              symbol: rawSymbol,
+              symbol: originalSymbol || rawSymbol,
               exchange: rawExchange || exchange,
               price: null,
               previousClose: null,
@@ -125,7 +163,7 @@ export default async function handler(req: any, res: any) {
             };
           }
           return {
-            symbol: rawSymbol,
+            symbol: originalSymbol || rawSymbol,
             exchange: rawExchange || exchange,
             price: result.price,
             previousClose: result.previousClose,
