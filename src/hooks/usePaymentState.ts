@@ -246,9 +246,9 @@ export function usePaymentState() {
   }, [user, refreshWorkspaces]);
 
   const paymentsLoadGen = useRef(0);
-  const reloadData = useCallback(async () => {
+  const reloadData = useCallback(async (overrideWsId?: string | null) => {
     if (!user) return;
-    const wsId = activeWorkspaceId;
+    const wsId = overrideWsId !== undefined ? overrideWsId : activeWorkspaceId;
     const gen = ++paymentsLoadGen.current;
     const wsFilter = wsId ? `workspace_id.eq.${wsId}` : `user_id.eq.${user.id},workspace_id.is.null`;
     const [{ data: pays }, { data: hist }, { data: cts }, { data: notifs }, { data: rewards }] = await Promise.all([
@@ -459,10 +459,8 @@ export function usePaymentState() {
     setIsSyncing(true);
     setPortfolioDataLoading(true);
     try {
-      // Invalidate any in-flight fetch for the previous workspace, then load the new one.
-      // Loading flag goes true first so the UI shows a spinner instead of a stale→empty→new flash.
-      portfolioLoadGen.current += 1;
-      paymentsLoadGen.current += 1;
+      // Drop previous workspace rows + show spinner. Pass workspaceId explicitly into
+      // loaders: setState is async so activeWorkspaceId in closures is still the old one.
       clearPortfolioState();
       portfolioStateWsRef.current = null;
       setAllPayments([]);
@@ -470,8 +468,8 @@ export function usePaymentState() {
       setActiveWorkspaceId(workspaceId);
       await supabase.from('profiles').update({ active_workspace_id: workspaceId }).eq('id', user.id);
       await refreshWorkspaces(user.id, workspaceId);
-      await loadPortfolioDetails();
-      await reloadData();
+      await loadPortfolioDetails(workspaceId);
+      await reloadData(workspaceId);
     } finally {
       setIsSyncing(false);
     }
@@ -1125,14 +1123,16 @@ export function usePaymentState() {
   // them when the active workspace actually changes (not on every routine refresh).
   const portfolioStateWsRef = useRef<string | null>(null);
 
-  const loadPortfolioDetails = useCallback(async () => {
-    if (!activeWorkspaceId) {
+  const loadPortfolioDetails = useCallback(async (overrideWsId?: string | null) => {
+    // overrideWsId is required when called from switchWorkspace: setActiveWorkspaceId is
+    // async, so the closure still holds the *previous* workspace id until the next render.
+    const wsId = overrideWsId !== undefined && overrideWsId !== null ? overrideWsId : activeWorkspaceId;
+    if (!wsId) {
       clearPortfolioState();
       portfolioStateWsRef.current = null;
       setPortfolioDataLoading(false);
       return;
     }
-    const wsId = activeWorkspaceId;
     const gen = ++portfolioLoadGen.current;
 
     const workspaceChanged =
