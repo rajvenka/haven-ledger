@@ -1,12 +1,9 @@
 /**
- * Portfolio_V1 — parallel redesign (classic PortfolioView untouched).
+ * Portfolio_V1 — ultimate summary-first redesign.
+ * Classic PortfolioView remains the full-feature workbench.
  *
- * Confirmed product direction:
- * - Almost all classic features over time
- * - Connect-broker modal (single flow) is good
- * - eToro Sasi / Raj = separate portfolios
- * - Webull / Moomoo / Tiger = multi-portfolio each
- * - Stop loss mainly for eToro CFDs
+ * Category tiles: India MF · India Stocks · US Stocks · CFD · Commodities · Options
+ * Each tile expands for sub-totals + top holdings. Portfolio chips keep Sasi/Raj separate.
  */
 import React, { useMemo, useState } from 'react';
 import {
@@ -17,13 +14,29 @@ import {
   X,
   RefreshCw,
   ChevronRight,
+  ChevronDown,
   Link2,
-  Wallet,
   ShieldAlert,
+  Landmark,
+  LineChart,
+  CandlestickChart,
+  Fuel,
   Layers,
+  Globe2,
+  Sparkles,
 } from 'lucide-react';
 
 type BrokerType = 'etoro' | 'ig' | 'webull' | 'zerodha' | 'groww';
+
+type CategoryId =
+  | 'india_mf'
+  | 'india_stock'
+  | 'us_stock'
+  | 'au_stock'
+  | 'cfd'
+  | 'commodities'
+  | 'options'
+  | 'other';
 
 interface Props {
   isReadOnly?: boolean;
@@ -58,7 +71,7 @@ const BROKER_META: Record<
     fields: [
       { key: 'api_key', label: 'API Key', placeholder: 'Kite API key' },
       { key: 'api_secret', label: 'API Secret', placeholder: 'Kite API secret', secret: true },
-      { key: 'access_token', label: 'Access Token (optional)', placeholder: 'Paste daily token if you have one' },
+      { key: 'access_token', label: 'Access Token (optional)', placeholder: 'Daily token' },
     ],
   },
   groww: {
@@ -93,6 +106,81 @@ const BROKER_META: Record<
   },
 };
 
+const COMMODITY_SYMBOLS = new Set([
+  'GOLD', 'SILVER', 'OIL', 'NATGAS', 'COPPER', 'PLATINUM', 'PALLADIUM',
+  'XAU', 'XAG', 'XAUUSD', 'XAGUSD', 'BRENT', 'WTI', 'GC=F', 'SI=F', 'CL=F',
+]);
+
+const CATEGORY_META: Record<
+  CategoryId,
+  { label: string; blurb: string; icon: React.ReactNode; accent: string; chip: string; ring: string }
+> = {
+  india_mf: {
+    label: 'India · MF',
+    blurb: 'Mutual funds',
+    icon: <Landmark className="w-4 h-4" />,
+    accent: 'from-amber-500/15 to-orange-500/5',
+    chip: 'bg-amber-500 text-white',
+    ring: 'ring-amber-400',
+  },
+  india_stock: {
+    label: 'India · Stocks',
+    blurb: 'NSE / BSE equity',
+    icon: <LineChart className="w-4 h-4" />,
+    accent: 'from-blue-500/15 to-indigo-500/5',
+    chip: 'bg-blue-600 text-white',
+    ring: 'ring-blue-400',
+  },
+  us_stock: {
+    label: 'US · Stocks',
+    blurb: 'USD equities',
+    icon: <Globe2 className="w-4 h-4" />,
+    accent: 'from-violet-500/15 to-fuchsia-500/5',
+    chip: 'bg-violet-600 text-white',
+    ring: 'ring-violet-400',
+  },
+  au_stock: {
+    label: 'AU · Stocks',
+    blurb: 'ASX / AUD',
+    icon: <Globe2 className="w-4 h-4" />,
+    accent: 'from-sky-500/15 to-cyan-500/5',
+    chip: 'bg-sky-600 text-white',
+    ring: 'ring-sky-400',
+  },
+  cfd: {
+    label: 'CFDs',
+    blurb: 'Leveraged eToro',
+    icon: <CandlestickChart className="w-4 h-4" />,
+    accent: 'from-teal-500/15 to-emerald-500/5',
+    chip: 'bg-teal-600 text-white',
+    ring: 'ring-teal-400',
+  },
+  commodities: {
+    label: 'Commodities',
+    blurb: 'Gold, oil, metals',
+    icon: <Fuel className="w-4 h-4" />,
+    accent: 'from-yellow-500/20 to-amber-600/5',
+    chip: 'bg-yellow-600 text-white',
+    ring: 'ring-yellow-400',
+  },
+  options: {
+    label: 'Options',
+    blurb: 'Contracts ×100',
+    icon: <Sparkles className="w-4 h-4" />,
+    accent: 'from-rose-500/15 to-pink-500/5',
+    chip: 'bg-rose-600 text-white',
+    ring: 'ring-rose-400',
+  },
+  other: {
+    label: 'Other',
+    blurb: 'Unclassified',
+    icon: <Layers className="w-4 h-4" />,
+    accent: 'from-slate-500/10 to-slate-500/5',
+    chip: 'bg-slate-600 text-white',
+    ring: 'ring-slate-400',
+  },
+};
+
 function money(n: number, currency = 'INR') {
   if (!Number.isFinite(n)) return '—';
   try {
@@ -121,50 +209,100 @@ function moneyPrecise(n: number, currency = 'USD') {
 
 function pct(n: number) {
   if (!Number.isFinite(n)) return '—';
-  const sign = n > 0 ? '+' : '';
-  return `${sign}${n.toFixed(2)}%`;
+  return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
 }
 
 function livePrice(h: any): number {
   return Number(h.live_price ?? h.current_price ?? h.buy_price ?? 0);
 }
-
 function invested(h: any): number {
   return Number(h.buy_price || 0) * Number(h.quantity || 0);
 }
-
 function marketValue(h: any): number {
   return livePrice(h) * Number(h.quantity || 0);
 }
-
 function pnl(h: any): number {
   return marketValue(h) - invested(h);
 }
-
 function pnlPct(h: any): number {
   const inv = invested(h);
-  if (inv <= 0) return 0;
-  return (pnl(h) / inv) * 100;
+  return inv > 0 ? (pnl(h) / inv) * 100 : 0;
 }
-
 function dayChangePct(h: any): number | null {
   const live = Number(h.live_price);
   const prev = Number(h.previous_close);
   if (!Number.isFinite(live) || !Number.isFinite(prev) || prev <= 0) return null;
   return ((live - prev) / prev) * 100;
 }
-
-/** Distance from live price to stop loss (%). Negative = already through stop. Long only heuristic. */
 function stopLossDistancePct(h: any): number | null {
   const stop = Number(h.stop_loss_rate);
   const live = livePrice(h);
   if (!Number.isFinite(stop) || stop <= 0 || !Number.isFinite(live) || live <= 0) return null;
   return ((live - stop) / live) * 100;
 }
-
 function portfolioNameOf(h: any, portfolios: any[]): string {
   if (!h?.portfolio_id) return 'Unassigned';
   return portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned';
+}
+function symOf(h: any): string {
+  return String(h.ticker || h.symbol || '').trim().toUpperCase();
+}
+
+/** Classify into product tiles — order of checks matters. */
+function classifyHolding(h: any): CategoryId {
+  const type = String(h.holding_type || '').toLowerCase();
+  const broker = String(h.broker || '').toLowerCase();
+  const ccy = String(h.currency || '').toUpperCase();
+  const src = String(h.source || '').toLowerCase();
+  const sym = symOf(h).replace(/[^A-Z0-9=]/g, '');
+  const lev = Number(h.leverage || 1);
+
+  if (type === 'options') return 'options';
+  if (type === 'mutual_fund' || src.includes('mf') || h.exchange === 'MF') return 'india_mf';
+
+  const isCommodity =
+    COMMODITY_SYMBOLS.has(sym) ||
+    COMMODITY_SYMBOLS.has(symOf(h)) ||
+    /\b(gold|silver|oil|brent|natgas|copper)\b/i.test(String(h.symbol || h.name || ''));
+  if (isCommodity) return 'commodities';
+
+  // Leveraged / CFD-style (eToro) — after commodities so Gold CFD still lands in commodities
+  if (lev > 1 || src.includes('cfd') || src.includes('leveraged') || src.includes('crypto margin')) {
+    return 'cfd';
+  }
+
+  if (broker.includes('zerodha') || broker.includes('groww') || ccy === 'INR') return 'india_stock';
+  if (ccy === 'AUD' || broker.includes('stake')) return 'au_stock';
+  if (ccy === 'USD' || broker.includes('webull') || broker.includes('etoro') || broker.includes('moomoo') || broker.includes('tiger')) {
+    return 'us_stock';
+  }
+  return 'other';
+}
+
+function summarizeBucket(holdings: any[]) {
+  const byCcy: Record<string, { market: number; invested: number; pnl: number; count: number }> = {};
+  holdings.forEach((h) => {
+    const ccy = String(h.currency || 'USD').toUpperCase();
+    if (!byCcy[ccy]) byCcy[ccy] = { market: 0, invested: 0, pnl: 0, count: 0 };
+    const inv = invested(h);
+    const mv = marketValue(h);
+    byCcy[ccy].market += mv;
+    byCcy[ccy].invested += inv;
+    byCcy[ccy].pnl += mv - inv;
+    byCcy[ccy].count += 1;
+  });
+  const tiles = Object.entries(byCcy)
+    .map(([currency, v]) => ({
+      currency,
+      ...v,
+      pnlPct: v.invested > 0 ? (v.pnl / v.invested) * 100 : 0,
+    }))
+    .sort((a, b) => b.market - a.market);
+  return {
+    count: holdings.length,
+    byCurrency: tiles,
+    primary: tiles[0] || null,
+  };
 }
 
 export default function PortfolioV1View({
@@ -174,22 +312,24 @@ export default function PortfolioV1View({
   portfolios = [],
   portfolioMode,
   portfolioHoldings = [],
-  portfolioCashBalances = [],
   portfolioBrokerConnections = [],
   setPortfolioBrokerConnection,
 }: Props) {
+  const [portfolioFilter, setPortfolioFilter] = useState<string>('All');
   const [brokerFilter, setBrokerFilter] = useState<string>('All');
-  const [portfolioFilter, setPortfolioFilter] = useState<string>('All'); // portfolio id or 'All'
+  const [categoryFilter, setCategoryFilter] = useState<CategoryId | 'All'>('All');
+  const [expandedCategory, setExpandedCategory] = useState<CategoryId | null>(null);
+  const [holdingsExpanded, setHoldingsExpanded] = useState(true);
+  const [showSlOnly, setShowSlOnly] = useState(false);
+
   const [connectOpen, setConnectOpen] = useState(false);
   const [connectStep, setConnectStep] = useState<'pick' | 'creds'>('pick');
   const [selectedBroker, setSelectedBroker] = useState<BrokerType | null>(null);
-  const [connectPortfolioId, setConnectPortfolioId] = useState<string>('');
+  const [connectPortfolioId, setConnectPortfolioId] = useState('');
   const [credFields, setCredFields] = useState<Record<string, string>>({});
   const [connectBusy, setConnectBusy] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [connectOk, setConnectOk] = useState<string | null>(null);
-  const [holdingsExpanded, setHoldingsExpanded] = useState(true);
-  const [showSlOnly, setShowSlOnly] = useState(false);
 
   const multiPortfolio = portfolioMode === 'multiple' || (portfolios || []).length > 1;
 
@@ -198,134 +338,100 @@ export default function PortfolioV1View({
     [portfolioHoldings]
   );
 
+  const scoped = useMemo(() => {
+    return active.filter((h: any) => {
+      if (portfolioFilter !== 'All' && String(h.portfolio_id || '') !== portfolioFilter) return false;
+      if (brokerFilter !== 'All' && String(h.broker) !== brokerFilter) return false;
+      return true;
+    });
+  }, [active, portfolioFilter, brokerFilter]);
+
+  const classified = useMemo(() => {
+    const map: Record<CategoryId, any[]> = {
+      india_mf: [],
+      india_stock: [],
+      us_stock: [],
+      au_stock: [],
+      cfd: [],
+      commodities: [],
+      options: [],
+      other: [],
+    };
+    scoped.forEach((h) => {
+      map[classifyHolding(h)].push(h);
+    });
+    return map;
+  }, [scoped]);
+
+  const categoryOrder: CategoryId[] = [
+    'india_mf',
+    'india_stock',
+    'us_stock',
+    'au_stock',
+    'cfd',
+    'commodities',
+    'options',
+    'other',
+  ];
+
+  const categoryCards = useMemo(() => {
+    return categoryOrder
+      .map((id) => {
+        const holdings = classified[id];
+        if (!holdings.length) return null;
+        return { id, holdings, stats: summarizeBucket(holdings), meta: CATEGORY_META[id] };
+      })
+      .filter(Boolean) as {
+      id: CategoryId;
+      holdings: any[];
+      stats: ReturnType<typeof summarizeBucket>;
+      meta: (typeof CATEGORY_META)[CategoryId];
+    }[];
+  }, [classified]);
+
+  const filtered = useMemo(() => {
+    let list = scoped;
+    if (categoryFilter !== 'All') list = list.filter((h) => classifyHolding(h) === categoryFilter);
+    if (showSlOnly) list = list.filter((h) => h.stop_loss_rate != null && Number(h.stop_loss_rate) > 0);
+    return list;
+  }, [scoped, categoryFilter, showSlOnly]);
+
   const brokersPresent = useMemo(() => {
     const s = new Set<string>();
-    active.forEach((h: any) => {
-      if (h.broker) s.add(String(h.broker));
-    });
+    active.forEach((h: any) => h.broker && s.add(String(h.broker)));
     return Array.from(s).sort();
   }, [active]);
 
   const portfoliosPresent = useMemo(() => {
-    // Only portfolios that actually have active holdings (or all defined portfolios in multi mode)
-    const ids = new Set<string>();
-    active.forEach((h: any) => {
-      if (h.portfolio_id) ids.add(h.portfolio_id);
-    });
-    const list = (portfolios || []).filter((p: any) => ids.has(p.id) || multiPortfolio);
-    // Dedupe by id
+    const ids = new Set(active.map((h: any) => h.portfolio_id).filter(Boolean));
     const seen = new Set<string>();
-    return list.filter((p: any) => {
+    return (portfolios || []).filter((p: any) => {
+      if (!ids.has(p.id) && !multiPortfolio) return false;
       if (seen.has(p.id)) return false;
       seen.add(p.id);
       return true;
     });
   }, [active, portfolios, multiPortfolio]);
 
-  const filtered = useMemo(() => {
-    return active.filter((h: any) => {
-      if (brokerFilter !== 'All' && String(h.broker) !== brokerFilter) return false;
-      if (portfolioFilter !== 'All' && String(h.portfolio_id || '') !== portfolioFilter) return false;
-      if (showSlOnly && (h.stop_loss_rate == null || Number(h.stop_loss_rate) <= 0)) return false;
-      return true;
-    });
-  }, [active, brokerFilter, portfolioFilter, showSlOnly]);
-
-  const summary = useMemo(() => {
-    const byCurrency: Record<
-      string,
-      { invested: number; market: number; pnl: number; dayPnl: number; dayBasis: number; count: number }
-    > = {};
-    let inv = 0;
-    let mv = 0;
-    let day = 0;
-    let dayBasis = 0;
-
-    filtered.forEach((h: any) => {
-      const ccy = String(h.currency || baseCurrency || 'INR').toUpperCase();
-      if (!byCurrency[ccy]) {
-        byCurrency[ccy] = { invested: 0, market: 0, pnl: 0, dayPnl: 0, dayBasis: 0, count: 0 };
-      }
-      const invH = invested(h);
-      const mvH = marketValue(h);
-      inv += invH;
-      mv += mvH;
-      byCurrency[ccy].invested += invH;
-      byCurrency[ccy].market += mvH;
-      byCurrency[ccy].pnl += mvH - invH;
-      byCurrency[ccy].count += 1;
-      const d = dayChangePct(h);
-      if (d != null) {
-        day += (d / 100) * mvH;
-        dayBasis += mvH;
-        byCurrency[ccy].dayPnl += (d / 100) * mvH;
-        byCurrency[ccy].dayBasis += mvH;
-      }
-    });
-
-    const currencyTiles = Object.entries(byCurrency)
-      .map(([currency, v]) => ({
-        currency,
-        invested: v.invested,
-        market: v.market,
-        total: v.market,
-        pnl: v.pnl,
-        pnlPct: v.invested > 0 ? (v.pnl / v.invested) * 100 : 0,
-        dayPnl: v.dayPnl,
-        dayPct: v.dayBasis > 0 ? (v.dayPnl / v.dayBasis) * 100 : 0,
-        count: v.count,
-      }))
-      .sort((a, b) => b.market - a.market);
-
-    return {
-      invested: inv,
-      market: mv,
-      total: mv,
-      pnl: mv - inv,
-      pnlPct: inv > 0 ? ((mv - inv) / inv) * 100 : 0,
-      dayPnl: day,
-      dayPct: dayBasis > 0 ? (day / dayBasis) * 100 : 0,
-      count: filtered.length,
-      currencyTiles,
-      multiCurrency: currencyTiles.length > 1,
-    };
-  }, [filtered, baseCurrency]);
-
   const ranked = useMemo(() => {
-    const withPnl = filtered
-      .map((h: any) => ({ h, p: pnlPct(h), dollar: pnl(h) }))
-      .filter((x) => Number.isFinite(x.p));
+    const rows = filtered.map((h) => ({ h, p: pnlPct(h), dollar: pnl(h) })).filter((x) => Number.isFinite(x.p));
     return {
-      gainers: [...withPnl].sort((a, b) => b.p - a.p).slice(0, 5),
-      losers: [...withPnl].sort((a, b) => a.p - b.p).slice(0, 5),
+      gainers: [...rows].sort((a, b) => b.p - a.p).slice(0, 5),
+      losers: [...rows].sort((a, b) => a.p - b.p).slice(0, 5),
     };
   }, [filtered]);
 
-  const allocation = useMemo(() => {
-    // Prefer portfolio breakdown when multi-portfolio; else broker
-    const by: Record<string, number> = {};
-    filtered.forEach((h: any) => {
-      const key = multiPortfolio ? portfolioNameOf(h, portfolios) : String(h.broker || 'Other');
-      by[key] = (by[key] || 0) + marketValue(h);
-    });
-    const total = Object.values(by).reduce((a, b) => a + b, 0) || 1;
-    return Object.entries(by)
-      .map(([name, value]) => ({ name, value, pct: (value / total) * 100 }))
-      .sort((a, b) => b.value - a.value);
-  }, [filtered, multiPortfolio, portfolios]);
-
-  const stopLossAlerts = useMemo(() => {
+  const tightStops = useMemo(() => {
     return filtered
-      .map((h: any) => {
+      .map((h) => {
         const dist = stopLossDistancePct(h);
         if (dist == null) return null;
         return { h, dist, stop: Number(h.stop_loss_rate) };
       })
       .filter(Boolean)
-      .sort((a: any, b: any) => a.dist - b.dist) as { h: any; dist: number; stop: number }[];
+      .sort((a: any, b: any) => a.dist - b.dist)
+      .filter((x: any) => x.dist < 8) as { h: any; dist: number; stop: number }[];
   }, [filtered]);
-
-  const tightStops = stopLossAlerts.filter((x) => x.dist < 8);
 
   const openConnect = () => {
     setConnectOpen(true);
@@ -337,13 +443,6 @@ export default function PortfolioV1View({
     setConnectPortfolioId(portfolios?.[0]?.id || '');
   };
 
-  const pickBroker = (b: BrokerType) => {
-    setSelectedBroker(b);
-    setCredFields({});
-    setConnectError(null);
-    setConnectStep('creds');
-  };
-
   const saveConnection = async () => {
     if (!selectedBroker || !setPortfolioBrokerConnection) return;
     setConnectBusy(true);
@@ -351,15 +450,12 @@ export default function PortfolioV1View({
     setConnectOk(null);
     try {
       const meta = BROKER_META[selectedBroker];
-      const missing = meta.fields.filter(
-        (f) => f.key !== 'access_token' && !String(credFields[f.key] || '').trim()
-      );
+      const missing = meta.fields.filter((f) => f.key !== 'access_token' && !String(credFields[f.key] || '').trim());
       if (missing.length) {
         setConnectError(`Fill in: ${missing.map((m) => m.label).join(', ')}`);
         setConnectBusy(false);
         return;
       }
-
       const portfolioId = connectPortfolioId || undefined;
       const label =
         multiPortfolio && portfolioId
@@ -392,11 +488,10 @@ export default function PortfolioV1View({
           portfolioId,
           label
         );
-        setConnectOk(`Groww connected${portfolioId ? ' to selected portfolio' : ''}. Sync from classic Portfolio for now.`);
       } else {
         await setPortfolioBrokerConnection(selectedBroker, { ...credFields }, portfolioId, label);
-        setConnectOk(`${label} connection saved. Sync from classic Portfolio for now.`);
       }
+      setConnectOk(`${label} saved. Sync holdings from classic Portfolio for now.`);
       setConnectStep('pick');
       setSelectedBroker(null);
     } catch (e: any) {
@@ -406,161 +501,261 @@ export default function PortfolioV1View({
     }
   };
 
-  const barColor = (name: string) => {
-    const n = name.toLowerCase();
-    if (n.includes('groww')) return 'bg-emerald-500';
-    if (n.includes('zerodha')) return 'bg-blue-500';
-    if (n.includes('etoro')) return 'bg-teal-500';
-    if (n.includes('webull')) return 'bg-violet-500';
-    if (n.includes('sasi')) return 'bg-teal-500';
-    if (n.includes('raj')) return 'bg-cyan-500';
-    return 'bg-slate-400';
+  const toggleCategory = (id: CategoryId) => {
+    if (categoryFilter === id && expandedCategory === id) {
+      setCategoryFilter('All');
+      setExpandedCategory(null);
+    } else {
+      setCategoryFilter(id);
+      setExpandedCategory(id);
+    }
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-3 sm:px-4 pb-28 sm:pb-10 space-y-4">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3 pt-2">
-        <div>
-          <div className="flex items-center gap-2">
-            <Briefcase className="w-5 h-5 text-indigo-500" />
-            <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
-              Portfolio
-              <span className="ml-2 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-300">
-                V1 preview
+    <div className="w-full max-w-6xl mx-auto px-3 sm:px-4 pb-28 sm:pb-10 space-y-5">
+      {/* Hero */}
+      <div className="relative overflow-hidden rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950/30 p-4 sm:p-6">
+        <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-indigo-400/10 blur-3xl pointer-events-none" />
+        <div className="relative flex items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Briefcase className="w-5 h-5 text-indigo-500" />
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                Portfolio
+              </h1>
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-600 text-white">
+                V1
               </span>
-            </h1>
+            </div>
+            <p className="text-[12px] text-slate-500 mt-1 max-w-xl">
+              Product tiles by market · multi-portfolio (Sasi / Raj / Webull…) · stop-loss for CFDs
+            </p>
           </div>
-          <p className="text-[11px] text-slate-500 mt-0.5">
-            Multi-portfolio · currency-aware · stop-loss for eToro · classic Portfolio untouched
-          </p>
+          <button
+            type="button"
+            onClick={openConnect}
+            disabled={isReadOnly}
+            className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold shadow-lg shadow-indigo-600/20 disabled:opacity-50"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Connect
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={openConnect}
-          disabled={isReadOnly}
-          className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold shadow-sm disabled:opacity-50"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Connect broker</span>
-          <span className="sm:hidden">Connect</span>
-        </button>
-      </div>
 
-      {isDataLoading && (
-        <div className="text-[11px] text-slate-400 flex items-center gap-2">
-          <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading holdings…
-        </div>
-      )}
+        {isDataLoading && (
+          <div className="relative mt-3 text-[11px] text-slate-400 flex items-center gap-2">
+            <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading…
+          </div>
+        )}
 
-      {/* Row 1 — Portfolios (Sasi / Raj / Webull AU / …) */}
-      {multiPortfolio && portfoliosPresent.length > 0 && (
-        <div className="-mx-3 sm:mx-0 px-3 sm:px-0">
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
-            <span className="shrink-0 text-[8px] font-black uppercase tracking-wider text-slate-400 mr-0.5">
-              Portfolio
+        {/* Portfolio + broker chips inside hero */}
+        <div className="relative mt-4 space-y-2">
+          {multiPortfolio && portfoliosPresent.length > 0 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              <span className="shrink-0 text-[8px] font-black uppercase tracking-wider text-slate-400 w-14">
+                Book
+              </span>
+              <button
+                type="button"
+                onClick={() => setPortfolioFilter('All')}
+                className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                  portfolioFilter === 'All'
+                    ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
+                    : 'bg-white/80 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                All
+              </button>
+              {portfoliosPresent.map((p: any) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setPortfolioFilter(p.id)}
+                  className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                    portfolioFilter === p.id
+                      ? 'bg-violet-600 text-white'
+                      : 'bg-white/80 dark:bg-slate-800 text-violet-600 border border-violet-200 dark:border-violet-900'
+                  }`}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+            <span className="shrink-0 text-[8px] font-black uppercase tracking-wider text-slate-400 w-14">
+              Broker
             </span>
             <button
               type="button"
-              onClick={() => setPortfolioFilter('All')}
-              className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold ${
-                portfolioFilter === 'All'
+              onClick={() => setBrokerFilter('All')}
+              className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                brokerFilter === 'All'
                   ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                  : 'bg-white/80 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700'
               }`}
             >
-              All portfolios
+              All
             </button>
-            {portfoliosPresent.map((p: any) => (
+            {brokersPresent.map((b) => (
               <button
-                key={p.id}
+                key={b}
                 type="button"
-                onClick={() => setPortfolioFilter(p.id)}
-                className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold ${
-                  portfolioFilter === p.id
-                    ? 'bg-violet-600 text-white'
-                    : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'
+                onClick={() => setBrokerFilter(b)}
+                className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                  brokerFilter === b
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-white/80 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700'
                 }`}
               >
-                {p.name}
+                {b}
               </button>
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* Row 2 — Brokers */}
-      <div className="-mx-3 sm:mx-0 px-3 sm:px-0">
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
-          <span className="shrink-0 text-[8px] font-black uppercase tracking-wider text-slate-400 mr-0.5">
-            Broker
-          </span>
-          <button
-            type="button"
-            onClick={() => setBrokerFilter('All')}
-            className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold ${
-              brokerFilter === 'All'
-                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-            }`}
-          >
-            All brokers
-          </button>
-          {brokersPresent.map((b) => (
             <button
-              key={b}
               type="button"
-              onClick={() => setBrokerFilter(b)}
-              className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold ${
-                brokerFilter === b
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+              onClick={() => setShowSlOnly((v) => !v)}
+              className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                showSlOnly ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 border border-amber-200'
               }`}
             >
-              {b}
+              <ShieldAlert className="w-3 h-3" /> SL
             </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setShowSlOnly((v) => !v)}
-            className={`shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[10px] font-bold ${
-              showSlOnly
-                ? 'bg-amber-500 text-white'
-                : 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400'
-            }`}
-          >
-            <ShieldAlert className="w-3 h-3" />
-            Stop loss
-          </button>
+          </div>
         </div>
       </div>
 
-      {/* Tight stop-loss strip (eToro CFDs) */}
+      {/* Category tiles — ultimate product map */}
+      <div>
+        <div className="flex items-center justify-between mb-2 px-0.5">
+          <h2 className="text-[11px] font-black uppercase tracking-wider text-slate-500">Markets & products</h2>
+          {categoryFilter !== 'All' && (
+            <button
+              type="button"
+              onClick={() => {
+                setCategoryFilter('All');
+                setExpandedCategory(null);
+              }}
+              className="text-[10px] font-bold text-indigo-600"
+            >
+              Clear category
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+          {categoryCards.map(({ id, holdings, stats, meta }) => {
+            const selected = categoryFilter === id;
+            const expanded = expandedCategory === id;
+            const primary = stats.primary;
+            return (
+              <div
+                key={id}
+                className={`rounded-2xl border bg-gradient-to-br ${meta.accent} ${
+                  selected
+                    ? `border-transparent ring-2 ${meta.ring} shadow-md`
+                    : 'border-slate-200/80 dark:border-slate-800'
+                } bg-white dark:bg-slate-900 overflow-hidden transition-shadow`}
+              >
+                <button type="button" onClick={() => toggleCategory(id)} className="w-full text-left p-3 sm:p-3.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className={`p-1.5 rounded-xl ${selected ? meta.chip : 'bg-white/70 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
+                      {meta.icon}
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-400 tabular-nums">{stats.count}</span>
+                  </div>
+                  <p className="mt-2 text-[12px] font-black text-slate-900 dark:text-white leading-tight">{meta.label}</p>
+                  <p className="text-[9px] text-slate-500 mt-0.5">{meta.blurb}</p>
+                  {primary && (
+                    <div className="mt-2 flex items-baseline justify-between gap-1">
+                      <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
+                        {money(primary.market, primary.currency)}
+                      </p>
+                      <p
+                        className={`text-[10px] font-bold tabular-nums ${
+                          primary.pnlPct >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                        }`}
+                      >
+                        {pct(primary.pnlPct)}
+                      </p>
+                    </div>
+                  )}
+                  {stats.byCurrency.length > 1 && (
+                    <p className="text-[9px] text-slate-400 mt-1">
+                      +{stats.byCurrency.length - 1} more ccy
+                    </p>
+                  )}
+                  <div className="mt-2 flex items-center gap-1 text-[9px] font-bold text-slate-400">
+                    {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                    {expanded ? 'Hide' : 'Expand'}
+                  </div>
+                </button>
+
+                {expanded && (
+                  <div className="border-t border-slate-200/60 dark:border-slate-800 px-3 pb-3 pt-2 space-y-2 bg-white/50 dark:bg-slate-950/40">
+                    {stats.byCurrency.map((c) => (
+                      <div key={c.currency} className="flex justify-between text-[10px]">
+                        <span className="font-bold text-slate-500">{c.currency}</span>
+                        <span className="tabular-nums font-bold text-slate-800 dark:text-slate-100">
+                          {money(c.market, c.currency)}
+                          <span className={`ml-1.5 ${c.pnlPct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {pct(c.pnlPct)}
+                          </span>
+                        </span>
+                      </div>
+                    ))}
+                    <div className="pt-1 space-y-1 max-h-36 overflow-y-auto">
+                      {holdings
+                        .slice()
+                        .sort((a, b) => marketValue(b) - marketValue(a))
+                        .slice(0, 6)
+                        .map((h) => (
+                          <div key={h.id} className="flex justify-between gap-2 text-[10px]">
+                            <span className="font-bold text-slate-700 dark:text-slate-200 truncate">
+                              {h.ticker || h.symbol}
+                            </span>
+                            <span
+                              className={`shrink-0 font-bold tabular-nums ${
+                                pnlPct(h) >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                              }`}
+                            >
+                              {pct(pnlPct(h))}
+                            </span>
+                          </div>
+                        ))}
+                      {holdings.length > 6 && (
+                        <p className="text-[9px] text-slate-400">+{holdings.length - 6} more in list below</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {categoryCards.length === 0 && (
+          <p className="text-[12px] text-slate-400 text-center py-8 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+            No holdings for this portfolio / broker filter
+          </p>
+        )}
+      </div>
+
+      {/* Near SL */}
       {tightStops.length > 0 && (
-        <div className="rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/80 dark:bg-amber-950/20 px-3 py-2.5">
+        <div className="rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/90 dark:bg-amber-950/25 px-3 py-2.5">
           <div className="flex items-center gap-1.5 mb-1.5">
             <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
             <p className="text-[10px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
-              Near stop loss ({tightStops.length})
+              Near stop loss · {tightStops.length}
             </p>
           </div>
           <div className="flex gap-2 overflow-x-auto no-scrollbar">
-            {tightStops.slice(0, 8).map(({ h, dist, stop }) => (
+            {tightStops.slice(0, 10).map(({ h, dist, stop }) => (
               <div
                 key={h.id}
-                className="shrink-0 rounded-xl bg-white dark:bg-slate-900 border border-amber-100 dark:border-amber-900/40 px-2.5 py-1.5 min-w-[7.5rem]"
+                className="shrink-0 rounded-xl bg-white dark:bg-slate-900 border border-amber-100 dark:border-amber-900/40 px-2.5 py-1.5 min-w-[7rem]"
               >
-                <p className="text-[11px] font-bold text-slate-800 dark:text-slate-100 truncate">
-                  {h.ticker || h.symbol}
-                </p>
-                <p className="text-[9px] text-slate-400 truncate">
-                  {portfolioNameOf(h, portfolios)} · SL {stop}
-                </p>
-                <p
-                  className={`text-[11px] font-black tabular-nums ${
-                    dist < 0 ? 'text-rose-600' : dist < 3 ? 'text-amber-600' : 'text-slate-600'
-                  }`}
-                >
+                <p className="text-[11px] font-bold truncate">{h.ticker || h.symbol}</p>
+                <p className="text-[9px] text-slate-400">SL {stop}</p>
+                <p className={`text-[11px] font-black ${dist < 0 ? 'text-rose-600' : 'text-amber-600'}`}>
                   {dist < 0 ? 'Past SL' : `${dist.toFixed(1)}% away`}
                 </p>
               </div>
@@ -569,322 +764,143 @@ export default function PortfolioV1View({
         </div>
       )}
 
-      {/* Summary — multi-currency tiles when needed */}
-      {summary.multiCurrency ? (
-        <div className="space-y-2">
-          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
-            Values by currency · not converted to {baseCurrency}
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
-            {summary.currencyTiles.map((tile) => (
-              <div
-                key={tile.currency}
-                className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4"
-              >
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                    {tile.currency}
-                  </span>
-                  <span className="text-[10px] text-slate-400">{tile.count} holdings</span>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Total value</p>
-                    <p className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mt-0.5 tabular-nums">
-                      {money(tile.total, tile.currency)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Invested</p>
-                    <p className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mt-0.5 tabular-nums">
-                      {money(tile.invested, tile.currency)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Unrealised P&amp;L</p>
-                    <p
-                      className={`text-base sm:text-lg font-black mt-0.5 tabular-nums ${
-                        tile.pnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                      }`}
-                    >
-                      {money(tile.pnl, tile.currency)}
-                    </p>
-                    <p className={`text-[10px] font-bold ${tile.pnlPct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {pct(tile.pnlPct)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Day move</p>
-                    <p
-                      className={`text-base sm:text-lg font-black mt-0.5 tabular-nums ${
-                        tile.dayPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                      }`}
-                    >
-                      {money(tile.dayPnl, tile.currency)}
-                    </p>
-                    <p className={`text-[10px] font-bold ${tile.dayPct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {pct(tile.dayPct)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-          {(() => {
-            const ccy = summary.currencyTiles[0]?.currency || baseCurrency;
-            return (
-              <>
-                <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4 col-span-2 sm:col-span-1">
-                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Total value</p>
-                  <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1 tabular-nums">
-                    {money(summary.total, ccy)}
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-1">{summary.count} holdings</p>
-                </div>
-                <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4">
-                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Invested</p>
-                  <p className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mt-1 tabular-nums">
-                    {money(summary.invested, ccy)}
-                  </p>
-                </div>
-                <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4">
-                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Unrealised P&amp;L</p>
-                  <p
-                    className={`text-lg sm:text-xl font-black mt-1 tabular-nums ${
-                      summary.pnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                    }`}
-                  >
-                    {money(summary.pnl, ccy)}
-                  </p>
-                  <p className={`text-[10px] font-bold ${summary.pnlPct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {pct(summary.pnlPct)}
-                  </p>
-                </div>
-                <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4">
-                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Day move</p>
-                  <p
-                    className={`text-lg sm:text-xl font-black mt-1 tabular-nums ${
-                      summary.dayPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                    }`}
-                  >
-                    {money(summary.dayPnl, ccy)}
-                  </p>
-                  <p className={`text-[10px] font-bold ${summary.dayPct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {pct(summary.dayPct)}
-                  </p>
-                </div>
-              </>
-            );
-          })()}
-        </div>
-      )}
-
-      {/* Gainers / Losers */}
+      {/* Gainers / losers */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4">
-          <div className="flex items-center gap-1.5 mb-2">
-            <TrendingUp className="w-4 h-4 text-emerald-500" />
-            <h2 className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
-              Top gainers
-            </h2>
+        {[
+          { title: 'Top gainers', icon: <TrendingUp className="w-4 h-4 text-emerald-500" />, rows: ranked.gainers, good: true },
+          { title: 'Top losers', icon: <TrendingDown className="w-4 h-4 text-rose-500" />, rows: ranked.losers, good: false },
+        ].map((block) => (
+          <div
+            key={block.title}
+            className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4"
+          >
+            <div className="flex items-center gap-1.5 mb-2">
+              {block.icon}
+              <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                {block.title}
+              </h3>
+            </div>
+            {block.rows.length === 0 ? (
+              <p className="text-[11px] text-slate-400 py-4 text-center">—</p>
+            ) : (
+              <ul className="space-y-1">
+                {block.rows.map(({ h, p, dollar }) => (
+                  <li key={h.id} className="flex justify-between gap-2 py-1.5 border-b border-slate-50 dark:border-slate-800 last:border-0">
+                    <div className="min-w-0">
+                      <p className="text-[12px] font-bold truncate">{h.ticker || h.symbol}</p>
+                      <p className="text-[9px] text-slate-400 truncate">
+                        {CATEGORY_META[classifyHolding(h)].label}
+                        {multiPortfolio ? ` · ${portfolioNameOf(h, portfolios)}` : ''}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className={`text-[12px] font-black tabular-nums ${block.good ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {pct(p)}
+                      </p>
+                      <p className="text-[9px] tabular-nums text-slate-400">
+                        {moneyPrecise(dollar, h.currency || baseCurrency)}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-          {ranked.gainers.length === 0 ? (
-            <p className="text-[11px] text-slate-400 py-4 text-center">No holdings yet</p>
-          ) : (
-            <ul className="space-y-1.5">
-              {ranked.gainers.map(({ h, p, dollar }) => (
-                <li
-                  key={h.id}
-                  className="flex items-center justify-between gap-2 py-1.5 border-b border-slate-100 dark:border-slate-800 last:border-0"
-                >
-                  <div className="min-w-0">
-                    <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100 truncate">
-                      {h.ticker || h.symbol}
-                    </p>
-                    <p className="text-[9px] text-slate-400 truncate">
-                      {multiPortfolio ? portfolioNameOf(h, portfolios) : h.broker}
-                      {h.holding_type === 'mutual_fund' ? ' · MF' : ''}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-[12px] font-black text-emerald-600 tabular-nums">{pct(p)}</p>
-                    <p className="text-[9px] text-emerald-600/80 tabular-nums">
-                      {moneyPrecise(dollar, h.currency || baseCurrency)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4">
-          <div className="flex items-center gap-1.5 mb-2">
-            <TrendingDown className="w-4 h-4 text-rose-500" />
-            <h2 className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
-              Top losers
-            </h2>
-          </div>
-          {ranked.losers.length === 0 ? (
-            <p className="text-[11px] text-slate-400 py-4 text-center">No holdings yet</p>
-          ) : (
-            <ul className="space-y-1.5">
-              {ranked.losers.map(({ h, p, dollar }) => (
-                <li
-                  key={h.id}
-                  className="flex items-center justify-between gap-2 py-1.5 border-b border-slate-100 dark:border-slate-800 last:border-0"
-                >
-                  <div className="min-w-0">
-                    <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100 truncate">
-                      {h.ticker || h.symbol}
-                    </p>
-                    <p className="text-[9px] text-slate-400 truncate">
-                      {multiPortfolio ? portfolioNameOf(h, portfolios) : h.broker}
-                      {h.holding_type === 'mutual_fund' ? ' · MF' : ''}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-[12px] font-black text-rose-600 tabular-nums">{pct(p)}</p>
-                    <p className="text-[9px] text-rose-600/80 tabular-nums">
-                      {moneyPrecise(dollar, h.currency || baseCurrency)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-
-      {/* Allocation by portfolio (or broker) */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4">
-        <div className="flex items-center gap-1.5 mb-3">
-          <Layers className="w-4 h-4 text-indigo-500" />
-          <h2 className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
-            {multiPortfolio ? 'By portfolio' : 'By broker'}
-          </h2>
-        </div>
-        {allocation.length === 0 ? (
-          <p className="text-[11px] text-slate-400 text-center py-3">Nothing to allocate yet</p>
-        ) : (
-          <div className="space-y-2">
-            {allocation.map((a) => (
-              <div key={a.name}>
-                <div className="flex justify-between text-[11px] mb-0.5">
-                  <span className="font-bold text-slate-700 dark:text-slate-200">{a.name}</span>
-                  <span className="tabular-nums text-slate-500">{a.pct.toFixed(1)}%</span>
-                </div>
-                <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${barColor(a.name)}`}
-                    style={{ width: `${Math.max(a.pct, 1)}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        ))}
       </div>
 
       {/* Connections */}
       {(portfolioBrokerConnections || []).length > 0 && (
-        <div className="rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 p-3">
-          <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-2">Connected</p>
-          <div className="flex flex-wrap gap-1.5">
-            {(portfolioBrokerConnections || []).map((c: any) => {
-              const pName = c.portfolio_id
-                ? portfolios.find((p: any) => p.id === c.portfolio_id)?.name
-                : null;
-              return (
-                <span
-                  key={c.id}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
-                >
-                  <Link2 className="w-3 h-3" />
-                  {c.connection_label || c.broker_type}
-                  {pName ? ` · ${pName}` : ''}
-                </span>
-              );
-            })}
-          </div>
+        <div className="flex flex-wrap gap-1.5">
+          {(portfolioBrokerConnections || []).map((c: any) => {
+            const pName = c.portfolio_id ? portfolios.find((p: any) => p.id === c.portfolio_id)?.name : null;
+            return (
+              <span
+                key={c.id}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+              >
+                <Link2 className="w-3 h-3" />
+                {c.connection_label || c.broker_type}
+                {pName ? ` · ${pName}` : ''}
+              </span>
+            );
+          })}
         </div>
       )}
 
-      {/* Holdings table with stop loss */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
+      {/* Holdings */}
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
         <button
           type="button"
           onClick={() => setHoldingsExpanded((v) => !v)}
-          className="w-full flex items-center justify-between px-3 sm:px-4 py-3 text-left"
+          className="w-full flex items-center justify-between px-4 py-3"
         >
           <h2 className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
-            Holdings ({filtered.length})
+            Holdings · {filtered.length}
+            {categoryFilter !== 'All' ? ` · ${CATEGORY_META[categoryFilter].label}` : ''}
           </h2>
-          <ChevronRight
-            className={`w-4 h-4 text-slate-400 transition-transform ${holdingsExpanded ? 'rotate-90' : ''}`}
-          />
+          <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${holdingsExpanded ? 'rotate-90' : ''}`} />
         </button>
         {holdingsExpanded && (
           <div className="border-t border-slate-100 dark:border-slate-800 max-h-[32rem] overflow-auto">
-            {/* Desktop header */}
-            <div className="hidden sm:grid grid-cols-[minmax(7rem,1.4fr)_repeat(6,minmax(0,1fr))] gap-2 px-4 py-2 text-[9px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800 sticky top-0 bg-white dark:bg-slate-900">
+            <div className="hidden sm:grid grid-cols-[minmax(8rem,1.5fr)_repeat(6,minmax(0,1fr))] gap-2 px-4 py-2 text-[9px] font-black uppercase tracking-wider text-slate-400 sticky top-0 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800">
               <span>Symbol</span>
               <span className="text-right">Qty</span>
               <span className="text-right">Live</span>
               <span className="text-right">Value</span>
               <span className="text-right">P&amp;L</span>
-              <span className="text-right">Stop loss</span>
+              <span className="text-right">Stop</span>
               <span className="text-right">Lev</span>
             </div>
             {filtered.length === 0 ? (
-              <p className="text-[11px] text-slate-400 text-center py-8">No holdings for this filter</p>
+              <p className="text-[11px] text-slate-400 text-center py-10">No rows for this filter</p>
             ) : (
               filtered
                 .slice()
-                .sort((a: any, b: any) => marketValue(b) - marketValue(a))
-                .map((h: any) => {
+                .sort((a, b) => marketValue(b) - marketValue(a))
+                .map((h) => {
                   const p = pnlPct(h);
                   const d = dayChangePct(h);
                   const stop = h.stop_loss_rate != null ? Number(h.stop_loss_rate) : null;
                   const dist = stopLossDistancePct(h);
                   const lev = h.leverage != null ? Number(h.leverage) : null;
                   const ccy = h.currency || baseCurrency;
+                  const cat = classifyHolding(h);
                   return (
                     <div
                       key={h.id}
-                      className="px-3 sm:px-4 py-2.5 border-b border-slate-50 dark:border-slate-800/80 sm:grid sm:grid-cols-[minmax(7rem,1.4fr)_repeat(6,minmax(0,1fr))] sm:gap-2 sm:items-center"
+                      className="px-3 sm:px-4 py-2.5 border-b border-slate-50 dark:border-slate-800/80 sm:grid sm:grid-cols-[minmax(8rem,1.5fr)_repeat(6,minmax(0,1fr))] sm:gap-2 sm:items-center"
                     >
-                      <div className="min-w-0 flex items-start justify-between gap-2 sm:block">
-                        <div className="min-w-0">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0">
                           <p className="text-[12px] font-bold text-slate-900 dark:text-white truncate">
                             {h.ticker || h.symbol}
                           </p>
-                          <p className="text-[9px] text-slate-400 truncate">
-                            {multiPortfolio ? portfolioNameOf(h, portfolios) : h.broker}
-                            {h.broker && multiPortfolio ? ` · ${h.broker}` : ''}
-                            {h.holding_type === 'mutual_fund'
-                              ? ' · MF'
-                              : h.holding_type === 'options'
-                                ? ' · Options'
-                                : ''}
-                          </p>
+                          <span className={`shrink-0 text-[8px] font-black px-1.5 py-0.5 rounded-full ${CATEGORY_META[cat].chip} opacity-90`}>
+                            {CATEGORY_META[cat].label.split('·').pop()?.trim()}
+                          </span>
                         </div>
-                        {/* Mobile-only P&L */}
-                        <div className="sm:hidden text-right shrink-0">
-                          <p className="text-[12px] font-bold text-slate-900 dark:text-white tabular-nums">
-                            {money(marketValue(h), ccy)}
-                          </p>
-                          <p className={`text-[10px] font-bold tabular-nums ${p >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        <p className="text-[9px] text-slate-400 truncate">
+                          {multiPortfolio ? portfolioNameOf(h, portfolios) : h.broker}
+                          {multiPortfolio ? ` · ${h.broker}` : ''}
+                        </p>
+                        <div className="sm:hidden mt-1 flex justify-between">
+                          <span className="text-[12px] font-bold tabular-nums">{money(marketValue(h), ccy)}</span>
+                          <span className={`text-[11px] font-black tabular-nums ${p >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                             {pct(p)}
-                          </p>
+                          </span>
                         </div>
+                        {stop != null && stop > 0 && (
+                          <p className="sm:hidden text-[10px] font-bold text-amber-700 mt-0.5">
+                            SL {moneyPrecise(stop, ccy)}
+                            {dist != null ? ` · ${dist < 0 ? 'past' : `${dist.toFixed(1)}% away`}` : ''}
+                          </p>
+                        )}
                       </div>
-                      <p className="hidden sm:block text-right text-[11px] tabular-nums text-slate-600 dark:text-slate-300">
+                      <p className="hidden sm:block text-right text-[11px] tabular-nums text-slate-600">
                         {Number(h.quantity).toLocaleString(undefined, { maximumFractionDigits: 4 })}
                       </p>
-                      <p className="hidden sm:block text-right text-[11px] tabular-nums text-slate-600 dark:text-slate-300">
+                      <p className="hidden sm:block text-right text-[11px] tabular-nums text-slate-600">
                         {moneyPrecise(livePrice(h), ccy)}
                         {d != null && (
                           <span className={`block text-[9px] font-bold ${d >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -892,47 +908,29 @@ export default function PortfolioV1View({
                           </span>
                         )}
                       </p>
-                      <p className="hidden sm:block text-right text-[11px] font-bold tabular-nums text-slate-800 dark:text-slate-100">
+                      <p className="hidden sm:block text-right text-[11px] font-bold tabular-nums">
                         {money(marketValue(h), ccy)}
                       </p>
-                      <p
-                        className={`hidden sm:block text-right text-[11px] font-bold tabular-nums ${
-                          p >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                        }`}
-                      >
+                      <p className={`hidden sm:block text-right text-[11px] font-bold tabular-nums ${p >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {pct(p)}
                       </p>
                       <div className="hidden sm:block text-right">
                         {stop != null && stop > 0 ? (
                           <>
-                            <p className="text-[11px] font-bold tabular-nums text-slate-700 dark:text-slate-200">
-                              {moneyPrecise(stop, ccy)}
-                            </p>
+                            <p className="text-[11px] font-bold tabular-nums">{moneyPrecise(stop, ccy)}</p>
                             {dist != null && (
-                              <p
-                                className={`text-[9px] font-bold tabular-nums ${
-                                  dist < 0 ? 'text-rose-600' : dist < 5 ? 'text-amber-600' : 'text-slate-400'
-                                }`}
-                              >
-                                {dist < 0 ? 'Past SL' : `${dist.toFixed(1)}% away`}
+                              <p className={`text-[9px] font-bold ${dist < 0 ? 'text-rose-600' : dist < 5 ? 'text-amber-600' : 'text-slate-400'}`}>
+                                {dist < 0 ? 'Past' : `${dist.toFixed(1)}%`}
                               </p>
                             )}
                           </>
                         ) : (
-                          <span className="text-[10px] text-slate-300">—</span>
+                          <span className="text-slate-300 text-[10px]">—</span>
                         )}
                       </div>
-                      <p className="hidden sm:block text-right text-[11px] tabular-nums text-slate-500">
+                      <p className="hidden sm:block text-right text-[11px] text-slate-500">
                         {lev != null && lev > 1 ? `${lev}x` : '—'}
                       </p>
-                      {/* Mobile stop loss line */}
-                      {stop != null && stop > 0 && (
-                        <p className="sm:hidden mt-1 text-[10px] text-amber-700 dark:text-amber-400 font-bold">
-                          SL {moneyPrecise(stop, ccy)}
-                          {dist != null ? ` · ${dist < 0 ? 'past stop' : `${dist.toFixed(1)}% away`}` : ''}
-                          {lev != null && lev > 1 ? ` · ${lev}x` : ''}
-                        </p>
-                      )}
                     </div>
                   );
                 })
@@ -941,52 +939,35 @@ export default function PortfolioV1View({
         )}
       </div>
 
-      {/* Connect broker modal */}
+      {/* Connect modal */}
       {connectOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
-          <div className="w-full sm:max-w-md bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-t-2xl">
-              <h3 className="text-sm font-black text-slate-900 dark:text-white">
-                {connectStep === 'pick' ? 'Connect a broker' : `Connect ${BROKER_META[selectedBroker!]?.label}`}
+          <div className="w-full sm:max-w-md bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-t-3xl">
+              <h3 className="text-sm font-black">
+                {connectStep === 'pick' ? 'Connect a broker' : BROKER_META[selectedBroker!]?.label}
               </h3>
-              <button
-                type="button"
-                onClick={() => setConnectOpen(false)}
-                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                <X className="w-4 h-4 text-slate-500" />
+              <button type="button" onClick={() => setConnectOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+                <X className="w-4 h-4" />
               </button>
             </div>
-
             <div className="p-4 space-y-3">
-              {connectOk && (
-                <div className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl px-3 py-2">
-                  {connectOk}
-                </div>
-              )}
-              {connectError && (
-                <div className="text-[11px] font-medium text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 rounded-xl px-3 py-2">
-                  {connectError}
-                </div>
-              )}
-
+              {connectOk && <div className="text-[11px] text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2">{connectOk}</div>}
+              {connectError && <div className="text-[11px] text-rose-700 bg-rose-50 rounded-xl px-3 py-2">{connectError}</div>}
               {connectStep === 'pick' && (
                 <>
                   <p className="text-[11px] text-slate-500">
-                    Pick a broker, choose which portfolio it belongs to (e.g. eToro Sasi vs Raj, or another
-                    Webull account), then enter keys.
+                    Link each connection to a portfolio — e.g. eToro → Sasi, second Webull → another book.
                   </p>
                   {multiPortfolio && (portfolios || []).length > 0 && (
                     <label className="block">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                        Link to portfolio
-                      </span>
+                      <span className="text-[10px] font-bold uppercase text-slate-500">Portfolio</span>
                       <select
                         value={connectPortfolioId}
                         onChange={(e) => setConnectPortfolioId(e.target.value)}
                         className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
                       >
-                        <option value="">No specific portfolio</option>
+                        <option value="">None</option>
                         {(portfolios || []).map((p: any) => (
                           <option key={p.id} value={p.id}>
                             {p.name}
@@ -1002,33 +983,29 @@ export default function PortfolioV1View({
                         <button
                           key={key}
                           type="button"
-                          onClick={() => pickBroker(key)}
-                          className={`text-left rounded-xl border border-slate-200 dark:border-slate-700 p-3 hover:ring-2 ${m.ring} ${m.bg}`}
+                          onClick={() => {
+                            setSelectedBroker(key);
+                            setCredFields({});
+                            setConnectStep('creds');
+                          }}
+                          className={`text-left rounded-2xl border border-slate-200 dark:border-slate-700 p-3 hover:ring-2 ${m.ring} ${m.bg}`}
                         >
                           <p className={`text-[13px] font-black ${m.color}`}>{m.label}</p>
-                          <p className="text-[9px] text-slate-500 mt-0.5">API key connection</p>
+                          <p className="text-[9px] text-slate-500 mt-0.5">API keys</p>
                         </button>
                       );
                     })}
                   </div>
                 </>
               )}
-
               {connectStep === 'creds' && selectedBroker && (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setConnectStep('pick');
-                      setSelectedBroker(null);
-                    }}
-                    className="text-[10px] font-bold text-indigo-600"
-                  >
-                    ← Change broker
+                  <button type="button" onClick={() => { setConnectStep('pick'); setSelectedBroker(null); }} className="text-[10px] font-bold text-indigo-600">
+                    ← Brokers
                   </button>
                   {BROKER_META[selectedBroker].fields.map((f) => (
                     <label key={f.key} className="block">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{f.label}</span>
+                      <span className="text-[10px] font-bold uppercase text-slate-500">{f.label}</span>
                       <input
                         type={f.secret ? 'password' : 'text'}
                         value={credFields[f.key] || ''}
@@ -1043,7 +1020,7 @@ export default function PortfolioV1View({
                     type="button"
                     disabled={connectBusy || isReadOnly}
                     onClick={saveConnection}
-                    className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[12px] font-black disabled:opacity-50"
+                    className="w-full py-2.5 rounded-2xl bg-indigo-600 text-white text-[12px] font-black disabled:opacity-50"
                   >
                     {connectBusy ? 'Saving…' : 'Save connection'}
                   </button>
