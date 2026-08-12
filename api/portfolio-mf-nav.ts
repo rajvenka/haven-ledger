@@ -42,20 +42,88 @@ interface MfapiSearchResult {
   schemeName: string;
 }
 
+/**
+ * mfapi /mf/search returns 0 hits for long full scheme names like
+ * "ICICI PRUDENTIAL PHARMA HEALTHCARE & DIAGNOSTICS (P.H.D) FUND - DIRECT PLAN".
+ * Progressive shorter queries still find the family; pickBestMatch then enforces
+ * Direct / Growth / plan words against the full target name.
+ */
+function buildSearchQueries(name: string): string[] {
+  const cleaned = name
+    .replace(/\([^)]*\)/g, " ") // drop (P.H.D) style abbreviations that confuse search
+    .replace(/\s+/g, " ")
+    .trim();
+  const withoutPlan = cleaned
+    .replace(/\s*[-–]?\s*(direct|regular)\s+plan\b/gi, " ")
+    .replace(/\s*[-–]?\s*(growth|idcw|dividend|cumulative)\b.*$/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const words = withoutPlan.split(/\s+/).filter(Boolean);
+  const queries: string[] = [];
+  const push = (q: string) => {
+    const t = q.trim();
+    if (t && !queries.includes(t)) queries.push(t);
+  };
+  push(cleaned);
+  push(withoutPlan);
+  // 5-word and 4-word prefixes work well for AMC + fund family (e.g. "ICICI Prudential Pharma Healthcare")
+  if (words.length > 5) push(words.slice(0, 5).join(" "));
+  if (words.length > 4) push(words.slice(0, 4).join(" "));
+  if (words.length > 3) push(words.slice(0, 3).join(" "));
+  return queries;
+}
+
 function pickBestMatch(candidates: MfapiSearchResult[], targetName: string): MfapiSearchResult | undefined {
-  const targetWords = targetName.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(w => w.length > 1);
+  const raw = targetName.toLowerCase();
+  const wantsDirect = /\bdirect\b/.test(raw);
+  const wantsRegular = /\bregular\b/.test(raw);
+  const wantsIdcw = /\b(idcw|dividend)\b/.test(raw);
+  // Words that must appear, excluding pure noise. Keep "direct" when present in target.
+  // Drop standalone "plan" - mfapi often says "Direct - Growth" without the word "plan".
+  const targetWords = raw
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 1 && w !== "plan" && w !== "option" && w !== "options");
   if (targetWords.length === 0) return undefined;
-  const filtered = candidates.filter(c => {
+
+  let filtered = candidates.filter((c) => {
     const nameLower = c.schemeName.toLowerCase();
-    return targetWords.every(w => nameLower.includes(w));
+    return targetWords.every((w) => nameLower.includes(w));
   });
-  // Never fall back to picking from unfiltered candidates - that's exactly how a wrong
-  // scheme variant (e.g. an IDCW/dividend-payout plan instead of Growth, which can have a
-  // wildly different NAV for the same fund) gets silently matched. No candidate containing
-  // every required word - including disambiguators like "growth"/"direct" - means no match,
-  // not a best-effort guess.
+
+  // Soften: if strict every-word failed, require AMC + core fund words (drop plan-type words)
+  if (filtered.length === 0) {
+    const core = targetWords.filter((w) => !["direct", "regular", "growth", "idcw", "dividend", "cumulative"].includes(w));
+    if (core.length >= 3) {
+      filtered = candidates.filter((c) => {
+        const nameLower = c.schemeName.toLowerCase();
+        return core.every((w) => nameLower.includes(w));
+      });
+    }
+  }
   if (filtered.length === 0) return undefined;
-  return filtered.sort((a, b) => Math.abs(a.schemeName.length - targetName.length) - Math.abs(b.schemeName.length - targetName.length))[0];
+
+  // Prefer Direct vs Regular when target says so
+  if (wantsDirect) {
+    const d = filtered.filter((c) => /\bdirect\b/i.test(c.schemeName));
+    if (d.length) filtered = d;
+  } else if (wantsRegular) {
+    const r = filtered.filter((c) => /\bregular\b/i.test(c.schemeName));
+    if (r.length) filtered = r;
+  }
+
+  // Prefer Growth/Cumulative over IDCW unless user explicitly holds IDCW
+  if (!wantsIdcw) {
+    const growth = filtered.filter((c) => !/\b(idcw|dividend)\b/i.test(c.schemeName));
+    if (growth.length) filtered = growth;
+  } else {
+    const idcw = filtered.filter((c) => /\b(idcw|dividend)\b/i.test(c.schemeName));
+    if (idcw.length) filtered = idcw;
+  }
+
+  return filtered.sort(
+    (a, b) => Math.abs(a.schemeName.length - targetName.length) - Math.abs(b.schemeName.length - targetName.length)
+  )[0];
 }
 
 async function fetchLatestNav(schemeCode: string | number): Promise<{ nav: number; schemeName: string; httpStatus: number } | null> {
@@ -95,54 +163,66 @@ export default async function handler(req: any, res: any) {
       if (row.isinReinvest) byIsin.set(row.isinReinvest, row);
     }
 
-    const results = await Promise.all(funds.map(async ({ id, isin, name }: { id: string; isin?: string; name: string }) => {
-      try {
-        if (isin) {
-          const isinMatch = byIsin.get(isin.trim());
-          if (isinMatch) {
-            const navResult = await fetchLatestNav(isinMatch.schemeCode);
-            if (navResult) {
-              console.log(`[mf-nav] OK (isin path) id=${id} name="${name}" schemeCode=${isinMatch.schemeCode} nav=${navResult.nav}`);
-              return { id, nav: navResult.nav, matchedSchemeName: navResult.schemeName, error: null };
+    const results = await Promise.all(
+      funds.map(async ({ id, isin, name }: { id: string; isin?: string; name: string }) => {
+        try {
+          if (isin) {
+            const isinMatch = byIsin.get(isin.trim());
+            if (isinMatch) {
+              const navResult = await fetchLatestNav(isinMatch.schemeCode);
+              if (navResult) {
+                console.log(`[mf-nav] OK (isin path) id=${id} name="${name}" schemeCode=${isinMatch.schemeCode} nav=${navResult.nav}`);
+                return { id, nav: navResult.nav, matchedSchemeName: navResult.schemeName, error: null };
+              }
+              console.log(`[mf-nav] ISIN matched scheme ${isinMatch.schemeCode} but fetchLatestNav failed, id=${id} name="${name}"`);
+            } else {
+              console.log(`[mf-nav] no AMFI ISIN match for isin=${isin} id=${id} name="${name}"`);
             }
-            console.log(`[mf-nav] ISIN matched scheme ${isinMatch.schemeCode} but fetchLatestNav failed, id=${id} name="${name}"`);
-          } else {
-            console.log(`[mf-nav] no AMFI ISIN match for isin=${isin} id=${id} name="${name}"`);
           }
-        }
-        if (name) {
-          // Full name, not truncated - dropping words like "Direct"/"Growth" from the query
-          // is exactly what let mfapi.in's search surface the wrong scheme variant (e.g. an
-          // IDCW/dividend-payout plan with a wildly different NAV) when nothing in the
-          // results happened to contain those words for disambiguation.
-          const searchQuery = name.trim();
-          const searchResp = await fetch(`https://api.mfapi.in/mf/search?q=${encodeURIComponent(searchQuery)}`);
-          if (!searchResp.ok) {
-            console.log(`[mf-nav] mfapi search HTTP ${searchResp.status} for query="${searchQuery}" id=${id}`);
-          } else {
-            const candidates: MfapiSearchResult[] = await searchResp.json();
-            if (Array.isArray(candidates) && candidates.length > 0) {
+          if (name) {
+            // Try progressively shorter search queries - full scheme names return 0 hits on mfapi.
+            const queries = buildSearchQueries(name);
+            let candidates: MfapiSearchResult[] = [];
+            let usedQuery = "";
+            for (const searchQuery of queries) {
+              const searchResp = await fetch(`https://api.mfapi.in/mf/search?q=${encodeURIComponent(searchQuery)}`);
+              if (!searchResp.ok) {
+                console.log(`[mf-nav] mfapi search HTTP ${searchResp.status} for query="${searchQuery}" id=${id}`);
+                continue;
+              }
+              const batch: MfapiSearchResult[] = await searchResp.json();
+              if (Array.isArray(batch) && batch.length > 0) {
+                candidates = batch;
+                usedQuery = searchQuery;
+                break;
+              }
+            }
+            if (candidates.length > 0) {
               const best = pickBestMatch(candidates, name);
               if (best) {
                 const navResult = await fetchLatestNav(best.schemeCode);
                 if (navResult) {
-                  console.log(`[mf-nav] OK (name path) id=${id} name="${name}" schemeCode=${best.schemeCode} nav=${navResult.nav}`);
+                  console.log(
+                    `[mf-nav] OK (name path) id=${id} name="${name}" query="${usedQuery}" schemeCode=${best.schemeCode} nav=${navResult.nav}`
+                  );
                   return { id, nav: navResult.nav, matchedSchemeName: navResult.schemeName, error: null };
                 }
                 console.log(`[mf-nav] name-matched scheme ${best.schemeCode} but fetchLatestNav failed, id=${id} name="${name}"`);
+              } else {
+                console.log(`[mf-nav] candidates found via "${usedQuery}" but pickBestMatch failed for name="${name}" id=${id}`);
               }
             } else {
-              console.log(`[mf-nav] mfapi search returned no candidates for query="${searchQuery}" id=${id}`);
+              console.log(`[mf-nav] mfapi search returned no candidates for queries=${JSON.stringify(queries)} id=${id}`);
             }
           }
+          console.log(`[mf-nav] FAILED entirely: id=${id} name="${name}" isin=${isin}`);
+          return { id, nav: null, error: "No matching scheme found." };
+        } catch (err: any) {
+          console.log(`[mf-nav] EXCEPTION for id=${id} name="${name}":`, err?.message);
+          return { id, nav: null, error: err?.message || "Lookup failed for this fund." };
         }
-        console.log(`[mf-nav] FAILED entirely: id=${id} name="${name}" isin=${isin}`);
-        return { id, nav: null, error: "No matching scheme found." };
-      } catch (err: any) {
-        console.log(`[mf-nav] EXCEPTION for id=${id} name="${name}":`, err?.message);
-        return { id, nav: null, error: err?.message || "Lookup failed for this fund." };
-      }
-    }));
+      })
+    );
 
     const okCount = results.filter((r: any) => r.nav != null).length;
     console.log(`[mf-nav] done: ${okCount}/${results.length} succeeded`);
