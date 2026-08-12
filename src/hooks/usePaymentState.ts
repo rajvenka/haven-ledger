@@ -1196,7 +1196,7 @@ export function usePaymentState() {
   useEffect(() => { if (isLoaded) loadPortfolioDetails(); }, [isLoaded, loadPortfolioDetails]);
 
   const addPortfolioHolding = async (holding: {
-    holdingType?: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; notes?: string;
+    holdingType?: 'stock' | 'mutual_fund' | 'options'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; notes?: string;
     source?: string; currency?: 'INR' | 'USD' | 'AUD'; portfolioId?: string;
     targetType?: 'price' | 'percent'; targetPrice?: number; targetPercent?: number;
     holdType?: 'days' | 'date'; holdDays?: number; holdUntilDate?: string;
@@ -1226,7 +1226,7 @@ export function usePaymentState() {
 
   // Bulk import from a broker file - inserts many holdings in one request, then refreshes once.
   const bulkAddPortfolioHoldings = async (holdings: {
-    holdingType: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; folioNumber?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string; currency?: string;
+    holdingType: 'stock' | 'mutual_fund' | 'options'; broker: string; symbol: string; isin?: string; folioNumber?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string; currency?: string;
     leverage?: number; stopLossRate?: number; takeProfitRate?: number; etoroNetValueAmount?: number;
   }[], portfolioId?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
@@ -1333,7 +1333,7 @@ export function usePaymentState() {
   // date becomes the current state (price, quantity, reference) - all via the same "latest date
   // wins" reference logic as a normal update.
   const bulkHistoricalImport = async (
-    snapshots: { date: string; holdings: { broker: string; holdingType: 'stock' | 'mutual_fund'; symbol: string; isin?: string; folioNumber?: string; exchange: string; quantity: number; buyPrice: number; currentPrice?: number; source?: string }[] }[],
+    snapshots: { date: string; holdings: { broker: string; holdingType: 'stock' | 'mutual_fund' | 'options'; symbol: string; isin?: string; folioNumber?: string; exchange: string; quantity: number; buyPrice: number; currentPrice?: number; source?: string }[] }[],
     portfolioId?: string
   ) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
@@ -1480,7 +1480,7 @@ export function usePaymentState() {
 
   const updatePortfolioHolding = async (id: string, updates: {
     currentPrice?: number; priceDate?: string; status?: 'active' | 'sold'; soldPrice?: number; soldDate?: string; quantity?: number; notes?: string;
-    holdingType?: 'stock' | 'mutual_fund'; source?: string; ticker?: string | null;
+    holdingType?: 'stock' | 'mutual_fund' | 'options'; source?: string; ticker?: string | null;
     targetType?: 'price' | 'percent' | null; targetPrice?: number | null; targetPercent?: number | null;
     holdType?: 'days' | 'date' | null; holdDays?: number | null; holdUntilDate?: string | null;
     symbol?: string; broker?: string; exchange?: string; isin?: string | null; buyPrice?: number; buyDate?: string; currency?: string; portfolioId?: string | null;
