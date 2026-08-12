@@ -575,23 +575,37 @@ export default function PortfolioV1View({
     const rows: TableRow[] = [];
     for (const h of filtered) {
       const lots = lotsByHoldingId.get(String(h.id)) || [];
-      const lotRows = lots.filter((l) => l.stop_loss_rate != null || true);
-      if (lotRows.length === 0) {
-        rows.push({ h, rowKey: String(h.id) });
-        continue;
-      }
-      for (const lot of lotRows) {
-        const stop = lot.stop_loss_rate != null ? Number(lot.stop_loss_rate) : null;
-        const live = Number(lot.current_price ?? h.live_price ?? h.current_price ?? lot.buy_price ?? h.buy_price) || 0;
-        const dist = stop != null && live > 0 ? ((live - stop) / live) * 100 : null;
-        rows.push({
-          h,
-          lot,
-          stop,
-          lotQty: Number(lot.quantity) || 0,
-          dist,
-          rowKey: `${h.id}-${lot.id || lot.external_position_id || Math.random()}`,
+      if (lots.length > 0) {
+        // One table row per position/lot (e.g. Netflix ×5)
+        lots.forEach((lot: any, idx: number) => {
+          const stop = lot.stop_loss_rate != null ? Number(lot.stop_loss_rate) : null;
+          const live = Number(lot.current_price ?? h.live_price ?? h.current_price ?? lot.buy_price ?? h.buy_price) || 0;
+          const dist = stop != null && live > 0 ? ((live - stop) / live) * 100 : null;
+          rows.push({
+            h,
+            lot,
+            stop,
+            lotQty: Number(lot.quantity) || 0,
+            dist,
+            rowKey: `${h.id}-lot-${lot.id || lot.external_position_id || idx}`,
+          });
         });
+      } else {
+        // No lot rows in DB — still surface master stop if present
+        const stops = stopsForHolding(h);
+        if (stops.length > 1) {
+          stops.forEach((s, idx) => {
+            rows.push({
+              h,
+              stop: s.stop,
+              lotQty: s.qty,
+              dist: s.dist,
+              rowKey: `${h.id}-stop-${idx}`,
+            });
+          });
+        } else {
+          rows.push({ h, rowKey: String(h.id) });
+        }
       }
     }
     return rows;
@@ -642,12 +656,19 @@ export default function PortfolioV1View({
     return Array.from(s).sort();
   }, [bookScoped]);
 
-  // Lots chip only when a *specific* book is selected and that book has lot rows.
-  // Hidden on "All books" per product rule.
+  // Lots chip only when a *specific* book is selected (hidden on All books).
+  // Show if that book has lot rows, eToro positions, or any stop-loss — so the control
+  // is visible even before lots finish loading / after a partial sync.
   const hasLotsForSelectedBook = useMemo(() => {
     if (portfolioFilter === 'All' || portfolioFilter === '__pending__') return false;
+    if (bookScoped.length === 0) return false;
     const ids = new Set(bookScoped.map((h: any) => String(h.id)));
-    return (portfolioHoldingLots || []).some((l: any) => ids.has(String(l.holding_id)));
+    const hasLotRows = (portfolioHoldingLots || []).some((l: any) => ids.has(String(l.holding_id)));
+    if (hasLotRows) return true;
+    return bookScoped.some((h: any) => {
+      const broker = String(h.broker || '').toLowerCase();
+      return broker === 'etoro' || (h.stop_loss_rate != null && Number(h.stop_loss_rate) > 0);
+    });
   }, [portfolioFilter, bookScoped, portfolioHoldingLots]);
 
   const ranked = useMemo(() => {
@@ -1230,18 +1251,20 @@ export default function PortfolioV1View({
                 {meta.label} · {stats.count}
               </button>
             ))}
-          </div>
             {hasLotsForSelectedBook && (
               <button
                 type="button"
                 onClick={() => setShowLotsOnly((v) => !v)}
                 className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                  showLotsOnly ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-900'
+                  showLotsOnly
+                    ? 'bg-amber-500 text-white'
+                    : 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-900'
                 }`}
               >
                 <ShieldAlert className="w-3 h-3" /> Lots
               </button>
             )}
+          </div>
         </div>
 
         {holdingsExpanded && (
