@@ -369,6 +369,7 @@ export default function PortfolioV1View({
   };
   const colOn = (key: string) => visibleCols.has(key);
 
+
   const [connectOpen, setConnectOpen] = useState(false);
   const [connectStep, setConnectStep] = useState<'pick' | 'creds'>('pick');
   const [selectedBroker, setSelectedBroker] = useState<BrokerType | null>(null);
@@ -379,6 +380,32 @@ export default function PortfolioV1View({
   const [connectOk, setConnectOk] = useState<string | null>(null);
 
   const multiPortfolio = portfolioMode === 'multiple' || (portfolios || []).length > 1;
+
+  // Desktop table columns — rebuilt whenever the user toggles Columns so widths reflow.
+  const desktopCols = useMemo(() => {
+    const cols: { key: string; label: string; align: 'left' | 'right'; fr: string }[] = [
+      { key: 'symbol', label: 'Symbol', align: 'left', fr: 'minmax(7rem, 1.6fr)' },
+    ];
+    if (colOn('type')) cols.push({ key: 'type', label: 'Type', align: 'left', fr: 'minmax(3.5rem, 0.7fr)' });
+    if (colOn('portfolio') && multiPortfolio) cols.push({ key: 'portfolio', label: 'Portfolio', align: 'left', fr: 'minmax(4.5rem, 0.9fr)' });
+    if (colOn('broker')) cols.push({ key: 'broker', label: 'Broker', align: 'left', fr: 'minmax(3.5rem, 0.7fr)' });
+    if (colOn('qty')) cols.push({ key: 'qty', label: 'Qty', align: 'right', fr: 'minmax(3rem, 0.6fr)' });
+    if (colOn('buy')) cols.push({ key: 'buy', label: 'Buy', align: 'right', fr: 'minmax(3.5rem, 0.7fr)' });
+    if (colOn('live')) cols.push({ key: 'live', label: 'Live', align: 'right', fr: 'minmax(3.5rem, 0.7fr)' });
+    if (colOn('day')) cols.push({ key: 'day', label: 'Day', align: 'right', fr: 'minmax(2.75rem, 0.55fr)' });
+    if (colOn('value')) cols.push({ key: 'value', label: 'Value', align: 'right', fr: 'minmax(4rem, 0.85fr)' });
+    if (colOn('pnl')) cols.push({ key: 'pnl', label: 'P&L%', align: 'right', fr: 'minmax(3rem, 0.6fr)' });
+    if (colOn('pnl_amt')) cols.push({ key: 'pnl_amt', label: 'P&L$', align: 'right', fr: 'minmax(3.5rem, 0.7fr)' });
+    if (colOn('stop')) cols.push({ key: 'stop', label: 'Stop', align: 'right', fr: 'minmax(3.5rem, 0.7fr)' });
+    if (colOn('lev')) cols.push({ key: 'lev', label: 'Lev', align: 'right', fr: 'minmax(2.5rem, 0.45fr)' });
+    if (colOn('currency')) cols.push({ key: 'currency', label: 'Ccy', align: 'right', fr: 'minmax(2.5rem, 0.45fr)' });
+    return cols;
+  }, [visibleCols, multiPortfolio]);
+
+  const desktopGridStyle = useMemo(
+    () => ({ gridTemplateColumns: desktopCols.map((c) => c.fr).join(' ') }),
+    [desktopCols]
+  );
 
   const active = useMemo(
     () => (portfolioHoldings || []).filter((h: any) => h.status === 'active' || !h.status),
@@ -1062,23 +1089,17 @@ export default function PortfolioV1View({
 
         {holdingsExpanded && (
           <div className="max-h-[32rem] overflow-auto">
-            {/* Desktop table */}
-            <div className="hidden sm:block min-w-full">
-              <div className="flex gap-2 px-4 py-2 text-[9px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800 sticky top-0 bg-white dark:bg-slate-900">
-                <span className="min-w-[8rem] flex-1">Symbol</span>
-                {colOn('type') && <span className="w-16 shrink-0">Type</span>}
-                {colOn('portfolio') && multiPortfolio && <span className="w-20 shrink-0">Portfolio</span>}
-                {colOn('broker') && <span className="w-16 shrink-0">Broker</span>}
-                {colOn('qty') && <span className="w-14 shrink-0 text-right">Qty</span>}
-                {colOn('buy') && <span className="w-16 shrink-0 text-right">Buy</span>}
-                {colOn('live') && <span className="w-16 shrink-0 text-right">Live</span>}
-                {colOn('day') && <span className="w-12 shrink-0 text-right">Day</span>}
-                {colOn('value') && <span className="w-20 shrink-0 text-right">Value</span>}
-                {colOn('pnl') && <span className="w-14 shrink-0 text-right">P&amp;L%</span>}
-                {colOn('pnl_amt') && <span className="w-16 shrink-0 text-right">P&amp;L$</span>}
-                {colOn('stop') && <span className="w-16 shrink-0 text-right">Stop</span>}
-                {colOn('lev') && <span className="w-10 shrink-0 text-right">Lev</span>}
-                {colOn('currency') && <span className="w-10 shrink-0 text-right">Ccy</span>}
+            {/* Desktop table — CSS grid reflows when Columns are toggled */}
+            <div className="hidden sm:block w-full">
+              <div
+                className="grid gap-x-2 px-4 py-2 text-[9px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800 sticky top-0 bg-white dark:bg-slate-900"
+                style={desktopGridStyle}
+              >
+                {desktopCols.map((c) => (
+                  <span key={c.key} className={c.align === 'right' ? 'text-right' : 'text-left'}>
+                    {c.label}
+                  </span>
+                ))}
               </div>
               {filtered.length === 0 ? (
                 <p className="text-[11px] text-slate-400 text-center py-10">No rows for this type filter</p>
@@ -1094,74 +1115,68 @@ export default function PortfolioV1View({
                     const lev = h.leverage != null ? Number(h.leverage) : null;
                     const ccy = h.currency || baseCurrency;
                     const cat = classifyHolding(h);
+                    const cells: Record<string, React.ReactNode> = {
+                      symbol: (
+                        <p className="font-bold text-slate-900 dark:text-white truncate">{h.ticker || h.symbol}</p>
+                      ),
+                      type: (
+                        <span className={`text-[8px] font-black px-1 py-0.5 rounded text-center inline-block ${CATEGORY_META[cat].chip}`}>
+                          {CATEGORY_META[cat].label.split('·').pop()?.trim()}
+                        </span>
+                      ),
+                      portfolio: (
+                        <span className="text-slate-500 truncate text-[10px]">{portfolioNameOf(h, portfolios)}</span>
+                      ),
+                      broker: <span className="text-slate-500 truncate text-[10px]">{h.broker}</span>,
+                      qty: (
+                        <span className="tabular-nums text-slate-600">
+                          {Number(h.quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                        </span>
+                      ),
+                      buy: <span className="tabular-nums text-slate-600">{moneyPrecise(Number(h.buy_price), ccy)}</span>,
+                      live: <span className="tabular-nums font-bold text-slate-900 dark:text-white">{moneyPrecise(livePrice(h), ccy)}</span>,
+                      day: (
+                        <span className={`tabular-nums font-bold ${d == null ? 'text-slate-300' : d >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {d == null ? '—' : pct(d)}
+                        </span>
+                      ),
+                      value: <span className="tabular-nums font-bold text-slate-900 dark:text-white">{moneyPrecise(marketValue(h), ccy)}</span>,
+                      pnl: (
+                        <span className={`tabular-nums font-bold ${p >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{pct(p)}</span>
+                      ),
+                      pnl_amt: (
+                        <span className={`tabular-nums font-bold ${pnl(h) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {moneyPrecise(pnl(h), ccy)}
+                        </span>
+                      ),
+                      stop: (
+                        stop != null ? (
+                          <span className="tabular-nums text-slate-600">
+                            {moneyPrecise(stop, ccy)}
+                            {dist != null && (
+                              <span className={`block text-[9px] ${dist < 0 ? 'text-rose-600' : 'text-amber-600'}`}>
+                                {dist < 0 ? 'past' : `${dist.toFixed(1)}%`}
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )
+                      ),
+                      lev: <span className="text-slate-500">{lev != null && lev > 1 ? `${lev}x` : '—'}</span>,
+                      currency: <span className="text-slate-400 font-bold">{ccy}</span>,
+                    };
                     return (
                       <div
                         key={h.id}
-                        className="flex gap-2 px-4 py-2.5 items-center border-b border-slate-50 dark:border-slate-800/80 text-[11px]"
+                        className="grid gap-x-2 px-4 py-2.5 items-center border-b border-slate-50 dark:border-slate-800/80 text-[11px]"
+                        style={desktopGridStyle}
                       >
-                        <div className="min-w-[8rem] flex-1 min-w-0">
-                          <p className="font-bold text-slate-900 dark:text-white truncate">{h.ticker || h.symbol}</p>
-                        </div>
-                        {colOn('type') && (
-                          <span className={`w-16 shrink-0 text-[8px] font-black px-1 py-0.5 rounded text-center ${CATEGORY_META[cat].chip}`}>
-                            {CATEGORY_META[cat].label.split('·').pop()?.trim()}
-                          </span>
-                        )}
-                        {colOn('portfolio') && multiPortfolio && (
-                          <span className="w-20 shrink-0 text-slate-500 truncate text-[10px]">{portfolioNameOf(h, portfolios)}</span>
-                        )}
-                        {colOn('broker') && (
-                          <span className="w-16 shrink-0 text-slate-500 truncate text-[10px]">{h.broker}</span>
-                        )}
-                        {colOn('qty') && (
-                          <span className="w-14 shrink-0 text-right tabular-nums text-slate-600">
-                            {Number(h.quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                          </span>
-                        )}
-                        {colOn('buy') && (
-                          <span className="w-16 shrink-0 text-right tabular-nums text-slate-600">{moneyPrecise(Number(h.buy_price), ccy)}</span>
-                        )}
-                        {colOn('live') && (
-                          <span className="w-16 shrink-0 text-right tabular-nums text-slate-600">{moneyPrecise(livePrice(h), ccy)}</span>
-                        )}
-                        {colOn('day') && (
-                          <span className={`w-12 shrink-0 text-right tabular-nums font-bold ${d == null ? 'text-slate-300' : d >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                            {d == null ? '—' : pct(d)}
-                          </span>
-                        )}
-                        {colOn('value') && (
-                          <span className="w-20 shrink-0 text-right tabular-nums font-bold">{money(marketValue(h), ccy)}</span>
-                        )}
-                        {colOn('pnl') && (
-                          <span className={`w-14 shrink-0 text-right tabular-nums font-bold ${p >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{pct(p)}</span>
-                        )}
-                        {colOn('pnl_amt') && (
-                          <span className={`w-16 shrink-0 text-right tabular-nums font-bold ${pnl(h) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                            {moneyPrecise(pnl(h), ccy)}
-                          </span>
-                        )}
-                        {colOn('stop') && (
-                          <span className="w-16 shrink-0 text-right">
-                            {stop != null && stop > 0 ? (
-                              <>
-                                <span className="tabular-nums font-bold block">{moneyPrecise(stop, ccy)}</span>
-                                {dist != null && (
-                                  <span className={`text-[9px] font-bold ${dist < 0 ? 'text-rose-600' : dist < 5 ? 'text-amber-600' : 'text-slate-400'}`}>
-                                    {dist < 0 ? 'Past' : `${dist.toFixed(1)}%`}
-                                  </span>
-                                )}
-                              </>
-                            ) : (
-                              <span className="text-slate-300">—</span>
-                            )}
-                          </span>
-                        )}
-                        {colOn('lev') && (
-                          <span className="w-10 shrink-0 text-right text-slate-500">{lev != null && lev > 1 ? `${lev}x` : '—'}</span>
-                        )}
-                        {colOn('currency') && (
-                          <span className="w-10 shrink-0 text-right text-slate-400 font-bold">{ccy}</span>
-                        )}
+                        {desktopCols.map((c) => (
+                          <div key={c.key} className={`min-w-0 ${c.align === 'right' ? 'text-right' : 'text-left'}`}>
+                            {cells[c.key]}
+                          </div>
+                        ))}
                       </div>
                     );
                   })
