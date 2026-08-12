@@ -1864,12 +1864,17 @@ export function usePaymentState() {
   // brokerage password, at the cost of re-entering it each time).
   const setPortfolioBrokerConnection = async (brokerType: 'etoro' | 'ig' | 'webull' | 'zerodha' | 'groww', credentials: Record<string, string>, portfolioId?: string, connectionLabel?: string) => {
     if (!user || !activeWorkspaceId) return;
+    const label = (connectionLabel || '').trim() || null;
     const row: any = {
       workspace_id: activeWorkspaceId, portfolio_id: portfolioId ?? null, broker_type: brokerType, credentials,
-      connection_label: connectionLabel ?? null, created_by: user.id, updated_at: new Date().toISOString(),
+      connection_label: label, created_by: user.id, updated_at: new Date().toISOString(),
     };
+    // Match on label when provided so "Webull-Sasi" and "Webull-Raj" can coexist on the
+    // same or different portfolios. Without a label, keep previous behaviour (one row per
+    // broker+portfolio) so re-saves still update instead of duplicating.
     let existingQuery = supabase.from('portfolio_broker_connections').select('id').eq('workspace_id', activeWorkspaceId).eq('broker_type', brokerType);
     existingQuery = portfolioId ? existingQuery.eq('portfolio_id', portfolioId) : existingQuery.is('portfolio_id', null);
+    if (label) existingQuery = existingQuery.eq('connection_label', label);
     const { data: existing } = await existingQuery.maybeSingle();
     const { error } = existing
       ? await supabase.from('portfolio_broker_connections').update(row).eq('id', existing.id)
