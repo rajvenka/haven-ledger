@@ -60,6 +60,7 @@ import ReportsView from './components/ReportsView';
 import IncomeView from './components/IncomeView';
 import AdminUsersView from './components/AdminUsersView';
 import AppTour from './components/AppTour';
+import OnboardingView from './components/OnboardingView';
 
 export default function App() {
   const {
@@ -273,20 +274,6 @@ export default function App() {
     if (userProfile.hasCompletedTour === false) setShowTour(true);
   }, [isLoaded, userProfile]);
 
-  // Auto-create a default family workspace when the user has none.
-  // Replaces the old "Initialize Your Vault" personal-vs-family picker.
-  const autoCreatingWorkspace = React.useRef(false);
-  React.useEffect(() => {
-    if (!user || !isLoaded) return;
-    if (workspaces.length > 0) return;
-    if (incomingInvitations.length > 0) return; // let them accept an invite first
-    if (autoCreatingWorkspace.current) return;
-    autoCreatingWorkspace.current = true;
-    setWorkspaceMode('family').catch((err) => {
-      console.error('Auto-create workspace failed:', err);
-      autoCreatingWorkspace.current = false;
-    });
-  }, [user, isLoaded, workspaces.length, incomingInvitations.length, setWorkspaceMode]);
 
   // Applies the saved landing-page preference when switching into a workspace - guards
   // against a stale preference pointing at a page the plan no longer grants (e.g. if
@@ -532,15 +519,16 @@ export default function App() {
     );
   }
 
-  // 2.5 No workspace yet (auto-create runs in effect above).
-    if (user && isLoaded && workspaces.length === 0) {
+  // 2.5 Show "Initialize Your Vault" ONLY when user is not in any workspace.
+  // If workspaces.length > 0 the main app renders — popup stays hidden.
+  if (user && isLoaded && workspaces.length === 0) {
     if (incomingInvitations.length > 0) {
       return (
         <IPhoneFrame>
           <div className="flex-1 flex flex-col justify-center px-6 py-10 bg-slate-50 dark:bg-slate-900 gap-4">
             <div className="text-center space-y-1.5 mb-2">
               <h2 className="text-base font-black text-slate-900 dark:text-white">You've Been Invited</h2>
-              <p className="text-[11px] text-slate-400 font-semibold">Accept to join a workspace.</p>
+              <p className="text-[11px] text-slate-400 font-semibold">Accept to join, or create your own workspace instead.</p>
             </div>
             {incomingInvitations.map(inv => (
               <div key={inv.id} className="bg-white dark:bg-slate-950 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3">
@@ -554,15 +542,19 @@ export default function App() {
                 </div>
               </div>
             ))}
+            <details className="text-center">
+              <summary className="text-[10px] text-indigo-500 font-bold cursor-pointer list-none">Prefer to create your own workspace instead?</summary>
+              <div className="mt-3">
+                <OnboardingView onSelectMode={setWorkspaceMode} isSyncing={isSyncing} canCreateBusiness={userProfile?.isSuperAdmin || userProfile?.canCreateBusiness} />
+              </div>
+            </details>
           </div>
         </IPhoneFrame>
       );
     }
     return (
       <IPhoneFrame>
-        <div className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-slate-900 h-full">
-          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-        </div>
+        <OnboardingView onSelectMode={setWorkspaceMode} isSyncing={isSyncing} canCreateBusiness={userProfile?.isSuperAdmin || userProfile?.canCreateBusiness} />
       </IPhoneFrame>
     );
   }
