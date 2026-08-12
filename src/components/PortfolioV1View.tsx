@@ -908,8 +908,12 @@ export default function PortfolioV1View({
     setConnectError(null);
     setConnectOk(null);
     try {
-      const type = String(connection.broker_type || '').toLowerCase();
-      const cred = connection.credentials || {};
+      const type = String(connection.broker_type || connection.brokerType || '').toLowerCase().trim();
+      // credentials may arrive as object or JSON string depending on load path
+      let cred: any = connection.credentials ?? connection.creds ?? {};
+      if (typeof cred === 'string') {
+        try { cred = JSON.parse(cred); } catch { cred = {}; }
+      }
       let priceBySymbol = new Map<string, number>();
 
       if (type === 'etoro') {
@@ -987,7 +991,13 @@ export default function PortfolioV1View({
           const q = data.quotes?.[key];
           if (q?.lastPrice != null) priceBySymbol.set(String(h.ticker || h.symbol).toUpperCase(), Number(q.lastPrice));
         });
-      } else if (type === 'webull') {
+      } else if (type === 'webull' || type.includes('webull')) {
+        if (!cred.app_key || !cred.app_secret) {
+          throw new Error('Webull connection is missing app_key / app_secret. Re-connect from Connect / Sync.');
+        }
+        if (!cred.token) {
+          throw new Error('Webull token missing — re-connect and approve on your phone, then Sync again.');
+        }
         const resp = await fetch('/api/portfolio-webull-sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1002,12 +1012,20 @@ export default function PortfolioV1View({
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) throw new Error(data?.error || `Webull sync failed (${resp.status})`);
         for (const h of data.holdings || []) {
-          const sym = String(h.symbol || '').toUpperCase();
+          const sym = String(h.symbol || '').toUpperCase().trim();
           const px = Number(h.currentPrice);
-          if (sym && Number.isFinite(px) && px > 0) priceBySymbol.set(sym, px);
+          if (sym && Number.isFinite(px) && px > 0) {
+            priceBySymbol.set(sym, px);
+            // Also index by first token (underlying) so "AAPL OPT xxx" matches holding "AAPL OPT …"
+            const under = sym.split(/\s+/)[0];
+            if (under && under !== sym) priceBySymbol.set(under, px);
+          }
+        }
+        if (priceBySymbol.size === 0) {
+          throw new Error('Webull sync returned no prices. Try classic Portfolio → Sync for full import.');
         }
       } else {
-        throw new Error(`Live sync for ${type} is not wired in V1 yet — use classic Portfolio.`);
+        throw new Error(`Live sync for "${type || '(empty)'}" is not wired in V1 yet — use classic Portfolio.`);
       }
 
       let updated = 0;
@@ -1015,8 +1033,19 @@ export default function PortfolioV1View({
       for (const h of portfolioHoldings || []) {
         if (h.status && h.status !== 'active') continue;
         if (targetPid && h.portfolio_id !== targetPid) continue;
-        const sym = String(h.ticker || h.symbol || '').toUpperCase();
-        const px = priceBySymbol.get(sym);
+        // Webull options: only match Webull holdings (or same book) to avoid stomping stocks
+        if ((type === 'webull' || type.includes('webull')) && String(h.broker || '').toLowerCase() !== 'webull') continue;
+        const sym = String(h.ticker || h.symbol || '').toUpperCase().trim();
+        let px = priceBySymbol.get(sym);
+        if (px == null) {
+          // Fuzzy: holding "AAPL OPT 1C000000" ↔ map key "AAPL OPT 1C000000" or underlying "AAPL"
+          for (const [k, v] of priceBySymbol) {
+            if (sym === k || sym.startsWith(k + ' ') || k.startsWith(sym + ' ') || sym.split(/\s+/)[0] === k.split(/\s+/)[0] && (sym.includes('OPT') || k.includes('OPT'))) {
+              px = v;
+              break;
+            }
+          }
+        }
         if (px != null && updatePortfolioHoldingLivePrice) {
           await updatePortfolioHoldingLivePrice(h.id, px, null);
           updated++;
