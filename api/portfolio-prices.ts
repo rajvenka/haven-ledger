@@ -29,11 +29,12 @@ function normalizeYahooSymbol(raw: string): string {
   if (/\.(NS|BO|AX)$/i.test(s)) return s;
   s = s.replace(/\*+$/g, "").trim();
   // "MIRAEAMC - MAFANG" / "ZERODHAAMC - SML100CASE" → last segment
+  // Use " - " (spaces around hyphen) so SME tickers like SSEGL-SM / TAC-SM are kept intact.
   if (s.includes(" - ")) {
     const parts = s.split(" - ").map((p) => p.trim()).filter(Boolean);
     if (parts.length >= 2) s = parts[parts.length - 1];
   }
-  // Drop leftover company noise words
+  // Drop leftover company noise words / spaces, but KEEP hyphens (NSE SME symbols)
   s = s.replace(/\b(ETF|BEES)\b/g, "").replace(/\s+/g, "").trim() || s;
 
   const aliases: Record<string, string> = {
@@ -46,11 +47,12 @@ function normalizeYahooSymbol(raw: string): string {
     "MAM150ETF": "MID150",
     "MAM150": "MID150",
   };
+  // Alias lookup without hyphens; return value is the Yahoo base ticker
   const compact = s.replace(/[^A-Z0-9]/g, "");
   if (aliases[compact]) return aliases[compact];
   if (aliases[s]) return aliases[s];
-  // Prefer alphanumerics-only ticker when we stripped spaces
-  return compact || s;
+  // Keep hyphens: SSEGL-SM, TAC-SM are valid NSE codes; Yahoo needs SSEGL-SM.NS
+  return s.replace(/[^A-Z0-9-]/g, "") || s;
 }
 
 
