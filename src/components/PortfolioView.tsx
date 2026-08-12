@@ -1606,6 +1606,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
       let succeeded = 0;
       let failed = 0;
+      let rateLimitedNote = '';
       const updatePromises: Promise<void>[] = [];
 
       // Zerodha holdings with a live Kite Connect account get their price from Zerodha's own
@@ -1614,18 +1615,64 @@ export default function PortfolioView(props: PortfolioViewProps) {
       // rows (Daily Change works for Zerodha without extra work). Falls back to Yahoo for
       // any Zerodha holding without a matching connection (CSV-only imports).
       const zerodhaConnections = portfolioBrokerConnections.filter((c: any) => c.broker_type === 'zerodha' && c.credentials?.api_key && c.credentials?.access_token);
+      const growwConnections = portfolioBrokerConnections.filter((c: any) => c.broker_type === 'groww' && (c.credentials?.access_token || (c.credentials?.api_key && c.credentials?.api_secret)));
       const zerodhaConnFor = (h: any) => zerodhaConnections.find((c: any) => (c.portfolio_id || null) === (h.portfolio_id || null)) ?? zerodhaConnections.find((c: any) => !c.portfolio_id);
+      const growwConnFor = (h: any) => growwConnections.find((c: any) => (c.portfolio_id || null) === (h.portfolio_id || null)) ?? growwConnections.find((c: any) => !c.portfolio_id);
       const instrumentKey = (h: any) => `${h.exchange || 'NSE'}:${h.ticker ?? h.symbol}`;
 
       const zerodhaGroups = new Map<string, { conn: any; holdings: any[] }>();
+      const growwGroups = new Map<string, { conn: any; holdings: any[] }>();
       const yahooHoldings: any[] = [];
       for (const h of refreshable) {
-        const conn = h.broker === 'Zerodha' ? zerodhaConnFor(h) : null;
-        if (conn) {
-          if (!zerodhaGroups.has(conn.id)) zerodhaGroups.set(conn.id, { conn, holdings: [] });
-          zerodhaGroups.get(conn.id)!.holdings.push(h);
+        const zConn = h.broker === 'Zerodha' ? zerodhaConnFor(h) : null;
+        const gConn = !zConn && String(h.broker || '').toLowerCase() === 'groww' ? growwConnFor(h) : null;
+        if (zConn) {
+          if (!zerodhaGroups.has(zConn.id)) zerodhaGroups.set(zConn.id, { conn: zConn, holdings: [] });
+          zerodhaGroups.get(zConn.id)!.holdings.push(h);
+        } else if (gConn) {
+          if (!growwGroups.has(gConn.id)) growwGroups.set(gConn.id, { conn: gConn, holdings: [] });
+          growwGroups.get(gConn.id)!.holdings.push(h);
         } else {
           yahooHoldings.push(h);
+        }
+      }
+
+      // Groww LTP first for Groww rows (avoids Yahoo rate limits on large India books).
+      for (const { conn, holdings } of growwGroups.values()) {
+        try {
+          const exchangeSymbols = holdings.map((h) => {
+            const sym = String(h.ticker || h.symbol || '').toUpperCase().replace(/^(NSE|BSE)[_:]/, '');
+            const ex = String(h.exchange || 'NSE').toUpperCase() === 'BSE' ? 'BSE' : 'NSE';
+            return `${ex}_${sym}`;
+          });
+          const resp = await fetch('/api/portfolio-groww-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'ltp',
+              apiKey: conn.credentials.api_key,
+              apiSecret: conn.credentials.api_secret,
+              accessToken: conn.credentials.access_token,
+              instruments: exchangeSymbols,
+            }),
+          });
+          const data = await resp.json().catch(() => ({}));
+          if (!resp.ok) throw new Error(data?.error || 'Groww LTP failed');
+          const ltpMap: Record<string, any> = data.prices || data.ltp || data.payload || {};
+          holdings.forEach((h, idx) => {
+            const key = exchangeSymbols[idx];
+            const bare = String(h.ticker || h.symbol || '').toUpperCase();
+            const raw = ltpMap[key] ?? ltpMap[`NSE_${bare}`] ?? ltpMap[`BSE_${bare}`] ?? ltpMap[bare];
+            const price = typeof raw === 'number' ? raw : Number(raw?.ltp ?? raw?.last_price ?? raw?.lastPrice);
+            if (Number.isFinite(price) && price > 0) {
+              updatePromises.push(updatePortfolioHoldingLivePrice(h.id, price, null));
+              succeeded++;
+            } else {
+              yahooHoldings.push(h);
+            }
+          });
+        } catch {
+          yahooHoldings.push(...holdings);
         }
       }
 
@@ -1671,17 +1718,26 @@ export default function PortfolioView(props: PortfolioViewProps) {
         // breaks when the same stock exists both actively held and sold (10 tickers in this
         // workspace do), since .find() would always return the first match and the other
         // copy's live_price would never get updated.
+        let rateLimited = 0;
         results.forEach((r: any, i: number) => {
           const holding = yahooHoldings[i];
           if (!holding) return;
           if (r.price != null) {
             updatePromises.push(updatePortfolioHoldingLivePrice(holding.id, r.price, r.previousClose ?? null));
             succeeded++;
+          } else if (r.rateLimited || r.error === 'rate_limited') {
+            // Soft fail — do not stamp "Symbol Not Found" for Yahoo throttling
+            rateLimited++;
           } else {
             updatePromises.push(markPriceLookupFailed(holding.id));
             failed++;
           }
         });
+        if (rateLimited > 0) {
+          // surface in summary via failed-style note without permanent flags
+          failed += 0;
+        }
+        rateLimitedNote = rateLimited > 0 ? ` · ${rateLimited} delayed (retry Refresh shortly)` : '';
       }
 
       let mfSucceeded = 0;
@@ -1721,8 +1777,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const mfNote = mutualFunds.length > 0 ? ` · MF NAV: ${mfSucceeded} updated${mfFailed > 0 ? `, ${mfFailed} not matched` : ''}` : '';
       setPriceRefreshSummary(
         failed === 0
-          ? `Live price updated for ${succeeded}${skipNote}${mfNote} · delayed a few minutes, not real-time`
-          : `Live price updated for ${succeeded}, couldn't find ${failed}${skipNote}${mfNote} · delayed a few minutes, not real-time`
+          ? `Live price updated for ${succeeded}${skipNote}${mfNote}${rateLimitedNote} · delayed a few minutes, not real-time`
+          : `Live price updated for ${succeeded}, couldn't find ${failed}${skipNote}${mfNote}${rateLimitedNote} · delayed a few minutes, not real-time`
       );
     });
     setRefreshingPrices(false);
