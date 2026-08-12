@@ -402,6 +402,12 @@ export default function PortfolioV1View({
     return Array.from(s).sort();
   }, [active]);
 
+  // Stop-loss UI is eToro CFD-focused — only show when eToro is in the current workspace data
+  const hasEtoro = useMemo(
+    () => active.some((h: any) => String(h.broker || '').toLowerCase() === 'etoro'),
+    [active]
+  );
+
   const portfoliosPresent = useMemo(() => {
     const ids = new Set(active.map((h: any) => h.portfolio_id).filter(Boolean));
     const seen = new Set<string>();
@@ -611,15 +617,17 @@ export default function PortfolioV1View({
                 {b}
               </button>
             ))}
-            <button
-              type="button"
-              onClick={() => setShowSlOnly((v) => !v)}
-              className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                showSlOnly ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 border border-amber-200'
-              }`}
-            >
-              <ShieldAlert className="w-3 h-3" /> SL
-            </button>
+            {hasEtoro && (
+              <button
+                type="button"
+                onClick={() => setShowSlOnly((v) => !v)}
+                className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                  showSlOnly ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                }`}
+              >
+                <ShieldAlert className="w-3 h-3" /> SL
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -739,7 +747,7 @@ export default function PortfolioV1View({
       </div>
 
       {/* Near SL */}
-      {tightStops.length > 0 && (
+      {hasEtoro && tightStops.length > 0 && (
         <div className="rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/90 dark:bg-amber-950/25 px-3 py-2.5">
           <div className="flex items-center gap-1.5 mb-1.5">
             <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
