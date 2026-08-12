@@ -1231,25 +1231,30 @@ export function usePaymentState() {
   }[], portfolioId?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     if (holdings.length === 0) return;
-    const rows = holdings.map(h => ({
+    const rows = holdings.map(h => {
+      // Normalize holding_type to values allowed by portfolio_holdings_holding_type_check
+      const rawType = String(h.holdingType || 'stock').toLowerCase().trim();
+      const holdingType =
+        rawType === 'mutual_fund' || rawType === 'mf' || rawType === 'mutual fund' ? 'mutual_fund'
+        : rawType === 'options' || rawType === 'option' ? 'options'
+        : 'stock';
+      const broker = String(h.broker || 'Other').trim() || 'Other';
+      return {
       workspace_id: activeWorkspaceId, created_by: user?.id ?? null, portfolio_id: portfolioId ?? null,
-      holding_type: h.holdingType, broker: h.broker, symbol: h.symbol.toUpperCase(), isin: h.isin ?? null, folio_number: h.folioNumber ?? null, exchange: h.exchange,
-      ticker: ['Zerodha', 'Groww', 'eToro', 'Webull'].includes(h.broker) ? h.symbol.toUpperCase() : null,
+      holding_type: holdingType, broker, symbol: h.symbol.toUpperCase(), isin: h.isin ?? null, folio_number: h.folioNumber ?? null, exchange: h.exchange,
+      ticker: ['Zerodha', 'Groww', 'eToro', 'Webull', 'Stake'].includes(broker) ? h.symbol.toUpperCase() : null,
       quantity: h.quantity, buy_price: h.buyPrice, buy_date: h.buyDate,
       current_price: h.currentPrice ?? null, current_price_updated_at: h.currentPrice != null ? new Date().toISOString() : null,
       reference_price: h.currentPrice ?? h.buyPrice, reference_date: new Date().toISOString().slice(0, 10),
       source: h.source ?? null, change_flag: 'added', currency: h.currency ?? 'INR',
       leverage: h.leverage ?? null, stop_loss_rate: h.stopLossRate ?? null, take_profit_rate: h.takeProfitRate ?? null,
       etoro_net_value_amount: h.etoroNetValueAmount ?? null,
-      // Populate live_price right at insert time for eToro/Webull (both are leveraged
-      // brokers whose sync always supplies a real currentPrice) - previously this column
-      // stayed null until the separate syncEtoroLivePrices follow-up ran, which required
-      // matching freshly-inserted rows back by symbol after the fact. Writing it here
-      // removes that whole second lookup step as a point of failure for the initial fill.
-      ...(['eToro', 'Webull'].includes(h.broker) && h.currentPrice != null
+      // Stamp live_price on import for brokers that supply a real mark in the file/API.
+      ...((['eToro', 'Webull', 'Stake'].includes(broker) && h.currentPrice != null)
         ? { live_price: h.currentPrice, live_price_updated_at: new Date().toISOString() }
         : {}),
-    }));
+    };
+    });
     const { data: inserted, error } = await supabase.from('portfolio_holdings').insert(rows).select('id, current_price');
     if (error) throw error;
     const snapshotRows = (inserted ?? []).filter(r => r.current_price != null).map(r => ({ workspace_id: activeWorkspaceId, holding_id: r.id, price: r.current_price }));
