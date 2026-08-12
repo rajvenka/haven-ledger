@@ -44,6 +44,7 @@ interface Props {
   isReadOnly?: boolean;
   isDataLoading?: boolean;
   baseCurrency?: string;
+  workspaceName?: string;
   portfolios?: any[];
   portfolioMode?: string;
   portfolioHoldings?: any[];
@@ -330,6 +331,7 @@ export default function PortfolioV1View({
   isReadOnly,
   isDataLoading,
   baseCurrency = 'INR',
+  workspaceName,
   portfolios = [],
   portfolioMode,
   portfolioHoldings = [],
@@ -618,9 +620,9 @@ export default function PortfolioV1View({
                 V1
               </span>
             </div>
-            <p className="text-[12px] text-slate-500 mt-1 max-w-xl">
-              Product tiles by market · multi-portfolio (Sasi / Raj / Webull…) · stop-loss for CFDs
-            </p>
+            {workspaceName ? (
+              <p className="text-[12px] text-slate-500 mt-1">{workspaceName}</p>
+            ) : null}
           </div>
           <button
             type="button"
