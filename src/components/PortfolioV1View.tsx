@@ -419,6 +419,17 @@ export default function PortfolioV1View({
     setShowSlOnly(false);
   };
 
+  // If current book was emptied / hidden, return to All books
+  React.useEffect(() => {
+    if (portfolioFilter === 'All' || portfolioFilter === '__pending__') return;
+    if (!portfoliosPresent.some((p: any) => p.id === portfolioFilter)) {
+      setPortfolioFilter('All');
+      setBrokerFilter('All');
+      setCategoryFilter('All');
+      setExpandedCategory(null);
+    }
+  }, [portfolioFilter, portfoliosPresent]);
+
   const categoryOrder: CategoryId[] = [
     'india_mf',
     'india_stock',
@@ -466,15 +477,19 @@ export default function PortfolioV1View({
   );
 
   const portfoliosPresent = useMemo(() => {
-    const ids = new Set(active.map((h: any) => h.portfolio_id).filter(Boolean));
+    // Hide books with no holdings and no broker connection — associate on CSV/add in classic Portfolio
+    const holdingIds = new Set(active.map((h: any) => h.portfolio_id).filter(Boolean));
+    const connIds = new Set(
+      (portfolioBrokerConnections || []).map((c: any) => c.portfolio_id).filter(Boolean)
+    );
     const seen = new Set<string>();
     return (portfolios || []).filter((p: any) => {
-      if (!ids.has(p.id) && !multiPortfolio) return false;
       if (seen.has(p.id)) return false;
       seen.add(p.id);
-      return true;
+      const hasData = holdingIds.has(p.id) || connIds.has(p.id);
+      return hasData;
     });
-  }, [active, portfolios, multiPortfolio]);
+  }, [active, portfolios, portfolioBrokerConnections]);
 
   const ranked = useMemo(() => {
     const rows = filtered.map((h) => ({ h, p: pnlPct(h), dollar: pnl(h) })).filter((x) => Number.isFinite(x.p));
