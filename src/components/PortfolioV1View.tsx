@@ -342,6 +342,7 @@ export default function PortfolioV1View({
   const [expandedCategory, setExpandedCategory] = useState<CategoryId | null>(null);
   const [holdingsExpanded, setHoldingsExpanded] = useState(true);
   const [showSlOnly, setShowSlOnly] = useState(false);
+  const [moversMode, setMoversMode] = useState<'overall' | 'day'>('overall');
   const [colsOpen, setColsOpen] = useState(false);
   const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
     try {
@@ -492,12 +493,24 @@ export default function PortfolioV1View({
   }, [active, portfolios, portfolioBrokerConnections]);
 
   const ranked = useMemo(() => {
-    const rows = filtered.map((h) => ({ h, p: pnlPct(h), dollar: pnl(h) })).filter((x) => Number.isFinite(x.p));
+    const rows = filtered
+      .map((h) => {
+        if (moversMode === 'day') {
+          const d = dayChangePct(h);
+          if (d == null || !Number.isFinite(d)) return null;
+          const mv = marketValue(h);
+          return { h, p: d, dollar: (d / 100) * mv };
+        }
+        const p = pnlPct(h);
+        if (!Number.isFinite(p)) return null;
+        return { h, p, dollar: pnl(h) };
+      })
+      .filter(Boolean) as { h: any; p: number; dollar: number }[];
     return {
       gainers: [...rows].sort((a, b) => b.p - a.p).slice(0, 5),
       losers: [...rows].sort((a, b) => a.p - b.p).slice(0, 5),
     };
-  }, [filtered]);
+  }, [filtered, moversMode]);
 
   const tightStops = useMemo(() => {
     return filtered
@@ -862,6 +875,34 @@ export default function PortfolioV1View({
       )}
 
       {/* Gainers / losers */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2 px-0.5">
+          <p className="text-[11px] font-black uppercase tracking-wider text-slate-500">Movers</p>
+          <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5">
+            <button
+              type="button"
+              onClick={() => setMoversMode('overall')}
+              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                moversMode === 'overall'
+                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500'
+              }`}
+            >
+              Overall
+            </button>
+            <button
+              type="button"
+              onClick={() => setMoversMode('day')}
+              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                moversMode === 'day'
+                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500'
+              }`}
+            >
+              Day
+            </button>
+          </div>
+        </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {[
           { title: 'Top gainers', icon: <TrendingUp className="w-4 h-4 text-emerald-500" />, rows: ranked.gainers, good: true },
@@ -875,6 +916,9 @@ export default function PortfolioV1View({
               {block.icon}
               <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
                 {block.title}
+                <span className="ml-1.5 text-[9px] font-bold text-slate-400 normal-case tracking-normal">
+                  {moversMode === 'day' ? 'today' : 'all time'}
+                </span>
               </h3>
             </div>
             {block.rows.length === 0 ? (
@@ -905,7 +949,7 @@ export default function PortfolioV1View({
           </div>
         ))}
       </div>
-
+      </div>
 
       {/* Holdings — type filters above table; connectors at bottom */}
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
