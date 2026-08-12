@@ -41,13 +41,13 @@ interface PortfolioViewProps {
   portfolioHoldings: any[];
   portfolioPriceHistory: any[];
   addPortfolioHolding: (h: {
-    holdingType?: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; notes?: string;
+    holdingType?: 'stock' | 'mutual_fund' | 'options'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; notes?: string;
     source?: string; currency?: 'INR' | 'USD' | 'AUD'; portfolioId?: string;
     targetType?: 'price' | 'percent'; targetPrice?: number; targetPercent?: number;
     holdType?: 'days' | 'date'; holdDays?: number; holdUntilDate?: string;
   }) => Promise<void>;
   bulkAddPortfolioHoldings: (holdings: {
-    holdingType: 'stock' | 'mutual_fund'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string; currency?: string;
+    holdingType: 'stock' | 'mutual_fund' | 'options'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string; currency?: string;
   }[], portfolioId?: string) => Promise<void>;
   portfolios?: any[];
   portfolioMode?: 'single' | 'multiple';
@@ -131,6 +131,18 @@ function isCommodityHolding(h: any): boolean {
   return /\b(gold|silver|oil|brent|natgas|copper|platinum|palladium)\b/i.test(
     String(h.symbol || h.name || h.ticker || '')
   );
+}
+
+/** Webull (and similar) equity options store price as premium×100. Yahoo must not overwrite. */
+function isOptionsHolding(h: any): boolean {
+  const t = String(h.holding_type || '').toLowerCase();
+  if (t === 'options' || t === 'option') return true;
+  const src = String(h.source || '').toLowerCase();
+  if (src.includes('option')) return true;
+  // OCC-style option symbols e.g. AAPL260522C00300000
+  const sym = String(h.ticker || h.symbol || '').toUpperCase();
+  if (/^[A-Z]{1,6}\d{6}[CP]\d{8}$/.test(sym)) return true;
+  return false;
 }
 
 // eToro "Net Value" - total cash committed to a leveraged position. eToro's own API
@@ -1648,6 +1660,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
           skippedCommodities++;
           continue;
         }
+        // Webull/others options: price is already premium×100 (per-contract notional).
+        // Yahoo returns the raw premium or the underlying stock — never overwrite.
+        if (isOptionsHolding(h)) {
+          skippedCommodities++; // reuse counter → shown as "kept (broker rate)"
+          continue;
+        }
         const zConn = h.broker === 'Zerodha' ? zerodhaConnFor(h) : null;
         const gConn = !zConn && brokerLower === 'groww' ? growwConnFor(h) : null;
         if (zConn) {
@@ -1798,7 +1816,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         return;
       }
       const skipNote = skippedNoTicker > 0 ? ` · ${skippedNoTicker} skipped (no ticker set)` : '';
-      const commodityNote = skippedCommodities > 0 ? ` · ${skippedCommodities} eToro commodity kept (eToro rate)` : '';
+      const commodityNote = skippedCommodities > 0 ? ` · ${skippedCommodities} commodity/options kept (broker rate)` : '';
       const mfNote = mutualFunds.length > 0 ? ` · MF NAV: ${mfSucceeded} updated${mfFailed > 0 ? `, ${mfFailed} not matched` : ''}` : '';
       setPriceRefreshSummary(
         failed === 0
