@@ -1775,6 +1775,7 @@ export default function App() {
                 isReadOnly={isReadOnly}
                 isDataLoading={portfolioDataLoading}
                 baseCurrency={activeWorkspace?.baseCurrency}
+                workspaceName={activeWorkspace?.name}
                 portfolios={portfolios}
                 portfolioMode={activeWorkspace?.portfolioMode}
                 portfolioHoldings={portfolioHoldings}
