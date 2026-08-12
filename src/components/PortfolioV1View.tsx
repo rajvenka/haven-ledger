@@ -607,9 +607,9 @@ export default function PortfolioV1View({
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-3 sm:px-4 pb-28 sm:pb-10 space-y-5">
+    <div className="w-full max-w-6xl mx-auto px-3 sm:px-4 pt-2 sm:pt-3 pb-24 sm:pb-6 space-y-3 sm:space-y-4">
       {/* Hero */}
-      <div className="relative overflow-hidden rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950/30 p-4 sm:p-6">
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950/30 p-3 sm:p-4">
         <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-indigo-400/10 blur-3xl pointer-events-none" />
         <div className="relative flex items-start justify-between gap-3">
           <div>
@@ -740,7 +740,7 @@ export default function PortfolioV1View({
 
       {/* Category tiles — ultimate product map */}
       <div>
-        <div className="flex items-center justify-between mb-2 px-0.5">
+        <div className="flex items-center justify-between mb-1.5 px-0.5">
           <h2 className="text-[11px] font-black uppercase tracking-wider text-slate-500">Markets & products</h2>
           {categoryFilter !== 'All' && (
             <button
