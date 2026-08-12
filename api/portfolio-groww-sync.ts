@@ -314,13 +314,12 @@ export default async function handler(req: any, res: any) {
 
       const holdings = rawHoldings
         .map((h) => {
-          const qty =
-            Number(h.quantity ?? 0) +
-            Number(h.t1_quantity ?? 0);
-          // Prefer free/available qty when present; fall back to net quantity.
-          const freeQty = Number(h.demat_free_quantity);
-          const effectiveQty = Number.isFinite(freeQty) && freeQty > 0 ? freeQty : qty;
-          if (effectiveQty <= 0) return null;
+          // Groww docs: `quantity` is the net holding. demat_free_quantity is only the
+          // sellable/unlocked slice (excludes pledge/locked) - using free qty under-reports
+          // the real position vs the Groww app. Do not add t1 on top of quantity: net
+          // quantity already reflects the position; t1 is informational.
+          const effectiveQty = Number(h.quantity ?? 0);
+          if (!Number.isFinite(effectiveQty) || effectiveQty <= 0) return null;
 
           const avg = Number(h.average_price || 0);
           const symbol = String(h.trading_symbol || h.tradingsymbol || h.symbol || "").toUpperCase();
@@ -334,7 +333,9 @@ export default async function handler(req: any, res: any) {
             exchange: String(h.exchange || "NSE"),
             quantity: effectiveQty,
             buyPrice: avg,
-            currentPrice: avg, // Groww holdings endpoint does not return LTP
+            // Holdings endpoint has no LTP - leave current=avg until Refresh Prices
+            // (Zerodha → Groww LTP → Yahoo) fills live_price.
+            currentPrice: avg,
             currency: "INR",
             isin: h.isin || undefined,
             source: "Groww API",
