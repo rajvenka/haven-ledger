@@ -1780,6 +1780,7 @@ export default function App() {
                 portfolios={portfolios}
                 portfolioMode={activeWorkspace?.portfolioMode}
                 portfolioHoldings={portfolioHoldings}
+                portfolioHoldingLots={portfolioHoldingLots}
                 portfolioCashBalances={portfolioCashBalances}
                 portfolioBrokerConnections={portfolioBrokerConnections}
                 setPortfolioBrokerConnection={setPortfolioBrokerConnection}
