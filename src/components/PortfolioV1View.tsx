@@ -422,6 +422,23 @@ export default function PortfolioV1View({
     setShowSlOnly(false);
   };
 
+  // Must be declared before the useEffect that depends on it — otherwise production
+  // minification hits Temporal Dead Zone: "Cannot access 'ft' before initialization".
+  const portfoliosPresent = useMemo(() => {
+    // Hide books with no holdings and no broker connection — associate on CSV/add in classic Portfolio
+    const holdingIds = new Set(active.map((h: any) => h.portfolio_id).filter(Boolean));
+    const connIds = new Set(
+      (portfolioBrokerConnections || []).map((c: any) => c.portfolio_id).filter(Boolean)
+    );
+    const seen = new Set<string>();
+    return (portfolios || []).filter((p: any) => {
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      const hasData = holdingIds.has(p.id) || connIds.has(p.id);
+      return hasData;
+    });
+  }, [active, portfolios, portfolioBrokerConnections]);
+
   // If current book was emptied / hidden, return to All books
   React.useEffect(() => {
     if (portfolioFilter === 'All' || portfolioFilter === '__pending__') return;
@@ -478,21 +495,6 @@ export default function PortfolioV1View({
     () => bookScoped.some((h: any) => String(h.broker || '').toLowerCase() === 'etoro'),
     [bookScoped]
   );
-
-  const portfoliosPresent = useMemo(() => {
-    // Hide books with no holdings and no broker connection — associate on CSV/add in classic Portfolio
-    const holdingIds = new Set(active.map((h: any) => h.portfolio_id).filter(Boolean));
-    const connIds = new Set(
-      (portfolioBrokerConnections || []).map((c: any) => c.portfolio_id).filter(Boolean)
-    );
-    const seen = new Set<string>();
-    return (portfolios || []).filter((p: any) => {
-      if (seen.has(p.id)) return false;
-      seen.add(p.id);
-      const hasData = holdingIds.has(p.id) || connIds.has(p.id);
-      return hasData;
-    });
-  }, [active, portfolios, portfolioBrokerConnections]);
 
   const ranked = useMemo(() => {
     const rows = filtered
