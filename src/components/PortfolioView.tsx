@@ -1679,8 +1679,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
         }
       }
 
-      // Groww LTP first for Groww rows (avoids Yahoo rate limits on large India books).
-      for (const { conn, holdings } of growwGroups.values()) {
+      // Reusable Groww LTP call - used both for holdings native to a Groww connection and
+      // as a fallback for Zerodha holdings whose own connection can't provide a quote (e.g.
+      // a free-tier Kite Connect app, which can't access /quote at all). Returns holdings
+      // that still need a price after this attempt, so the caller can chain to Yahoo.
+      const tryGrowwLtp = async (conn: any, holdings: any[]): Promise<any[]> => {
         try {
           const exchangeSymbols = holdings.map((h) => {
             const sym = String(h.ticker || h.symbol || '').toUpperCase().replace(/^(NSE|BSE)[_:]/, '');
@@ -1701,6 +1704,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
           const data = await resp.json().catch(() => ({}));
           if (!resp.ok) throw new Error(data?.error || 'Groww LTP failed');
           const ltpMap: Record<string, any> = data.prices || data.ltp || data.payload || {};
+          const stillNeedsPrice: any[] = [];
           holdings.forEach((h, idx) => {
             const key = exchangeSymbols[idx];
             const bare = String(h.ticker || h.symbol || '').toUpperCase();
@@ -1710,15 +1714,27 @@ export default function PortfolioView(props: PortfolioViewProps) {
               updatePromises.push(updatePortfolioHoldingLivePrice(h.id, price, null));
               succeeded++;
             } else {
-              yahooHoldings.push(h);
+              stillNeedsPrice.push(h);
             }
           });
+          return stillNeedsPrice;
         } catch {
-          yahooHoldings.push(...holdings);
+          return holdings;
         }
+      };
+
+      // Groww LTP first for Groww rows (avoids Yahoo rate limits on large India books).
+      for (const { conn, holdings } of growwGroups.values()) {
+        yahooHoldings.push(...(await tryGrowwLtp(conn, holdings)));
       }
 
+      // Own broker first for Zerodha holdings -> any connected Groww account as a secondary
+      // India-market source -> Yahoo as the final fallback. This matters in practice: a free
+      // (Personal) Kite Connect app gets a 403 on /quote entirely, so without this step every
+      // Zerodha holding would skip straight to Yahoo even when a working Groww connection
+      // could have given a real, accurate NSE/BSE price instead.
       for (const { conn, holdings } of zerodhaGroups.values()) {
+        let stillNeedsPrice: any[] = [];
         try {
           const instruments = holdings.map(instrumentKey);
           const qResp = await fetch('/api/portfolio-zerodha-sync', {
@@ -1734,15 +1750,23 @@ export default function PortfolioView(props: PortfolioViewProps) {
               updatePromises.push(updatePortfolioHoldingLivePrice(h.id, q.lastPrice, q.previousClose ?? null));
               succeeded++;
             } else {
-              updatePromises.push(markPriceLookupFailed(h.id));
-              failed++;
+              stillNeedsPrice.push(h);
             }
           });
         } catch {
-          // Connection likely has an expired daily access_token - fall back to Yahoo for
-          // this batch rather than failing these holdings outright, so a stale Zerodha
-          // token degrades gracefully instead of blocking the whole refresh.
-          yahooHoldings.push(...holdings);
+          // Whole call failed (403 on a free app, expired token, network error) - every
+          // holding in this batch still needs a price, so try the secondary broker next
+          // rather than marking them all failed immediately.
+          stillNeedsPrice = holdings;
+        }
+        if (stillNeedsPrice.length > 0) {
+          const secondaryGroww = growwConnections.find((c: any) => (c.portfolio_id || null) === (conn.portfolio_id || null)) ?? growwConnections[0];
+          if (secondaryGroww) {
+            const stillAfterGroww = await tryGrowwLtp(secondaryGroww, stillNeedsPrice);
+            yahooHoldings.push(...stillAfterGroww);
+          } else {
+            yahooHoldings.push(...stillNeedsPrice);
+          }
         }
       }
 
