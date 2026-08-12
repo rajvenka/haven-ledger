@@ -457,18 +457,21 @@ export function usePaymentState() {
     if (!user) return;
     if (workspaceId === activeWorkspaceId) return;
     setIsSyncing(true);
+    setPortfolioDataLoading(true);
     try {
-      // Drop current workspace data immediately so the UI cannot show mixed holdings
-      // from kumar-raj while raj-sasi is loading (or vice versa).
+      // Invalidate any in-flight fetch for the previous workspace, then load the new one.
+      // Loading flag goes true first so the UI shows a spinner instead of a stale→empty→new flash.
       portfolioLoadGen.current += 1;
+      paymentsLoadGen.current += 1;
       clearPortfolioState();
+      portfolioStateWsRef.current = null;
       setAllPayments([]);
       setAllHistory([]);
       setActiveWorkspaceId(workspaceId);
       await supabase.from('profiles').update({ active_workspace_id: workspaceId }).eq('id', user.id);
       await refreshWorkspaces(user.id, workspaceId);
-      // Effects on activeWorkspaceId will reload payments + portfolio; force portfolio too.
       await loadPortfolioDetails();
+      await reloadData();
     } finally {
       setIsSyncing(false);
     }
@@ -1118,24 +1121,33 @@ export function usePaymentState() {
     setPortfolioBrokerConnectionsState([]); setPortfolioHoldingLotsState([]);
   }, []);
 
+  // Tracks which workspace the in-memory portfolio rows belong to, so we only wipe
+  // them when the active workspace actually changes (not on every routine refresh).
+  const portfolioStateWsRef = useRef<string | null>(null);
+
   const loadPortfolioDetails = useCallback(async () => {
     if (!activeWorkspaceId) {
       clearPortfolioState();
+      portfolioStateWsRef.current = null;
       setPortfolioDataLoading(false);
       return;
     }
     const wsId = activeWorkspaceId;
     const gen = ++portfolioLoadGen.current;
 
-    // Immediately drop previous workspace data so UI never mixes kumar-raj with raj-sasi.
-    clearPortfolioState();
-
-    // Only show the full-page spinner the first time this workspace's portfolio data loads -
-    // every mutation (price update, add holding, mark transferred, etc.) also calls this to
-    // refresh state, and showing the spinner on every one of those was causing a visible
-    // flicker during completely normal use, not just on initial load or workspace switch.
+    const workspaceChanged =
+      portfolioStateWsRef.current != null && portfolioStateWsRef.current !== wsId;
     const isFirstLoadForWorkspace = !loadedPortfolioWorkspaces.current.has(wsId);
-    if (isFirstLoadForWorkspace) setPortfolioDataLoading(true);
+
+    // Only clear when switching workspace. Clearing on every refresh caused:
+    // brief stale/cache → empty → new data flash. Mutations (price update, etc.)
+    // keep showing current rows until the fresh payload replaces them in one shot.
+    if (workspaceChanged) {
+      clearPortfolioState();
+      setPortfolioDataLoading(true);
+    } else if (isFirstLoadForWorkspace) {
+      setPortfolioDataLoading(true);
+    }
 
     const scope = <T extends { workspace_id?: string }>(rows: T[] | null | undefined): T[] =>
       (rows ?? []).filter(r => !r.workspace_id || r.workspace_id === wsId);
@@ -1177,6 +1189,7 @@ export function usePaymentState() {
     setPortfolioBrokerConnectionsState(scope(brokerConnectionsData));
     setPortfolioHoldingLotsState(scope(holdingLotsData));
     loadedPortfolioWorkspaces.current.add(wsId);
+    portfolioStateWsRef.current = wsId;
     setPortfolioDataLoading(false);
   }, [activeWorkspaceId, clearPortfolioState]);
 
