@@ -202,7 +202,10 @@ export function usePaymentState() {
   }, []);
 
   useEffect(() => {
-    if (!user) { setUserProfile(null); setIsLoaded(true); return; }
+    if (!user) { setUserProfile(null); setWorkspaces([]); setActiveWorkspaceId(null); setIsLoaded(true); return; }
+    // Reset so App shows a loading spinner instead of briefly flashing the
+    // "Initialize Your Vault" onboarding while memberships are still loading.
+    setIsLoaded(false);
     (async () => {
       let { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
       if (!profile) {
