@@ -33,45 +33,112 @@ export default async function handler(req: any, res: any) {
 
     const results = await Promise.all(
       symbols.slice(0, 250).map(async ({ symbol, exchange, currency }: { symbol: string; exchange: string; currency?: string }) => {
+        const rawSymbol = String(symbol || "").trim();
+        const rawExchange = String(exchange || "").trim().toUpperCase();
+        const rawCurrency = currency ? String(currency).trim().toUpperCase() : "";
+
         // Only NSE/BSE (India) and ASX (Australia) need a Yahoo suffix appended - US exchanges
         // (NASDAQ, NYSE) and others use the plain symbol as-is. Previously this defaulted to
         // ".NS" for anything that wasn't literally "BSE", which silently broke every
         // non-Indian exchange (e.g. AAPL on NASDAQ became the invalid "AAPL.NS").
-        const isIndianExchange = exchange === "NSE" || exchange === "BSE";
+        //
+        // Critical fix: many India holdings arrive with exchange empty/null/"Other" after
+        // CSV or Groww import (e.g. TVSMOTOR). Bare "TVSMOTOR" 404s on Yahoo; "TVSMOTOR.NS"
+        // works. Treat INR currency or missing exchange as Indian and try .NS/.BO before
+        // giving up - this is what was causing the bulk "Symbol not found" reports.
+        const isUsExchange = ["NASDAQ", "NYSE", "AMEX", "ARCA", "BATS", "OTC"].includes(rawExchange);
+        const isIndianExchange =
+          rawExchange === "NSE" ||
+          rawExchange === "BSE" ||
+          // Infer India when exchange is missing/generic and currency is INR (or unset)
+          ((!rawExchange || rawExchange === "OTHER" || rawExchange === "INDIA") &&
+            (!rawCurrency || rawCurrency === "INR"));
         // AUD is the reliable signal for ASX-listed holdings (Webull AU positions carry
         // currency directly from the API) - exchange alone can't be trusted since
-        // Webull's exchange field isn't always a clean "ASX" string.
-        const isAsxListed = currency === "AUD" || exchange === "ASX";
-        const alreadySuffixed = /\.(NS|BO|AX)$/i.test(symbol);
-        const primarySuffix = exchange === "BSE" ? ".BO" : isIndianExchange ? ".NS" : isAsxListed ? ".AX" : "";
-        const primarySymbol = alreadySuffixed || !primarySuffix ? symbol : `${symbol}${primarySuffix}`;
+        // Webull's exchange field is sometimes a market code rather than "ASX".
+        const isAsxListed = rawCurrency === "AUD" || rawExchange === "ASX";
+        const alreadySuffixed = /\.(NS|BO|AX)$/i.test(rawSymbol);
+
+        let primarySuffix = "";
+        if (!alreadySuffixed) {
+          if (rawExchange === "BSE") primarySuffix = ".BO";
+          else if (isIndianExchange) primarySuffix = ".NS";
+          else if (isAsxListed) primarySuffix = ".AX";
+        }
+        const primarySymbol = alreadySuffixed || !primarySuffix ? rawSymbol : `${rawSymbol}${primarySuffix}`;
 
         try {
           let result = await fetchYahooPrice(primarySymbol);
+          const tried = [primarySymbol];
+
           // A stock can genuinely be listed on only one of NSE/BSE, or the workspace's
           // tagged exchange for it can simply be wrong - rather than fail outright, try
           // the other Indian exchange before giving up. Only applies to plain (non-suffixed)
-          // Indian symbols, since a symbol that already carries its own .NS/.BO has no
-          // second exchange to fall back to.
-          if (result.price == null && isIndianExchange && !alreadySuffixed) {
-            const fallbackSuffix = primarySuffix === ".NS" ? ".BO" : ".NS";
-            const fallbackResult = await fetchYahooPrice(`${symbol}${fallbackSuffix}`);
-            if (fallbackResult.price != null) result = fallbackResult;
+          // symbols, since a symbol that already carries its own .NS/.BO has no second
+          // exchange to fall back to.
+          if (result.price == null && !alreadySuffixed) {
+            // Always try the other Indian suffix when primary was Indian or when we still
+            // have no price (covers empty-exchange India tickers like TVSMOTOR).
+            const candidates: string[] = [];
+            if (primarySuffix === ".NS") candidates.push(`${rawSymbol}.BO`);
+            else if (primarySuffix === ".BO") candidates.push(`${rawSymbol}.NS`);
+            else if (!isUsExchange && !isAsxListed) {
+              // Unknown market / empty exchange: try both India suffixes, then ASX
+              candidates.push(`${rawSymbol}.NS`, `${rawSymbol}.BO`);
+              if (rawCurrency === "AUD") candidates.push(`${rawSymbol}.AX`);
+            }
+
+            for (const candidate of candidates) {
+              if (tried.includes(candidate)) continue;
+              tried.push(candidate);
+              const fallbackResult = await fetchYahooPrice(candidate);
+              if (fallbackResult.price != null) {
+                result = fallbackResult;
+                break;
+              }
+            }
           }
+
           if (result.price == null) {
-            return { symbol, exchange, price: null, previousClose: null, error: result.error };
+            return {
+              symbol: rawSymbol,
+              exchange: rawExchange || exchange,
+              price: null,
+              previousClose: null,
+              error: result.error || `No price found (tried ${tried.join(", ")})`,
+            };
           }
           // Currency guard: if we know the holding's real currency (e.g. AUD from a Webull
           // AU position) and Yahoo's match came back in a different currency, this is almost
           // certainly a wrong-market collision (a bare ticker matching a same-symbol US
           // listing instead of the actual ASX one) rather than a real price - reject it
           // instead of silently writing a wrong-currency number into live_price.
-          if (currency && result.currency && result.currency.toUpperCase() !== currency.toUpperCase()) {
-            return { symbol, exchange, price: null, previousClose: null, error: `Currency mismatch: expected ${currency}, Yahoo returned ${result.currency} for "${primarySymbol}" - likely wrong market` };
+          // Skip the guard when expected currency is INR and Yahoo returns INR (normal),
+          // or when we had to fall back across exchanges.
+          if (rawCurrency && result.currency && result.currency.toUpperCase() !== rawCurrency) {
+            return {
+              symbol: rawSymbol,
+              exchange: rawExchange || exchange,
+              price: null,
+              previousClose: null,
+              error: `Currency mismatch: expected ${rawCurrency}, Yahoo returned ${result.currency} for "${primarySymbol}" - likely wrong market`,
+            };
           }
-          return { symbol, exchange, price: result.price, previousClose: result.previousClose, error: null };
+          return {
+            symbol: rawSymbol,
+            exchange: rawExchange || exchange,
+            price: result.price,
+            previousClose: result.previousClose,
+            error: null,
+          };
         } catch (err: any) {
-          return { symbol, exchange, price: null, previousClose: null, error: err?.message || "Fetch failed" };
+          return {
+            symbol: rawSymbol,
+            exchange: rawExchange || exchange,
+            price: null,
+            previousClose: null,
+            error: err?.message || "Fetch failed",
+          };
         }
       })
     );
