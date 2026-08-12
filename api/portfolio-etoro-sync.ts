@@ -186,16 +186,26 @@ export default async function handler(req: any, res: any) {
     // route has no DB access of its own) - only covers US-listed symbols (Webull's own
     // Category enum has no AU_STOCK option), so AU-listed/commodity symbols like Gold still
     // fall through to eToro's own rates endpoint below regardless.
+    // Commodities/CFDs must NOT use Webull US_STOCK snapshots — Webull "GOLD" is a
+    // low-priced equity ticker (~$40), while eToro Gold is spot-style (~thousands/oz).
+    // Taking Webull here was overwriting the correct eToro rate with a garbage stock price.
+    const WEBULL_SKIP = new Set([
+      "GOLD", "SILVER", "OIL", "NATGAS", "COPPER", "PLATINUM", "PALLADIUM",
+      "XAU", "XAG", "XAUUSD", "XAGUSD", "BRENT", "WTI",
+    ]);
     if (webullAppKey && webullAppSecret) {
       const webullHost = WEBULL_REGION_HOSTS[webullRegion] || WEBULL_REGION_HOSTS.us;
       const idToSymbol = new Map(Array.from(instrumentMap.entries()).map(([id, info]) => [id, info.symbol]));
-      const symbolsToTry = Array.from(new Set(Array.from(idToSymbol.values())));
+      const symbolsToTry = Array.from(new Set(
+        Array.from(idToSymbol.values()).filter((s) => s && !WEBULL_SKIP.has(String(s).toUpperCase()))
+      ));
       const { prices: webullPrices, debug: webullFetchDebug } = await webullSnapshotFetch(webullHost, webullAppKey, webullAppSecret, webullToken, symbolsToTry);
       for (const [id, symbol] of Array.from(idToSymbol.entries())) {
+        if (WEBULL_SKIP.has(String(symbol).toUpperCase())) continue;
         const price = webullPrices.get(symbol.toUpperCase());
         if (price != null) rateMap.set(id, price);
       }
-      ratesDebug.webull = { attempted: symbolsToTry.length, resolved: webullPrices.size, mappedToInstruments: rateMap.size, host: webullHost, ...webullFetchDebug };
+      ratesDebug.webull = { attempted: symbolsToTry.length, resolved: webullPrices.size, mappedToInstruments: rateMap.size, host: webullHost, skippedCommodities: true, ...webullFetchDebug };
     }
 
     const stillNeeded = uniqueIds.filter((id) => !rateMap.has(id));
