@@ -347,8 +347,11 @@ export default function PortfolioV1View({
   const [categoryFilter, setCategoryFilter] = useState<CategoryId | 'All'>('All');
   const [expandedCategory, setExpandedCategory] = useState<CategoryId | null>(null);
   const [holdingsExpanded, setHoldingsExpanded] = useState(true);
-  const [showSlOnly, setShowSlOnly] = useState(false);
+  const [showLotsOnly, setShowLotsOnly] = useState(false);
   const [moversMode, setMoversMode] = useState<'overall' | 'day'>('overall');
+  const [moversUnit, setMoversUnit] = useState<'pct' | 'dollar'>('pct');
+  const [sortKey, setSortKey] = useState<string>('value');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [colsOpen, setColsOpen] = useState(false);
   const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
     try {
@@ -421,29 +424,41 @@ export default function PortfolioV1View({
 
   // Desktop table columns — rebuilt whenever the user toggles Columns so widths reflow.
   const desktopCols = useMemo(() => {
+    // Equal flexible tracks so hiding a column redistributes width (no empty gap left behind).
     const cols: { key: string; label: string; align: 'left' | 'right'; fr: string }[] = [
-      { key: 'symbol', label: 'Symbol', align: 'left', fr: 'minmax(7rem, 1.6fr)' },
+      { key: 'symbol', label: 'Symbol', align: 'left', fr: 'minmax(6rem, 1.4fr)' },
     ];
-    if (colOn('type')) cols.push({ key: 'type', label: 'Type', align: 'left', fr: 'minmax(3.5rem, 0.7fr)' });
-    if (colOn('portfolio') && multiPortfolio) cols.push({ key: 'portfolio', label: 'Portfolio', align: 'left', fr: 'minmax(4.5rem, 0.9fr)' });
-    if (colOn('broker')) cols.push({ key: 'broker', label: 'Broker', align: 'left', fr: 'minmax(3.5rem, 0.7fr)' });
-    if (colOn('qty')) cols.push({ key: 'qty', label: 'Qty', align: 'right', fr: 'minmax(3rem, 0.6fr)' });
-    if (colOn('buy')) cols.push({ key: 'buy', label: 'Buy', align: 'right', fr: 'minmax(3.5rem, 0.7fr)' });
-    if (colOn('live')) cols.push({ key: 'live', label: 'Live', align: 'right', fr: 'minmax(3.5rem, 0.7fr)' });
-    if (colOn('day')) cols.push({ key: 'day', label: 'Day', align: 'right', fr: 'minmax(2.75rem, 0.55fr)' });
-    if (colOn('value')) cols.push({ key: 'value', label: 'Value', align: 'right', fr: 'minmax(4rem, 0.85fr)' });
-    if (colOn('pnl')) cols.push({ key: 'pnl', label: 'P&L%', align: 'right', fr: 'minmax(3rem, 0.6fr)' });
-    if (colOn('pnl_amt')) cols.push({ key: 'pnl_amt', label: 'P&L$', align: 'right', fr: 'minmax(3.5rem, 0.7fr)' });
-    if (colOn('stop')) cols.push({ key: 'stop', label: 'Stop', align: 'right', fr: 'minmax(3.5rem, 0.7fr)' });
-    if (colOn('lev')) cols.push({ key: 'lev', label: 'Lev', align: 'right', fr: 'minmax(2.5rem, 0.45fr)' });
-    if (colOn('currency')) cols.push({ key: 'currency', label: 'Ccy', align: 'right', fr: 'minmax(2.5rem, 0.45fr)' });
+    if (colOn('type')) cols.push({ key: 'type', label: 'Type', align: 'left', fr: 'minmax(3rem, 0.8fr)' });
+    if (colOn('portfolio') && multiPortfolio) cols.push({ key: 'portfolio', label: 'Portfolio', align: 'left', fr: 'minmax(3.5rem, 0.9fr)' });
+    if (colOn('broker')) cols.push({ key: 'broker', label: 'Broker', align: 'left', fr: 'minmax(3rem, 0.8fr)' });
+    if (colOn('qty')) cols.push({ key: 'qty', label: 'Qty', align: 'right', fr: 'minmax(2.5rem, 0.7fr)' });
+    if (colOn('buy')) cols.push({ key: 'buy', label: 'Buy', align: 'right', fr: 'minmax(3rem, 0.8fr)' });
+    if (colOn('live')) cols.push({ key: 'live', label: 'Live', align: 'right', fr: 'minmax(3rem, 0.8fr)' });
+    if (colOn('day')) cols.push({ key: 'day', label: 'Day', align: 'right', fr: 'minmax(2.5rem, 0.7fr)' });
+    if (colOn('value')) cols.push({ key: 'value', label: 'Value', align: 'right', fr: 'minmax(3.5rem, 1fr)' });
+    if (colOn('pnl')) cols.push({ key: 'pnl', label: 'P&L%', align: 'right', fr: 'minmax(2.5rem, 0.7fr)' });
+    if (colOn('pnl_amt')) cols.push({ key: 'pnl_amt', label: 'P&L$', align: 'right', fr: 'minmax(3rem, 0.8fr)' });
+    if (colOn('stop')) cols.push({ key: 'stop', label: 'Stop', align: 'right', fr: 'minmax(3rem, 0.85fr)' });
+    if (colOn('lev')) cols.push({ key: 'lev', label: 'Lev', align: 'right', fr: 'minmax(2rem, 0.5fr)' });
+    if (colOn('currency')) cols.push({ key: 'currency', label: 'Ccy', align: 'right', fr: 'minmax(2rem, 0.5fr)' });
     return cols;
   }, [visibleCols, multiPortfolio]);
 
   const desktopGridStyle = useMemo(
-    () => ({ gridTemplateColumns: desktopCols.map((c) => c.fr).join(' ') }),
+    () => ({
+      gridTemplateColumns: desktopCols.map((c) => c.fr).join(' '),
+      width: '100%',
+    }),
     [desktopCols]
   );
+
+  const toggleSort = (key: string) => {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else {
+      setSortKey(key);
+      setSortDir(key === 'symbol' || key === 'type' || key === 'broker' || key === 'portfolio' ? 'asc' : 'desc');
+    }
+  };
 
   const active = useMemo(
     () => (portfolioHoldings || []).filter((h: any) => h.status === 'active' || !h.status),
@@ -484,7 +499,8 @@ export default function PortfolioV1View({
     setBrokerFilter('All');
     setCategoryFilter('All');
     setExpandedCategory(null);
-    setShowSlOnly(false);
+    // Lots only makes sense on a single book — clear when returning to All books
+    if (id === 'All' || id === '__pending__') setShowLotsOnly(false);
   };
 
   // Must be declared before the useEffect that depends on it — otherwise production
@@ -544,11 +560,80 @@ export default function PortfolioV1View({
   const filtered = useMemo(() => {
     let list = scoped;
     if (categoryFilter !== 'All') list = list.filter((h) => classifyHolding(h) === categoryFilter);
-    if (showSlOnly) {
-      list = list.filter((h) => stopsForHolding(h).length > 0);
+    if (showLotsOnly) {
+      list = list.filter((h) => stopsForHolding(h).length > 0 || (lotsByHoldingId.get(String(h.id)) || []).length > 0);
     }
     return list;
-  }, [scoped, categoryFilter, showSlOnly, lotsByHoldingId]);
+  }, [scoped, categoryFilter, showLotsOnly, lotsByHoldingId]);
+
+  // Table rows: when Lots is on, expand one row per lot/position (repeat symbol).
+  type TableRow = { h: any; lot?: any; stop?: number | null; lotQty?: number; dist?: number | null; rowKey: string };
+  const tableRows = useMemo((): TableRow[] => {
+    if (!showLotsOnly) {
+      return filtered.map((h) => ({ h, rowKey: String(h.id) }));
+    }
+    const rows: TableRow[] = [];
+    for (const h of filtered) {
+      const lots = lotsByHoldingId.get(String(h.id)) || [];
+      const lotRows = lots.filter((l) => l.stop_loss_rate != null || true);
+      if (lotRows.length === 0) {
+        rows.push({ h, rowKey: String(h.id) });
+        continue;
+      }
+      for (const lot of lotRows) {
+        const stop = lot.stop_loss_rate != null ? Number(lot.stop_loss_rate) : null;
+        const live = Number(lot.current_price ?? h.live_price ?? h.current_price ?? lot.buy_price ?? h.buy_price) || 0;
+        const dist = stop != null && live > 0 ? ((live - stop) / live) * 100 : null;
+        rows.push({
+          h,
+          lot,
+          stop,
+          lotQty: Number(lot.quantity) || 0,
+          dist,
+          rowKey: `${h.id}-${lot.id || lot.external_position_id || Math.random()}`,
+        });
+      }
+    }
+    return rows;
+  }, [filtered, showLotsOnly, lotsByHoldingId]);
+
+  const sortedTableRows = useMemo(() => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const rows = tableRows.slice();
+    const val = (r: TableRow) => {
+      const h = r.h;
+      const qty = r.lotQty ?? Number(h.quantity) || 0;
+      const buy = r.lot ? Number(r.lot.buy_price) : Number(h.buy_price);
+      const live = r.lot ? Number(r.lot.current_price ?? h.live_price ?? h.current_price ?? buy) : livePrice(h);
+      switch (sortKey) {
+        case 'symbol': return String(h.ticker || h.symbol || '');
+        case 'type': return classifyHolding(h);
+        case 'portfolio': return portfolioNameOf(h, portfolios);
+        case 'broker': return String(h.broker || '');
+        case 'qty': return qty;
+        case 'buy': return buy;
+        case 'live': return live;
+        case 'day': return dayChangePct(h) ?? -999;
+        case 'value': return live * qty;
+        case 'pnl': {
+          const inv = buy * qty;
+          return inv > 0 ? ((live * qty - inv) / inv) * 100 : 0;
+        }
+        case 'pnl_amt': return live * qty - buy * qty;
+        case 'stop': return r.stop ?? Number(h.stop_loss_rate) ?? -1;
+        case 'lev': return Number(r.lot?.leverage ?? h.leverage) || 0;
+        case 'currency': return String(h.currency || '');
+        default: return live * qty;
+      }
+    };
+    rows.sort((a, b) => {
+      const av = val(a);
+      const bv = val(b);
+      if (typeof av === 'string' && typeof bv === 'string') return av.localeCompare(bv) * dir;
+      return ((Number(av) || 0) - (Number(bv) || 0)) * dir;
+    });
+    return rows;
+  }, [tableRows, sortKey, sortDir, portfolios]);
 
   // Broker chips follow the selected book only
   const brokersPresent = useMemo(() => {
@@ -557,11 +642,13 @@ export default function PortfolioV1View({
     return Array.from(s).sort();
   }, [bookScoped]);
 
-  // SL only when eToro exists in the selected book
-  const hasEtoro = useMemo(
-    () => bookScoped.some((h: any) => String(h.broker || '').toLowerCase() === 'etoro'),
-    [bookScoped]
-  );
+  // Lots chip only when a *specific* book is selected and that book has lot rows.
+  // Hidden on "All books" per product rule.
+  const hasLotsForSelectedBook = useMemo(() => {
+    if (portfolioFilter === 'All' || portfolioFilter === '__pending__') return false;
+    const ids = new Set(bookScoped.map((h: any) => String(h.id)));
+    return (portfolioHoldingLots || []).some((l: any) => ids.has(String(l.holding_id)));
+  }, [portfolioFilter, bookScoped, portfolioHoldingLots]);
 
   const ranked = useMemo(() => {
     const rows = filtered
@@ -790,17 +877,6 @@ export default function PortfolioV1View({
                 Clear broker
               </button>
             )}
-            {hasEtoro && (
-              <button
-                type="button"
-                onClick={() => setShowSlOnly((v) => !v)}
-                className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                  showSlOnly ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 border border-amber-200'
-                }`}
-              >
-                <ShieldAlert className="w-3 h-3" /> SL
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -932,7 +1008,7 @@ export default function PortfolioV1View({
       </div>
 
       {/* Near SL */}
-      {hasEtoro && tightStops.length > 0 && (
+      {hasLotsForSelectedBook && tightStops.length > 0 && (
         <div className="rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/90 dark:bg-amber-950/25 px-3 py-2.5">
           <div className="flex items-center gap-1.5 mb-1.5">
             <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
@@ -991,6 +1067,30 @@ export default function PortfolioV1View({
               Day
             </button>
           </div>
+          <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5">
+            <button
+              type="button"
+              onClick={() => setMoversUnit('pct')}
+              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                moversUnit === 'pct'
+                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500'
+              }`}
+            >
+              %
+            </button>
+            <button
+              type="button"
+              onClick={() => setMoversUnit('dollar')}
+              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                moversUnit === 'dollar'
+                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500'
+              }`}
+            >
+              $
+            </button>
+          </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
         {[
@@ -1025,10 +1125,10 @@ export default function PortfolioV1View({
                     </div>
                     <div className="text-right shrink-0">
                       <p className={`text-[12px] font-black tabular-nums ${block.good ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {pct(p)}
+                        {moversUnit === 'pct' ? pct(p) : moneyPrecise(dollar, h.currency || baseCurrency)}
                       </p>
                       <p className="text-[9px] tabular-nums text-slate-400">
-                        {moneyPrecise(dollar, h.currency || baseCurrency)}
+                        {moversUnit === 'pct' ? moneyPrecise(dollar, h.currency || baseCurrency) : pct(p)}
                       </p>
                     </div>
                   </li>
@@ -1050,7 +1150,7 @@ export default function PortfolioV1View({
               className="flex items-center gap-2 min-w-0"
             >
               <h2 className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
-                Holdings · {filtered.length}
+                Holdings · {showLotsOnly ? sortedTableRows.length : filtered.length}
               </h2>
               <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform shrink-0 ${holdingsExpanded ? 'rotate-90' : ''}`} />
             </button>
@@ -1131,112 +1231,132 @@ export default function PortfolioV1View({
               </button>
             ))}
           </div>
+            {hasLotsForSelectedBook && (
+              <button
+                type="button"
+                onClick={() => setShowLotsOnly((v) => !v)}
+                className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                  showLotsOnly ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-900'
+                }`}
+              >
+                <ShieldAlert className="w-3 h-3" /> Lots
+              </button>
+            )}
         </div>
 
         {holdingsExpanded && (
           <div className="max-h-[32rem] overflow-auto">
-            {/* Desktop table — CSS grid reflows when Columns are toggled */}
-            <div className="hidden sm:block w-full">
+            {/* Desktop table — sortable; expands to per-lot rows when Lots is on */}
+            <div className="hidden sm:block w-full overflow-x-auto">
               <div
-                className="grid gap-x-2 px-4 py-2 text-[9px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800 sticky top-0 bg-white dark:bg-slate-900"
+                className="grid gap-x-2 px-4 py-2 text-[9px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800 sticky top-0 bg-white dark:bg-slate-900 min-w-full"
                 style={desktopGridStyle}
               >
                 {desktopCols.map((c) => (
-                  <span key={c.key} className={c.align === 'right' ? 'text-right' : 'text-left'}>
+                  <button
+                    key={c.key}
+                    type="button"
+                    onClick={() => toggleSort(c.key)}
+                    className={`min-w-0 flex items-center gap-0.5 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer ${c.align === 'right' ? 'justify-end text-right' : 'justify-start text-left'}`}
+                  >
                     {c.label}
-                  </span>
+                    {sortKey === c.key && <span className="text-indigo-500">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                  </button>
                 ))}
               </div>
-              {filtered.length === 0 ? (
-                <p className="text-[11px] text-slate-400 text-center py-10">No rows for this type filter</p>
+              {sortedTableRows.length === 0 ? (
+                <p className="text-[11px] text-slate-400 text-center py-10">No rows for this filter</p>
               ) : (
-                filtered
-                  .slice()
-                  .sort((a, b) => marketValue(b) - marketValue(a))
-                  .map((h) => {
-                    const p = pnlPct(h);
-                    const d = dayChangePct(h);
-                    const stop = h.stop_loss_rate != null ? Number(h.stop_loss_rate) : null;
-                    const dist = stopLossDistancePct(h);
-                    const lev = h.leverage != null ? Number(h.leverage) : null;
-                    const ccy = h.currency || baseCurrency;
-                    const cat = classifyHolding(h);
-                    const cells: Record<string, React.ReactNode> = {
-                      symbol: (
+                sortedTableRows.map((row) => {
+                  const { h, lot, stop: lotStop, lotQty, dist: lotDist, rowKey } = row;
+                  const qty = lotQty != null ? lotQty : Number(h.quantity) || 0;
+                  const buy = lot ? Number(lot.buy_price) : Number(h.buy_price);
+                  const live = lot
+                    ? Number(lot.current_price ?? h.live_price ?? h.current_price ?? buy) || 0
+                    : livePrice(h);
+                  const inv = buy * qty;
+                  const mv = live * qty;
+                  const pAmt = mv - inv;
+                  const pPct = inv > 0 ? (pAmt / inv) * 100 : 0;
+                  const d = dayChangePct(h);
+                  const lev = Number(lot?.leverage ?? h.leverage) || null;
+                  const ccy = h.currency || baseCurrency;
+                  const cat = classifyHolding(h);
+                  const stopVal = lotStop != null ? lotStop : (h.stop_loss_rate != null ? Number(h.stop_loss_rate) : null);
+                  const distVal = lotDist != null ? lotDist : stopLossDistancePct(h);
+
+                  const cells: Record<string, React.ReactNode> = {
+                    symbol: (
+                      <div className="min-w-0">
                         <p className="font-bold text-slate-900 dark:text-white truncate">{h.ticker || h.symbol}</p>
-                      ),
-                      type: (
-                        <span className={`text-[8px] font-black px-1 py-0.5 rounded text-center inline-block ${CATEGORY_META[cat].chip}`}>
-                          {CATEGORY_META[cat].label.split('·').pop()?.trim()}
-                        </span>
-                      ),
-                      portfolio: (
-                        <span className="text-slate-500 truncate text-[10px]">{portfolioNameOf(h, portfolios)}</span>
-                      ),
-                      broker: <span className="text-slate-500 truncate text-[10px]">{h.broker}</span>,
-                      qty: (
-                        <span className="tabular-nums text-slate-600">
-                          {Number(h.quantity).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                        </span>
-                      ),
-                      buy: <span className="tabular-nums text-slate-600">{moneyPrecise(Number(h.buy_price), ccy)}</span>,
-                      live: <span className="tabular-nums font-bold text-slate-900 dark:text-white">{moneyPrecise(livePrice(h), ccy)}</span>,
-                      day: (
-                        <span className={`tabular-nums font-bold ${d == null ? 'text-slate-300' : d >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          {d == null ? '—' : pct(d)}
-                        </span>
-                      ),
-                      value: <span className="tabular-nums font-bold text-slate-900 dark:text-white">{moneyPrecise(marketValue(h), ccy)}</span>,
-                      pnl: (
-                        <span className={`tabular-nums font-bold ${p >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{pct(p)}</span>
-                      ),
-                      pnl_amt: (
-                        <span className={`tabular-nums font-bold ${pnl(h) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          {moneyPrecise(pnl(h), ccy)}
-                        </span>
-                      ),
-                      stop: (() => {
-                        const stops = stopsForHolding(h);
-                        if (stops.length === 0) return <span className="text-slate-300">—</span>;
-                        if (stops.length === 1) {
-                          const s = stops[0];
-                          return (
-                            <span className="tabular-nums text-slate-600">
-                              {moneyPrecise(s.stop, ccy)}
-                              <span className={`block text-[9px] ${s.dist < 0 ? 'text-rose-600' : 'text-amber-600'}`}>
-                                {s.dist < 0 ? 'past' : `${s.dist.toFixed(1)}%`}
-                              </span>
-                            </span>
-                          );
-                        }
-                        // Multiple positions — show tightest SL + count (e.g. Netflix ×5)
-                        const tightest = stops[0];
-                        return (
-                          <span className="tabular-nums text-slate-600" title={stops.map((s) => `SL ${s.stop} (${s.qty} qty, ${s.dist.toFixed(1)}%)`).join('\n')}>
-                            {moneyPrecise(tightest.stop, ccy)}
-                            <span className="block text-[9px] text-amber-600">
-                              {stops.length} pos · {tightest.dist < 0 ? 'past' : `${tightest.dist.toFixed(1)}%`}
-                            </span>
-                          </span>
-                        );
-                      })(),
-                      lev: <span className="text-slate-500">{lev != null && lev > 1 ? `${lev}x` : '—'}</span>,
-                      currency: <span className="text-slate-400 font-bold">{ccy}</span>,
-                    };
-                    return (
-                      <div
-                        key={h.id}
-                        className="grid gap-x-2 px-4 py-2.5 items-center border-b border-slate-50 dark:border-slate-800/80 text-[11px]"
-                        style={desktopGridStyle}
-                      >
-                        {desktopCols.map((c) => (
-                          <div key={c.key} className={`min-w-0 ${c.align === 'right' ? 'text-right' : 'text-left'}`}>
-                            {cells[c.key]}
-                          </div>
-                        ))}
+                        {lot && (
+                          <p className="text-[9px] text-amber-600 font-bold truncate">
+                            Lot{lot.external_position_id ? ` · ${String(lot.external_position_id).slice(-6)}` : ''}
+                          </p>
+                        )}
                       </div>
-                    );
-                  })
+                    ),
+                    type: (
+                      <span className={`text-[8px] font-black px-1 py-0.5 rounded text-center inline-block ${CATEGORY_META[cat].chip}`}>
+                        {CATEGORY_META[cat].label.split('·').pop()?.trim()}
+                      </span>
+                    ),
+                    portfolio: (
+                      <span className="text-slate-500 truncate text-[10px]">{portfolioNameOf(h, portfolios)}</span>
+                    ),
+                    broker: <span className="text-slate-500 truncate text-[10px]">{h.broker}</span>,
+                    qty: (
+                      <span className="tabular-nums text-slate-600">
+                        {qty.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      </span>
+                    ),
+                    buy: <span className="tabular-nums text-slate-600">{moneyPrecise(buy, ccy)}</span>,
+                    live: <span className="tabular-nums font-bold text-slate-900 dark:text-white">{moneyPrecise(live, ccy)}</span>,
+                    day: (
+                      <span className={`tabular-nums font-bold ${d == null ? 'text-slate-300' : d >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {d == null ? '—' : pct(d)}
+                      </span>
+                    ),
+                    value: <span className="tabular-nums font-bold text-slate-900 dark:text-white">{moneyPrecise(mv, ccy)}</span>,
+                    pnl: (
+                      <span className={`tabular-nums font-bold ${pPct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{pct(pPct)}</span>
+                    ),
+                    pnl_amt: (
+                      <span className={`tabular-nums font-bold ${pAmt >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {moneyPrecise(pAmt, ccy)}
+                      </span>
+                    ),
+                    stop: (
+                      stopVal != null ? (
+                        <span className="tabular-nums text-slate-600">
+                          {moneyPrecise(stopVal, ccy)}
+                          {distVal != null && (
+                            <span className={`block text-[9px] ${distVal < 0 ? 'text-rose-600' : 'text-amber-600'}`}>
+                              {distVal < 0 ? 'past' : `${distVal.toFixed(1)}%`}
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )
+                    ),
+                    lev: <span className="text-slate-500">{lev != null && lev > 1 ? `${lev}x` : '—'}</span>,
+                    currency: <span className="text-slate-400 font-bold">{ccy}</span>,
+                  };
+                  return (
+                    <div
+                      key={rowKey}
+                      className="grid gap-x-2 px-4 py-2.5 items-center border-b border-slate-50 dark:border-slate-800/80 text-[11px] min-w-full"
+                      style={desktopGridStyle}
+                    >
+                      {desktopCols.map((c) => (
+                        <div key={c.key} className={`min-w-0 ${c.align === 'right' ? 'text-right' : 'text-left'}`}>
+                          {cells[c.key]}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })
               )}
             </div>
 
