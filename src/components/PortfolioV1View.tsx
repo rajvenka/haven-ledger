@@ -62,7 +62,7 @@ interface Props {
   ) => Promise<void>;
   deletePortfolioBrokerConnection?: (id: string) => Promise<void>;
   markBrokerConnectionSynced?: (id: string) => Promise<void>;
-  updatePortfolioHoldingLivePrice?: (id: string, price: number, previousClose?: number | null) => Promise<void>;
+  updatePortfolioHoldingLivePrice?: (id: string, price: number, previousClose?: number | null, priceSource?: string | null) => Promise<void>;
   markPriceLookupFailed?: (id: string) => Promise<void>;
 }
 
@@ -1047,7 +1047,7 @@ export default function PortfolioV1View({
           }
         }
         if (px != null && updatePortfolioHoldingLivePrice) {
-          await updatePortfolioHoldingLivePrice(h.id, px, null);
+          await updatePortfolioHoldingLivePrice(h.id, px, null, type === 'webull' || type.includes('webull') ? 'Webull' : type === 'etoro' ? 'eToro' : type === 'zerodha' ? 'Zerodha' : type === 'groww' ? 'Groww' : type);
           updated++;
         }
       }
