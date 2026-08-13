@@ -425,8 +425,10 @@ export default function AccountInfo({
       : currentSubTab === 'members' || currentSubTab === 'groups' || currentSubTab === 'chat'
         ? 'Members · roles · invite code'
         : 'Theme · digests · workspace defaults';
+  /** Pulse: hide long instruction copy; Classic keeps Tips toggle */
+  const tipsOn = !pulseMode && showInstructions;
   const sectionCardClass = pulseMode
-    ? 'bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-200/80 dark:border-slate-800 shadow-sm'
+    ? 'bg-white dark:bg-slate-900 rounded-2xl p-3 border border-slate-200/80 dark:border-slate-800 shadow-sm'
     : 'bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm';
 
   return (
@@ -438,18 +440,11 @@ export default function AccountInfo({
       }
     >
       {pulseMode ? (
-        <div className="flex items-start justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <Sliders className="w-5 h-5 text-indigo-500/80 dark:text-indigo-400/80 shrink-0" />
-            <div className="min-w-0">
-              <h2 className="text-lg sm:text-xl font-black tracking-tight text-slate-900 dark:text-white truncate">{settingsPageTitle}</h2>
-              <p className="text-[10px] font-medium text-slate-400">{settingsPageBlurb}</p>
-            </div>
+        <div className="flex items-start justify-between gap-3 shrink-0 mb-1">
+          <div className="min-w-0">
+            <h2 className="text-xl font-black tracking-tight text-slate-900 dark:text-white truncate">{settingsPageTitle}</h2>
+            <p className="text-[11px] text-slate-400 mt-0.5">{settingsPageBlurb}</p>
           </div>
-          <button type="button" onClick={() => handleToggleInstructions(!showInstructions)} className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold text-slate-500 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-sm">
-            {showInstructions ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5 text-indigo-500" />}
-            <span className="hidden sm:inline">{showInstructions ? 'Hide tips' : 'Tips'}</span>
-          </button>
         </div>
       ) : (
         <div className="flex justify-between items-center px-1 shrink-0">
@@ -466,17 +461,17 @@ export default function AccountInfo({
       {/* Scope Data View shown inside Security */}
       {currentSubTab === 'security' && (
         <>
-          {/* Section 1: Scope Data View */}
+          {/* Data scope */}
           <div className={`${sectionCardClass} space-y-3.5 text-left animate-in fade-in-50 duration-200`}>
-            <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-              <Layers className="w-4 h-4 text-indigo-500" /> Section 1: Scope Data View
+            <h4 className="text-[12px] font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-1.5">
+              <Layers className="w-4 h-4 text-indigo-500" /> Data scope
             </h4>
 
             {setViewMode && (
               <div className="space-y-3">
-                {showInstructions && (
+                {tipsOn && (
                   <span className="text-[10px] text-slate-450 dark:text-slate-550 font-bold block leading-relaxed">
-                    Select which payment records represent your active dashboard state.
+                    What appears on your dashboard.
                   </span>
                 )}
 
@@ -501,7 +496,7 @@ export default function AccountInfo({
                     <div className="flex-1 min-w-0 space-y-0.5">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                          My Personal Scope
+                          Personal only
                         </span>
                         {viewMode === 'personal' && (
                           <span className="w-2 h-2 rounded-full bg-indigo-600 dark:bg-indigo-500 flex items-center justify-center">
@@ -509,7 +504,7 @@ export default function AccountInfo({
                           </span>
                         )}
                       </div>
-                      {showInstructions && (
+                      {tipsOn && (
                         <p className="text-[9.5px] text-slate-455 dark:text-slate-550 font-semibold leading-relaxed">
                           Filters the dashboard to show only payments created by your account.
                         </p>
@@ -554,7 +549,7 @@ export default function AccountInfo({
                           </span>
                         )}
                       </div>
-                      {showInstructions && (
+                      {tipsOn && (
                         <p className="text-[9.5px] text-slate-455 dark:text-slate-550 font-semibold leading-relaxed">
                           Consolidates all workspace-member and personal payments in a single unified ledger.
                         </p>
@@ -599,7 +594,7 @@ export default function AccountInfo({
                           </span>
                         )}
                       </div>
-                      {showInstructions && (
+                      {tipsOn && (
                         <p className="text-[9.5px] text-slate-455 dark:text-slate-550 font-semibold leading-relaxed">
                           Excludes your own payments to audit items belonging exclusively to other family members.
                         </p>
@@ -668,7 +663,7 @@ export default function AccountInfo({
 
           {activeWorkspace && (
             <div className={`${sectionCardClass} space-y-3`}>
-              <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+              <h4 className="text-[12px] font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-1.5">
                 <Layers className="w-4 h-4 text-indigo-500" /> Portfolio Mode
               </h4>
 
@@ -728,7 +723,7 @@ export default function AccountInfo({
                   {familyRole === 'host' && hasFeature && !hasFeature('multi_portfolio') && (
                     <div className="bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900 rounded-lg p-2.5 flex items-center gap-2">
                       <Sparkles className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                      <p className="text-[10px] text-indigo-700 dark:text-indigo-400 font-semibold">Multiple Portfolio is a Pro Max feature. Request an upgrade in your plan settings to unlock it.</p>
+                      <p className="text-[10px] text-indigo-700 dark:text-indigo-400 font-semibold">Multiple portfolios need Pro Max.</p>
                     </div>
                   )}
                 </>
@@ -846,7 +841,7 @@ export default function AccountInfo({
                       never see this at all. */}
                   {new Set(portfolios.map(p => p.currency)).size > 1 && (
                     <div className="pt-2 border-t border-slate-100 dark:border-slate-900 space-y-1.5">
-                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Exchange Rates (relative to {activeWorkspace.baseCurrency})</span>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Rates vs {activeWorkspace.baseCurrency}</span>
                       {Array.from(new Set(portfolios.map(p => p.currency))).filter(c => c !== activeWorkspace.baseCurrency).map(currency => {
                         const existing = workspaceCurrencyRates.find(r => r.currency === currency);
                         return (
@@ -898,7 +893,7 @@ export default function AccountInfo({
 
           {activeWorkspace?.isOwner && (
             <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5">
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Manage This Workspace</span>
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">This workspace</span>
               {isRenamingWorkspace ? (
                 <form
                   onSubmit={async (e) => {
@@ -1009,7 +1004,7 @@ export default function AccountInfo({
           {/* Invite code / share panel — hosts see it, and solo users can create a family to get one */}
           {(familyRole === 'host' || !familyRole) && (
             <div className={`${sectionCardClass} space-y-3`}>
-              <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+              <h4 className="text-[12px] font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-1.5">
                 <Users className="w-4 h-4 text-indigo-500" /> Your Workspace Invite Code
               </h4>
 
@@ -1222,7 +1217,7 @@ export default function AccountInfo({
           {/* Join a family by code — shown to anyone not already the host of one */}
           {familyRole !== 'host' && (
             <div className={`${sectionCardClass} space-y-3`}>
-              <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+              <h4 className="text-[12px] font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-1.5">
                 <UserPlus className="w-4 h-4 text-indigo-500" /> Join a Workspace
               </h4>
               <form
@@ -1314,7 +1309,7 @@ export default function AccountInfo({
           {/* Current members */}
           {familyMembers.length > 0 && (
             <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5">
-              <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+              <h4 className="text-[12px] font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-1.5">
                 <Users className="w-4 h-4 text-indigo-500" /> Workspace Members ({familyMembers.length})
               </h4>
               {familyMembers.map(m => (
@@ -1488,7 +1483,7 @@ export default function AccountInfo({
           <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Billing Alerts & Reminders</h4>
         </div>
         
-        {showInstructions && (
+        {tipsOn && (
           <p className="text-[10px] text-slate-450 dark:text-slate-500 font-bold leading-normal text-left">
             Toggle where and how you receive payment reminders before and on due dates.
           </p>
@@ -1499,7 +1494,7 @@ export default function AccountInfo({
           <div className="flex items-center justify-between py-1">
             <div className="text-left pr-3">
               <span className="text-xs font-bold text-slate-900 dark:text-white block">App-Level Notification Banners</span>
-              {showInstructions && (
+              {tipsOn && (
                 <span className="text-[9px] text-slate-450 dark:text-slate-500 block mt-0.5 font-bold">Show sliding banners and sound alerts inside the web application UI</span>
               )}
             </div>
@@ -1521,7 +1516,7 @@ export default function AccountInfo({
           <div className="flex items-center justify-between py-1 border-t border-slate-100 dark:border-slate-900/60 pt-3">
             <div className="text-left pr-3">
               <span className="text-xs font-bold text-slate-900 dark:text-white block">Mobile / Push Level Notifications</span>
-              {showInstructions && (
+              {tipsOn && (
                 <span className="text-[9px] text-slate-450 dark:text-slate-500 block mt-0.5 font-bold">Trigger native browser-level push banners simulating mobile OS notifications</span>
               )}
             </div>
@@ -1703,18 +1698,18 @@ export default function AccountInfo({
             </div>
           </details>
 
-          {/* APP DISPLAY SETTINGS (Premium Bento card styling) */}
+          {/* Display (Premium Bento card styling) */}
           <details className="group bg-white dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm shrink-0">
         <summary className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-900 pb-2.5 cursor-pointer list-none">
           <div className="flex items-center gap-2">
             <History className="w-4 h-4 text-indigo-500" />
-            <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Display Preferences</h4>
+            <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Display</h4>
           </div>
           <ChevronDown className="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180" />
         </summary>
         <div className="mt-3.5 space-y-4">
         
-        {showInstructions && (
+        {tipsOn && (
           <p className="text-[10px] text-slate-450 dark:text-slate-500 font-bold leading-normal text-left">
             Customize what information is shown across your active bill cards.
           </p>
@@ -1724,7 +1719,7 @@ export default function AccountInfo({
           <div className="flex items-center justify-between py-1">
             <div className="text-left pr-3">
               <span className="text-xs font-bold text-slate-900 dark:text-white block">Historical Billing Patterns</span>
-              {showInstructions && (
+              {tipsOn && (
                 <span className="text-[9px] text-slate-450 dark:text-slate-500 block mt-0.5 font-bold">Show frequency indicators, 6-month visual payment tracks, and last-logged stats on bill cards</span>
               )}
             </div>
@@ -1755,7 +1750,7 @@ export default function AccountInfo({
           <ChevronDown className="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180" />
         </summary>
         <div className="mt-3.5 space-y-3">
-        {showInstructions && (
+        {tipsOn && (
           <p className="text-[10px] text-slate-450 dark:text-slate-450 font-bold leading-normal">
             Customize default tagging labels (e.g. Father, Mother, Self) so each person's transactions are tracked with their customized identity tags.
           </p>
@@ -1832,13 +1827,13 @@ export default function AccountInfo({
       {/* Visual Theme Selection (Premium High Density Cards) */}
       <details className="group bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm">
         <summary className="flex items-center justify-between cursor-pointer list-none">
-          <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+          <h4 className="text-[12px] font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-1.5">
             <Settings className="w-4 h-4 text-indigo-500" /> App Visual Theme
           </h4>
           <ChevronDown className="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180" />
         </summary>
         <div className="mt-3 space-y-3">
-        {showInstructions && (
+        {tipsOn && (
           <p className="text-[10px] text-slate-450 block mb-1 leading-tight text-left font-bold">
             Select your preferred viewing mode for the PayMonitor interface:
           </p>
@@ -1896,10 +1891,10 @@ export default function AccountInfo({
       {currentSubTab === 'security' && (
         <>
           
-          {/* Daily digests — Email + WhatsApp */}
+          {/* Daily alerts — Email + WhatsApp */}
           <div className={`${sectionCardClass} space-y-3 shrink-0`}>
             <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
-              Daily digests
+              Daily alerts
             </h4>
             <p className="text-[10px] text-slate-500">
               Morning brief: bills due/overdue + simple portfolio mark. Email is free-tier friendly; WhatsApp needs Meta Cloud API (and may need a template for cold pushes).
@@ -1936,18 +1931,18 @@ export default function AccountInfo({
               />
             </label>
             {!userProfile?.whatsappPhone && (
-              <p className="text-[9px] text-slate-400">Link WhatsApp below before enabling WhatsApp digest.</p>
+              <p className="text-[9px] text-slate-400">Link WhatsApp first.</p>
             )}
           </div>
 
-{/* Connect WhatsApp */}
+{/* WhatsApp */}
           <div className={`${sectionCardClass} space-y-3 shrink-0`}>
-            <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-              <MessageSquare className="w-4 h-4 text-emerald-500" /> Connect WhatsApp
+            <h4 className="text-[12px] font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-1.5">
+              <MessageSquare className="w-4 h-4 text-emerald-500" /> WhatsApp
             </h4>
             {!hasWhatsApp ? (
               <div className="space-y-2">
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">WhatsApp integration is a Pro Max feature.</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">WhatsApp is on Pro Max.</p>
                 <button
                   onClick={() => {
                     const proMax = accessPlans.find(p => p.name === 'Pro Max');
@@ -1977,7 +1972,7 @@ export default function AccountInfo({
             ) : waCode ? (
               <div className="space-y-2">
                 <p className="text-[11px] text-slate-600 dark:text-slate-300">
-                  Text this code to the Haven WhatsApp business number (see NOTIFICATIONS.md / WHATSAPP_BUSINESS_DISPLAY) to finish linking:
+                  Text this code to the Haven WhatsApp number to finish linking:
                 </p>
                 <div className="px-3 py-2 bg-slate-50 dark:bg-slate-900 rounded-lg font-mono text-lg font-bold tracking-widest text-center text-emerald-600 dark:text-emerald-400">
                   {waCode}
@@ -2003,15 +1998,15 @@ export default function AccountInfo({
               </form>
             )}
             {waError && <p className="text-[10px] text-red-500 font-semibold">{waError}</p>}
-            <p className="text-[9px] text-slate-400">Once linked, text things like "log gas bill $200" or "what's due today?" and Haven Vault replies right in WhatsApp.</p>
+            <p className="text-[9px] text-slate-400">Then text due or help anytime.</p>
             </>
             )}
           </div>
 
           {/* Backup and Restore Utilities Accordion (High Density Styled Cards) */}
           <div className={`${sectionCardClass} space-y-3 shrink-0`}>
-        <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-          <ShieldAlert className="w-4 h-4 text-indigo-500" /> Backup, Sync & Danger Zone
+        <h4 className="text-[12px] font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-1.5">
+          <ShieldAlert className="w-4 h-4 text-indigo-500" /> Backup & danger zone
         </h4>
 
         {workspaceBackups.length > 0 && (
@@ -2038,7 +2033,7 @@ export default function AccountInfo({
         <div className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-900/60">
           <div className="text-left pr-3">
             <span className="text-xs font-bold text-slate-900 dark:text-white block">Download Data Backup</span>
-            {showInstructions && (
+            {tipsOn && (
               <span className="text-[9px] text-slate-450 dark:text-slate-500 block mt-0.5 font-bold">Save your complete configured billing tracks and schedules locally as a JSON backup.</span>
             )}
           </div>
@@ -2055,7 +2050,7 @@ export default function AccountInfo({
         <div className="py-2.5 space-y-2">
           <div className="text-left">
             <span className="text-xs font-bold text-slate-900 dark:text-white block">Restore From Backup File</span>
-            {showInstructions && (
+            {tipsOn && (
               <span className="text-[9px] text-slate-450 dark:text-slate-500 block mt-0.5 font-bold">Paste a previously downloaded billing configuration file below to replace your workspace data.</span>
             )}
           </div>
