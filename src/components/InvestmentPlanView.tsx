@@ -374,9 +374,6 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
               <ClipboardList className="w-5 h-5 text-white" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-100">Pulse</p>
-              </div>
               <h2 className="text-xl font-black tracking-tight truncate">
                 {workspaceName ? `${workspaceName} Investment Plan` : 'Investment Plan'}
               </h2>
@@ -394,11 +391,11 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
       {portfolioMode === 'multiple' && planPortfolioNames.length > 1 && (
         pulseMode ? (
           <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-violet-500/80 dark:text-violet-400/80 w-10">Book</span>
-            <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-violet-100/80 dark:bg-violet-950/50 border border-violet-200/60 dark:border-violet-900/60">
-              <button type="button" onClick={() => setSelectedPlanPortfolios(new Set())} className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${selectedPlanPortfolios.size === 0 ? 'bg-violet-600 text-white shadow-md shadow-violet-600/25' : 'text-violet-700/70 dark:text-violet-300/70'}`}>All</button>
+            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-indigo-500/80 dark:text-indigo-400/80 w-10">Book</span>
+            <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-indigo-100/80 dark:bg-indigo-950/50 border border-indigo-200/60 dark:border-indigo-900/60">
+              <button type="button" onClick={() => setSelectedPlanPortfolios(new Set())} className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${selectedPlanPortfolios.size === 0 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25' : 'text-indigo-700/70 dark:text-indigo-300/70'}`}>All</button>
               {planPortfolioNames.map(p => (
-                <button type="button" key={p} onClick={() => setSelectedPlanPortfolios(prev => { const next = new Set(prev); if (next.has(p)) next.delete(p); else next.add(p); return next; })} className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${selectedPlanPortfolios.has(p) ? 'bg-violet-600 text-white shadow-md shadow-violet-600/25' : 'text-violet-700/70 dark:text-violet-300/70'}`}>{p}</button>
+                <button type="button" key={p} onClick={() => setSelectedPlanPortfolios(prev => { const next = new Set(prev); if (next.has(p)) next.delete(p); else next.add(p); return next; })} className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${selectedPlanPortfolios.has(p) ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25' : 'text-indigo-700/70 dark:text-indigo-300/70'}`}>{p}</button>
               ))}
             </div>
           </div>
