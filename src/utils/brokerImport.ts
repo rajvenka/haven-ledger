@@ -168,8 +168,13 @@ function parseStakeRows(rows: any[][], sheetName?: string, statementDate?: strin
 
   // --- Preferred path: Stake's multi-tab export ---
   // Sheet is already "Aus Equities" or "Wall St Equities" with header on row 1.
-  const sheetIsAus = /aus\s*equit/i.test(nameLower);
-  const sheetIsWall = /wall\s*st/i.test(nameLower) || /us\s*equit/i.test(nameLower) || /wallstreet/i.test(nameLower);
+  // IMPORTANT: do NOT use /us\s*equit/ — it matches inside "Aus Equities" ("us equit").
+  const sheetIsAus = /\baus\b.*equit/i.test(nameLower) || /^aus\s*equit/i.test(nameLower);
+  const sheetIsWall =
+    /wall\s*st/i.test(nameLower) ||
+    /wall\s*street/i.test(nameLower) ||
+    /^us\s*equit/i.test(nameLower) ||
+    /\bus\s+equit/i.test(nameLower);
   if (sheetIsAus || sheetIsWall) {
     let headerIdx = -1;
     for (let j = 0; j < Math.min(rows.length, 15); j++) {
@@ -180,7 +185,9 @@ function parseStakeRows(rows: any[][], sheetName?: string, statementDate?: strin
       }
     }
     if (headerIdx >= 0) {
-      results.push(...parseStakeDataRows(rows, headerIdx, sheetIsWall ? 'wall' : 'aus', statementDate));
+      // Prefer Aus when both somehow match (Aus name is unambiguous).
+      const section: 'aus' | 'wall' = sheetIsAus ? 'aus' : 'wall';
+      results.push(...parseStakeDataRows(rows, headerIdx, section, statementDate));
     }
     return results;
   }
@@ -242,8 +249,10 @@ function parseStakeRows(rows: any[][], sheetName?: string, statementDate?: strin
     }
     if (headerIdx >= 0) {
       const headers = (rows[headerIdx] || []).map((h: any) => String(h ?? '').trim()).join(' ').toLowerCase();
-      const looksUsd = /us\$|usd|wall/.test(headers) || /wall|us/.test(nameLower);
-      results.push(...parseStakeDataRows(rows, headerIdx, looksUsd ? 'wall' : 'aus', statementDate));
+      const looksAus = /\baus\b|asx|a\$/.test(headers) || /\baus\b|asx/.test(nameLower);
+      const looksUsd = /us\$|\busd\b|wall\s*st/.test(headers) || /wall\s*st|wall\s*street/.test(nameLower);
+      const section: 'aus' | 'wall' = looksAus ? 'aus' : looksUsd ? 'wall' : 'aus';
+      results.push(...parseStakeDataRows(rows, headerIdx, section, statementDate));
     }
   }
 
@@ -304,9 +313,12 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
     const statementDate = extractStakeStatementDate(workbook);
     const results: ParsedHolding[] = [];
     // Prefer named tabs from Stake's own download: "Aus Equities", "Wall St Equities"
-    const equitySheets = workbook.SheetNames.filter((n) =>
-      /aus\s*equit|wall\s*st|wall\s*street|us\s*equit/i.test(n)
-    );
+    const equitySheets = workbook.SheetNames.filter((n) => {
+      const s = String(n || '').toLowerCase();
+      const isAus = /\baus\b.*equit/i.test(s) || /^aus\s*equit/i.test(s);
+      const isWall = /wall\s*st/i.test(s) || /wall\s*street/i.test(s) || /^us\s*equit/i.test(s);
+      return isAus || isWall;
+    });
     const sheetsToScan = equitySheets.length > 0 ? equitySheets : workbook.SheetNames;
     for (const sheetName of sheetsToScan) {
       if (/disclaimer|glossary/i.test(sheetName)) continue;
