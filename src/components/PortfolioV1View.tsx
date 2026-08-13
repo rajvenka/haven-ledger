@@ -339,14 +339,20 @@ function pnlPct(h: any): number {
 function dayChangePct(h: any): number | null {
   const live = Number(h.live_price);
   const prev = Number(h.previous_close);
-  if (!Number.isFinite(live) || !Number.isFinite(prev) || prev <= 0) return null;
+  if (!Number.isFinite(live) || !Number.isFinite(prev) || prev <= 0 || live <= 0) return null;
+  // Yahoo maps GOLD/SILVER to ~$40 equities; eToro spot is thousands. That scale mismatch
+  // produces absurd Day % (e.g. +10,000%). Only trust previous_close when same order of magnitude.
+  const ratio = live / prev;
+  if (ratio > 20 || ratio < 1 / 20) return null;
   return ((live - prev) / prev) * 100;
 }
 function dayChangeDollar(h: any): number | null {
   const live = Number(h.live_price);
   const prev = Number(h.previous_close);
   const qty = Number(h.quantity || 0);
-  if (!Number.isFinite(live) || !Number.isFinite(prev) || !Number.isFinite(qty)) return null;
+  if (!Number.isFinite(live) || !Number.isFinite(prev) || !Number.isFinite(qty) || prev <= 0 || live <= 0) return null;
+  const ratio = live / prev;
+  if (ratio > 20 || ratio < 1 / 20) return null;
   return (live - prev) * qty;
 }
 function stopLossDistancePct(h: any): number | null {
