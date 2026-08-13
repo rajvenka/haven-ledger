@@ -1685,6 +1685,7 @@ export default function App() {
               )
             ) : activeTab === 'configure' && hasFeature('core') ? (
               uiPulse ? (
+                <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
                 <PulseBills
                   payments={payments}
                   history={history}
@@ -1698,6 +1699,7 @@ export default function App() {
                   isReadOnly={userProfile?.role === 'view'}
                   currentUserUid={user?.uid}
                 />
+                </div>
               ) : (
                 <ConfigurePayments 
                   payments={payments}
@@ -1790,6 +1792,7 @@ export default function App() {
               />
             ) : activeTab === 'rewards' ? (
               uiPulse ? (
+                <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
                 <PulseMembership
                   rewardsPerks={rewardsPerks}
                   onAddReward={addReward}
@@ -1802,6 +1805,7 @@ export default function App() {
                   onDeleteGiftCard={deleteGiftCard}
                   isReadOnly={isReadOnly}
                 />
+                </div>
               ) : (
                 <RewardsTracker
                   rewardsPerks={rewardsPerks}
