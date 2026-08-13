@@ -518,6 +518,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [pnlCalendarRows, setPnlCalendarRows] = useState<any[]>([]);
   const [pnlCalendarLoading, setPnlCalendarLoading] = useState(false);
   const [pnlCalendarCcy, setPnlCalendarCcy] = useState<string>(String(baseCurrency || 'INR').toUpperCase());
+  const [pnlCalendarPortfolioId, setPnlCalendarPortfolioId] = useState<string>('all');
 
   const reloadPnlCalendar = async () => {
     if (!loadPortfolioDailyPositions) return;
@@ -3543,7 +3544,25 @@ export default function PortfolioView(props: PortfolioViewProps) {
             ]))}
             selectedCurrency={pnlCalendarCcy}
             onCurrencyChange={setPnlCalendarCcy}
-            portfolioLabel={singleHeaderPortfolio?.name}
+            portfolios={(portfolios || []).map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              currency: p.currency,
+            }))}
+            selectedPortfolioId={pnlCalendarPortfolioId}
+            onPortfolioChange={(id) => {
+              setPnlCalendarPortfolioId(id);
+              if (id !== 'all') {
+                const book = (portfolios || []).find((p: any) => p.id === id);
+                const ccy = String(book?.currency || '').toUpperCase();
+                if (ccy) setPnlCalendarCcy(ccy);
+              }
+            }}
+            portfolioLabel={
+              pnlCalendarPortfolioId !== 'all'
+                ? (portfolios || []).find((p: any) => p.id === pnlCalendarPortfolioId)?.name
+                : singleHeaderPortfolio?.name
+            }
             canSnapshot={!isReadOnly}
             onRefreshSnapshot={snapshotPortfolioDailyPositions}
             onReload={reloadPnlCalendar}
