@@ -1980,31 +1980,48 @@ export default function PortfolioV1View({
                 Columns
               </button>
               {colsOpen && (
-                <div className="absolute right-0 top-full mt-1 z-20 w-48 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl p-2">
-                  <p className="text-[9px] font-black uppercase text-slate-400 px-2 py-1">Desktop columns</p>
-                  {HOLDING_COLUMNS.map((c) => (
-                    <label
-                      key={c.key}
-                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer text-[11px] font-bold text-slate-700 dark:text-slate-200"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={colOn(c.key)}
-                        onChange={() => toggleCol(c.key)}
-                        className="rounded border-slate-300"
-                      />
-                      {c.label}
-                      {c.desktopOnly && <span className="text-[8px] text-slate-400 font-bold">desk</span>}
-                    </label>
-                  ))}
+                <div className="absolute right-0 top-full mt-1 z-20 w-64 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl p-2">
+                  <p className="text-[9px] font-black uppercase text-slate-400 px-2 py-1">Show &amp; order columns</p>
+                  <p className="text-[9px] text-slate-400 px-2 pb-1">↑↓ moves left/right in the table</p>
+                  {colOrder.map((key, idx) => {
+                    const c = HOLDING_COLUMNS.find((x) => x.key === key);
+                    if (!c) return null;
+                    return (
+                      <div
+                        key={key}
+                        className="flex items-center gap-1 px-1.5 py-1 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-200"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={colOn(key)}
+                          onChange={() => toggleCol(key)}
+                          className="rounded border-slate-300 shrink-0"
+                        />
+                        <span className="flex-1 min-w-0 truncate">{c.label}</span>
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() => moveCol(key, -1)}
+                          className="p-0.5 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-25"
+                          title="Move left"
+                        >
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === colOrder.length - 1}
+                          onClick={() => moveCol(key, 1)}
+                          className="p-0.5 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-25"
+                          title="Move right"
+                        >
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
                   <button
                     type="button"
-                    onClick={() => {
-                      setVisibleCols(new Set(DEFAULT_COLS));
-                      try {
-                        localStorage.setItem('portfolio_v1_cols', JSON.stringify(Array.from(DEFAULT_COLS)));
-                      } catch { /* ignore */ }
-                    }}
+                    onClick={resetColLayout}
                     className="w-full mt-1 text-[10px] font-bold text-indigo-600 py-1"
                   >
                     Reset defaults
