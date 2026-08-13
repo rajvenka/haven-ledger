@@ -17,6 +17,7 @@ import { RecurringPayment, CountryConfig, PaymentHistory, getCategoryColor } fro
 import {
   formatCurrencyValue,
   getDaysUntilPayment,
+  getNextPaymentDate,
   isPaymentPaidForCurrentPeriod,
 } from '../utils/paymentUtils';
 
@@ -142,6 +143,41 @@ export default function PulseExpenses({
     non_monthly: sorted.filter((p) => groupOf(p) === 'non_monthly'),
   };
 
+  const amt = (payment: RecurringPayment) =>
+    isAll ? convertCurrency(payment.amount, payment.currency, defaultCurrency) : Number(payment.amount) || 0;
+  const now = new Date();
+  const nextM = now.getMonth() === 11 ? 0 : now.getMonth() + 1;
+  const nextY = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear();
+  const isNextMonthDue = (payment: RecurringPayment) => {
+    try {
+      const d = getNextPaymentDate(payment, now, history);
+      return d.getFullYear() === nextY && d.getMonth() === nextM;
+    } catch {
+      return false;
+    }
+  };
+  const baseGroup = {
+    dd: filteredPayments.filter((payment) => groupOf(payment) === 'dd'),
+    manual_monthly: filteredPayments.filter((payment) => groupOf(payment) === 'manual_monthly'),
+    non_monthly: filteredPayments.filter((payment) => groupOf(payment) === 'non_monthly'),
+  };
+  const tileFor = (items: RecurringPayment[]) => {
+    const paidItems = items.filter((payment) => isPaymentPaidForCurrentPeriod(payment, history));
+    const toPayItems = items.filter((payment) => !isPaymentPaidForCurrentPeriod(payment, history));
+    const nextItems = items.filter((payment) => isNextMonthDue(payment));
+    return {
+      paidSum: paidItems.reduce((s, payment) => s + amt(payment), 0),
+      paidCount: paidItems.length,
+      toPaySum: toPayItems.reduce((s, payment) => s + amt(payment), 0),
+      toPayCount: toPayItems.length,
+      nextSum: nextItems.reduce((s, payment) => s + amt(payment), 0),
+      nextCount: nextItems.length,
+    };
+  };
+  const tilesDd = tileFor(baseGroup.dd);
+  const tilesManual = tileFor(baseGroup.manual_monthly);
+  const tilesOneOff = tileFor(baseGroup.non_monthly);
+
   const markAllDdDone = async () => {
     for (const p of groups.dd) {
       if (isPaymentPaidForCurrentPeriod(p, history)) continue;
@@ -155,7 +191,7 @@ export default function PulseExpenses({
       {/* Single scroll surface: sticky filters live INSIDE it */}
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-5 pt-3 pb-24 md:pb-6">
         {/* Title */}
-        <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex items-start justify-between gap-3 mb-2">
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">Spend</h1>
@@ -176,23 +212,105 @@ export default function PulseExpenses({
           )}
         </div>
 
-        {/* Summary (scrolls away) */}
-        <div className="grid grid-cols-2 gap-2.5 mb-3">
-          <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5">
-            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Still due</p>
-            <p className="mt-1 text-xl font-black tabular-nums text-slate-900 dark:text-white">
-              {formatCurrencyValue(dueTotal, displayCcy as any, countries)}
-            </p>
-            <p className="text-[10px] text-slate-500 mt-0.5">{dueOpen.length} open</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5">
-            <p className="text-[9px] font-black uppercase tracking-wider text-emerald-500">Paid this month</p>
-            <p className="mt-1 text-xl font-black tabular-nums text-slate-900 dark:text-white">
-              {formatCurrencyValue(paidSoFar, displayCcy as any, countries)}
-            </p>
-            <p className="text-[10px] text-slate-500 mt-0.5">{displayCcy}</p>
+        {/* Currency filter — top */}
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar mb-3">
+          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-emerald-600/80 dark:text-emerald-400/80">Ccy</span>
+          <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-emerald-100/90 dark:bg-emerald-950/50 border border-emerald-200/60 dark:border-emerald-900/50">
+            <button
+              type="button"
+              onClick={() => setActiveTabCountryId('ALL')}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                isAll ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25' : 'text-emerald-800/70 dark:text-emerald-300/70'
+              }`}
+            >
+              All
+            </button>
+            {countries.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setActiveTabCountryId(c.id)}
+                className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                  activeTabCountryId === c.id
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
+                    : 'text-emerald-800/70 dark:text-emerald-300/70'
+                }`}
+              >
+                {c.flag ? `${c.flag} ` : ''}
+                {c.currency}
+              </button>
+            ))}
           </div>
         </div>
+
+        {/* Overall still due / paid */}
+        <div className="grid grid-cols-2 gap-2.5 mb-3">
+          <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
+            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Still due</p>
+            <p className="mt-0.5 text-lg font-black tabular-nums text-slate-900 dark:text-white">
+              {formatCurrencyValue(dueTotal, displayCcy as any, countries)}
+            </p>
+            <p className="text-[10px] text-slate-500">{dueOpen.length} open · {displayCcy}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
+            <p className="text-[9px] font-black uppercase tracking-wider text-emerald-500">Paid this month</p>
+            <p className="mt-0.5 text-lg font-black tabular-nums text-slate-900 dark:text-white">
+              {formatCurrencyValue(paidSoFar, displayCcy as any, countries)}
+            </p>
+            <p className="text-[10px] text-slate-500">{displayCcy}</p>
+          </div>
+        </div>
+
+        {/* Method tiles — horizontal scroll rows */}
+        {(
+          [
+            { key: 'dd', title: 'Direct debit', t: tilesDd, accent: 'sky' },
+            { key: 'manual', title: 'Manual monthly', t: tilesManual, accent: 'violet' },
+            { key: 'oneoff', title: 'One-off / non-monthly', t: tilesOneOff, accent: 'slate' },
+          ] as const
+        ).map((row) => {
+          if (row.t.paidCount + row.t.toPayCount + row.t.nextCount === 0) return null;
+          const chip =
+            row.accent === 'sky'
+              ? 'bg-sky-50 dark:bg-sky-950/40 border-sky-200/70 dark:border-sky-900/50'
+              : row.accent === 'violet'
+                ? 'bg-violet-50 dark:bg-violet-950/40 border-violet-200/70 dark:border-violet-900/50'
+                : 'bg-slate-50 dark:bg-slate-900/80 border-slate-200/80 dark:border-slate-800';
+          const head =
+            row.accent === 'sky'
+              ? 'text-sky-700 dark:text-sky-300'
+              : row.accent === 'violet'
+                ? 'text-violet-700 dark:text-violet-300'
+                : 'text-slate-600 dark:text-slate-300';
+          return (
+            <div key={row.key} className="mb-3">
+              <p className={`text-[10px] font-black uppercase tracking-wider mb-1.5 ${head}`}>{row.title}</p>
+              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-0.5">
+                <div className={`shrink-0 min-w-[9.5rem] rounded-2xl border p-3 ${chip}`}>
+                  <p className="text-[9px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">This month paid</p>
+                  <p className="mt-1 text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
+                    {formatCurrencyValue(row.t.paidSum, displayCcy as any, countries)}
+                  </p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{row.t.paidCount} bills</p>
+                </div>
+                <div className={`shrink-0 min-w-[9.5rem] rounded-2xl border p-3 ${chip}`}>
+                  <p className="text-[9px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">This month to pay</p>
+                  <p className="mt-1 text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
+                    {formatCurrencyValue(row.t.toPaySum, displayCcy as any, countries)}
+                  </p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{row.t.toPayCount} bills</p>
+                </div>
+                <div className={`shrink-0 min-w-[9.5rem] rounded-2xl border p-3 ${chip}`}>
+                  <p className="text-[9px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">Next month</p>
+                  <p className="mt-1 text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
+                    {formatCurrencyValue(row.t.nextSum, displayCcy as any, countries)}
+                  </p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{row.t.nextCount} bills</p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
 
         {/* FLOATING / STICKY filter bar — first sticky child of the scroller */}
         <div
@@ -201,37 +319,6 @@ export default function PulseExpenses({
             border-b border-slate-200 dark:border-slate-800
             shadow-[0_8px_24px_-8px_rgba(0,0,0,0.35)]"
         >
-          {/* Currency */}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-400">Ccy</span>
-            <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-emerald-100/90 dark:bg-emerald-950/50 border border-emerald-200/60 dark:border-emerald-900/50">
-              <button
-                type="button"
-                onClick={() => setActiveTabCountryId('ALL')}
-                className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
-                  isAll ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25' : 'text-emerald-800/70 dark:text-emerald-300/70'
-                }`}
-              >
-                All
-              </button>
-              {countries.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => setActiveTabCountryId(c.id)}
-                  className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
-                    activeTabCountryId === c.id
-                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
-                      : 'text-emerald-800/70 dark:text-emerald-300/70'
-                  }`}
-                >
-                  {c.flag ? `${c.flag} ` : ''}
-                  {c.currency}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
