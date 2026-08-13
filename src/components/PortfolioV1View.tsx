@@ -29,6 +29,8 @@ import {
   Columns3,
   Settings2,
   Trash2,
+  Upload,
+  ExternalLink,
 } from 'lucide-react';
 
 type BrokerType = 'etoro' | 'ig' | 'webull' | 'zerodha' | 'groww' | 'moomoo' | 'tiger' | 'stake';
@@ -490,6 +492,7 @@ export default function PortfolioV1View({
   const [connectOk, setConnectOk] = useState<string | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [syncOpen, setSyncOpen] = useState(false);
   const [importTemplate, setImportTemplate] = useState<BrokerTemplate>('universal');
   const [importPortfolioId, setImportPortfolioId] = useState('');
   const [importBusy, setImportBusy] = useState(false);
@@ -1047,6 +1050,12 @@ export default function PortfolioV1View({
     }
   };
 
+  const openSync = () => {
+    setSyncOpen(true);
+    setConnectError(null);
+    setConnectOk(null);
+  };
+
   const openConnect = () => {
     setConnectOpen(true);
     setConnectStep('pick');
@@ -1532,50 +1541,40 @@ export default function PortfolioV1View({
                 ))}
               </div>
             </div>
-            {/* Connect + Refresh pinned — not inside horizontal scroller */}
-            <div className="shrink-0 inline-flex items-center gap-0.5 p-0.5 rounded-full bg-teal-100/90 dark:bg-teal-950/50 border border-teal-200/70 dark:border-teal-800/60">
-              <button
-                type="button"
-                onClick={openImport}
-                disabled={isReadOnly}
-                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold bg-teal-600 text-white shadow-md shadow-teal-600/30 hover:bg-teal-700 disabled:opacity-50 transition-all"
-                title="Import holdings from CSV / broker export"
-              >
-                Import
-              </button>
+            {/* Import + Sync together · Connect separate */}
+            <div className="shrink-0 flex items-center gap-1.5">
+              <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-teal-100/90 dark:bg-teal-950/50 border border-teal-200/70 dark:border-teal-800/60">
+                <button
+                  type="button"
+                  onClick={openImport}
+                  disabled={isReadOnly}
+                  className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold text-teal-900 dark:text-teal-100 hover:bg-teal-200/70 dark:hover:bg-teal-900/50 disabled:opacity-50 transition-all"
+                  title="Import CSV / broker export"
+                >
+                  <Upload className="w-3 h-3" />
+                  Import
+                </button>
+                <button
+                  type="button"
+                  onClick={openSync}
+                  disabled={isReadOnly}
+                  className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold bg-teal-600 text-white shadow-md shadow-teal-600/30 hover:bg-teal-700 disabled:opacity-50 transition-all"
+                  title="Sync existing broker connections"
+                >
+                  <RefreshCw className={`w-3 h-3 ${syncingId ? 'animate-spin' : ''}`} />
+                  Sync
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={openConnect}
                 disabled={isReadOnly}
-                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold text-teal-800 dark:text-teal-200 hover:bg-teal-200/70 dark:hover:bg-teal-900/50 disabled:opacity-50 transition-all"
-                title="Add or manage broker connection"
+                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold bg-indigo-600 text-white shadow-md shadow-indigo-600/25 hover:bg-indigo-700 disabled:opacity-50 transition-all"
+                title="Add a new broker connection"
               >
                 <Plus className="w-3 h-3" />
                 Connect
               </button>
-              {portfolioFilter !== 'All' && portfolioFilter !== '__pending__' && bookConnections.length > 0 && (
-                bookConnections.map((c: any) => {
-                  const busy = syncingId === c.id;
-                  const label = c.connection_label || c.broker_type || 'Broker';
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      disabled={isReadOnly || busy}
-                      onClick={() => syncConnection(c)}
-                      title={`Refresh holdings from ${label}`}
-                      className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all disabled:opacity-50 ${
-                        busy
-                          ? 'bg-teal-700 text-white shadow-md shadow-teal-700/30'
-                          : 'bg-teal-600 text-white shadow-md shadow-teal-600/30 hover:bg-teal-700'
-                      }`}
-                    >
-                      <RefreshCw className={`w-3 h-3 ${busy ? 'animate-spin' : ''}`} />
-                      {busy ? 'Refreshing…' : 'Refresh'}
-                    </button>
-                  );
-                })
-              )}
             </div>
           </div>
           {(connectOk || connectError) && !connectOpen && (
@@ -2237,7 +2236,88 @@ export default function PortfolioV1View({
 
       {/* Connect modal */}
       
-      {importOpen && (
+      
+      {syncOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-3" onClick={() => setSyncOpen(false)}>
+          <div className="w-full sm:max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 space-y-3 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h3 className="text-[14px] font-black text-slate-900 dark:text-white">Sync connections</h3>
+                <p className="text-[10px] text-slate-500">Existing brokers only — pull live prices / holdings</p>
+              </div>
+              <button type="button" onClick={() => setSyncOpen(false)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {(portfolioBrokerConnections || []).length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-700 p-4 text-center space-y-2">
+                <p className="text-[12px] text-slate-500">No connections yet.</p>
+                <button
+                  type="button"
+                  onClick={() => { setSyncOpen(false); openConnect(); }}
+                  className="text-[11px] font-bold text-indigo-600"
+                >
+                  + Connect a broker
+                </button>
+              </div>
+            ) : (
+              <ul className="space-y-2 max-h-[50vh] overflow-y-auto">
+                {(portfolioBrokerConnections || []).map((c: any) => {
+                  const busy = syncingId === c.id;
+                  const label = c.connection_label || c.broker_type || 'Broker';
+                  const book = (portfolios || []).find((p: any) => p.id === c.portfolio_id)?.name;
+                  const last = c.last_synced_at ? new Date(c.last_synced_at).toLocaleString() : 'Never';
+                  return (
+                    <li key={c.id} className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[12px] font-black truncate text-slate-900 dark:text-white">{label}</p>
+                        <p className="text-[9px] text-slate-400 truncate">
+                          {String(c.broker_type || '').toUpperCase()}
+                          {book ? ` · ${book}` : ''}
+                          {' · '}Last: {last}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isReadOnly || busy}
+                        onClick={() => syncConnection(c)}
+                        className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold bg-teal-600 text-white disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${busy ? 'animate-spin' : ''}`} />
+                        {busy ? '…' : 'Sync'}
+                      </button>
+                      {deletePortfolioBrokerConnection && (
+                        <button
+                          type="button"
+                          disabled={isReadOnly || busy}
+                          onClick={() => {
+                            if (confirm(`Remove connection "${label}"?`)) removeConnection(c.id);
+                          }}
+                          className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-rose-500"
+                          title="Remove connection"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {(connectOk || connectError) && (
+              <p className={`text-[11px] font-bold ${connectError ? 'text-rose-600' : 'text-emerald-600'}`}>
+                {connectError || connectOk}
+              </p>
+            )}
+            <p className="text-[10px] text-slate-400">
+              Need a new broker? Use <button type="button" className="font-bold text-indigo-600" onClick={() => { setSyncOpen(false); openConnect(); }}>+ Connect</button>
+              {' · '}CSV file? <button type="button" className="font-bold text-teal-600" onClick={() => { setSyncOpen(false); openImport(); }}>Import</button>
+            </p>
+          </div>
+        </div>
+      )}
+
+{importOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-3" onClick={() => !importBusy && setImportOpen(false)}>
           <div className="w-full sm:max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 space-y-3 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
@@ -2323,7 +2403,7 @@ export default function PortfolioV1View({
           <div className="w-full sm:max-w-md bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-t-3xl">
               <h3 className="text-sm font-black">
-                {connectStep === 'pick' ? 'Connect / Sync' : BROKER_META[selectedBroker!]?.label}
+                {connectStep === 'pick' ? 'New connection' : BROKER_META[selectedBroker!]?.label}
               </h3>
               <button type="button" onClick={() => setConnectOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
                 <X className="w-4 h-4" />
@@ -2391,14 +2471,6 @@ export default function PortfolioV1View({
                       </select>
                     </label>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => { setConnectOpen(false); openImport(); }}
-                    className="w-full mb-2 py-2.5 rounded-xl text-[12px] font-black bg-teal-600 text-white hover:bg-teal-700"
-                  >
-                    Import CSV / broker export
-                  </button>
-                  <p className="text-[10px] text-slate-400 mb-2">Or connect a broker for live Refresh:</p>
                   <div className="grid grid-cols-2 gap-2">
                     {(Object.keys(BROKER_META) as BrokerType[]).map((key) => {
                       const m = BROKER_META[key];
@@ -2439,6 +2511,32 @@ export default function PortfolioV1View({
                       />
                     </label>
                   ))}
+                  {selectedBroker === 'zerodha' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const key = String(credFields.api_key || '').trim();
+                        if (!key) {
+                          setConnectError('Enter API Key first, then open login');
+                          return;
+                        }
+                        window.open(
+                          `https://kite.zerodha.com/connect/login?v=3&api_key=${encodeURIComponent(key)}`,
+                          '_blank',
+                          'noopener,noreferrer'
+                        );
+                      }}
+                      className="w-full py-2 rounded-2xl border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-[11px] font-bold inline-flex items-center justify-center gap-1.5"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Open Zerodha login (get request token)
+                    </button>
+                  )}
+                  {selectedBroker === 'webull' && (
+                    <p className="text-[10px] text-slate-500">
+                      After Save, approve the login request in the Webull app if prompted (same as classic).
+                    </p>
+                  )}
                   <button
                     type="button"
                     disabled={connectBusy || isReadOnly}
