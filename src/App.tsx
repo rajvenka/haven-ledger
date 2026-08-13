@@ -135,6 +135,7 @@ export default function App() {
     monthlyIncome,
     updateMonthlyIncome,
     renameWorkspace,
+    updateWorkspaceBaseCurrency,
     deleteWorkspace,
     workspaceBackups,
     createBackupNow,
@@ -1722,6 +1723,7 @@ export default function App() {
                 onCreateFamily={async () => { await createWorkspace(activeWorkspace?.type === 'business' ? 'My Business' : 'My Family', activeWorkspace?.type || 'family'); }}
                 activeWorkspace={activeWorkspace}
                 onRenameWorkspace={renameWorkspace}
+                onUpdateWorkspaceBaseCurrency={updateWorkspaceBaseCurrency}
                 onDeleteWorkspace={deleteWorkspace}
                 onJoinFamilyGroup={joinFamilyGroup}
                 onLeaveFamilyGroup={leaveFamilyGroup}

@@ -64,6 +64,7 @@ interface AccountInfoProps {
   onCreateFamily?: () => Promise<void>;
   activeWorkspace?: { id: string; name: string; type: 'family' | 'business'; role: string; isOwner: boolean; portfolioMode?: 'single' | 'multiple'; baseCurrency?: string } | null;
   onRenameWorkspace?: (id: string, name: string) => Promise<void>;
+  onUpdateWorkspaceBaseCurrency?: (id: string, currency: string) => Promise<void>;
   onDeleteWorkspace?: (id: string) => Promise<void>;
   onJoinFamilyGroup: (code: string) => Promise<void>;
   onLeaveFamilyGroup?: () => Promise<void>;
@@ -131,6 +132,7 @@ export default function AccountInfo({
   onCreateFamily,
   activeWorkspace,
   onRenameWorkspace,
+  onUpdateWorkspaceBaseCurrency,
   onDeleteWorkspace,
   onJoinFamilyGroup,
   onLeaveFamilyGroup,
@@ -263,6 +265,8 @@ export default function AccountInfo({
   const [respondingInvId, setRespondingInvId] = useState<string | null>(null);
   const [isRenamingWorkspace, setIsRenamingWorkspace] = useState(false);
   const [workspaceRenameValue, setWorkspaceRenameValue] = useState('');
+  const [isEditingBaseCurrency, setIsEditingBaseCurrency] = useState(false);
+  const [baseCurrencyInput, setBaseCurrencyInput] = useState('');
   const [workspaceActionBusy, setWorkspaceActionBusy] = useState(false);
   const [workspaceActionError, setWorkspaceActionError] = useState<string | null>(null);
   const ALL_FEATURES = ['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'whatsapp', 'portfolio'];
@@ -953,6 +957,49 @@ export default function AccountInfo({
                   </div>
                 </div>
               )}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-900">
+                <div>
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Base Currency</span>
+                  <span className="text-[9px] text-slate-400">Drives every cross-currency total on Portfolio. Existing exchange rates stay tied to whatever currency you set.</span>
+                </div>
+                {isEditingBaseCurrency ? (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <select
+                      value={baseCurrencyInput}
+                      onChange={(e) => setBaseCurrencyInput(e.target.value)}
+                      autoFocus
+                      className="px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-bold"
+                    >
+                      {['INR', 'USD', 'AUD', 'EUR', 'GBP', 'SGD', 'AED', 'CAD'].map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <button
+                      onClick={async () => {
+                        if (!activeWorkspace) return;
+                        setWorkspaceActionError(null);
+                        setWorkspaceActionBusy(true);
+                        try {
+                          await onUpdateWorkspaceBaseCurrency?.(activeWorkspace.id, baseCurrencyInput);
+                          setIsEditingBaseCurrency(false);
+                        } catch (err: any) {
+                          setWorkspaceActionError(err.message || 'Could not update base currency.');
+                        } finally {
+                          setWorkspaceActionBusy(false);
+                        }
+                      }}
+                      disabled={workspaceActionBusy}
+                      className="p-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg cursor-pointer"
+                    ><Check className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setIsEditingBaseCurrency(false)} className="p-1.5 text-slate-400 cursor-pointer"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setBaseCurrencyInput(activeWorkspace.baseCurrency || 'INR'); setIsEditingBaseCurrency(true); }}
+                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer shrink-0"
+                  >
+                    {activeWorkspace.baseCurrency || 'INR'}
+                  </button>
+                )}
+              </div>
               {workspaceActionError && <p className="text-[10px] text-red-500 font-semibold">{workspaceActionError}</p>}
               <p className="text-[9px] text-slate-400">You can also switch, rename, or delete workspaces from the switcher next to your workspace name at the top.</p>
             </div>

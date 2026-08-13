@@ -661,6 +661,18 @@ export function usePaymentState() {
     await refreshWorkspaces(user!.id, activeWorkspaceId);
   };
 
+  // Workspace base currency drives every cross-currency conversion in the header totals -
+  // exchange rates (workspace_currency_rates) are all stored as "rate to this base", and
+  // portfolio/holding totals get converted through it. No UI existed to change this after
+  // workspace creation; this was previously fixed for the workspace's lifetime.
+  const updateWorkspaceBaseCurrency = async (workspaceId: string, currency: string) => {
+    const ws = workspaces.find(w => w.id === workspaceId);
+    if (!ws || ws.role !== 'host') throw new Error('Only the owner can change the base currency.');
+    const { error } = await supabase.from('workspaces').update({ base_currency: currency }).eq('id', workspaceId);
+    if (error) throw error;
+    await refreshWorkspaces(user!.id, activeWorkspaceId);
+  };
+
   const deleteWorkspace = async (workspaceId: string) => {
     const ws = workspaces.find(w => w.id === workspaceId);
     if (!ws || ws.role !== 'host') throw new Error('Only the owner can delete this workspace.');
@@ -2347,7 +2359,7 @@ export function usePaymentState() {
     workspaces, activeWorkspaceId, activeWorkspace, switchWorkspace, createWorkspace, setWorkspaceMode, updateWorkspaceLandingTab, updateWorkspaceColumnPrefs, dismissContributionReminder,
     portfolios, workspaceCurrencyRates, switchToMultiPortfolio, createPortfolio, updatePortfolio, deletePortfolio, upsertCurrencyRate,
     mfHoldingsCache, loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
-    renameWorkspace, deleteWorkspace,
+    renameWorkspace, updateWorkspaceBaseCurrency, deleteWorkspace,
     incomeSources, addIncomeSource, deleteIncomeSource, incomeMode, updateIncomeMode, monthlyIncome, updateMonthlyIncome,
     workspaceBackups, createBackupNow, restoreFromBackup,
     addFamilyMember, joinFamilyGroup, leaveFamilyGroup,
