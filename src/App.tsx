@@ -1642,7 +1642,7 @@ export default function App() {
               )
             ) : activeTab === 'expenses' && hasFeature('core') ? (
               uiPulse ? (
-                <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
                 <PulseExpenses
                   payments={payments}
                   history={history}
