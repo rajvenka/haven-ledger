@@ -1,5 +1,6 @@
 /**
  * Pulse Manage Bills — list, filters, method groups, bulk import.
+ * Build-safe rewrite (redeploy).
  */
 import React, { useMemo, useState } from 'react';
 import {
