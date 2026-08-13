@@ -1192,9 +1192,9 @@ export default function PortfolioV1View({
                   </button>
                 ))}
               </div>
-              {/* View currency — only meaningful across All books */}
-              {portfolioFilter === 'All' && currenciesPresent.length > 1 && (
-                <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-emerald-100/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-900/50 ml-1">
+              {/* View currency — same place as before; keep visible whenever multiple exist */}
+              {currenciesPresent.length > 1 && (
+                <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-emerald-100/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-900/50 ml-1 shrink-0">
                   <span className="px-1.5 text-[8px] font-black uppercase tracking-wider text-emerald-600/80 dark:text-emerald-400/80">
                     View
                   </span>
@@ -1216,80 +1216,76 @@ export default function PortfolioV1View({
               )}
             </div>
           )}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-2 min-w-0">
             <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-indigo-500/80 dark:text-indigo-400/80 w-12">
               Broker
             </span>
-            <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-indigo-100/80 dark:bg-indigo-950/50 border border-indigo-200/60 dark:border-indigo-900/60">
-              <button
-                type="button"
-                onClick={() => setBrokerFilter('All')}
-                className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
-                  brokerFilter === 'All'
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                    : 'text-indigo-700/70 dark:text-indigo-300/70 hover:text-indigo-900 dark:hover:text-indigo-100'
-                }`}
-              >
-                All
-              </button>
-              {brokersPresent.map((b) => (
+            <div className="flex-1 flex items-center gap-2 min-w-0 overflow-x-auto no-scrollbar">
+              <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-indigo-100/80 dark:bg-indigo-950/50 border border-indigo-200/60 dark:border-indigo-900/60 shrink-0">
                 <button
-                  key={b}
                   type="button"
-                  onClick={() => {
-                    setBrokerFilter(b);
-                    setCategoryFilter('All');
-                    setExpandedCategory(null);
-                  }}
+                  onClick={() => setBrokerFilter('All')}
                   className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
-                    brokerFilter === b
+                    brokerFilter === 'All'
                       ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
                       : 'text-indigo-700/70 dark:text-indigo-300/70 hover:text-indigo-900 dark:hover:text-indigo-100'
                   }`}
                 >
-                  {b}
+                  All
                 </button>
-              ))}
+                {brokersPresent.map((b) => (
+                  <button
+                    key={b}
+                    type="button"
+                    onClick={() => {
+                      setBrokerFilter(b);
+                      setCategoryFilter('All');
+                      setExpandedCategory(null);
+                    }}
+                    className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                      brokerFilter === b
+                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                        : 'text-indigo-700/70 dark:text-indigo-300/70 hover:text-indigo-900 dark:hover:text-indigo-100'
+                    }`}
+                  >
+                    {b}
+                  </button>
+                ))}
+              </div>
+              {/* Sync on same row as Broker — right side when a book is selected */}
+              {portfolioFilter !== 'All' && portfolioFilter !== '__pending__' && (
+                <div className="ml-auto flex items-center gap-1.5 shrink-0 pl-1">
+                  {bookConnections.length === 0 ? (
+                    <button
+                      type="button"
+                      onClick={openConnect}
+                      disabled={isReadOnly}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700 disabled:opacity-50"
+                    >
+                      <Plus className="w-3 h-3" /> Link
+                    </button>
+                  ) : (
+                    bookConnections.map((c: any) => {
+                      const busy = syncingId === c.id;
+                      const label = c.connection_label || c.broker_type || 'Broker';
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          disabled={isReadOnly || busy}
+                          onClick={() => syncConnection(c)}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold shadow-md shadow-indigo-600/25 disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${busy ? 'animate-spin' : ''}`} />
+                          {busy ? '…' : 'Sync now'}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
             </div>
           </div>
-
-          {/* Book-linked Sync — under currency/broker filters, right-aligned */}
-          {portfolioFilter !== 'All' && portfolioFilter !== '__pending__' && (
-            <div className="flex items-center gap-2 pt-0.5">
-              <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-500/80 w-12">
-                Sync
-              </span>
-              <div className="flex-1 flex flex-wrap items-center justify-end gap-2 min-w-0">
-                {bookConnections.length === 0 ? (
-                  <button
-                    type="button"
-                    onClick={openConnect}
-                    disabled={isReadOnly}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700 disabled:opacity-50"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Link broker for this book
-                  </button>
-                ) : (
-                  bookConnections.map((c: any) => {
-                    const busy = syncingId === c.id;
-                    const label = c.connection_label || c.broker_type || 'Broker';
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        disabled={isReadOnly || busy}
-                        onClick={() => syncConnection(c)}
-                        className="inline-flex items-center justify-center gap-1.5 min-h-[40px] px-5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold shadow-md shadow-indigo-600/25 disabled:opacity-50"
-                      >
-                        <RefreshCw className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`} />
-                        {busy ? 'Syncing…' : `Sync now · ${label}`}
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          )}
           {(connectOk || connectError) && !connectOpen && (
             <p className={`text-[10px] font-bold text-right ${connectOk ? 'text-emerald-600' : 'text-rose-500'}`}>
               {connectOk || connectError}
