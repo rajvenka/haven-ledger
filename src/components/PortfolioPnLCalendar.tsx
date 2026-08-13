@@ -137,7 +137,7 @@ interface Props {
   currencies: string[];
   selectedCurrency: string;
   onCurrencyChange: (ccy: string) => void;
-  /** Books to filter by (eToro Raj, Zerodha, …). Optional. */
+  /** Books to filter by (eToro Raj, Zerodha, ...). Optional. */
   portfolios?: { id: string; name: string; currency?: string }[];
   selectedPortfolioId?: string; // 'all' or portfolio uuid
   onPortfolioChange?: (id: string) => void;
@@ -375,7 +375,7 @@ export default function PortfolioPnLCalendar({
               disabled={snapBusy}
               onClick={runSnap}
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-600 text-white disabled:opacity-50"
-              title="Capture today’s positions into the daily snapshot table"
+              title="Capture today's positions into the daily snapshot table"
             >
               <RefreshCw className={`w-3 h-3 ${snapBusy ? 'animate-spin' : ''}`} />
               Snapshot now
@@ -406,7 +406,7 @@ export default function PortfolioPnLCalendar({
         )}
         {distinctDates.length === 1 && (
           <p>
-            Only <span className="font-bold">1 trading day</span> captured. Day P&L needs a <span className="font-bold">second day</span> to compare. Today’s cells show portfolio value (baseline); green/red P&L appears from day 2 onward.
+            Only <span className="font-bold">1 trading day</span> captured. Day P&L needs a <span className="font-bold">second day</span> to compare. Today's cells show portfolio value (baseline); green/red P&L appears from day 2 onward.
           </p>
         )}
         {snapError && <p className="text-rose-600 font-bold">Snapshot failed: {snapError}</p>}
@@ -437,7 +437,7 @@ export default function PortfolioPnLCalendar({
 
       {loading ? (
         <p className="text-[12px] text-slate-400 flex items-center gap-2 py-8 justify-center">
-          <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading snapshots…
+          <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading snapshots...
         </p>
       ) : mode === 'month' ? (
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-900">
