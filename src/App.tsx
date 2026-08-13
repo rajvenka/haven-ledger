@@ -44,6 +44,10 @@ import PulseDashboard from './components/PulseDashboard';
 import PulseExpenses from './components/PulseExpenses';
 import PulseBills from './components/PulseBills';
 import PulseMembership from './components/PulseMembership';
+import PulseIncome from './components/PulseIncome';
+import PulseHistory from './components/PulseHistory';
+import PulseReports from './components/PulseReports';
+import PulseInvestment from './components/PulseInvestment';
 import ConfigurePayments from './components/ConfigurePayments';
 import AccountInfo from './components/AccountInfo';
 import PaymentHistoryView from './components/PaymentHistoryView';
@@ -1510,7 +1514,7 @@ export default function App() {
             >
               <div className="flex items-center justify-end gap-0.5 w-max min-w-full">
               {/* Pulse / Classic icon — top bar, next to theme */}
-              {(activeTab === 'summary' || activeTab === 'expenses' || activeTab === 'configure' || activeTab === 'income' || activeTab === 'rewards' || activeTab === 'portfolio' || activeTab === 'history') && (
+              {(activeTab === 'summary' || activeTab === 'expenses' || activeTab === 'configure' || activeTab === 'income' || activeTab === 'rewards' || activeTab === 'portfolio' || activeTab === 'history' || activeTab === 'reports' || activeTab === 'investment_plan') && (
                 <button
                   type="button"
                   onClick={togglePulse}
@@ -1621,11 +1625,11 @@ export default function App() {
 
           {/* Dynamic page content body */}
           <main className={`flex-1 min-w-0 max-w-full overflow-x-hidden flex flex-col min-h-0 ${
-            uiPulse && (activeTab === 'expenses' || activeTab === 'summary' || activeTab === 'configure' || activeTab === 'rewards')
+            uiPulse && (activeTab === 'expenses' || activeTab === 'summary' || activeTab === 'configure' || activeTab === 'rewards' || activeTab === 'income' || activeTab === 'history' || activeTab === 'reports' || activeTab === 'investment_plan')
               ? 'overflow-hidden'
               : 'overflow-y-auto'
           }`}>
-            {(activeTab === 'summary' || activeTab === 'expenses' || activeTab === 'configure' || activeTab === 'income' || activeTab === 'rewards' || activeTab === 'portfolio' || activeTab === 'history') && (
+            {(activeTab === 'summary' || activeTab === 'expenses' || activeTab === 'configure' || activeTab === 'income' || activeTab === 'rewards' || activeTab === 'portfolio' || activeTab === 'history' || activeTab === 'reports' || activeTab === 'investment_plan') && (
               <div className="hidden md:flex shrink-0 px-4 sm:px-5 pt-2 items-center justify-end">
                 <button
                   type="button"
@@ -1929,7 +1933,9 @@ export default function App() {
               />
               )
             ) : activeTab === 'investment_plan' ? (
-              <InvestmentPlanView
+              uiPulse ? (
+                <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
+                  <PulseInvestment
                 workspaceName={activeWorkspace?.name}
                 workspaceMembers={contributorMembers}
                 isReadOnly={isReadOnly}
@@ -1962,8 +1968,46 @@ export default function App() {
                 updatePortfolioRecurringPlan={updatePortfolioRecurringPlan}
                 deletePortfolioRecurringPlan={deletePortfolioRecurringPlan}
               />
+                </div>
+              ) : (
+                <InvestmentPlanView
+                workspaceName={activeWorkspace?.name}
+                workspaceMembers={contributorMembers}
+                isReadOnly={isReadOnly}
+                currentUserId={user?.id}
+                portfolios={portfolios}
+                portfolioMode={activeWorkspace?.portfolioMode}
+                workspaceCurrencyRates={workspaceCurrencyRates}
+                baseCurrency={activeWorkspace?.baseCurrency}
+                dismissedReminderKey={activeWorkspace?.dismissedReminderKey}
+                onDismissContributionReminder={dismissContributionReminder}
+                portfolioSplits={portfolioSplits}
+                addPortfolioSplit={addPortfolioSplit}
+                deletePortfolioSplit={deletePortfolioSplit}
+                portfolioContributions={portfolioContributions}
+                addPortfolioContribution={addPortfolioContribution}
+                updatePortfolioContribution={updatePortfolioContribution}
+                deletePortfolioContribution={deletePortfolioContribution}
+                portfolioWithdrawals={portfolioWithdrawals}
+                addPortfolioWithdrawal={addPortfolioWithdrawal}
+                deletePortfolioWithdrawal={deletePortfolioWithdrawal}
+                portfolioCashBalances={portfolioCashBalances}
+                setPortfolioCashBalance={setPortfolioCashBalance}
+                deletePortfolioCashBalance={deletePortfolioCashBalance}
+                portfolioBookedPlBaselines={portfolioBookedPlBaselines}
+                setBookedPlBaseline={setBookedPlBaseline}
+                portfolioProjectedBankBalances={portfolioProjectedBankBalances}
+                setProjectedBankBalance={setProjectedBankBalance}
+                portfolioRecurringPlans={portfolioRecurringPlans}
+                addPortfolioRecurringPlan={addPortfolioRecurringPlan}
+                updatePortfolioRecurringPlan={updatePortfolioRecurringPlan}
+                deletePortfolioRecurringPlan={deletePortfolioRecurringPlan}
+              />
+              )
             ) : activeTab === 'reports' ? (
-              <ReportsView
+              uiPulse ? (
+                <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
+                  <PulseReports
                 workspaceName={activeWorkspace?.name}
                 workspaceMembers={contributorMembers}
                 isReadOnly={isReadOnly}
@@ -1989,21 +2033,69 @@ export default function App() {
                 mfHoldingsCache={mfHoldingsCache}
                 loadMfHoldingsCache={loadMfHoldingsCache}
               />
-            ) : activeTab === 'income' ? (
-              <IncomeView
-                incomeSources={incomeSources}
-                incomeMode={incomeMode}
-                monthlyIncome={monthlyIncome}
-                summaryCurrency={summaryCurrency}
-                countries={countries}
-                payments={payments}
-                history={history}
-                addIncomeSource={addIncomeSource}
-                deleteIncomeSource={deleteIncomeSource}
-                updateIncomeMode={updateIncomeMode}
-                updateMonthlyIncome={updateMonthlyIncome}
+                </div>
+              ) : (
+                <ReportsView
+                workspaceName={activeWorkspace?.name}
+                workspaceMembers={contributorMembers}
                 isReadOnly={isReadOnly}
+                portfolios={portfolios}
+                portfolioMode={activeWorkspace?.portfolioMode}
+                workspaceCurrencyRates={workspaceCurrencyRates}
+                baseCurrency={activeWorkspace?.baseCurrency}
+                portfolioHoldings={portfolioHoldings}
+                portfolioPriceHistory={portfolioPriceHistory}
+                portfolioContributions={portfolioContributions}
+                portfolioWithdrawals={portfolioWithdrawals}
+                portfolioDividends={portfolioDividends}
+                addPortfolioDividend={addPortfolioDividend}
+                deletePortfolioDividend={deletePortfolioDividend}
+                portfolioFees={portfolioFees}
+                addPortfolioFee={addPortfolioFee}
+                deletePortfolioFee={deletePortfolioFee}
+                portfolioSplits={portfolioSplits}
+                portfolioCashBalances={portfolioCashBalances}
+                portfolioSnapshots={portfolioSnapshots}
+                takePortfolioSnapshot={takePortfolioSnapshot}
+                deletePortfolioSnapshotBatch={deletePortfolioSnapshotBatch}
+                mfHoldingsCache={mfHoldingsCache}
+                loadMfHoldingsCache={loadMfHoldingsCache}
               />
+              )
+            ) : activeTab === 'income' ? (
+              uiPulse ? (
+                <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
+                  <PulseIncome
+                    incomeSources={incomeSources}
+                    incomeMode={incomeMode}
+                    monthlyIncome={monthlyIncome}
+                    summaryCurrency={summaryCurrency}
+                    countries={countries}
+                    payments={payments}
+                    history={history}
+                    addIncomeSource={addIncomeSource}
+                    deleteIncomeSource={deleteIncomeSource}
+                    updateIncomeMode={updateIncomeMode}
+                    updateMonthlyIncome={updateMonthlyIncome}
+                    isReadOnly={isReadOnly}
+                  />
+                </div>
+              ) : (
+                <IncomeView
+                  incomeSources={incomeSources}
+                  incomeMode={incomeMode}
+                  monthlyIncome={monthlyIncome}
+                  summaryCurrency={summaryCurrency}
+                  countries={countries}
+                  payments={payments}
+                  history={history}
+                  addIncomeSource={addIncomeSource}
+                  deleteIncomeSource={deleteIncomeSource}
+                  updateIncomeMode={updateIncomeMode}
+                  updateMonthlyIncome={updateMonthlyIncome}
+                  isReadOnly={isReadOnly}
+                />
+              )
             ) : activeTab === 'admin_users' && userProfile?.isSuperAdmin ? (
               <AdminUsersView
                 fetchAllUsersForAdmin={fetchAllUsersForAdmin}
@@ -2020,15 +2112,29 @@ export default function App() {
                 currentUserId={user?.id}
               />
             ) : activeTab === 'history' && hasFeature('core') ? (
-              <PaymentHistoryView 
-                history={history}
-                onDeleteHistoryEntry={deleteHistoryEntry}
-                onUpdateHistoryStatus={updateHistoryStatus}
-                onClearHistory={clearHistory}
-                rate={rate}
-                summaryCurrency={summaryCurrency}
-                countries={countries}
-              />
+              uiPulse ? (
+                <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
+                  <PulseHistory
+                    history={history}
+                    onDeleteHistoryEntry={deleteHistoryEntry}
+                    onUpdateHistoryStatus={updateHistoryStatus}
+                    onClearHistory={clearHistory}
+                    rate={rate}
+                    summaryCurrency={summaryCurrency}
+                    countries={countries}
+                  />
+                </div>
+              ) : (
+                <PaymentHistoryView 
+                  history={history}
+                  onDeleteHistoryEntry={deleteHistoryEntry}
+                  onUpdateHistoryStatus={updateHistoryStatus}
+                  onClearHistory={clearHistory}
+                  rate={rate}
+                  summaryCurrency={summaryCurrency}
+                  countries={countries}
+                />
+              )
             ) : (
               <div className="flex-1 flex items-center justify-center p-8 text-center">
                 <p className="text-sm text-slate-400">This page isn't available on your current plan.</p>
