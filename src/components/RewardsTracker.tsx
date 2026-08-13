@@ -31,6 +31,7 @@ import {
 import { RewardPerk, GiftCard, giftCardStatus } from '../types';
 
 interface RewardsTrackerProps {
+  pulseMode?: boolean;
   rewardsPerks: RewardPerk[];
   onAddReward: (perk: Omit<RewardPerk, 'id' | 'userId' | 'familyGroupId' | 'workspaceMode'>) => Promise<void>;
   onUpdateReward: (id: string, updates: Partial<Omit<RewardPerk, 'id' | 'userId'>>) => Promise<void>;
@@ -53,6 +54,7 @@ const DEFAULT_POINTS_CONVERSION_RATES: Record<string, number> = {
 };
 
 export default function RewardsTracker({
+  pulseMode = false,
   rewardsPerks,
   onAddReward,
   onUpdateReward,
@@ -539,8 +541,32 @@ export default function RewardsTracker({
   }, [calcProgram, calcPoints, calcCustomRate, pointRates]);
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-6 text-left bg-slate-50 dark:bg-slate-900">
+    <div className={`flex-1 flex flex-col overflow-y-auto px-3 sm:px-5 pt-3 sm:pt-4 pb-24 md:pb-4 space-y-5 text-left ${pulseMode ? 'bg-slate-50 dark:bg-slate-950' : 'bg-slate-50 dark:bg-slate-900'}`}>
       {/* Title Header with action button */}
+      {pulseMode ? (
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-violet-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-violet-950/20 p-3 sm:p-3.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Gift className="w-5 h-5 text-violet-500 shrink-0" />
+                <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">Membership Hub</h2>
+                <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-violet-600/90 text-white">Pulse</span>
+              </div>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">Rewards, cooling periods, gift cards</p>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {!isReadOnly && (
+                <button type="button" onClick={handleOpenAdd} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold bg-indigo-600 text-white cursor-pointer">
+                  <Plus className="w-3.5 h-3.5" /> Log reward
+                </button>
+              )}
+              <button type="button" onClick={toggleInstructions} className="p-1.5 rounded-full border border-slate-200 dark:border-slate-800 cursor-pointer">
+                <HelpCircle className={`w-3.5 h-3.5 ${showInstructions ? 'text-indigo-500' : 'text-slate-400'}`} />
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -568,8 +594,33 @@ export default function RewardsTracker({
           </button>
         </div>
       </div>
+      )}
 
       {/* Tracker Menu Tabs */}
+      {pulseMode ? (
+        <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-violet-500/80 dark:text-violet-400/80 w-10">View</span>
+          <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-violet-100/80 dark:bg-violet-950/50 border border-violet-200/60 dark:border-violet-900/60">
+            {([
+              ['trackers', 'Trackers'],
+              ['analytics', 'Analytics'],
+              ['calculator', 'Calculator'],
+              ['gift_cards', 'Gift cards'],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTrackerTab(id)}
+                className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
+                  trackerTab === id ? 'bg-violet-600 text-white shadow-md shadow-violet-600/25' : 'text-violet-700/70 dark:text-violet-300/70'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
       <div className="flex border-b border-slate-150 dark:border-slate-800 gap-1 pb-px">
         <button
           onClick={() => setTrackerTab('trackers')}
@@ -612,6 +663,8 @@ export default function RewardsTracker({
           Gift Cards
         </button>
       </div>
+
+      )}
 
       {/* TAB 1: TRACKERS & EXCLUSION DATES */}
       {trackerTab === 'trackers' && (
