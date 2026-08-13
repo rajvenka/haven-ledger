@@ -223,6 +223,21 @@ export default function RewardsTracker({
     setIsModalOpen(true);
   };
 
+  const handleCloneGiftCard = (card: GiftCard) => {
+    setEditingGiftCardId(null);
+    setShowAddGiftCard(true);
+    setGiftCardError(null);
+    setGiftCardForm({
+      brand: card.brand || '',
+      initialValue: String(card.initialValue ?? card.remainingBalance ?? ''),
+      currency: card.currency || 'AUD',
+      purchaseDate: new Date().toISOString().slice(0, 10),
+      expiryDate: card.expiryDate || '',
+      cardLast4: '',
+      notes: card.notes || '',
+    });
+  };
+
   // Clone: same form, pre-filled, but treated as a brand new entry (no editingPerk set)
   const handleClone = (perk: RewardPerk) => {
     setEditingPerk(null);
@@ -1528,10 +1543,17 @@ export default function RewardsTracker({
                                   });
                                 }}
                                 className="text-white/70 hover:text-white cursor-pointer"
+                                title="Edit"
                               ><Edit2 className="w-3.5 h-3.5" /></button>
+                              <button
+                                onClick={() => handleCloneGiftCard(card)}
+                                className="text-white/70 hover:text-white cursor-pointer"
+                                title="Clone — same card again"
+                              ><Copy className="w-3.5 h-3.5" /></button>
                               <button
                                 onClick={async () => { if (confirm(`Delete ${card.brand} gift card?`)) { try { await onDeleteGiftCard(card.id); } catch (err: any) { setGiftCardError(err.message); } } }}
                                 className="text-white/70 hover:text-white cursor-pointer"
+                                title="Delete"
                               ><Trash2 className="w-3.5 h-3.5" /></button>
                             </div>
                           )}
