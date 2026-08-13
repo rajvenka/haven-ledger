@@ -392,6 +392,7 @@ export default function PortfolioV1View({
   const [pnlCalendarRows, setPnlCalendarRows] = useState<any[]>([]);
   const [pnlCalendarLoading, setPnlCalendarLoading] = useState(false);
   const [pnlCalendarCcy, setPnlCalendarCcy] = useState<string>(String(baseCurrency || 'INR').toUpperCase());
+  const [pnlCalendarPortfolioId, setPnlCalendarPortfolioId] = useState<string>('all');
 
   const [viewCurrency, setViewCurrency] = useState<string>(() => {
     try {
@@ -1198,6 +1199,16 @@ export default function PortfolioV1View({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showPnlCalendar, portfolioFilter]);
 
+  // Keep calendar book chip in sync with main Book filter when a specific book is selected
+  useEffect(() => {
+    if (portfolioFilter && portfolioFilter !== 'All' && portfolioFilter !== '__pending__') {
+      setPnlCalendarPortfolioId(String(portfolioFilter));
+      const book = (portfolios || []).find((p: any) => String(p.id) === String(portfolioFilter));
+      const ccy = String(book?.currency || '').toUpperCase();
+      if (ccy) setPnlCalendarCcy(ccy);
+    }
+  }, [portfolioFilter, portfolios]);
+
   const toggleCategory = (id: CategoryId) => {
     if (categoryFilter === id && expandedCategory === id) {
       setCategoryFilter('All');
@@ -1549,9 +1560,23 @@ export default function PortfolioV1View({
             ]))}
             selectedCurrency={pnlCalendarCcy}
             onCurrencyChange={setPnlCalendarCcy}
+            portfolios={(portfolios || []).map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              currency: p.currency,
+            }))}
+            selectedPortfolioId={pnlCalendarPortfolioId}
+            onPortfolioChange={(id) => {
+              setPnlCalendarPortfolioId(id);
+              if (id !== 'all') {
+                const book = (portfolios || []).find((p: any) => p.id === id);
+                const ccy = String(book?.currency || '').toUpperCase();
+                if (ccy) setPnlCalendarCcy(ccy);
+              }
+            }}
             portfolioLabel={
-              portfolioFilter !== 'All' && portfolioFilter !== '__pending__'
-                ? (portfolios || []).find((p: any) => p.id === portfolioFilter)?.name
+              pnlCalendarPortfolioId !== 'all'
+                ? (portfolios || []).find((p: any) => p.id === pnlCalendarPortfolioId)?.name
                 : undefined
             }
             canSnapshot={!isReadOnly}
