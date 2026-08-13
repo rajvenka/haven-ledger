@@ -93,7 +93,7 @@ export default function PulseMembership({
   }, [giftCards, search]);
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 w-full max-w-full overflow-hidden">
+    <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-left w-full max-w-full">
       <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 space-y-2">
         <div className="flex items-center justify-between gap-2">
           <div>
