@@ -99,47 +99,67 @@ export default function PulseInvestment(props: any) {
 
   return (
     <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-left w-full max-w-full">
-      <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-              Investment plan
-              <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-violet-600 text-white">
-                Pulse
-              </span>
-            </h1>
-            <p className="text-[10px] text-slate-400 font-bold">
-              In {money(contribTotal)} · Out {money(withTotal)} · Net {money(contribTotal - withTotal)}
-            </p>
+      <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 space-y-3">
+        <div className="rounded-2xl bg-indigo-600 text-white p-4 shadow-lg shadow-indigo-600/30">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-100">Pulse · Plan</p>
+              <h1 className="text-xl font-black tracking-tight">Investment plan</h1>
+              <p className="text-[11px] font-semibold text-indigo-100/95 mt-1">
+                In {money(contribTotal)} · Out {money(withTotal)} · Net {money(contribTotal - withTotal)}
+              </p>
+            </div>
+            {!isReadOnly && (
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="inline-flex items-center gap-1 px-3 py-2 rounded-xl text-[11px] font-black bg-white text-indigo-700 shadow-md"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add
+              </button>
+            )}
           </div>
-          {!isReadOnly && (
-            <button
-              type="button"
-              onClick={() => setOpen(true)}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold bg-indigo-600 text-white"
-            >
-              <Plus className="w-3.5 h-3.5" /> Add
-            </button>
-          )}
         </div>
-        <div className="flex gap-1 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+
+        <div className="grid grid-cols-3 gap-2">
+          <div className="rounded-xl border-2 border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 p-2.5 text-center">
+            <p className="text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-300">In</p>
+            <p className="text-[13px] font-black text-emerald-800 dark:text-emerald-200 tabular-nums">{money(contribTotal)}</p>
+          </div>
+          <div className="rounded-xl border-2 border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 p-2.5 text-center">
+            <p className="text-[9px] font-black uppercase text-rose-700 dark:text-rose-300">Out</p>
+            <p className="text-[13px] font-black text-rose-800 dark:text-rose-200 tabular-nums">{money(withTotal)}</p>
+          </div>
+          <div className="rounded-xl border-2 border-indigo-300 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40 p-2.5 text-center">
+            <p className="text-[9px] font-black uppercase text-indigo-700 dark:text-indigo-300">Net</p>
+            <p className="text-[13px] font-black text-indigo-800 dark:text-indigo-200 tabular-nums">{money(contribTotal - withTotal)}</p>
+          </div>
+        </div>
+
+        <div className="flex gap-1 p-1 rounded-2xl bg-indigo-100 dark:bg-indigo-950/60 border-2 border-indigo-300 dark:border-indigo-700">
           {(
             [
-              ['contributions', 'Contributions', TrendingUp],
-              ['withdrawals', 'Withdrawals', TrendingDown],
-              ['recurring', 'Recurring', Repeat],
+              ['contributions', 'Contributions', TrendingUp, 'emerald'],
+              ['withdrawals', 'Withdrawals', TrendingDown, 'rose'],
+              ['recurring', 'Recurring', Repeat, 'violet'],
             ] as const
-          ).map(([id, label, Icon]) => (
+          ).map(([id, label, Icon, tone]) => (
             <button
               key={id}
               type="button"
               onClick={() => setTab(id)}
-              className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                tab === id ? 'bg-violet-600 text-white' : 'bg-white dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-800'
+              className={`flex-1 inline-flex items-center justify-center gap-1 py-2.5 rounded-xl text-[11px] font-black transition-all ${
+                tab === id
+                  ? id === 'contributions'
+                    ? 'bg-emerald-600 text-white shadow-md'
+                    : id === 'withdrawals'
+                      ? 'bg-rose-600 text-white shadow-md'
+                      : 'bg-violet-600 text-white shadow-md'
+                  : 'text-indigo-900 dark:text-indigo-100'
               }`}
             >
-              <Icon className="w-3 h-3" />
-              {label}
+              <Icon className="w-3.5 h-3.5" />
+              <span className="hidden xs:inline sm:inline">{label}</span>
             </button>
           ))}
         </div>
