@@ -235,7 +235,7 @@ export default function PulseBills({
   };
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 w-full max-w-full overflow-hidden">
+    <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-left w-full max-w-full">
       {/* Header */}
       <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 space-y-2">
         <div className="flex items-center justify-between gap-2">
@@ -439,7 +439,10 @@ export default function PulseBills({
                       const expanded = expandedId === p.id;
                       const hist = showFrequencyPatterns ? getHistoryStats(p.id) : null;
                       const ro = isPaymentReadOnly(p);
-                      const catColor = getCategoryColor?.(p.category) || '#6366f1';
+                      const catMeta = typeof getCategoryColor === 'function' ? getCategoryColor(p.category) : null;
+                      const catColor =
+                        (typeof catMeta === 'string' ? catMeta : (catMeta as any)?.iconBg || (catMeta as any)?.bg) ||
+                        '#6366f1';
                       return (
                         <li key={p.id} className={`${!p.active ? 'opacity-55' : ''}`}>
                           <div className="flex items-center gap-2 px-3 py-2.5">
