@@ -28,13 +28,18 @@ import {
   Coins,
   ShieldCheck
 } from 'lucide-react';
-import { RewardPerk } from '../types';
+import { RewardPerk, GiftCard, giftCardStatus } from '../types';
 
 interface RewardsTrackerProps {
   rewardsPerks: RewardPerk[];
   onAddReward: (perk: Omit<RewardPerk, 'id' | 'userId' | 'familyGroupId' | 'workspaceMode'>) => Promise<void>;
   onUpdateReward: (id: string, updates: Partial<Omit<RewardPerk, 'id' | 'userId'>>) => Promise<void>;
   onDeleteReward: (id: string) => Promise<void>;
+  giftCards: GiftCard[];
+  onAddGiftCard: (card: Omit<GiftCard, 'id' | 'userId' | 'workspaceId'>) => Promise<void>;
+  onUpdateGiftCard: (id: string, updates: Partial<Omit<GiftCard, 'id' | 'userId' | 'workspaceId'>>) => Promise<void>;
+  onRedeemGiftCard: (id: string, amountUsed: number) => Promise<void>;
+  onDeleteGiftCard: (id: string) => Promise<void>;
   isReadOnly?: boolean;
 }
 
@@ -52,10 +57,39 @@ export default function RewardsTracker({
   onAddReward,
   onUpdateReward,
   onDeleteReward,
+  giftCards,
+  onAddGiftCard,
+  onUpdateGiftCard,
+  onRedeemGiftCard,
+  onDeleteGiftCard,
   isReadOnly = false
 }: RewardsTrackerProps) {
   // Main Navigation Tabs inside Tracker
-  const [trackerTab, setTrackerTab] = useState<'trackers' | 'analytics' | 'calculator'>('trackers');
+  const [trackerTab, setTrackerTab] = useState<'trackers' | 'analytics' | 'calculator' | 'gift_cards'>('trackers');
+
+  // ---- Gift Card Tracker state ----
+  const [showAddGiftCard, setShowAddGiftCard] = useState(false);
+  const [editingGiftCardId, setEditingGiftCardId] = useState<string | null>(null);
+  const [giftCardFilter, setGiftCardFilter] = useState<'active' | 'used' | 'expired' | 'all'>('active');
+  const [giftCardForm, setGiftCardForm] = useState({
+    brand: '', initialValue: '', currency: 'AUD', purchaseDate: '', expiryDate: '', cardLast4: '', notes: '',
+  });
+  // Tracks which card has its inline "use $__" input open, and what's typed into it - keyed
+  // by card id so multiple tiles can't interfere with each other.
+  const [redeemInputFor, setRedeemInputFor] = useState<string | null>(null);
+  const [redeemAmount, setRedeemAmount] = useState('');
+  const [giftCardError, setGiftCardError] = useState<string | null>(null);
+  const GIFT_CARD_PALETTE = [
+    'from-violet-500 to-purple-600', 'from-blue-500 to-indigo-600', 'from-emerald-500 to-teal-600',
+    'from-amber-500 to-orange-600', 'from-rose-500 to-pink-600', 'from-cyan-500 to-blue-600',
+    'from-fuchsia-500 to-purple-600', 'from-lime-500 to-emerald-600',
+  ];
+  function giftCardGradient(brand: string) {
+    let hash = 0;
+    for (let i = 0; i < brand.length; i++) hash = brand.charCodeAt(i) + ((hash << 5) - hash);
+    return GIFT_CARD_PALETTE[Math.abs(hash) % GIFT_CARD_PALETTE.length];
+  }
+
   const [viewStyle, setViewStyle] = useState<'card' | 'compact'>(() => {
     return (localStorage.getItem('rewards_view_style') as 'card' | 'compact') || 'card';
   });
@@ -551,6 +585,16 @@ export default function RewardsTracker({
           }`}
         >
           Points to Cash Calculator
+        </button>
+        <button
+          onClick={() => setTrackerTab('gift_cards')}
+          className={`px-4.5 py-3 text-xs font-bold transition-all relative ${
+            trackerTab === 'gift_cards'
+              ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 dark:border-indigo-400'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
+          }`}
+        >
+          Gift Cards
         </button>
       </div>
 
@@ -1384,6 +1428,274 @@ export default function RewardsTracker({
           </div>
         </div>
       )}
+
+      {/* TAB 4: GIFT CARDS */}
+      {trackerTab === 'gift_cards' && (() => {
+        const filtered = giftCards.filter(c => giftCardFilter === 'all' ? true : giftCardStatus(c) === giftCardFilter);
+        const activeCards = giftCards.filter(c => giftCardStatus(c) === 'active');
+        const totalsByCurrency: Record<string, number> = {};
+        activeCards.forEach(c => { totalsByCurrency[c.currency] = (totalsByCurrency[c.currency] || 0) + c.remainingBalance; });
+        const expiringSoon = activeCards.filter(c => {
+          if (!c.expiryDate) return false;
+          const days = (new Date(c.expiryDate).getTime() - Date.now()) / 86400000;
+          return days >= 0 && days <= 30;
+        });
+        const counts = {
+          active: giftCards.filter(c => giftCardStatus(c) === 'active').length,
+          used: giftCards.filter(c => giftCardStatus(c) === 'used').length,
+          expired: giftCards.filter(c => giftCardStatus(c) === 'expired').length,
+          all: giftCards.length,
+        };
+        const editing = editingGiftCardId ? giftCards.find(c => c.id === editingGiftCardId) : null;
+
+        const resetForm = () => setGiftCardForm({ brand: '', initialValue: '', currency: 'AUD', purchaseDate: '', expiryDate: '', cardLast4: '', notes: '' });
+
+        return (
+          <div className="space-y-5">
+            {/* Summary strip - the "how much free money is still sitting unused" number, up front */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white">
+                <p className="text-[10px] font-bold uppercase tracking-wide opacity-80">Unused Balance</p>
+                <p className="text-lg font-black mt-1">
+                  {Object.keys(totalsByCurrency).length === 0
+                    ? '—'
+                    : Object.entries(totalsByCurrency).map(([ccy, amt]) => `${ccy} ${amt.toLocaleString(undefined, { maximumFractionDigits: 0 })}`).join(' · ')}
+                </p>
+                <p className="text-[10px] opacity-80 mt-0.5">{activeCards.length} card{activeCards.length !== 1 ? 's' : ''} unused</p>
+              </div>
+              <div className={`p-3.5 rounded-2xl ${expiringSoon.length > 0 ? 'bg-gradient-to-br from-amber-500 to-orange-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+                <p className="text-[10px] font-bold uppercase tracking-wide opacity-80">Expiring Soon</p>
+                <p className="text-lg font-black mt-1">{expiringSoon.length}</p>
+                <p className="text-[10px] opacity-80 mt-0.5">within 30 days</p>
+              </div>
+              {!isReadOnly && (
+                <button
+                  onClick={() => { setShowAddGiftCard(true); setEditingGiftCardId(null); resetForm(); }}
+                  className="p-3.5 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 text-slate-400 hover:text-indigo-500 hover:border-indigo-400 transition-all flex flex-col items-center justify-center gap-1"
+                >
+                  <Plus className="w-5 h-5" />
+                  <span className="text-[10px] font-bold">Add Gift Card</span>
+                </button>
+              )}
+            </div>
+
+            {/* Filter chips */}
+            <div className="flex gap-1.5">
+              {(['active', 'used', 'expired', 'all'] as const).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setGiftCardFilter(f)}
+                  className={`px-3 py-1.5 rounded-full text-[10px] font-bold capitalize transition-all ${
+                    giftCardFilter === f ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                  }`}
+                >
+                  {f} ({counts[f]})
+                </button>
+              ))}
+            </div>
+
+            {giftCardError && <p className="text-xs text-rose-500 font-semibold">{giftCardError}</p>}
+
+            {/* Card grid */}
+            {filtered.length === 0 ? (
+              <div className="text-center py-10 text-slate-400">
+                <Gift className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                <p className="text-xs font-semibold">No {giftCardFilter !== 'all' ? giftCardFilter : ''} gift cards yet.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {filtered.map(card => {
+                  const status = giftCardStatus(card);
+                  const pct = card.initialValue > 0 ? Math.max(0, Math.min(100, (card.remainingBalance / card.initialValue) * 100)) : 0;
+                  const daysToExpiry = card.expiryDate ? Math.ceil((new Date(card.expiryDate).getTime() - Date.now()) / 86400000) : null;
+                  return (
+                    <div key={card.id} className={`rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 ${status !== 'active' ? 'opacity-60' : ''}`}>
+                      <div className={`bg-gradient-to-br ${giftCardGradient(card.brand)} p-3.5 text-white relative`}>
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="text-xs font-black">{card.brand}</p>
+                            {card.cardLast4 && <p className="text-[9px] opacity-70 mt-0.5">•••• {card.cardLast4}</p>}
+                          </div>
+                          {!isReadOnly && (
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => {
+                                  setEditingGiftCardId(card.id);
+                                  setShowAddGiftCard(true);
+                                  setGiftCardForm({
+                                    brand: card.brand, initialValue: String(card.initialValue), currency: card.currency,
+                                    purchaseDate: card.purchaseDate || '', expiryDate: card.expiryDate || '', cardLast4: card.cardLast4 || '', notes: card.notes || '',
+                                  });
+                                }}
+                                className="text-white/70 hover:text-white cursor-pointer"
+                              ><Edit2 className="w-3.5 h-3.5" /></button>
+                              <button
+                                onClick={async () => { if (confirm(`Delete ${card.brand} gift card?`)) { try { await onDeleteGiftCard(card.id); } catch (err: any) { setGiftCardError(err.message); } } }}
+                                className="text-white/70 hover:text-white cursor-pointer"
+                              ><Trash2 className="w-3.5 h-3.5" /></button>
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-xl font-black mt-3 tabular-nums">
+                          {card.currency} {card.remainingBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                        </p>
+                        <p className="text-[9px] opacity-70">of {card.currency} {card.initialValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                        <div className="mt-2 h-1.5 bg-white/25 rounded-full overflow-hidden">
+                          <div className="h-full bg-white rounded-full transition-all" style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                      <div className="p-2.5 bg-white dark:bg-slate-900 space-y-1.5">
+                        {status === 'used' && <p className="text-[10px] font-bold text-slate-400 flex items-center gap-1"><Check className="w-3 h-3" /> Fully used</p>}
+                        {status === 'expired' && <p className="text-[10px] font-bold text-rose-500 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Expired {card.expiryDate}</p>}
+                        {status === 'active' && daysToExpiry != null && (
+                          <p className={`text-[10px] font-bold flex items-center gap-1 ${daysToExpiry <= 30 ? 'text-amber-600' : 'text-slate-400'}`}>
+                            <Clock className="w-3 h-3" /> Expires in {daysToExpiry}d
+                          </p>
+                        )}
+                        {card.notes && <p className="text-[10px] text-slate-400 truncate">{card.notes}</p>}
+
+                        {status === 'active' && !isReadOnly && (
+                          redeemInputFor === card.id ? (
+                            <div className="flex items-center gap-1 pt-1">
+                              <input
+                                type="number"
+                                autoFocus
+                                placeholder="Amount used"
+                                value={redeemAmount}
+                                onChange={(e) => setRedeemAmount(e.target.value)}
+                                className="flex-1 px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-[11px] w-0"
+                              />
+                              <button
+                                onClick={async () => {
+                                  const amt = parseFloat(redeemAmount);
+                                  if (!amt || amt <= 0) return;
+                                  try {
+                                    await onRedeemGiftCard(card.id, amt);
+                                    setRedeemInputFor(null);
+                                    setRedeemAmount('');
+                                  } catch (err: any) { setGiftCardError(err.message); }
+                                }}
+                                className="p-1.5 bg-indigo-600 text-white rounded-md cursor-pointer shrink-0"
+                              ><Check className="w-3 h-3" /></button>
+                              <button onClick={() => { setRedeemInputFor(null); setRedeemAmount(''); }} className="p-1.5 text-slate-400 cursor-pointer shrink-0"><X className="w-3 h-3" /></button>
+                            </div>
+                          ) : (
+                            <div className="flex gap-1.5 pt-1">
+                              <button
+                                onClick={async () => { try { await onRedeemGiftCard(card.id, card.remainingBalance); } catch (err: any) { setGiftCardError(err.message); } }}
+                                className="flex-1 px-2 py-1.5 bg-slate-900 dark:bg-white text-white dark:text-slate-950 rounded-lg text-[10px] font-bold cursor-pointer"
+                              >
+                                Mark Used
+                              </button>
+                              <button
+                                onClick={() => { setRedeemInputFor(card.id); setRedeemAmount(''); }}
+                                className="px-2 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-lg text-[10px] font-bold cursor-pointer"
+                              >
+                                Use partial
+                              </button>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Add / Edit Gift Card modal */}
+            {showAddGiftCard && (
+              <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowAddGiftCard(false)}>
+                <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 w-full max-w-sm space-y-3" onClick={(e) => e.stopPropagation()}>
+                  <p className="text-sm font-black text-slate-900 dark:text-white">{editing ? 'Edit Gift Card' : 'Add Gift Card'}</p>
+                  <input
+                    type="text" placeholder="Brand (e.g. Amazon, Myer)" value={giftCardForm.brand}
+                    onChange={(e) => setGiftCardForm(f => ({ ...f, brand: e.target.value }))}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="number" placeholder="Value" value={giftCardForm.initialValue}
+                      onChange={(e) => setGiftCardForm(f => ({ ...f, initialValue: e.target.value }))}
+                      className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs w-0"
+                    />
+                    <select
+                      value={giftCardForm.currency}
+                      onChange={(e) => setGiftCardForm(f => ({ ...f, currency: e.target.value }))}
+                      className="px-2 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold"
+                    >
+                      {['AUD', 'USD', 'INR', 'EUR', 'GBP', 'SGD'].map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase">Purchased</label>
+                      <input
+                        type="date" value={giftCardForm.purchaseDate}
+                        onChange={(e) => setGiftCardForm(f => ({ ...f, purchaseDate: e.target.value }))}
+                        className="w-full px-2 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase">Expires</label>
+                      <input
+                        type="date" value={giftCardForm.expiryDate}
+                        onChange={(e) => setGiftCardForm(f => ({ ...f, expiryDate: e.target.value }))}
+                        className="w-full px-2 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                      />
+                    </div>
+                  </div>
+                  <input
+                    type="text" placeholder="Last 4 digits (optional)" maxLength={4} value={giftCardForm.cardLast4}
+                    onChange={(e) => setGiftCardForm(f => ({ ...f, cardLast4: e.target.value }))}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                  />
+                  <input
+                    type="text" placeholder="Notes (optional)" value={giftCardForm.notes}
+                    onChange={(e) => setGiftCardForm(f => ({ ...f, notes: e.target.value }))}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                  />
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={() => { setShowAddGiftCard(false); setEditingGiftCardId(null); }} className="flex-1 px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-lg text-xs font-bold cursor-pointer">
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const value = parseFloat(giftCardForm.initialValue);
+                        if (!giftCardForm.brand.trim() || !value || value <= 0) { setGiftCardError('Enter a brand and a value greater than 0.'); return; }
+                        setGiftCardError(null);
+                        try {
+                          if (editing) {
+                            await onUpdateGiftCard(editing.id, {
+                              brand: giftCardForm.brand.trim(), initialValue: value, currency: giftCardForm.currency,
+                              purchaseDate: giftCardForm.purchaseDate || undefined, expiryDate: giftCardForm.expiryDate || undefined,
+                              cardLast4: giftCardForm.cardLast4 || undefined, notes: giftCardForm.notes || undefined,
+                            });
+                          } else {
+                            await onAddGiftCard({
+                              brand: giftCardForm.brand.trim(), initialValue: value, remainingBalance: value, currency: giftCardForm.currency,
+                              purchaseDate: giftCardForm.purchaseDate || undefined, expiryDate: giftCardForm.expiryDate || undefined,
+                              cardLast4: giftCardForm.cardLast4 || undefined, notes: giftCardForm.notes || undefined,
+                            });
+                          }
+                          setShowAddGiftCard(false);
+                          setEditingGiftCardId(null);
+                          resetForm();
+                        } catch (err: any) {
+                          setGiftCardError(err.message || 'Failed to save gift card.');
+                        }
+                      }}
+                      className="flex-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold cursor-pointer"
+                    >
+                      {editing ? 'Save' : 'Add Card'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Form Dialog Modal */}
       {isModalOpen && (

@@ -111,6 +111,26 @@ export interface RewardPerk {
   familyGroupId?: string;
 }
 
+export interface GiftCard {
+  id: string;
+  brand: string;
+  initialValue: number;
+  remainingBalance: number;
+  currency: string;
+  purchaseDate?: string;
+  expiryDate?: string;
+  cardLast4?: string;
+  notes?: string;
+  userId?: string;
+  workspaceId?: string;
+}
+
+export function giftCardStatus(card: GiftCard): 'used' | 'expired' | 'active' {
+  if (card.remainingBalance <= 0) return 'used';
+  if (card.expiryDate && new Date(card.expiryDate) < new Date(new Date().toDateString())) return 'expired';
+  return 'active';
+}
+
 export function getCategoryLabel(category: string, mode: 'family' | 'business' = 'family'): string {
   if (mode === 'family') return category;
   const businessLabels: Record<string, string> = {

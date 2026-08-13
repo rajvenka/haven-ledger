@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { RecurringPayment, PaymentHistory, AppNotification, Currency, UserProfile, CountryConfig, FamilyInvitation, RewardPerk, Workspace, IncomeSource } from '../types';
+import { RecurringPayment, PaymentHistory, AppNotification, Currency, UserProfile, CountryConfig, FamilyInvitation, RewardPerk, GiftCard, Workspace, IncomeSource } from '../types';
 import { INITIAL_COUNTRIES } from '../utils/paymentUtils';
 
 function rowToPayment(r: any): RecurringPayment {
@@ -44,6 +44,14 @@ function rowToReward(r: any): RewardPerk {
   };
 }
 
+function rowToGiftCard(r: any): GiftCard {
+  return {
+    id: r.id, brand: r.brand, initialValue: Number(r.initial_value ?? 0), remainingBalance: Number(r.remaining_balance ?? 0),
+    currency: r.currency ?? 'AUD', purchaseDate: r.purchase_date ?? undefined, expiryDate: r.expiry_date ?? undefined,
+    cardLast4: r.card_last4 ?? undefined, notes: r.notes ?? undefined, userId: r.user_id, workspaceId: r.workspace_id ?? undefined,
+  };
+}
+
 export function usePaymentState() {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -69,6 +77,7 @@ export function usePaymentState() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [familyMessages, setFamilyMessages] = useState<any[]>([]);
   const [rewardsPerks, setRewardsPerks] = useState<RewardPerk[]>([]);
+  const [giftCards, setGiftCards] = useState<GiftCard[]>([]);
   const [appNotificationsEnabled, setAppNotificationsEnabled] = useState(true);
   const [mobileNotificationsEnabled, setMobileNotificationsEnabled] = useState(true);
 
@@ -251,12 +260,13 @@ export function usePaymentState() {
     const wsId = overrideWsId !== undefined ? overrideWsId : activeWorkspaceId;
     const gen = ++paymentsLoadGen.current;
     const wsFilter = wsId ? `workspace_id.eq.${wsId}` : `user_id.eq.${user.id},workspace_id.is.null`;
-    const [{ data: pays }, { data: hist }, { data: cts }, { data: notifs }, { data: rewards }] = await Promise.all([
+    const [{ data: pays }, { data: hist }, { data: cts }, { data: notifs }, { data: rewards }, { data: giftCardRows }] = await Promise.all([
       supabase.from('recurring_payments').select('*').or(wsFilter).order('sort_order', { ascending: true, nullsFirst: false }),
       supabase.from('payment_history').select('*').or(wsFilter).order('paid_date', { ascending: false }),
       supabase.from('countries').select('*').or(wsFilter),
       supabase.from('app_notifications').select('*').eq('user_id', user.id).order('date', { ascending: false }).limit(50),
       supabase.from('reward_perks').select('*').or(wsFilter).order('application_date', { ascending: false }),
+      supabase.from('gift_cards').select('*').or(wsFilter).order('created_at', { ascending: false }),
     ]);
     if (gen !== paymentsLoadGen.current) return; // stale — user switched workspace mid-fetch
     const scopeRows = (rows: any[] | null | undefined) =>
@@ -265,6 +275,7 @@ export function usePaymentState() {
     setAllHistory(scopeRows(hist).map(rowToHistory));
     const scopedCts = scopeRows(cts);
     const scopedRewards = scopeRows(rewards);
+    const scopedGiftCards = scopeRows(giftCardRows);
     if (scopedCts.length > 0) {
       setCountries(scopedCts.map(rowToCountry));
     } else if ((cts ?? []).length === 0) {
@@ -277,6 +288,7 @@ export function usePaymentState() {
     }
     setNotifications((notifs ?? []).map(rowToNotification));
     setRewardsPerks(scopedRewards.map(rowToReward));
+    setGiftCards(scopedGiftCards.map(rowToGiftCard));
   }, [user, activeWorkspaceId]);
 
   useEffect(() => { if (isLoaded) reloadData(); }, [isLoaded, activeWorkspaceId, reloadData]);
@@ -977,6 +989,50 @@ export function usePaymentState() {
 
   const deleteReward = async (id: string) => {
     const { error } = await supabase.from('reward_perks').delete().eq('id', id);
+    if (error) throw error;
+    await reloadData();
+  };
+
+  // ---------- Gift Card Tracker (lives under Rewards) ----------
+  const addGiftCard = async (card: Omit<GiftCard, 'id' | 'userId' | 'workspaceId'>) => {
+    if (!user) return;
+    const { error } = await supabase.from('gift_cards').insert({
+      brand: card.brand, initial_value: card.initialValue, remaining_balance: card.remainingBalance,
+      currency: card.currency, purchase_date: card.purchaseDate ?? null, expiry_date: card.expiryDate ?? null,
+      card_last4: card.cardLast4 ?? null, notes: card.notes ?? null,
+      user_id: user.id, workspace_id: activeWorkspaceId,
+    });
+    if (error) throw error;
+    await reloadData();
+  };
+
+  const updateGiftCard = async (id: string, updates: Partial<Omit<GiftCard, 'id' | 'userId' | 'workspaceId'>>) => {
+    const row: any = { updated_at: new Date().toISOString() };
+    if (updates.brand !== undefined) row.brand = updates.brand;
+    if (updates.initialValue !== undefined) row.initial_value = updates.initialValue;
+    if (updates.remainingBalance !== undefined) row.remaining_balance = updates.remainingBalance;
+    if (updates.currency !== undefined) row.currency = updates.currency;
+    if (updates.purchaseDate !== undefined) row.purchase_date = updates.purchaseDate;
+    if (updates.expiryDate !== undefined) row.expiry_date = updates.expiryDate;
+    if (updates.cardLast4 !== undefined) row.card_last4 = updates.cardLast4;
+    if (updates.notes !== undefined) row.notes = updates.notes;
+    const { error } = await supabase.from('gift_cards').update(row).eq('id', id);
+    if (error) throw error;
+    await reloadData();
+  };
+
+  // The one-click "used" action from the card tile - separate from the general update
+  // function so the common case (mark fully used, or spend a partial amount) doesn't need
+  // the caller to know or recompute the remaining balance itself.
+  const redeemGiftCard = async (id: string, amountUsed: number) => {
+    const card = giftCards.find(c => c.id === id);
+    if (!card) return;
+    const newBalance = Math.max(0, card.remainingBalance - amountUsed);
+    await updateGiftCard(id, { remainingBalance: newBalance });
+  };
+
+  const deleteGiftCard = async (id: string) => {
+    const { error } = await supabase.from('gift_cards').delete().eq('id', id);
     if (error) throw error;
     await reloadData();
   };
@@ -2266,6 +2322,7 @@ export function usePaymentState() {
     payments, allPayments, history, allHistory, countries, rate, summaryCurrency, notifications, isLoaded, isSyncing,
     familyMessages, sendFamilyMessage,
     rewardsPerks, addReward, updateReward, deleteReward,
+    giftCards, addGiftCard, updateGiftCard, redeemGiftCard, deleteGiftCard,
     addPayment, addBulkPayments, updatePayment, deletePayment, updatePaymentsOrder, recordPayment,
     deleteHistoryEntry, updateHistoryStatus, clearHistory, saveRate, saveSummaryCurrency,
     addCountry, updateCountry, deleteCountry,
