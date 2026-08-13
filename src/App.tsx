@@ -1497,13 +1497,16 @@ export default function App() {
                   type="button"
                   onClick={togglePulse}
                   title={uiPulse ? 'Switch to Classic layout' : 'Switch to Pulse layout'}
-                  className={`shrink-0 p-2 rounded-full transition-colors cursor-pointer ${
+                  className={`relative shrink-0 p-2 rounded-full transition-colors cursor-pointer ${
                     uiPulse
                       ? 'bg-violet-100 dark:bg-violet-950/50 text-violet-600 dark:text-violet-300'
                       : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 hover:text-violet-600'
                   }`}
                 >
                   <Sparkles className="w-4.5 h-4.5" />
+                  <span className="absolute -top-0.5 -right-0.5 px-1 min-w-[1.1rem] h-3.5 rounded-full bg-violet-600 text-white text-[7px] font-black leading-3.5 flex items-center justify-center tracking-tight">
+                    new
+                  </span>
                 </button>
               )}
 
