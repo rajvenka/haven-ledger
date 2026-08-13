@@ -55,6 +55,50 @@ function money(n: number, ccy: string, countries: CountryConfig[]) {
   return formatCurrencyValue(n, ccy as Currency, countries);
 }
 
+type DueStatus = 'overdue' | 'today' | 'soon' | 'upcoming';
+
+function dueStatus(dueDate: string, todayStr: string): DueStatus {
+  if (dueDate < todayStr) return 'overdue';
+  if (dueDate === todayStr) return 'today';
+  const due = new Date(dueDate + 'T12:00:00');
+  const today = new Date(todayStr + 'T12:00:00');
+  const days = Math.round((due.getTime() - today.getTime()) / 86400000);
+  if (days <= 3) return 'soon';
+  return 'upcoming';
+}
+
+const STATUS_UI: Record<DueStatus, { label: string; dot: string; badge: string; row: string; avatar: string }> = {
+  overdue: {
+    label: 'Overdue',
+    dot: 'bg-rose-500',
+    badge: 'bg-rose-500/15 text-rose-600 dark:text-rose-400 ring-1 ring-rose-500/25',
+    row: 'border-l-[3px] border-l-rose-500 bg-rose-500/[0.04]',
+    avatar: 'bg-rose-500 text-white',
+  },
+  today: {
+    label: 'Due today',
+    dot: 'bg-amber-500',
+    badge: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 ring-1 ring-amber-500/25',
+    row: 'border-l-[3px] border-l-amber-500 bg-amber-500/[0.04]',
+    avatar: 'bg-amber-500 text-white',
+  },
+  soon: {
+    label: 'Due soon',
+    dot: 'bg-orange-500',
+    badge: 'bg-orange-500/15 text-orange-700 dark:text-orange-400 ring-1 ring-orange-500/25',
+    row: 'border-l-[3px] border-l-orange-400 bg-orange-500/[0.03]',
+    avatar: 'bg-orange-500/90 text-white',
+  },
+  upcoming: {
+    label: 'Upcoming',
+    dot: 'bg-indigo-500',
+    badge: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 ring-1 ring-indigo-500/20',
+    row: 'border-l-[3px] border-l-indigo-400/80',
+    avatar: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300',
+  },
+};
+
+
 export default function PulseDashboard({
   payments,
   history,
@@ -162,22 +206,31 @@ export default function PulseDashboard({
 
       {/* Hero metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5 col-span-2 lg:col-span-1 bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-950/40 dark:to-slate-900">
-          <p className="text-[9px] font-black uppercase tracking-wider text-indigo-500">Due this month</p>
+        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 p-3.5 col-span-2 lg:col-span-1 bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-950/40 dark:to-slate-900">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-indigo-500" />
+            <p className="text-[9px] font-black uppercase tracking-wider text-indigo-500">Due this month</p>
+          </div>
           <p className="mt-1 text-xl font-black tabular-nums text-slate-900 dark:text-white">
             {money(totalDueMonth, summaryCurrency, countries)}
           </p>
           <p className="text-[10px] text-slate-500 mt-0.5">{dueCurrentMonth.length} open bills</p>
         </div>
         <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5">
-          <p className="text-[9px] font-black uppercase tracking-wider text-amber-500">Next 7 days</p>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
+            <p className="text-[9px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">Next 7 days</p>
+          </div>
           <p className="mt-1 text-lg font-black tabular-nums text-slate-900 dark:text-white">
             {money(totalDueWeek, summaryCurrency, countries)}
           </p>
           <p className="text-[10px] text-slate-500 mt-0.5">{dueNextWeek.length} due</p>
         </div>
         <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5">
-          <p className="text-[9px] font-black uppercase tracking-wider text-emerald-500">Paid this month</p>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <p className="text-[9px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Paid this month</p>
+          </div>
           <p className="mt-1 text-lg font-black tabular-nums text-slate-900 dark:text-white">
             {money(paidThisMonth, summaryCurrency, countries)}
           </p>
@@ -185,13 +238,18 @@ export default function PulseDashboard({
             {paidCount}/{totalCount} bills
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5">
-          <p className="text-[9px] font-black uppercase tracking-wider text-slate-500">After bills</p>
-          <p
-            className={`mt-1 text-lg font-black tabular-nums ${
-              net >= 0 ? 'text-emerald-600' : 'text-rose-600'
-            }`}
-          >
+        <div className={`rounded-2xl border p-3.5 ${
+          net >= 0
+            ? 'border-emerald-200/80 dark:border-emerald-900/40 bg-emerald-50/50 dark:bg-emerald-950/20'
+            : 'border-rose-200/80 dark:border-rose-900/40 bg-rose-50/50 dark:bg-rose-950/20'
+        }`}>
+          <div className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${net >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+            <p className={`text-[9px] font-black uppercase tracking-wider ${net >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+              After bills
+            </p>
+          </div>
+          <p className={`mt-1 text-lg font-black tabular-nums ${net >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600'}`}>
             {money(net, summaryCurrency, countries)}
           </p>
           <p className="text-[10px] text-slate-500 mt-0.5">vs income estimate</p>
@@ -252,16 +310,32 @@ export default function PulseDashboard({
 
       {/* Upcoming */}
       <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
-        <div className="px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-          <p className="text-[11px] font-black text-slate-800 dark:text-slate-100">Coming up</p>
-          <span className="text-[10px] font-bold text-slate-400">{upcomingList.length}</span>
+        <div className="px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-800 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-black text-slate-800 dark:text-slate-100">Coming up</p>
+            <span className="text-[10px] font-bold text-slate-400">{upcomingList.length}</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {([
+              ['overdue', 'Overdue'],
+              ['today', 'Today'],
+              ['soon', 'Soon'],
+              ['upcoming', 'Later'],
+            ] as [DueStatus, string][]).map(([key, lab]) => (
+              <span key={key} className="inline-flex items-center gap-1 text-[9px] font-bold text-slate-500">
+                <span className={`w-1.5 h-1.5 rounded-full ${STATUS_UI[key].dot}`} />
+                {lab}
+              </span>
+            ))}
+          </div>
         </div>
         {upcomingList.length === 0 ? (
           <p className="px-3.5 py-8 text-center text-[12px] text-slate-400">Nothing due in the next week 🎉</p>
         ) : (
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {upcomingList.map((ins) => {
-              const isOd = ins.dueDate < todayStr;
+              const status = dueStatus(ins.dueDate, todayStr);
+              const ui = STATUS_UI[status];
               const payment = payments.find((p) => p.id === ins.paymentId);
               const label = String(ins.paymentName || payment?.name || 'Bill').trim();
               const initials = label
@@ -271,37 +345,52 @@ export default function PulseDashboard({
                 .join('')
                 .slice(0, 2)
                 .toUpperCase();
+              const due = new Date(ins.dueDate + 'T12:00:00');
+              const today = new Date(todayStr + 'T12:00:00');
+              const dayDiff = Math.round((due.getTime() - today.getTime()) / 86400000);
+              const dayLabel =
+                status === 'overdue'
+                  ? `${Math.abs(dayDiff)}d late`
+                  : status === 'today'
+                    ? 'Today'
+                    : dayDiff === 1
+                      ? 'Tomorrow'
+                      : `in ${dayDiff}d`;
               return (
-                <li key={`${ins.paymentId}-${ins.dueDate}`} className="px-3.5 py-3 flex items-center gap-3">
-                  <div
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-[11px] font-black ${
-                      isOd
-                        ? 'bg-rose-500/15 text-rose-500 ring-1 ring-rose-500/30'
-                        : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 ring-1 ring-indigo-500/20'
-                    }`}
-                    title={label}
-                  >
-                    {initials || (isOd ? '!' : '·')}
+                <li
+                  key={`${ins.paymentId}-${ins.dueDate}`}
+                  className={`px-3.5 py-3 flex items-center gap-3 ${ui.row}`}
+                >
+                  <div className="relative shrink-0">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center text-[11px] font-black ${ui.avatar}`}
+                      title={label}
+                    >
+                      {initials || '·'}
+                    </div>
+                    <span
+                      className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full ring-2 ring-white dark:ring-slate-900 ${ui.dot}`}
+                      title={ui.label}
+                    />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-[13px] font-bold text-slate-900 dark:text-white truncate leading-snug">
                       {label}
                     </p>
-                    <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                      <span
-                        className={`text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-md ${
-                          isOd
-                            ? 'bg-rose-500/15 text-rose-500'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-                        }`}
-                      >
-                        {isOd ? 'Overdue' : 'Due'}
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                      <span className={`text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-md ${ui.badge}`}>
+                        {ui.label}
                       </span>
+                      <span className="text-[10px] font-bold text-slate-500">{dayLabel}</span>
+                      <span className="text-[10px] text-slate-400">·</span>
                       <span className="text-[10px] text-slate-500">
                         {formatDatePretty(new Date(ins.dueDate))}
                       </span>
                       {ins.currency && (
-                        <span className="text-[10px] font-bold text-slate-400">{ins.currency}</span>
+                        <>
+                          <span className="text-[10px] text-slate-400">·</span>
+                          <span className="text-[10px] font-bold text-slate-400">{ins.currency}</span>
+                        </>
                       )}
                     </div>
                   </div>
