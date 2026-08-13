@@ -7,6 +7,7 @@ import { IncomeSource, Currency, CountryConfig, RecurringPayment, PaymentHistory
 import { convertCurrency } from '../utils/paymentUtils';
 
 interface IncomeViewProps {
+  pulseMode?: boolean;
   incomeSources: IncomeSource[];
   incomeMode: 'simple' | 'detailed';
   monthlyIncome: string;
@@ -91,6 +92,7 @@ function incomeForPeriod(sources: IncomeSource[], start: Date, end: Date): numbe
 }
 
 export default function IncomeView({
+  pulseMode = false,
   incomeSources,
   incomeMode,
   monthlyIncome,
@@ -178,7 +180,19 @@ export default function IncomeView({
   const showPayDateField = frequency === 'monthly' || frequency === 'adhoc';
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-5 text-left bg-slate-50 dark:bg-slate-900 animate-in fade-in-50 duration-300">
+    <div className={`flex-1 flex flex-col overflow-y-auto px-3 sm:px-5 pt-3 sm:pt-4 pb-24 md:pb-4 space-y-4 text-left animate-in fade-in-50 duration-300 ${pulseMode ? "bg-slate-50 dark:bg-slate-950" : "bg-slate-50 dark:bg-slate-900"}`}>
+      {pulseMode && (
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-emerald-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/20 p-3 sm:p-3.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Briefcase className="w-5 h-5 text-emerald-500 shrink-0" />
+            <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">Income</h2>
+            <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-emerald-600/90 text-white">Pulse</span>
+          </div>
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">What&apos;s coming in, alongside what&apos;s going out</p>
+        </div>
+      )}
+
+      {!pulseMode && (
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">Income</h2>
@@ -201,6 +215,17 @@ export default function IncomeView({
           </div>
         )}
       </div>
+      )}
+
+      {pulseMode && !isReadOnly && (
+        <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-emerald-600/80 dark:text-emerald-400/80 w-10">Mode</span>
+          <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-emerald-100/80 dark:bg-emerald-950/50 border border-emerald-200/60 dark:border-emerald-900/60">
+            <button type="button" onClick={() => updateIncomeMode('simple')} className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${incomeMode === 'simple' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25' : 'text-emerald-800/70 dark:text-emerald-300/70'}`}>Simple</button>
+            <button type="button" onClick={() => updateIncomeMode('detailed')} className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${incomeMode === 'detailed' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25' : 'text-emerald-800/70 dark:text-emerald-300/70'}`}>Detailed</button>
+          </div>
+        </div>
+      )}
 
       <div className="apple-card p-6">
         <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Monthly Income</span>
