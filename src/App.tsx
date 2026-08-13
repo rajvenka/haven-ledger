@@ -1716,6 +1716,7 @@ export default function App() {
                   onDeleteClick={deletePayment}
                   onUpdatePayment={updatePayment}
                   onAddBulkPayments={addBulkPayments}
+                  onUpdatePaymentsOrder={updatePaymentsOrder}
                   isReadOnly={userProfile?.role === 'view'}
                   currentUserUid={user?.uid}
                 />
