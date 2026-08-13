@@ -295,8 +295,10 @@ export function formatDaysRemaining(days: number): string {
   return `In ${days} days`;
 }
 
-export function formatDatePretty(date: Date): string {
-  return date.toLocaleDateString('en-AU', {
+export function formatDatePretty(date: Date | string | number | null | undefined): string {
+  const d = date instanceof Date ? date : new Date(date as any);
+  if (!d || Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-AU', {
     day: 'numeric',
     month: 'short',
     year: 'numeric'
