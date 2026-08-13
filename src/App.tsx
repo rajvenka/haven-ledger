@@ -46,6 +46,7 @@ import PulseBills from './components/PulseBills';
 import PulseMembership from './components/PulseMembership';
 import PulseIncome from './components/PulseIncome';
 import PulseHistory from './components/PulseHistory';
+/* pulse-parity-deploy */
 import PulseReports from './components/PulseReports';
 import PulseInvestment from './components/PulseInvestment';
 import ConfigurePayments from './components/ConfigurePayments';
