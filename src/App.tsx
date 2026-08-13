@@ -199,6 +199,8 @@ export default function App() {
     portfolioSnapshots,
     takePortfolioSnapshot,
     deletePortfolioSnapshotBatch,
+    snapshotPortfolioDailyPositions,
+    loadPortfolioDailyPositions,
     portfolioContributions,
     addPortfolioContribution,
     updatePortfolioContribution,
@@ -1774,6 +1776,8 @@ export default function App() {
                 markBrokerConnectionSynced={markBrokerConnectionSynced}
                 updatePortfolioHoldingLivePrice={updatePortfolioHoldingLivePrice}
                 markPriceLookupFailed={markPriceLookupFailed}
+                snapshotPortfolioDailyPositions={snapshotPortfolioDailyPositions}
+                loadPortfolioDailyPositions={loadPortfolioDailyPositions}
               />
               ) : (
               <PortfolioView
@@ -1827,6 +1831,8 @@ export default function App() {
                 portfolioHoldingLots={portfolioHoldingLots}
                 portfolioSnapshots={portfolioSnapshots}
                 takePortfolioSnapshot={takePortfolioSnapshot}
+                snapshotPortfolioDailyPositions={snapshotPortfolioDailyPositions}
+                loadPortfolioDailyPositions={loadPortfolioDailyPositions}
                 deletePortfolioSnapshotBatch={deletePortfolioSnapshotBatch}
                 portfolioContributions={portfolioContributions}
                 addPortfolioContribution={addPortfolioContribution}
