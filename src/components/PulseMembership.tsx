@@ -320,66 +320,77 @@ export default function PulseMembership({
 
   return (
     <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-left w-full max-w-full">
-      {/* Header */}
-      <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-              Membership
-              <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-violet-600 text-white">
-                Pulse
-              </span>
-            </h1>
-            <p className="text-[10px] text-slate-400 font-bold">
-              {stats.active} active · {stats.soon} closing soon · {stats.closed} closed
-              {stats.value > 0 ? ` · ~$${stats.value.toLocaleString()} value` : ''}
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="inline-flex p-0.5 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={() => setTab('memberships')}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                  tab === 'memberships' ? 'bg-violet-600 text-white' : 'text-slate-500'
-                }`}
-              >
-                <Award className="w-3 h-3 inline mr-1" />
-                Perks
-              </button>
-              <button
-                type="button"
-                onClick={() => setTab('giftcards')}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                  tab === 'giftcards' ? 'bg-violet-600 text-white' : 'text-slate-500'
-                }`}
-              >
-                <Gift className="w-3 h-3 inline mr-1" />
-                Cards
-              </button>
+      {/* Header — Portfolio-level quiet chrome */}
+      <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 space-y-2.5">
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-violet-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-violet-950/20 p-3 sm:p-3.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Award className="w-5 h-5 text-violet-500 shrink-0" />
+                <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                  Membership
+                </h1>
+                <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-violet-600/90 text-white">
+                  Pulse
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">
+                {stats.active} active
+                {stats.soon ? ` · ${stats.soon} closing soon` : ''}
+                {stats.closed ? ` · ${stats.closed} closed` : ''}
+                {stats.value > 0 ? ` · ~$${stats.value.toLocaleString()} value` : ''}
+                {tab === 'giftcards' && stats.gcBal > 0 ? ` · cards ~$${stats.gcBal.toLocaleString()}` : ''}
+              </p>
             </div>
             {!isReadOnly && (
               <button
                 type="button"
                 onClick={() => (tab === 'memberships' ? openAdd() : setGcOpen(true))}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold bg-indigo-600 text-white shadow-md shadow-indigo-600/25"
+                className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold bg-indigo-600 text-white"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Add
+                {tab === 'memberships' ? 'Add' : 'Add card'}
               </button>
             )}
           </div>
         </div>
 
-        {tab === 'giftcards' && stats.gcBal > 0 && (
-          <div className="inline-flex px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
-            Gift card balance ~${stats.gcBal.toLocaleString()}
+        {/* Main section tabs — like Portfolio View chips */}
+        <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-violet-500/80 dark:text-violet-400/80 w-10">
+            View
+          </span>
+          <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-violet-100/80 dark:bg-violet-950/50 border border-violet-200/60 dark:border-violet-900/60">
+            <button
+              type="button"
+              onClick={() => setTab('memberships')}
+              className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                tab === 'memberships'
+                  ? 'bg-violet-600 text-white shadow-md shadow-violet-600/25'
+                  : 'text-violet-700/70 dark:text-violet-300/70'
+              }`}
+            >
+              <Award className="w-3 h-3" />
+              Memberships
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('giftcards')}
+              className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                tab === 'giftcards'
+                  ? 'bg-violet-600 text-white shadow-md shadow-violet-600/25'
+                  : 'text-violet-700/70 dark:text-violet-300/70'
+              }`}
+            >
+              <Gift className="w-3 h-3" />
+              Gift cards
+            </button>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Sticky filters */}
-      <div className="shrink-0 px-3 sm:px-4 pb-2 space-y-2 border-b border-slate-100 dark:border-slate-900 bg-slate-50/90 dark:bg-slate-950/90 backdrop-blur-sm">
+      <div className="shrink-0 px-3 sm:px-4 pb-2 space-y-2 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-sm">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
           <input
@@ -395,46 +406,57 @@ export default function PulseMembership({
           )}
         </div>
         {tab === 'memberships' && (
-          <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-            {(
-              [
-                ['all', 'All'],
-                ['active', 'Active'],
-                ['closing_soon', 'Closing soon'],
-                ['closed', 'Closed'],
-              ] as [StatusFilter, string][]
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setStatusFilter(id)}
-                className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                  statusFilter === id
-                    ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
-                    : 'bg-white dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-800'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-            {categoriesPresent.length > 2 && (
-              <>
-                <span className="w-px bg-slate-200 dark:bg-slate-800 shrink-0 self-stretch" />
-                {categoriesPresent.map((c) => (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+              <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-500/80 w-10">
+                Status
+              </span>
+              <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-slate-100/90 dark:bg-slate-900/80 border border-slate-200/60 dark:border-slate-800">
+                {(
+                  [
+                    ['all', 'All'],
+                    ['active', 'Active'],
+                    ['closing_soon', 'Closing soon'],
+                    ['closed', 'Closed'],
+                  ] as [StatusFilter, string][]
+                ).map(([id, label]) => (
                   <button
-                    key={c}
+                    key={id}
                     type="button"
-                    onClick={() => setCategoryFilter(c)}
-                    className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                      categoryFilter === c
-                        ? 'bg-violet-600 text-white'
-                        : 'bg-white dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-800'
+                    onClick={() => setStatusFilter(id)}
+                    className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                      statusFilter === id
+                        ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 shadow-md'
+                        : 'text-slate-600 dark:text-slate-300'
                     }`}
                   >
-                    {c}
+                    {label}
                   </button>
                 ))}
-              </>
+              </div>
+            </div>
+            {categoriesPresent.length > 2 && (
+              <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+                <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-emerald-600/80 dark:text-emerald-400/80 w-10">
+                  Type
+                </span>
+                <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-emerald-100/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-900/50">
+                  {categoriesPresent.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setCategoryFilter(c)}
+                      className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                        categoryFilter === c
+                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
+                          : 'text-emerald-800/70 dark:text-emerald-300/70'
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -664,7 +686,7 @@ export default function PulseMembership({
       {/* Perk modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
-          <div className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+          <div className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-black text-slate-900 dark:text-white">
                 {editingId ? 'Edit membership' : 'Add membership'}
@@ -814,7 +836,7 @@ export default function PulseMembership({
       {/* Gift card modal */}
       {gcOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
-          <div className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+          <div className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-black">Add gift card</h2>
               <button type="button" onClick={() => setGcOpen(false)} className="p-1 text-slate-400">
