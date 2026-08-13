@@ -377,6 +377,8 @@ export default function PortfolioV1View({
   deletePortfolioBrokerConnection,
   markBrokerConnectionSynced,
   updatePortfolioHoldingLivePrice,
+  snapshotPortfolioDailyPositions,
+  loadPortfolioDailyPositions,
 }: Props) {
   const [portfolioFilter, setPortfolioFilter] = useState<string>('__pending__');
   const [brokerFilter, setBrokerFilter] = useState<string>('All');
@@ -1592,66 +1594,68 @@ export default function PortfolioV1View({
 
       {/* Gainers / losers */}
       <div className="space-y-2 w-full">
-        <div className="flex items-center justify-between gap-2 px-0.5">
-          <div className="flex items-center justify-between gap-2 w-full flex-wrap">
-          <p className="text-[11px] font-black uppercase tracking-wider text-slate-500">Movers</p>
-          <button
-            type="button"
-            onClick={() => setShowPnlCalendar((v) => !v)}
-            className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-              showPnlCalendar ? 'bg-violet-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-            }`}
-          >
-            P&L Calendar
-          </button>
-        </div>
-          <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5">
+        <div className="flex items-center justify-between gap-2 px-0.5 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-[11px] font-black uppercase tracking-wider text-slate-500">Movers</p>
             <button
               type="button"
-              onClick={() => setMoversMode('overall')}
+              onClick={() => setShowPnlCalendar((v) => !v)}
               className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                moversMode === 'overall'
-                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
-                  : 'text-slate-500'
+                showPnlCalendar ? 'bg-violet-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
               }`}
             >
-              Overall
-            </button>
-            <button
-              type="button"
-              onClick={() => setMoversMode('day')}
-              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                moversMode === 'day'
-                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
-                  : 'text-slate-500'
-              }`}
-            >
-              Day
+              P&L Calendar
             </button>
           </div>
-          <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5">
-            <button
-              type="button"
-              onClick={() => setMoversUnit('pct')}
-              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                moversUnit === 'pct'
-                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
-                  : 'text-slate-500'
-              }`}
-            >
-              %
-            </button>
-            <button
-              type="button"
-              onClick={() => setMoversUnit('dollar')}
-              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                moversUnit === 'dollar'
-                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
-                  : 'text-slate-500'
-              }`}
-            >
-              $
-            </button>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5">
+              <button
+                type="button"
+                onClick={() => setMoversMode('overall')}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                  moversMode === 'overall'
+                    ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500'
+                }`}
+              >
+                Overall
+              </button>
+              <button
+                type="button"
+                onClick={() => setMoversMode('day')}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                  moversMode === 'day'
+                    ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500'
+                }`}
+              >
+                Day
+              </button>
+            </div>
+            <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5">
+              <button
+                type="button"
+                onClick={() => setMoversUnit('pct')}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                  moversUnit === 'pct'
+                    ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500'
+                }`}
+              >
+                %
+              </button>
+              <button
+                type="button"
+                onClick={() => setMoversUnit('dollar')}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                  moversUnit === 'dollar'
+                    ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500'
+                }`}
+              >
+                $
+              </button>
+            </div>
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
