@@ -368,16 +368,17 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   return (
     <div className={`flex-1 flex flex-col overflow-y-auto px-3 sm:px-5 pt-3 sm:pt-4 pb-24 md:pb-4 space-y-4 text-left ${pulseMode ? 'bg-slate-50 dark:bg-slate-950' : 'bg-slate-50 dark:bg-slate-900'}`}>
       {pulseMode ? (
-        <div className="rounded-2xl bg-indigo-600 text-white p-4 shadow-lg shadow-indigo-600/25">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-              <ClipboardList className="w-5 h-5 text-white" />
+        <div className="relative overflow-hidden rounded-2xl border border-indigo-200/60 dark:border-indigo-900/40 bg-gradient-to-br from-indigo-50/80 via-white to-slate-50 dark:from-indigo-950/30 dark:via-slate-950 dark:to-slate-950 p-3.5 sm:p-4">
+          <div className="absolute -right-6 -top-6 w-28 h-28 rounded-full bg-indigo-400/10 blur-2xl pointer-events-none" />
+          <div className="relative flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-950/60 border border-indigo-200/70 dark:border-indigo-800 flex items-center justify-center shrink-0">
+              <ClipboardList className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-xl font-black tracking-tight truncate">
+              <h2 className="text-xl font-black tracking-tight truncate text-slate-900 dark:text-white">
                 {workspaceName ? `${workspaceName} Investment Plan` : 'Investment Plan'}
               </h2>
-              <p className="text-[11px] font-semibold text-indigo-100/90">Contributions · withdrawals · splits · recurring</p>
+              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Contributions · withdrawals · splits · recurring</p>
             </div>
           </div>
         </div>
@@ -452,7 +453,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
       )}
 
       {pulseMode ? (
-        <div className="flex gap-1 p-1 rounded-2xl bg-indigo-100 dark:bg-indigo-950/60 border-2 border-indigo-300 dark:border-indigo-700">
+        <div className="flex gap-1 p-1 rounded-2xl bg-slate-100/90 dark:bg-slate-900/80 border border-slate-200/70 dark:border-slate-800">
           {TABS.map(tab => (
             <button
               type="button"
@@ -460,8 +461,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
               onClick={() => setPlanTab(tab.key)}
               className={`flex-1 py-2.5 rounded-xl text-[12px] font-black uppercase tracking-wide transition-all cursor-pointer ${
                 planTab === tab.key
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                  : 'text-indigo-900 dark:text-indigo-100'
+                  ? 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 shadow-sm border border-indigo-200/60 dark:border-indigo-800'
+                  : 'text-slate-500 dark:text-slate-400'
               }`}
             >
               {tab.label}
