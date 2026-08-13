@@ -1,3 +1,4 @@
+import PortfolioPnLCalendar from './PortfolioPnLCalendar';
 import { parseBrokerFile, parseBrokerFileWithDate, BrokerTemplate, ParsedHolding, downloadUniversalTemplate } from '../utils/brokerImport';
 import * as XLSX from 'xlsx';
 import React, { useState, useMemo, useEffect } from 'react';
@@ -69,6 +70,8 @@ interface PortfolioViewProps {
   bulkDeletePortfolioHoldings: (holdingIds: string[]) => Promise<void>;
   deleteAllPortfolioData: () => Promise<void>;
   portfolioSnapshots: any[];
+  snapshotPortfolioDailyPositions?: (currencies?: string[], timezone?: string) => Promise<void>;
+  loadPortfolioDailyPositions?: (fromDate: string, toDate: string, portfolioId?: string | null) => Promise<any[]>;
   takePortfolioSnapshot: (date: string, groups: { label: string; invested: number; current: number }[]) => Promise<void>;
   deletePortfolioSnapshotBatch: (date: string) => Promise<void>;
   portfolioContributions: any[];
@@ -283,7 +286,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setPortfolioCashBalance, deletePortfolioCashBalance, setBookedPlBaseline, setProjectedBankBalance, recalculateProjectedBankBalance,
     portfolioBrokerConnections = [], setPortfolioBrokerConnection, deletePortfolioBrokerConnection, markBrokerConnectionSynced,
     syncEtoroHoldingLots, syncEtoroLivePrices, loadPortfolioHoldingLots, portfolioHoldingLots = [],
-    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
+    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, snapshotPortfolioDailyPositions, loadPortfolioDailyPositions, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     mfHoldingsCache = [], loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
@@ -511,7 +514,35 @@ export default function PortfolioView(props: PortfolioViewProps) {
   };
 
   const [wipeConfirmText, setWipeConfirmText] = useState('');
-  const [holdingsTab, setHoldingsTab] = useState<'active' | 'sold' | 'search' | 'mf-holdings' | 'settings' | 'lots'>('active');
+  const [holdingsTab, setHoldingsTab] = useState<'active' | 'sold' | 'search' | 'mf-holdings' | 'settings' | 'lots' | 'pnl_calendar'>('active');
+  const [pnlCalendarRows, setPnlCalendarRows] = useState<any[]>([]);
+  const [pnlCalendarLoading, setPnlCalendarLoading] = useState(false);
+  const [pnlCalendarCcy, setPnlCalendarCcy] = useState<string>(String(baseCurrency || 'INR').toUpperCase());
+
+  const reloadPnlCalendar = async () => {
+    if (!loadPortfolioDailyPositions) return;
+    setPnlCalendarLoading(true);
+    try {
+      const to = new Date();
+      const from = new Date(to.getFullYear() - 1, to.getMonth(), to.getDate());
+      const fromStr = from.toISOString().slice(0, 10);
+      const toStr = to.toISOString().slice(0, 10);
+      const data = await loadPortfolioDailyPositions(fromStr, toStr, null);
+      setPnlCalendarRows(data || []);
+      const ccySet = Array.from(new Set((data || []).map((r: any) => String(r.currency || '').toUpperCase()).filter(Boolean)));
+      if (ccySet.length && !ccySet.includes(pnlCalendarCcy)) setPnlCalendarCcy(ccySet[0]);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setPnlCalendarLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (holdingsTab === 'pnl_calendar') reloadPnlCalendar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holdingsTab]);
+
   const [mfHoldingsSelectedId, setMfHoldingsSelectedId] = useState<string>('all');
   const [mfHoldingsFetchingId, setMfHoldingsFetchingId] = useState<string | null>(null);
   const [mfHoldingsError, setMfHoldingsError] = useState<string | null>(null);
@@ -2296,6 +2327,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         <button onClick={() => setHoldingsTab('sold')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'sold' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Sold ({soldHoldings.length})</button>
         <button onClick={() => setHoldingsTab('search')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${holdingsTab === 'search' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}><Search className="w-3 h-3" /> Quote Search</button>
         <button onClick={() => setHoldingsTab('settings')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${holdingsTab === 'settings' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}><Settings className="w-3 h-3" /> Settings</button>
+        <button onClick={() => { setHoldingsTab('pnl_calendar'); }} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'pnl_calendar' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>P&L Calendar</button>
         {activeHoldings.some(h => h.holding_type === 'mutual_fund') && (
           <button
             onClick={() => { setHoldingsTab('mf-holdings'); loadMfHoldingsCache?.(); }}
@@ -3496,6 +3528,26 @@ export default function PortfolioView(props: PortfolioViewProps) {
             </div>
           );
         })()}
+        </div>
+      )}
+
+
+      {holdingsTab === 'pnl_calendar' && (
+        <div className="apple-card p-4">
+          <PortfolioPnLCalendar
+            rows={pnlCalendarRows}
+            loading={pnlCalendarLoading}
+            currencies={Array.from(new Set([
+              ...pnlCalendarRows.map((r: any) => String(r.currency || '').toUpperCase()).filter(Boolean),
+              String(baseCurrency || 'INR').toUpperCase(),
+            ]))}
+            selectedCurrency={pnlCalendarCcy}
+            onCurrencyChange={setPnlCalendarCcy}
+            portfolioLabel={singleHeaderPortfolio?.name}
+            canSnapshot={!isReadOnly}
+            onRefreshSnapshot={snapshotPortfolioDailyPositions}
+            onReload={reloadPnlCalendar}
+          />
         </div>
       )}
 
