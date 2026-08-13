@@ -238,16 +238,17 @@ export default function ReportsView(props: ReportsViewProps) {
   return (
     <div className={`flex-1 flex flex-col overflow-y-auto px-3 sm:px-5 pt-3 sm:pt-4 pb-24 md:pb-4 space-y-4 text-left ${pulseMode ? 'bg-slate-50 dark:bg-slate-950' : 'bg-slate-50 dark:bg-slate-900'}`}>
       {pulseMode ? (
-        <div className="rounded-2xl bg-violet-600 text-white p-4 shadow-lg shadow-violet-600/25">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-              <FileBarChart className="w-5 h-5 text-white" />
+        <div className="relative overflow-hidden rounded-2xl border border-violet-200/60 dark:border-violet-900/40 bg-gradient-to-br from-violet-50/80 via-white to-slate-50 dark:from-violet-950/30 dark:via-slate-950 dark:to-slate-950 p-3.5 sm:p-4">
+          <div className="absolute -right-6 -top-6 w-28 h-28 rounded-full bg-violet-400/10 blur-2xl pointer-events-none" />
+          <div className="relative flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-950/60 border border-violet-200/70 dark:border-violet-800 flex items-center justify-center shrink-0">
+              <FileBarChart className="w-5 h-5 text-violet-600 dark:text-violet-400" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-xl font-black tracking-tight truncate">
+              <h2 className="text-xl font-black tracking-tight truncate text-slate-900 dark:text-white">
                 {workspaceName ? `${workspaceName} Reports` : 'Reports'}
               </h2>
-              <p className="text-[11px] font-semibold text-violet-100/90">Overview · dividends · fees · snapshots</p>
+              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Overview · dividends · fees · snapshots</p>
             </div>
           </div>
         </div>
@@ -284,7 +285,7 @@ export default function ReportsView(props: ReportsViewProps) {
       )}
 
       {pulseMode ? (
-        <div className="flex gap-1 p-1 rounded-2xl bg-violet-100 dark:bg-violet-950/60 border-2 border-violet-300 dark:border-violet-700 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+        <div className="flex gap-1 p-1 rounded-2xl bg-slate-100/90 dark:bg-slate-900/80 border border-slate-200/70 dark:border-slate-800 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {TABS.map(tab => (
             <button
               type="button"
@@ -292,8 +293,8 @@ export default function ReportsView(props: ReportsViewProps) {
               onClick={() => setReportTab(tab.key)}
               className={`shrink-0 flex-1 px-3 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wide transition-all cursor-pointer ${
                 reportTab === tab.key
-                  ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30'
-                  : 'text-violet-900 dark:text-violet-100'
+                  ? 'bg-white dark:bg-slate-800 text-violet-700 dark:text-violet-300 shadow-sm border border-violet-200/60 dark:border-violet-800'
+                  : 'text-slate-500 dark:text-slate-400'
               }`}
             >
               {tab.label}
