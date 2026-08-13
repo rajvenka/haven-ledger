@@ -198,6 +198,16 @@ export default function PulseMembership({
     setModalOpen(true);
   };
 
+  const openCloneGiftCard = (c: GiftCard) => {
+    setGcBrand(c.brand || '');
+    setGcValue(String(c.initialValue ?? c.remainingBalance ?? ''));
+    setGcCurrency(c.currency || 'AUD');
+    setGcExpiry(c.expiryDate || '');
+    setGcNotes(c.notes || '');
+    setGcError('');
+    setGcOpen(true);
+  };
+
   const openClone = (p: RewardPerk) => {
     setEditingId(null);
     setForm({
@@ -607,10 +617,18 @@ export default function PulseMembership({
                       )}
                       <button
                         type="button"
+                        onClick={() => openCloneGiftCard(c)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 ml-auto"
+                        title="Clone — buy the same card again"
+                      >
+                        <Copy className="w-3 h-3" /> Clone
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => {
                           if (confirm('Delete gift card?')) onDeleteGiftCard(c.id);
                         }}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold text-rose-600 ml-auto"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold text-rose-600"
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
