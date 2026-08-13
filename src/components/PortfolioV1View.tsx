@@ -641,6 +641,39 @@ export default function PortfolioV1View({
     }[];
   }, [classified]);
 
+  /** Total portfolio value in default book currency (or View currency when All books). */
+  const totalPortfolioTile = useMemo(() => {
+    const book =
+      portfolioFilter !== 'All' && portfolioFilter !== '__pending__'
+        ? (portfolios || []).find((p: any) => String(p.id) === String(portfolioFilter))
+        : (portfolios || []).find((p: any) => p.is_default) || (portfolios || [])[0];
+    const displayCcy = String(
+      (portfolioFilter !== 'All' && portfolioFilter !== '__pending__'
+        ? book?.currency
+        : viewCurrency || book?.currency || baseCurrency) ||
+        baseCurrency ||
+        'USD'
+    ).toUpperCase();
+
+    let market = 0;
+    let inv = 0;
+    for (const h of scoped) {
+      const nativeCcy = String(h.currency || displayCcy).toUpperCase();
+      market += convertAmount(marketValue(h), nativeCcy, displayCcy, workspaceCurrencyRates, baseCurrency);
+      inv += convertAmount(invested(h), nativeCcy, displayCcy, workspaceCurrencyRates, baseCurrency);
+    }
+    const pnlAmt = market - inv;
+    const pnlPct = inv > 0 ? (pnlAmt / inv) * 100 : 0;
+    return {
+      displayCcy,
+      market,
+      invested: inv,
+      pnlAmt,
+      pnlPct,
+      count: scoped.length,
+    };
+  }, [scoped, portfolioFilter, portfolios, viewCurrency, workspaceCurrencyRates, baseCurrency]);
+
   const filtered = useMemo(() => {
     let list = scoped;
     if (categoryFilter !== 'All') list = list.filter((h) => classifyHolding(h) === categoryFilter);
@@ -1310,15 +1343,56 @@ export default function PortfolioV1View({
           className="grid gap-2.5"
           style={{
             gridTemplateColumns:
-              categoryCards.length <= 1
+              (categoryCards.length + 1) <= 1
                 ? '1fr'
-                : categoryCards.length === 2
+                : (categoryCards.length + 1) === 2
                   ? 'repeat(2, minmax(0, 1fr))'
-                  : categoryCards.length === 3
+                  : (categoryCards.length + 1) === 3
                     ? 'repeat(3, minmax(0, 1fr))'
                     : 'repeat(auto-fit, minmax(140px, 1fr))',
           }}
         >
+          {/* Total portfolio — first tile, in default/book currency */}
+          <div
+            className={`rounded-2xl border bg-gradient-to-br from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-900 ${
+              categoryFilter === 'All'
+                ? 'border-transparent ring-2 ring-slate-400/60 shadow-md'
+                : 'border-slate-200/80 dark:border-slate-800'
+            } overflow-hidden transition-shadow`}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setCategoryFilter('All');
+                setExpandedCategory(null);
+              }}
+              className="w-full text-left p-3 sm:p-3.5"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="p-1.5 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900">
+                  <Briefcase className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-[10px] font-bold text-slate-400 tabular-nums">{totalPortfolioTile.count}</span>
+              </div>
+              <p className="mt-2 text-[12px] font-black text-slate-900 dark:text-white leading-tight">Total portfolio</p>
+              <p className="text-[9px] text-slate-500 mt-0.5">
+                All categories · {totalPortfolioTile.displayCcy}
+              </p>
+              <div className="mt-2 flex items-baseline justify-between gap-1">
+                <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
+                  {money(totalPortfolioTile.market, totalPortfolioTile.displayCcy)}
+                </p>
+                <p
+                  className={`text-[10px] font-bold tabular-nums ${
+                    totalPortfolioTile.pnlPct >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                  }`}
+                >
+                  {pct(totalPortfolioTile.pnlPct)}
+                </p>
+              </div>
+            </button>
+          </div>
+
           {categoryCards.map(({ id, holdings, stats, meta }) => {
             const selected = categoryFilter === id;
             const expanded = expandedCategory === id;
@@ -1408,7 +1482,7 @@ export default function PortfolioV1View({
             );
           })}
         </div>
-        {categoryCards.length === 0 && (
+        {categoryCards.length === 0 && totalPortfolioTile.count === 0 && (
           <p className="text-[12px] text-slate-400 text-center py-8 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
             No holdings for this portfolio / broker filter
           </p>
