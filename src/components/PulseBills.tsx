@@ -347,7 +347,7 @@ export default function PulseBills({
 
         {Object.keys(stats.byCcy).length > 0 && (
           <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-            {Object.entries(stats.byCcy)
+            {(Object.entries(stats.byCcy) as [string, number][])
               .sort((a, b) => b[1] - a[1])
               .map(([ccy, amt]) => (
                 <div
