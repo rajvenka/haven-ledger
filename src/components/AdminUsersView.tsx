@@ -197,10 +197,10 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, o
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-indigo-500" /> App & License Management
+            <ShieldCheck className="w-5 h-5 text-indigo-500" /> App & licenses
           </h2>
           <p className="text-[11px] text-slate-400 dark:text-slate-500 font-semibold mt-0.5">
-            {users.length} registered user{users.length !== 1 ? 's' : ''} across the platform · Super Admin only
+            {users.length} user{users.length !== 1 ? 's' : ''} · admin only
           </p>
         </div>
         <button
@@ -230,7 +230,7 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, o
             <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
               <UserPlus className="w-3.5 h-3.5" /> Onboard New User
             </span>
-            <p className="text-[10px] text-slate-400">Step 1 of 3 - who are you onboarding?</p>
+            <p className="text-[10px] text-slate-400">Email to invite</p>
             <input
               type="email"
               value={inviteEmail}
