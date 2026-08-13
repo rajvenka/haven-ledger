@@ -13,6 +13,7 @@ import { PaymentHistory, Currency, CountryConfig } from '../types';
 import { formatCurrencyValue, convertCurrency } from '../utils/paymentUtils';
 
 interface PaymentHistoryViewProps {
+  pulseMode?: boolean;
   history: PaymentHistory[];
   onDeleteHistoryEntry: (id: string) => void;
   onUpdateHistoryStatus?: (id: string, status: 'paid' | 'delayed' | 'carry') => void;
@@ -23,6 +24,7 @@ interface PaymentHistoryViewProps {
 }
 
 export default function PaymentHistoryView({
+  pulseMode = false,
   history,
   onDeleteHistoryEntry,
   onUpdateHistoryStatus,
@@ -69,9 +71,33 @@ export default function PaymentHistoryView({
   });
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-4 text-left bg-slate-50 dark:bg-slate-900">
+    <div className={`flex-1 flex flex-col overflow-y-auto px-3 sm:px-5 pt-3 sm:pt-4 pb-24 md:pb-4 space-y-4 text-left ${pulseMode ? 'bg-slate-50 dark:bg-slate-950' : 'bg-slate-50 dark:bg-slate-900'}`}>
       
-      {/* Title Bar with clear action */}
+      {pulseMode ? (
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-sky-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-sky-950/20 p-3 sm:p-3.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <History className="w-5 h-5 text-sky-500 shrink-0" />
+                <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">Payment History</h3>
+                <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-sky-600/90 text-white">Pulse</span>
+              </div>
+            </div>
+            {history.length > 0 && (
+              <button
+                onClick={() => {
+                  if (confirm('Are you sure you want to permanently delete all archived transaction history?')) {
+                    onClearHistory();
+                  }
+                }}
+                className="shrink-0 text-[10px] font-bold text-rose-500 px-2 py-1 rounded-lg border border-rose-200/60 dark:border-rose-900/40 flex items-center gap-1 cursor-pointer"
+              >
+                <Trash2 className="w-3 h-3" /> Clear
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
       <div className="flex justify-between items-center px-1 shrink-0">
         <div className="flex items-center gap-1.5">
           <History className="w-4 h-4 text-indigo-500" />
@@ -91,6 +117,7 @@ export default function PaymentHistoryView({
           </button>
         )}
       </div>
+      )}
 
       {/* Aggregate Spend Card (High Density Card styling) */}
       <div className="apple-card p-4 flex items-center justify-between shrink-0">
