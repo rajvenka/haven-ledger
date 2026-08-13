@@ -568,6 +568,14 @@ export default function PortfolioV1View({
     });
   }, [active, portfolios, portfolioBrokerConnections]);
 
+  /** Connections linked to the currently selected book (empty on All books). */
+  const bookConnections = useMemo(() => {
+    if (portfolioFilter === 'All' || portfolioFilter === '__pending__') return [];
+    return (portfolioBrokerConnections || []).filter(
+      (c: any) => String(c.portfolio_id || '') === String(portfolioFilter)
+    );
+  }, [portfolioBrokerConnections, portfolioFilter]);
+
   // If current book was emptied / hidden, return to All books
   React.useEffect(() => {
     if (portfolioFilter === 'All' || portfolioFilter === '__pending__') return;
@@ -1105,15 +1113,43 @@ export default function PortfolioV1View({
               <p className="text-[12px] text-slate-500 mt-1">{workspaceName}</p>
             ) : null}
           </div>
-          <button
-            type="button"
-            onClick={openConnect}
-            disabled={isReadOnly}
-            className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold shadow-lg shadow-indigo-600/25 disabled:opacity-50"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Connect / Sync
-          </button>
+          <div className="shrink-0 flex flex-col items-end gap-1.5 max-w-[min(100%,18rem)]">
+            <button
+              type="button"
+              onClick={openConnect}
+              disabled={isReadOnly}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold shadow-lg shadow-indigo-600/25 disabled:opacity-50"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Connect
+            </button>
+            {bookConnections.length > 0 && (
+              <div className="flex flex-wrap justify-end gap-1">
+                {bookConnections.map((c: any) => {
+                  const busy = syncingId === c.id;
+                  const label = c.connection_label || c.broker_type || 'Broker';
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      disabled={isReadOnly || busy}
+                      onClick={() => syncConnection(c)}
+                      title={`Sync ${label}`}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:border-indigo-300 dark:hover:border-indigo-800 disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${busy ? 'animate-spin' : ''}`} />
+                      {busy ? '…' : 'Sync'} · {String(label).slice(0, 14)}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {(connectOk || connectError) && !connectOpen && (
+              <p className={`text-[9px] font-bold text-right max-w-full ${connectOk ? 'text-emerald-600' : 'text-rose-500'}`}>
+                {connectOk || connectError}
+              </p>
+            )}
+          </div>
         </div>
 
         {isDataLoading && (
@@ -1761,74 +1797,6 @@ export default function PortfolioV1View({
         )}
       </div>
 
-      {/* Broker connections — Sync + Delete with mobile-friendly targets */}
-      {(portfolioBrokerConnections || []).length > 0 && (
-        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-3 space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Connected brokers</p>
-            <button
-              type="button"
-              onClick={openConnect}
-              disabled={isReadOnly}
-              className="text-[10px] font-bold text-indigo-600 disabled:opacity-50"
-            >
-              + Add
-            </button>
-          </div>
-          <div className="space-y-2">
-            {(portfolioBrokerConnections || []).map((c: any) => {
-              const pName = c.portfolio_id ? portfolios.find((p: any) => p.id === c.portfolio_id)?.name : null;
-              const meta = BROKER_META[c.broker_type] || { label: c.broker_type, color: 'text-slate-600', bg: 'bg-slate-50' };
-              const busy = syncingId === c.id;
-              return (
-                <div
-                  key={c.id}
-                  className={`flex flex-col sm:flex-row sm:items-center gap-2 rounded-xl border border-slate-100 dark:border-slate-800 ${meta.bg} px-3 py-2.5`}
-                >
-                  <div className="min-w-0 flex-1 flex items-center gap-2">
-                    <Link2 className={`w-3.5 h-3.5 shrink-0 ${meta.color}`} />
-                    <div className="min-w-0">
-                      <p className={`text-[12px] font-black truncate ${meta.color}`}>
-                        {c.connection_label || meta.label}
-                      </p>
-                      <p className="text-[9px] text-slate-400 truncate">
-                        {pName ? `Book · ${pName}` : 'Workspace'}
-                        {c.last_synced_at ? ` · synced ${new Date(c.last_synced_at).toLocaleDateString()}` : ''}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-stretch gap-2 w-full sm:w-auto">
-                    <button
-                      type="button"
-                      disabled={isReadOnly || busy}
-                      onClick={() => syncConnection(c)}
-                      className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 min-h-[40px] px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold disabled:opacity-50"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`} />
-                      {busy ? 'Syncing…' : 'Sync'}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isReadOnly || busy}
-                      onClick={() => removeConnection(c.id)}
-                      className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 min-h-[40px] px-4 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-950/70 text-rose-600 dark:text-rose-400 text-[11px] font-bold border border-rose-200/80 dark:border-rose-900 disabled:opacity-50"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {(connectOk || connectError) && !connectOpen && (
-            <div className={`text-[11px] rounded-xl px-3 py-2 ${connectOk ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/30' : 'text-rose-700 bg-rose-50 dark:bg-rose-950/30'}`}>
-              {connectOk || connectError}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Connect modal */}
       {connectOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
@@ -1892,7 +1860,7 @@ export default function PortfolioV1View({
                       <select
                         value={connectPortfolioId}
                         onChange={(e) => setConnectPortfolioId(e.target.value)}
-                        className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                        className="mt-1 w-full px-3 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm font-semibold text-slate-800 dark:text-slate-100 appearance-none shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
                       >
                         <option value="">None</option>
                         {(portfolios || []).map((p: any) => (
@@ -1938,7 +1906,7 @@ export default function PortfolioV1View({
                         value={credFields[f.key] || ''}
                         onChange={(e) => setCredFields((prev) => ({ ...prev, [f.key]: e.target.value }))}
                         placeholder={f.placeholder}
-                        className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                        className="mt-1 w-full px-3 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm font-semibold text-slate-800 dark:text-slate-100 appearance-none shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
                         autoComplete="off"
                       />
                     </label>
