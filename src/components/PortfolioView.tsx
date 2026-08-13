@@ -2328,20 +2328,86 @@ export default function PortfolioView(props: PortfolioViewProps) {
         </div>
       )}
 
-      <div className="flex gap-1.5">
-        <button onClick={() => setHoldingsTab('active')} className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'active' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Active ({activeHoldings.length})</button>
-        <button onClick={() => setHoldingsTab('sold')} className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'sold' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Sold ({soldHoldings.length})</button>
-        <button onClick={() => setHoldingsTab('search')} className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${holdingsTab === 'search' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}><Search className="w-3 h-3" /> Quote Search</button>
-        <button onClick={() => setHoldingsTab('settings')} className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${holdingsTab === 'settings' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}><Settings className="w-3 h-3" /> Settings</button>
-        <button onClick={() => { setHoldingsTab('pnl_calendar'); }} className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'pnl_calendar' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>P&L Calendar</button>
-        {activeHoldings.some(h => h.holding_type === 'mutual_fund') && (
-          <button
-            onClick={() => { setHoldingsTab('mf-holdings'); loadMfHoldingsCache?.(); }}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${holdingsTab === 'mf-holdings' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
-          >
-            <PieChart className="w-3 h-3" /> MF Holdings
-          </button>
-        )}
+      {/* Holdings tabs — horizontal scroll on mobile (same pattern as Book chips) */}
+      <div className="w-full min-w-0 max-w-full">
+        <div
+          className="w-full min-w-0 overflow-x-auto overscroll-x-contain touch-pan-x"
+          style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
+        >
+          <div className="flex flex-nowrap items-center gap-1.5 w-max pr-2">
+            <button
+              type="button"
+              onClick={() => setHoldingsTab('active')}
+              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
+                holdingsTab === 'active'
+                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+              }`}
+            >
+              Active ({activeHoldings.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setHoldingsTab('sold')}
+              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
+                holdingsTab === 'sold'
+                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+              }`}
+            >
+              Sold ({soldHoldings.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setHoldingsTab('search')}
+              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${
+                holdingsTab === 'search'
+                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+              }`}
+            >
+              <Search className="w-3 h-3" /> Quote Search
+            </button>
+            <button
+              type="button"
+              onClick={() => setHoldingsTab('settings')}
+              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${
+                holdingsTab === 'settings'
+                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+              }`}
+            >
+              <Settings className="w-3 h-3" /> Settings
+            </button>
+            <button
+              type="button"
+              onClick={() => setHoldingsTab('pnl_calendar')}
+              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
+                holdingsTab === 'pnl_calendar'
+                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+              }`}
+            >
+              P&L Calendar
+            </button>
+            {activeHoldings.some((h) => h.holding_type === 'mutual_fund') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setHoldingsTab('mf-holdings');
+                  loadMfHoldingsCache?.();
+                }}
+                className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${
+                  holdingsTab === 'mf-holdings'
+                    ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                }`}
+              >
+                <PieChart className="w-3 h-3" /> MF Holdings
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {holdingsTab === 'search' && (
