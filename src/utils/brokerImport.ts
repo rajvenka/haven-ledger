@@ -22,7 +22,7 @@ export interface ParsedHolding {
   matchKey?: string;
 }
 
-export type BrokerTemplate = 'zerodha' | 'groww_stocks' | 'groww_mf' | 'stake' | 'universal';
+export type BrokerTemplate = 'zerodha' | 'groww_stocks' | 'groww_mf' | 'stake' | 'universal' | 'moomoo' | 'tiger';
 export const UNIVERSAL_TEMPLATE_HEADERS = ['Broker', 'Holding Type', 'Symbol', 'ISIN', 'Exchange', 'Quantity', 'Buy Price', 'Current Price', 'Currency', 'Source', 'Folio Number'];
 export const UNIVERSAL_TEMPLATE_EXAMPLE_ROW = ['eToro', 'Stock', 'AAPL', '', 'NASDAQ', 10, 150.25, 175.50, 'USD', '', ''];
 
@@ -368,6 +368,48 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
           currency: (validCurrencies.includes(currencyRaw) ? currencyRaw : 'INR') as ParsedHolding['currency'],
         };
       });
+  }
+
+  if (template === 'moomoo' || template === 'tiger') {
+    const brokerName = template === 'moomoo' ? 'Moomoo' : 'Tiger';
+    // Flexible CSV: Symbol, Quantity, Buy Price / Avg Cost, Current / Market Price, Currency
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length < 2) throw new Error(`Empty ${brokerName} file`);
+    const split = (line: string) => line.split(/,|\t/).map((s) => s.trim().replace(/^"|"$/g, ''));
+    const headers = split(lines[0]).map((h) => h.toLowerCase());
+    const find = (...keys: string[]) => headers.findIndex((h) => keys.some((k) => h.includes(k)));
+    const iSym = find('symbol', 'ticker', 'code', 'stock');
+    const iQty = find('qty', 'quantity', 'shares', 'units', 'position');
+    const iBuy = find('avg', 'cost', 'buy', 'entry');
+    const iMkt = find('market', 'last', 'current', 'price', 'mkt');
+    const iCcy = find('currency', 'ccy');
+    if (iSym < 0 || iQty < 0) {
+      throw new Error(`${brokerName}: need Symbol and Quantity columns (CSV export from app)`);
+    }
+    const out: ParsedHolding[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = split(lines[i]);
+      if (!cols[iSym]) continue;
+      const qty = Number(String(cols[iQty] || '').replace(/,/g, ''));
+      if (!Number.isFinite(qty) || qty === 0) continue;
+      const buy = Number(String(cols[iBuy >= 0 ? iBuy : -1] || '').replace(/,/g, '')) || 0;
+      const mkt = Number(String(cols[iMkt >= 0 ? iMkt : -1] || '').replace(/,/g, '')) || buy;
+      const ccy = (iCcy >= 0 ? cols[iCcy] : 'USD') || 'USD';
+      out.push({
+        broker: brokerName,
+        holdingType: 'stock',
+        symbol: cols[iSym].toUpperCase(),
+        exchange: ccy.toUpperCase() === 'AUD' ? 'ASX' : 'US',
+        quantity: Math.abs(qty),
+        buyPrice: buy,
+        currentPrice: mkt,
+        currency: ccy.toUpperCase(),
+        source: brokerName,
+      });
+    }
+    if (!out.length) throw new Error(`No holdings found in ${brokerName} CSV`);
+    return out;
   }
 
   if (template === 'groww_stocks') {
