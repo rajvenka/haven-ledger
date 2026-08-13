@@ -136,6 +136,35 @@ function isCommodityHolding(h: any): boolean {
 /** Webull (and similar) equity options store price as premium×100. Yahoo must not overwrite. */
 
 /** Broker + type label used by filter pills (must match between options and filter match). */
+
+/** Normalize messy broker source tags for filters/UI (legacy rows included). */
+function normalizeSourceTag(raw: string | null | undefined, h?: any): string | null {
+  if (h && (String(h.holding_type || '').toLowerCase() === 'options' || String(h.holding_type || '').toLowerCase() === 'option')) {
+    return 'Options';
+  }
+  if (!raw || !String(raw).trim()) return null;
+  const s = String(raw).trim();
+  const lower = s.toLowerCase();
+  if (lower.includes('option')) return 'Options';
+  if (lower.includes('cfd') || lower.includes('leveraged')) return 'CFD';
+  if (lower.includes('real asset') || lower.includes('real ass')) return 'Real Asset';
+  if (lower.includes('crypto')) return 'Crypto';
+  if (lower.includes('future')) return 'Futures';
+  if (lower.includes('zerodha')) return 'Zerodha';
+  if (lower.includes('groww')) return 'Groww';
+  if (lower.includes('stake')) return 'Stake';
+  if (lower.startsWith('webull')) return 'Webull';
+  if (lower.startsWith('etoro')) {
+    if (lower.includes('cfd')) return 'CFD';
+    if (lower.includes('real')) return 'Real Asset';
+    return 'eToro';
+  }
+  // Strip trailing · position ids (e.g. "Webull · Options · 1C000000")
+  const cleaned = s.replace(/\s*·\s*[A-Z0-9]{4,}$/i, '').trim();
+  if (/option/i.test(cleaned)) return 'Options';
+  return cleaned;
+}
+
 function holdingFilterCombo(h: any): string {
   const broker = String(h.broker || 'Other').trim() || 'Other';
   const t = String(h.holding_type || '').toLowerCase();
@@ -739,7 +768,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       if (portfolioMode === 'multiple') portfolioNames.add(holdingPortfolioName!);
       if (selectedPortfolioNames.size > 0 && portfolioMode === 'multiple' && !selectedPortfolioNames.has(holdingPortfolioName!)) return;
       combos.add(holdingFilterCombo(h));
-      if (h.source) sources.add(h.source); else hasUnclassified = true;
+      const src = normalizeSourceTag(h.source, h); if (src) sources.add(src); else hasUnclassified = true;
       if (h.change_flag && CHANGE_FLAG_LABELS[h.change_flag]) changes.add(CHANGE_FLAG_LABELS[h.change_flag]);
       const moveLabel = getSinceUploadLabel(h);
       if (moveLabel) priceMoves.add(moveLabel);
@@ -769,7 +798,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       list = activeHoldings.filter(h => {
         const combo = holdingFilterCombo(h);
         const comboOk = selectedCombos.length === 0 || selectedCombos.includes(combo);
-        const sourceOk = selectedSources.length === 0 || (h.source ? selectedSources.includes(h.source) : selectedSources.includes(UNCLASSIFIED_LABEL));
+        const normSrc = normalizeSourceTag(h.source, h); const sourceOk = selectedSources.length === 0 || (normSrc ? selectedSources.includes(normSrc) : selectedSources.includes(UNCLASSIFIED_LABEL));
         const changeLabel = h.change_flag ? CHANGE_FLAG_LABELS[h.change_flag] : null;
         const changeOk = selectedChanges.length === 0 || (changeLabel && selectedChanges.includes(changeLabel));
         const moveLabel = getSinceUploadLabel(h);
@@ -838,7 +867,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     let hasUnclassified = false;
     soldHoldings.forEach(h => {
       combos.add(holdingFilterCombo(h));
-      if (h.source) sources.add(h.source); else hasUnclassified = true;
+      const src = normalizeSourceTag(h.source, h); if (src) sources.add(src); else hasUnclassified = true;
       if (portfolioMode === 'multiple') portfolioNames.add(portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned');
     });
     const sortedSources = Array.from(sources).sort();
@@ -868,7 +897,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       list = soldHoldings.filter(h => {
         const combo = holdingFilterCombo(h);
         const comboOk = selectedCombos.length === 0 || selectedCombos.includes(combo);
-        const sourceOk = selectedSources.length === 0 || (h.source ? selectedSources.includes(h.source) : selectedSources.includes(UNCLASSIFIED_LABEL));
+        const normSrc = normalizeSourceTag(h.source, h); const sourceOk = selectedSources.length === 0 || (normSrc ? selectedSources.includes(normSrc) : selectedSources.includes(UNCLASSIFIED_LABEL));
         const portfolioName = portfolioMode === 'multiple' ? (portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned') : null;
         const portfolioOk = selectedPortfolios.length === 0 || (portfolioName && selectedPortfolios.includes(portfolioName));
         return comboOk && sourceOk && portfolioOk;
