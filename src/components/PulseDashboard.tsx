@@ -276,7 +276,7 @@ export default function PulseDashboard({
                     <p className="text-[12px] font-bold text-slate-900 dark:text-white truncate">{ins.name}</p>
                     <p className="text-[10px] text-slate-500">
                       {isOd ? 'Overdue · ' : ''}
-                      {formatDatePretty(ins.dueDate)}
+                      {formatDatePretty(new Date(ins.dueDate))}
                     </p>
                   </div>
                   <div className="text-right shrink-0">
