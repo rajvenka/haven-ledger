@@ -3,7 +3,7 @@
  * Contributions, withdrawals, recurring plans.
  */
 import React, { useMemo, useState } from 'react';
-import { Plus, Trash2, X, TrendingUp, TrendingDown, Repeat } from 'lucide-react';
+import { Plus, Trash2, X, TrendingUp, TrendingDown, Repeat, ClipboardList } from 'lucide-react';
 
 export default function PulseInvestment(props: any) {
   const {
@@ -101,26 +101,26 @@ export default function PulseInvestment(props: any) {
   return (
     <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-left w-full max-w-full">
       <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 space-y-2.5">
-        <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950/20 p-3 sm:p-3.5">
+        <div className="rounded-2xl bg-indigo-600 text-white p-4 shadow-lg shadow-indigo-600/25">
           <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
-                  {workspaceName ? `${workspaceName} Investment Plan` : 'Investment Plan'}
-                </h1>
-                <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-indigo-600/90 text-white">
-                  Pulse
-                </span>
+            <div className="min-w-0 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                <ClipboardList className="w-5 h-5 text-white" />
               </div>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">
+              <div className="min-w-0">
+              <h1 className="text-xl font-black tracking-tight truncate">
+                {workspaceName ? `${workspaceName} Investment Plan` : 'Investment Plan'}
+              </h1>
+              <p className="text-[11px] font-semibold text-indigo-100/90">
                 In {money(contribTotal)} · Out {money(withTotal)} · Net {money(contribTotal - withTotal)}
               </p>
+              </div>
             </div>
             {!isReadOnly && (
               <button
                 type="button"
                 onClick={() => setOpen(true)}
-                className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold bg-indigo-600 text-white"
+                className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold bg-white/20 hover:bg-white/30 text-white border border-white/30"
               >
                 <Plus className="w-3.5 h-3.5" /> Add
               </button>
