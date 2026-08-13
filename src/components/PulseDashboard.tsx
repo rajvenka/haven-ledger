@@ -110,6 +110,7 @@ export default function PulseDashboard({
   currentUserUid,
   monthlyIncomeEstimate = 0,
 }: Props) {
+  const [paidFilter, setPaidFilter] = useState<'all' | 'unpaid' | 'paid'>('unpaid');
   const isPaymentReadOnly = (payment?: RecurringPayment) => {
     if (!payment) return true;
     if (!isReadOnly) return false;
@@ -192,10 +193,20 @@ export default function PulseDashboard({
     return 'manual_monthly';
   };
 
+  // Paid this month instances for "Paid" filter
+  const paidThisMonthInstances = currentMonthInstances.filter((ins) => ins.status === 'paid');
+
+  const listForFilter =
+    paidFilter === 'paid'
+      ? paidThisMonthInstances
+      : paidFilter === 'unpaid'
+        ? upcomingList
+        : [...upcomingList, ...paidThisMonthInstances].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
   const groupedUpcoming = {
-    dd: upcomingList.filter((ins) => groupOf(ins) === 'dd'),
-    manual_monthly: upcomingList.filter((ins) => groupOf(ins) === 'manual_monthly'),
-    non_monthly: upcomingList.filter((ins) => groupOf(ins) === 'non_monthly'),
+    dd: listForFilter.filter((ins) => groupOf(ins) === 'dd'),
+    manual_monthly: listForFilter.filter((ins) => groupOf(ins) === 'manual_monthly'),
+    non_monthly: listForFilter.filter((ins) => groupOf(ins) === 'non_monthly'),
   };
 
   const markDdDone = async (list: typeof upcomingList) => {
@@ -335,6 +346,35 @@ export default function PulseDashboard({
         </div>
       </div>
 
+      {/* Paid filter chips */}
+      <div className="flex items-center gap-2">
+        <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 shrink-0">Show</span>
+        <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          {([
+            ['all', 'All'],
+            ['unpaid', 'To be paid'],
+            ['paid', 'Paid'],
+          ] as const).map(([id, lab]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setPaidFilter(id)}
+              className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                paidFilter === id
+                  ? id === 'unpaid'
+                    ? 'bg-rose-600 text-white shadow-md shadow-rose-600/25'
+                    : id === 'paid'
+                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
+                      : 'bg-slate-800 dark:bg-white text-white dark:text-slate-900 shadow-md'
+                  : 'text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              {lab}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Upcoming — grouped */}
       <div className="space-y-3">
         {(
@@ -470,7 +510,9 @@ export default function PulseDashboard({
                         <p className="text-[13px] font-black tabular-nums text-slate-900 dark:text-white">
                           {money(ins.amount, ins.currency, countries)}
                         </p>
-                        {payment && !isPaymentReadOnly(payment) && (
+                        {ins.status === 'paid' ? (
+                          <span className="text-[10px] font-bold text-emerald-600 mt-0.5">Paid</span>
+                        ) : payment && !isPaymentReadOnly(payment) ? (
                           <button
                             type="button"
                             onClick={() => onRecordPayment(payment, ins.dueDate)}
@@ -482,7 +524,7 @@ export default function PulseDashboard({
                           >
                             {group.key === 'dd' ? 'DD done?' : 'Mark paid'}
                           </button>
-                        )}
+                        ) : null}
                       </div>
                     </li>
                   );
@@ -496,9 +538,13 @@ export default function PulseDashboard({
             </div>
           );
         })}
-        {upcomingList.length === 0 && (
+        {listForFilter.length === 0 && (
           <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 px-3.5 py-8 text-center text-[12px] text-slate-400">
-            Nothing due in the next week 🎉
+            {paidFilter === 'paid'
+              ? 'No paid bills logged this month yet'
+              : paidFilter === 'unpaid'
+                ? 'Nothing left to pay — nice 🎉'
+                : 'No bills in this view'}
           </div>
         )}
       </div>
