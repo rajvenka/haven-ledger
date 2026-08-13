@@ -62,7 +62,7 @@ interface PortfolioViewProps {
   bulkHistoricalImport: (snapshots: { date: string; holdings: any[] }[], portfolioId?: string) => Promise<{ newCount: number; updatedCount: number; soldCount: number; skippedStaleCount: number; priceHistoryCount: number; stockCount: number }>;
   updatePortfolioHolding: (id: string, updates: any) => Promise<void>;
   sellPortfolioHolding: (id: string, params: { quantity: number; soldPrice: number; soldDate: string }) => Promise<void>;
-  updatePortfolioHoldingLivePrice: (id: string, price: number, previousClose?: number | null) => Promise<void>;
+  updatePortfolioHoldingLivePrice: (id: string, price: number, previousClose?: number | null, priceSource?: string | null) => Promise<void>;
   markPriceLookupFailed: (id: string) => Promise<void>;
   deletePortfolioHolding: (id: string) => Promise<void>;
   bulkTagPortfolioHoldings: (holdingIds: string[], source: string) => Promise<void>;
@@ -1679,11 +1679,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
         }
       }
 
-      // Reusable Groww LTP call - used both for holdings native to a Groww connection and
-      // as a fallback for Zerodha holdings whose own connection can't provide a quote (e.g.
-      // a free-tier Kite Connect app, which can't access /quote at all). Returns holdings
-      // that still need a price after this attempt, so the caller can chain to Yahoo.
-      const tryGrowwLtp = async (conn: any, holdings: any[]): Promise<any[]> => {
+      // Groww LTP first for Groww rows (avoids Yahoo rate limits on large India books).
+      for (const { conn, holdings } of growwGroups.values()) {
         try {
           const exchangeSymbols = holdings.map((h) => {
             const sym = String(h.ticker || h.symbol || '').toUpperCase().replace(/^(NSE|BSE)[_:]/, '');
@@ -1704,37 +1701,24 @@ export default function PortfolioView(props: PortfolioViewProps) {
           const data = await resp.json().catch(() => ({}));
           if (!resp.ok) throw new Error(data?.error || 'Groww LTP failed');
           const ltpMap: Record<string, any> = data.prices || data.ltp || data.payload || {};
-          const stillNeedsPrice: any[] = [];
           holdings.forEach((h, idx) => {
             const key = exchangeSymbols[idx];
             const bare = String(h.ticker || h.symbol || '').toUpperCase();
             const raw = ltpMap[key] ?? ltpMap[`NSE_${bare}`] ?? ltpMap[`BSE_${bare}`] ?? ltpMap[bare];
             const price = typeof raw === 'number' ? raw : Number(raw?.ltp ?? raw?.last_price ?? raw?.lastPrice);
             if (Number.isFinite(price) && price > 0) {
-              updatePromises.push(updatePortfolioHoldingLivePrice(h.id, price, null));
+              updatePromises.push(updatePortfolioHoldingLivePrice(h.id, price, null, 'Groww'));
               succeeded++;
             } else {
-              stillNeedsPrice.push(h);
+              yahooHoldings.push(h);
             }
           });
-          return stillNeedsPrice;
         } catch {
-          return holdings;
+          yahooHoldings.push(...holdings);
         }
-      };
-
-      // Groww LTP first for Groww rows (avoids Yahoo rate limits on large India books).
-      for (const { conn, holdings } of growwGroups.values()) {
-        yahooHoldings.push(...(await tryGrowwLtp(conn, holdings)));
       }
 
-      // Own broker first for Zerodha holdings -> any connected Groww account as a secondary
-      // India-market source -> Yahoo as the final fallback. This matters in practice: a free
-      // (Personal) Kite Connect app gets a 403 on /quote entirely, so without this step every
-      // Zerodha holding would skip straight to Yahoo even when a working Groww connection
-      // could have given a real, accurate NSE/BSE price instead.
       for (const { conn, holdings } of zerodhaGroups.values()) {
-        let stillNeedsPrice: any[] = [];
         try {
           const instruments = holdings.map(instrumentKey);
           const qResp = await fetch('/api/portfolio-zerodha-sync', {
@@ -1747,26 +1731,18 @@ export default function PortfolioView(props: PortfolioViewProps) {
           holdings.forEach((h) => {
             const q = qData.quotes?.[instrumentKey(h)];
             if (q?.lastPrice != null) {
-              updatePromises.push(updatePortfolioHoldingLivePrice(h.id, q.lastPrice, q.previousClose ?? null));
+              updatePromises.push(updatePortfolioHoldingLivePrice(h.id, q.lastPrice, q.previousClose ?? null, 'Zerodha'));
               succeeded++;
             } else {
-              stillNeedsPrice.push(h);
+              updatePromises.push(markPriceLookupFailed(h.id));
+              failed++;
             }
           });
         } catch {
-          // Whole call failed (403 on a free app, expired token, network error) - every
-          // holding in this batch still needs a price, so try the secondary broker next
-          // rather than marking them all failed immediately.
-          stillNeedsPrice = holdings;
-        }
-        if (stillNeedsPrice.length > 0) {
-          const secondaryGroww = growwConnections.find((c: any) => (c.portfolio_id || null) === (conn.portfolio_id || null)) ?? growwConnections[0];
-          if (secondaryGroww) {
-            const stillAfterGroww = await tryGrowwLtp(secondaryGroww, stillNeedsPrice);
-            yahooHoldings.push(...stillAfterGroww);
-          } else {
-            yahooHoldings.push(...stillNeedsPrice);
-          }
+          // Connection likely has an expired daily access_token - fall back to Yahoo for
+          // this batch rather than failing these holdings outright, so a stale Zerodha
+          // token degrades gracefully instead of blocking the whole refresh.
+          yahooHoldings.push(...holdings);
         }
       }
 
@@ -1789,7 +1765,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
           const holding = yahooHoldings[i];
           if (!holding) return;
           if (r.price != null) {
-            updatePromises.push(updatePortfolioHoldingLivePrice(holding.id, r.price, r.previousClose ?? null));
+            updatePromises.push(updatePortfolioHoldingLivePrice(holding.id, r.price, r.previousClose ?? null, 'Yahoo'));
             succeeded++;
           } else if (r.rateLimited || r.error === 'rate_limited') {
             // Soft fail — do not stamp "Symbol Not Found" for Yahoo throttling
@@ -1821,7 +1797,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             const holding = mutualFunds.find(h => h.id === r.id);
             if (!holding) return;
             if (r.nav != null) {
-              updatePromises.push(updatePortfolioHoldingLivePrice(holding.id, r.nav, null));
+              updatePromises.push(updatePortfolioHoldingLivePrice(holding.id, r.nav, null, 'MF'));
               mfSucceeded++;
             } else {
               updatePromises.push(markPriceLookupFailed(holding.id));
@@ -4495,7 +4471,21 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               case 'live_price':
                                 return (
                                   <td key="live_price" className="p-2.5 text-right text-slate-600 dark:text-slate-300">
-                                    {h.live_price != null ? fmtCur(Number(h.live_price), h.currency) : <span className="text-slate-300 dark:text-slate-700">—</span>}
+                                    {h.live_price != null ? (
+                                      <div className="flex flex-col items-end gap-0.5">
+                                        <span>{fmtCur(Number(h.live_price), h.currency)}</span>
+                                        {h.live_price_source && (
+                                          <span className={`text-[8px] font-black uppercase tracking-wider px-1 py-0.5 rounded ${
+                                            String(h.live_price_source).toLowerCase() === 'yahoo' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' :
+                                            String(h.live_price_source).toLowerCase() === 'etoro' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' :
+                                            String(h.live_price_source).toLowerCase() === 'webull' ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300' :
+                                            String(h.live_price_source).toLowerCase() === 'zerodha' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' :
+                                            String(h.live_price_source).toLowerCase() === 'groww' ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300' :
+                                            'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                                          }`}>{h.live_price_source}</span>
+                                        )}
+                                      </div>
+                                    ) : <span className="text-slate-300 dark:text-slate-700">—</span>}
                                   </td>
                                 );
                               case 'daily_change': {
