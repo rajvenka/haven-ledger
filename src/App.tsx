@@ -42,6 +42,8 @@ import PaymentModal from './components/PaymentModal';
 import Dashboard from './components/Dashboard';
 import PulseDashboard from './components/PulseDashboard';
 import PulseExpenses from './components/PulseExpenses';
+import PulseBills from './components/PulseBills';
+import PulseMembership from './components/PulseMembership';
 import ConfigurePayments from './components/ConfigurePayments';
 import AccountInfo from './components/AccountInfo';
 import PaymentHistoryView from './components/PaymentHistoryView';
@@ -1603,7 +1605,7 @@ export default function App() {
 
           {/* Dynamic page content body */}
           <main className={`flex-1 min-w-0 max-w-full overflow-x-hidden flex flex-col min-h-0 ${
-            uiPulse && (activeTab === 'expenses' || activeTab === 'summary')
+            uiPulse && (activeTab === 'expenses' || activeTab === 'summary' || activeTab === 'configure' || activeTab === 'rewards')
               ? 'overflow-hidden'
               : 'overflow-y-auto'
           }`}>
@@ -1682,20 +1684,36 @@ export default function App() {
                 />
               )
             ) : activeTab === 'configure' && hasFeature('core') ? (
-              <ConfigurePayments 
-                payments={payments}
-                history={history}
-                showFrequencyPatterns={showFrequencyPatterns}
-                onAddClick={handleOpenAddModal}
-                onEditClick={handleOpenEditModal}
-                onCloneClick={handleCloneClick}
-                onDeleteClick={deletePayment}
-                onUpdatePayment={updatePayment}
-                onAddBulkPayments={addBulkPayments}
-                onUpdatePaymentsOrder={updatePaymentsOrder}
-                isReadOnly={userProfile?.role === 'view'}
-                currentUserUid={user?.uid}
-              />
+              uiPulse ? (
+                <PulseBills
+                  payments={payments}
+                  history={history}
+                  showFrequencyPatterns={showFrequencyPatterns}
+                  onAddClick={handleOpenAddModal}
+                  onEditClick={handleOpenEditModal}
+                  onCloneClick={handleCloneClick}
+                  onDeleteClick={deletePayment}
+                  onUpdatePayment={updatePayment}
+                  onAddBulkPayments={addBulkPayments}
+                  isReadOnly={userProfile?.role === 'view'}
+                  currentUserUid={user?.uid}
+                />
+              ) : (
+                <ConfigurePayments 
+                  payments={payments}
+                  history={history}
+                  showFrequencyPatterns={showFrequencyPatterns}
+                  onAddClick={handleOpenAddModal}
+                  onEditClick={handleOpenEditModal}
+                  onCloneClick={handleCloneClick}
+                  onDeleteClick={deletePayment}
+                  onUpdatePayment={updatePayment}
+                  onAddBulkPayments={addBulkPayments}
+                  onUpdatePaymentsOrder={updatePaymentsOrder}
+                  isReadOnly={userProfile?.role === 'view'}
+                  currentUserUid={user?.uid}
+                />
+              )
             ) : activeTab === 'account' ? (
               <AccountInfo 
                 payments={payments}
@@ -1771,18 +1789,33 @@ export default function App() {
                 summaryCurrency={summaryCurrency}
               />
             ) : activeTab === 'rewards' ? (
-              <RewardsTracker
-                rewardsPerks={rewardsPerks}
-                onAddReward={addReward}
-                onUpdateReward={updateReward}
-                onDeleteReward={deleteReward}
-                giftCards={giftCards}
-                onAddGiftCard={addGiftCard}
-                onUpdateGiftCard={updateGiftCard}
-                onRedeemGiftCard={redeemGiftCard}
-                onDeleteGiftCard={deleteGiftCard}
-                isReadOnly={isReadOnly}
-              />
+              uiPulse ? (
+                <PulseMembership
+                  rewardsPerks={rewardsPerks}
+                  onAddReward={addReward}
+                  onUpdateReward={updateReward}
+                  onDeleteReward={deleteReward}
+                  giftCards={giftCards}
+                  onAddGiftCard={addGiftCard}
+                  onUpdateGiftCard={updateGiftCard}
+                  onRedeemGiftCard={redeemGiftCard}
+                  onDeleteGiftCard={deleteGiftCard}
+                  isReadOnly={isReadOnly}
+                />
+              ) : (
+                <RewardsTracker
+                  rewardsPerks={rewardsPerks}
+                  onAddReward={addReward}
+                  onUpdateReward={updateReward}
+                  onDeleteReward={deleteReward}
+                  giftCards={giftCards}
+                  onAddGiftCard={addGiftCard}
+                  onUpdateGiftCard={updateGiftCard}
+                  onRedeemGiftCard={redeemGiftCard}
+                  onDeleteGiftCard={deleteGiftCard}
+                  isReadOnly={isReadOnly}
+                />
+              )
             ) : activeTab === 'portfolio' ? (
               uiPulse ? (
               <PortfolioV1View
