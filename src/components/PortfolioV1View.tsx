@@ -1222,7 +1222,7 @@ export default function PortfolioV1View({
   return (
     <div className="w-full max-w-none px-3 sm:px-4 pt-2 sm:pt-3 pb-24 sm:pb-6 space-y-3 sm:space-y-4">
       {/* Hero */}
-      <div className="relative w-full overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950/30 p-3 sm:p-4">
+      <div className="relative w-full min-w-0 max-w-full overflow-x-hidden rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950/30 p-3 sm:p-4">
         <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-indigo-400/10 blur-3xl pointer-events-none" />
         <div className="relative flex items-start justify-between gap-3">
           <div>
@@ -1244,57 +1244,74 @@ export default function PortfolioV1View({
         {/* Portfolio + broker chips — segmented, Canva-clean */}
         <div className="relative mt-4 space-y-2.5">
           {multiPortfolio && portfoliosPresent.length > 0 && (
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-              <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-violet-500/80 dark:text-violet-400/80 w-12">
-                Book
-              </span>
-              <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-violet-100/80 dark:bg-violet-950/50 border border-violet-200/60 dark:border-violet-900/60">
-                <button
-                  type="button"
-                  onClick={() => selectPortfolioBook('All')}
-                  className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
-                    portfolioFilter === 'All'
-                      ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30'
-                      : 'text-violet-700/70 dark:text-violet-300/70 hover:text-violet-900 dark:hover:text-violet-100'
-                  }`}
+            <div className="w-full min-w-0 max-w-full space-y-2">
+              {/* Book row — own horizontal scroller */}
+              <div className="flex items-center gap-2 min-w-0 w-full">
+                <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-violet-500/80 dark:text-violet-400/80 w-10">
+                  Book
+                </span>
+                <div
+                  className="flex-1 min-w-0 overflow-x-auto overscroll-x-contain touch-pan-x no-scrollbar"
+                  style={{ WebkitOverflowScrolling: 'touch' }}
                 >
-                  All
-                </button>
-                {portfoliosPresent.map((p: any) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => selectPortfolioBook(p.id)}
-                    className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
-                      portfolioFilter === p.id
-                        ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30'
-                        : 'text-violet-700/70 dark:text-violet-300/70 hover:text-violet-900 dark:hover:text-violet-100'
-                    }`}
-                  >
-                    {p.name}
-                  </button>
-                ))}
-              </div>
-              {/* View currency — same place as before; keep visible whenever multiple exist */}
-              {currenciesPresent.length > 1 && (
-                <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-emerald-100/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-900/50 ml-1 shrink-0">
-                  <span className="px-1.5 text-[8px] font-black uppercase tracking-wider text-emerald-600/80 dark:text-emerald-400/80">
-                    View
-                  </span>
-                  {currenciesPresent.map((ccy) => (
+                  <div className="flex items-center gap-1 w-max pr-2">
                     <button
-                      key={ccy}
                       type="button"
-                      onClick={() => pickViewCurrency(ccy)}
-                      className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all ${
-                        viewCurrency === ccy
-                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
-                          : 'text-emerald-800/70 dark:text-emerald-300/70 hover:text-emerald-950 dark:hover:text-emerald-100'
+                      onClick={() => selectPortfolioBook('All')}
+                      className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                        portfolioFilter === 'All'
+                          ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30'
+                          : 'bg-violet-500/10 text-violet-700 dark:text-violet-300'
                       }`}
                     >
-                      {ccy}
+                      All
                     </button>
-                  ))}
+                    {portfoliosPresent.map((p: any) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => selectPortfolioBook(p.id)}
+                        className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all max-w-[7.5rem] truncate ${
+                          portfolioFilter === p.id
+                            ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30'
+                            : 'bg-violet-500/10 text-violet-700 dark:text-violet-300'
+                        }`}
+                        title={p.name}
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* View currency — separate row so it never steals Book space */}
+              {currenciesPresent.length > 1 && (
+                <div className="flex items-center gap-2 min-w-0 w-full">
+                  <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-emerald-500/80 dark:text-emerald-400/80 w-10">
+                    View
+                  </span>
+                  <div
+                    className="flex-1 min-w-0 overflow-x-auto overscroll-x-contain touch-pan-x no-scrollbar"
+                    style={{ WebkitOverflowScrolling: 'touch' }}
+                  >
+                    <div className="flex items-center gap-1 w-max pr-2">
+                      {currenciesPresent.map((ccy) => (
+                        <button
+                          key={ccy}
+                          type="button"
+                          onClick={() => pickViewCurrency(ccy)}
+                          className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                            viewCurrency === ccy
+                              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
+                              : 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
+                          }`}
+                        >
+                          {ccy}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
