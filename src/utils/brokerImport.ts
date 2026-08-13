@@ -13,6 +13,8 @@ export interface ParsedHolding {
   source?: string;
   currency?: 'INR' | 'USD' | 'AUD' | 'EUR' | 'GBP' | 'SGD' | 'AED' | 'CAD';
   buyDate?: string;
+  /** Yahoo-style ticker when different from display symbol (e.g. AMD.AX). */
+  ticker?: string;
   leverage?: number;
   stopLossRate?: number;
   takeProfitRate?: number;
@@ -123,31 +125,36 @@ function parseStakeDataRows(
 
     const name = idxName >= 0 && data[idxName] != null ? String(data[idxName]).trim() : undefined;
 
+    const code = sym.toUpperCase();
     if (section === 'aus') {
+      // ASX codes can collide with US tickers (e.g. AMD = Arrow Minerals on ASX,
+      // Advanced Micro Devices on NASDAQ). Tag + .AX ticker keep them distinct.
       results.push({
         holdingType: 'stock',
         broker: 'Stake',
-        symbol: sym.toUpperCase(),
+        symbol: code,
+        ticker: code.endsWith('.AX') ? code : `${code}.AX`,
         exchange: 'ASX',
         quantity: units,
         buyPrice: price,
         currentPrice: price,
         buyDate,
         currency: 'AUD',
-        source: name,
+        source: 'Stake AU',
       });
     } else {
       results.push({
         holdingType: 'stock',
         broker: 'Stake',
-        symbol: sym.toUpperCase(),
+        symbol: code,
+        ticker: code,
         exchange: 'US',
         quantity: units,
         buyPrice: price,
         currentPrice: price,
         buyDate,
         currency: 'USD',
-        source: name,
+        source: 'Stake US',
       });
     }
   }
