@@ -1704,8 +1704,25 @@ export default function App() {
                 />
               )
             ) : activeTab === 'configure' && hasFeature('core') ? (
+              uiPulse ? (
                 <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
-                <PulseBills
+                  <PulseBills
+                    payments={payments}
+                    history={history}
+                    showFrequencyPatterns={showFrequencyPatterns}
+                    onAddClick={handleOpenAddModal}
+                    onEditClick={handleOpenEditModal}
+                    onCloneClick={handleCloneClick}
+                    onDeleteClick={deletePayment}
+                    onUpdatePayment={updatePayment}
+                    onAddBulkPayments={addBulkPayments}
+                    onUpdatePaymentsOrder={updatePaymentsOrder}
+                    isReadOnly={userProfile?.role === 'view'}
+                    currentUserUid={user?.uid}
+                  />
+                </div>
+              ) : (
+                <ConfigurePayments
                   payments={payments}
                   history={history}
                   showFrequencyPatterns={showFrequencyPatterns}
@@ -1719,7 +1736,7 @@ export default function App() {
                   isReadOnly={userProfile?.role === 'view'}
                   currentUserUid={user?.uid}
                 />
-                </div>
+              )
             ) : activeTab === 'account' ? (
               <AccountInfo 
                 payments={payments}
