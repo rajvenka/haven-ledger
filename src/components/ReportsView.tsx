@@ -233,10 +233,10 @@ export default function ReportsView(props: ReportsViewProps) {
   ];
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-5 text-left bg-slate-50 dark:bg-slate-900">
+    <div className="flex-1 flex flex-col overflow-y-auto px-3 sm:px-5 pt-3 sm:pt-4 pb-24 md:pb-4 space-y-4 text-left bg-slate-50 dark:bg-slate-950">
       <div className="flex items-center gap-2">
         <FileBarChart className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-        <h2 className="text-lg font-bold text-slate-900 dark:text-white">{workspaceName ? `${workspaceName} Reports` : 'Reports'}</h2>
+        <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">{workspaceName ? `${workspaceName} Reports` : 'Reports'}</h2>
       </div>
 
       {formError && (
@@ -244,35 +244,60 @@ export default function ReportsView(props: ReportsViewProps) {
       )}
 
       {portfolioMode === 'multiple' && reportPortfolioNames.length > 1 && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <button
-            onClick={() => setSelectedReportPortfolios(new Set())}
-            className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${selectedReportPortfolios.size === 0 ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}
-          >
-            All
-          </button>
-          {reportPortfolioNames.map(p => (
+        <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-violet-500/80 dark:text-violet-400/80 w-10">
+            Book
+          </span>
+          <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-violet-100/80 dark:bg-violet-950/50 border border-violet-200/60 dark:border-violet-900/60">
             <button
-              key={p}
-              onClick={() => setSelectedReportPortfolios(prev => { const next = new Set(prev); if (next.has(p)) next.delete(p); else next.add(p); return next; })}
-              className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${selectedReportPortfolios.has(p) ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}
+              type="button"
+              onClick={() => setSelectedReportPortfolios(new Set())}
+              className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
+                selectedReportPortfolios.size === 0
+                  ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30'
+                  : 'text-violet-700/70 dark:text-violet-300/70'
+              }`}
             >
-              {p}
+              All
             </button>
-          ))}
+            {reportPortfolioNames.map(p => (
+              <button
+                type="button"
+                key={p}
+                onClick={() => setSelectedReportPortfolios(prev => { const next = new Set(prev); if (next.has(p)) next.delete(p); else next.add(p); return next; })}
+                className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
+                  selectedReportPortfolios.has(p)
+                    ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30'
+                    : 'text-violet-700/70 dark:text-violet-300/70'
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
-      <div className="flex gap-1.5 flex-wrap">
-        {TABS.map(t => (
-          <button
-            key={t.key}
-            onClick={() => setReportTab(t.key)}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${reportTab === t.key ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+        <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-500/80 dark:text-slate-400/80 w-10">
+          View
+        </span>
+        <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-slate-100/90 dark:bg-slate-900/80 border border-slate-200/60 dark:border-slate-800">
+          {TABS.map(t => (
+            <button
+              type="button"
+              key={t.key}
+              onClick={() => setReportTab(t.key)}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
+                reportTab === t.key
+                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 shadow-md'
+                  : 'text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {reportTab === 'overview' && (
