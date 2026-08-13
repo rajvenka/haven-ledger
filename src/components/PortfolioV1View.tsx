@@ -1220,7 +1220,7 @@ export default function PortfolioV1View({
   };
 
   return (
-    <div className="w-full max-w-none px-3 sm:px-4 pt-2 sm:pt-3 pb-24 sm:pb-6 space-y-3 sm:space-y-4">
+    <div className="w-full max-w-full min-w-0 overflow-x-hidden px-3 sm:px-4 pt-2 sm:pt-3 pb-24 sm:pb-6 space-y-3 sm:space-y-4 box-border">
       {/* Hero */}
       <div className="relative w-full min-w-0 max-w-full overflow-x-hidden rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950/30 p-3 sm:p-4">
         <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-indigo-400/10 blur-3xl pointer-events-none" />
@@ -1242,7 +1242,7 @@ export default function PortfolioV1View({
         )}
 
         {/* Portfolio + broker chips — segmented, Canva-clean */}
-        <div className="relative mt-4 space-y-2.5">
+        <div className="relative mt-4 space-y-2.5 w-full min-w-0 max-w-full">
           {multiPortfolio && portfoliosPresent.length > 0 && (
             <div className="w-full min-w-0 max-w-full space-y-2">
               {/* Book row — own horizontal scroller */}
@@ -1251,8 +1251,8 @@ export default function PortfolioV1View({
                   Book
                 </span>
                 <div
-                  className="flex-1 min-w-0 overflow-x-auto overscroll-x-contain touch-pan-x no-scrollbar"
-                  style={{ WebkitOverflowScrolling: 'touch' }}
+                  className="w-0 flex-1 min-w-0 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x"
+                  style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
                 >
                   <div className="flex items-center gap-1 w-max pr-2">
                     <button
@@ -1292,8 +1292,8 @@ export default function PortfolioV1View({
                     View
                   </span>
                   <div
-                    className="flex-1 min-w-0 overflow-x-auto overscroll-x-contain touch-pan-x no-scrollbar"
-                    style={{ WebkitOverflowScrolling: 'touch' }}
+                    className="w-0 flex-1 min-w-0 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x"
+                    style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
                   >
                     <div className="flex items-center gap-1 w-max pr-2">
                       {currenciesPresent.map((ccy) => (
@@ -1316,19 +1316,19 @@ export default function PortfolioV1View({
               )}
             </div>
           )}
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-indigo-500/80 dark:text-indigo-400/80 w-12">
+          <div className="flex items-center gap-2 min-w-0 w-full max-w-full">
+            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-indigo-500/80 dark:text-indigo-400/80 w-10">
               Broker
             </span>
-            <div className="flex-1 flex items-center gap-2 min-w-0 overflow-x-auto no-scrollbar">
-              <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-indigo-100/80 dark:bg-indigo-950/50 border border-indigo-200/60 dark:border-indigo-900/60 shrink-0">
+            <div className="w-0 flex-1 min-w-0 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
+              <div className="flex items-center gap-1 w-max pr-1">
                 <button
                   type="button"
                   onClick={() => setBrokerFilter('All')}
                   className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
                     brokerFilter === 'All'
                       ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                      : 'text-indigo-700/70 dark:text-indigo-300/70 hover:text-indigo-900 dark:hover:text-indigo-100'
+                      : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300'
                   }`}
                 >
                   All
@@ -1345,49 +1345,49 @@ export default function PortfolioV1View({
                     className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
                       brokerFilter === b
                         ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                        : 'text-indigo-700/70 dark:text-indigo-300/70 hover:text-indigo-900 dark:hover:text-indigo-100'
+                        : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300'
                     }`}
                   >
                     {b}
                   </button>
                 ))}
               </div>
-              {/* Connect + Refresh — teal track (≠ book violet / broker indigo / view green) */}
-              <div className="ml-auto inline-flex items-center gap-0.5 p-0.5 rounded-full bg-teal-100/90 dark:bg-teal-950/50 border border-teal-200/70 dark:border-teal-800/60 shrink-0">
-                <button
-                  type="button"
-                  onClick={openConnect}
-                  disabled={isReadOnly}
-                  className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold text-teal-800 dark:text-teal-200 hover:bg-teal-200/70 dark:hover:bg-teal-900/50 disabled:opacity-50 transition-all"
-                  title="Add or manage broker connection"
-                >
-                  <Plus className="w-3 h-3" />
-                  Connect
-                </button>
-                {portfolioFilter !== 'All' && portfolioFilter !== '__pending__' && bookConnections.length > 0 && (
-                  bookConnections.map((c: any) => {
-                    const busy = syncingId === c.id;
-                    const label = c.connection_label || c.broker_type || 'Broker';
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        disabled={isReadOnly || busy}
-                        onClick={() => syncConnection(c)}
-                        title={`Refresh holdings from ${label}`}
-                        className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all disabled:opacity-50 ${
-                          busy
-                            ? 'bg-teal-700 text-white shadow-md shadow-teal-700/30'
-                            : 'bg-teal-600 text-white shadow-md shadow-teal-600/30 hover:bg-teal-700'
-                        }`}
-                      >
-                        <RefreshCw className={`w-3 h-3 ${busy ? 'animate-spin' : ''}`} />
-                        {busy ? 'Refreshing…' : 'Refresh'}
-                      </button>
-                    );
-                  })
-                )}
-              </div>
+            </div>
+            {/* Connect + Refresh pinned — not inside horizontal scroller */}
+            <div className="shrink-0 inline-flex items-center gap-0.5 p-0.5 rounded-full bg-teal-100/90 dark:bg-teal-950/50 border border-teal-200/70 dark:border-teal-800/60">
+              <button
+                type="button"
+                onClick={openConnect}
+                disabled={isReadOnly}
+                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold text-teal-800 dark:text-teal-200 hover:bg-teal-200/70 dark:hover:bg-teal-900/50 disabled:opacity-50 transition-all"
+                title="Add or manage broker connection"
+              >
+                <Plus className="w-3 h-3" />
+                Connect
+              </button>
+              {portfolioFilter !== 'All' && portfolioFilter !== '__pending__' && bookConnections.length > 0 && (
+                bookConnections.map((c: any) => {
+                  const busy = syncingId === c.id;
+                  const label = c.connection_label || c.broker_type || 'Broker';
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      disabled={isReadOnly || busy}
+                      onClick={() => syncConnection(c)}
+                      title={`Refresh holdings from ${label}`}
+                      className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all disabled:opacity-50 ${
+                        busy
+                          ? 'bg-teal-700 text-white shadow-md shadow-teal-700/30'
+                          : 'bg-teal-600 text-white shadow-md shadow-teal-600/30 hover:bg-teal-700'
+                      }`}
+                    >
+                      <RefreshCw className={`w-3 h-3 ${busy ? 'animate-spin' : ''}`} />
+                      {busy ? 'Refreshing…' : 'Refresh'}
+                    </button>
+                  );
+                })
+              )}
             </div>
           </div>
           {(connectOk || connectError) && !connectOpen && (
