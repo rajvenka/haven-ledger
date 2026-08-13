@@ -1243,14 +1243,14 @@ export default function PortfolioV1View({
                   </button>
                 ))}
               </div>
-              {/* Connect + Sync — same row as Broker, chip wrap like currency (amber) */}
-              <div className="ml-auto inline-flex items-center gap-0.5 p-0.5 rounded-full bg-amber-100/80 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-900/50 shrink-0 pl-0.5">
+              {/* Connect + Refresh — teal track (≠ book violet / broker indigo / view green) */}
+              <div className="ml-auto inline-flex items-center gap-0.5 p-0.5 rounded-full bg-teal-100/90 dark:bg-teal-950/50 border border-teal-200/70 dark:border-teal-800/60 shrink-0">
                 <button
                   type="button"
                   onClick={openConnect}
                   disabled={isReadOnly}
-                  className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold text-amber-800/80 dark:text-amber-300/80 hover:bg-amber-200/60 dark:hover:bg-amber-900/40 disabled:opacity-50 transition-all"
-                  title="Connect broker"
+                  className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold text-teal-800 dark:text-teal-200 hover:bg-teal-200/70 dark:hover:bg-teal-900/50 disabled:opacity-50 transition-all"
+                  title="Add or manage broker connection"
                 >
                   <Plus className="w-3 h-3" />
                   Connect
@@ -1265,15 +1265,15 @@ export default function PortfolioV1View({
                         type="button"
                         disabled={isReadOnly || busy}
                         onClick={() => syncConnection(c)}
-                        title={`Sync ${label}`}
+                        title={`Refresh holdings from ${label}`}
                         className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all disabled:opacity-50 ${
                           busy
-                            ? 'bg-amber-600 text-white shadow-md shadow-amber-600/25'
-                            : 'bg-amber-500 text-white shadow-md shadow-amber-500/25 hover:bg-amber-600'
+                            ? 'bg-teal-700 text-white shadow-md shadow-teal-700/30'
+                            : 'bg-teal-600 text-white shadow-md shadow-teal-600/30 hover:bg-teal-700'
                         }`}
                       >
                         <RefreshCw className={`w-3 h-3 ${busy ? 'animate-spin' : ''}`} />
-                        {busy ? '…' : 'Sync'}
+                        {busy ? 'Refreshing…' : 'Refresh'}
                       </button>
                     );
                   })
