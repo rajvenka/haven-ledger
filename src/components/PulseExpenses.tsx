@@ -141,8 +141,8 @@ export default function PulseExpenses({
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto px-4 sm:px-5 pt-4 pb-24 md:pb-6 space-y-4 text-left bg-slate-50 dark:bg-slate-950">
-      <div className="flex items-start justify-between gap-3">
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden px-4 sm:px-5 pt-3 pb-20 md:pb-4 text-left bg-slate-50 dark:bg-slate-950">
+      <div className="shrink-0 flex items-start justify-between gap-3 mb-3">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">Spend</h1>
@@ -163,8 +163,8 @@ export default function PulseExpenses({
         )}
       </div>
 
-      {/* Summary tiles (scroll away) */}
-      <div className="grid grid-cols-2 gap-2.5">
+      {/* Summary tiles */}
+      <div className="shrink-0 grid grid-cols-2 gap-2.5 mb-2">
         <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5">
           <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Still due</p>
           <p className="mt-1 text-xl font-black tabular-nums text-slate-900 dark:text-white">
@@ -181,8 +181,8 @@ export default function PulseExpenses({
         </div>
       </div>
 
-      {/* Sticky filters */}
-      <div className="sticky top-0 z-20 -mx-4 sm:-mx-5 px-4 sm:px-5 py-2.5 space-y-2 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md border-b border-slate-200/70 dark:border-slate-800/70">
+      {/* Pinned filters — stay on screen; only the list below scrolls */}
+      <div className="shrink-0 space-y-2 py-2 border-b border-slate-200/70 dark:border-slate-800/70 bg-slate-50 dark:bg-slate-950">
         {/* Currency chips */}
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
           <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-400 w-10">Ccy</span>
@@ -280,6 +280,8 @@ export default function PulseExpenses({
         </div>
       </div>
 
+      {/* Scrollable bill groups only */}
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pt-3 pb-4 overscroll-contain">
       {/* Grouped lists */}
       {(
         [
@@ -397,6 +399,7 @@ export default function PulseExpenses({
           No active expenses in this currency
         </p>
       )}
+      </div>
 
     </div>
   );
