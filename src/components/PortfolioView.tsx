@@ -2301,6 +2301,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const sincePreviousLoadChange = holdingsWithLoadChange.reduce((s, h) => s + convHeader(h, (Number(h.live_price) - Number(h.current_price ?? h.buy_price)) * Number(h.quantity)), 0);
   const returnPct = netContributed > 0 ? (netGain / netContributed) * 100 : 0;
 
+  useEffect(() => {
+    if (holdingsTab === 'pnl_calendar') reloadPnlCalendar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holdingsTab]);
+
   return (
     <div className="flex-1 flex flex-col overflow-y-auto px-3 sm:px-4 pt-3 pb-24 md:pb-4 space-y-5 text-left bg-slate-50 dark:bg-slate-900">
       {/* Header */}
