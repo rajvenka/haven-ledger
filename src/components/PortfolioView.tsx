@@ -47,7 +47,7 @@ interface PortfolioViewProps {
     holdType?: 'days' | 'date'; holdDays?: number; holdUntilDate?: string;
   }) => Promise<void>;
   bulkAddPortfolioHoldings: (holdings: {
-    holdingType: 'stock' | 'mutual_fund' | 'options'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string; currency?: string;
+    holdingType: 'stock' | 'mutual_fund' | 'options'; broker: string; symbol: string; isin?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string; currency?: string; ticker?: string;
   }[], portfolioId?: string) => Promise<void>;
   portfolios?: any[];
   portfolioMode?: 'single' | 'multiple';
@@ -1538,6 +1538,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
           await bulkAddPortfolioHoldings(
             importPreview.fresh.map(h => ({
               holdingType: h.holdingType, broker: h.broker, symbol: h.symbol, isin: h.isin, folioNumber: h.folioNumber, exchange: h.exchange,
+              ticker: (h as any).ticker,
               quantity: h.quantity, buyPrice: h.buyPrice, buyDate: importBuyDate, currentPrice: h.currentPrice,
               source: h.source || importSourceTag.trim() || undefined, currency: h.currency,
               leverage: h.leverage, stopLossRate: h.stopLossRate, takeProfitRate: h.takeProfitRate, etoroNetValueAmount: h.etoroNetValueAmount,
