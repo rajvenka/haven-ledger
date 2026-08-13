@@ -1844,6 +1844,7 @@ export default function App() {
                 portfolioCashBalances={portfolioCashBalances}
                 portfolioBrokerConnections={portfolioBrokerConnections}
                 workspaceCurrencyRates={workspaceCurrencyRates}
+                bulkAddPortfolioHoldings={bulkAddPortfolioHoldings}
                 setPortfolioBrokerConnection={setPortfolioBrokerConnection}
                 deletePortfolioBrokerConnection={deletePortfolioBrokerConnection}
                 markBrokerConnectionSynced={markBrokerConnectionSynced}
