@@ -88,6 +88,30 @@ export default function PulseExpenses({
 
   const sorted = [...filteredPayments].sort((a, b) => getDaysUntilPayment(a) - getDaysUntilPayment(b));
 
+  const isMonthlyCycle = (cycle?: string) => {
+    const c = String(cycle || 'monthly').toLowerCase();
+    return c === 'monthly' || c === 'weekly';
+  };
+  const groupOf = (p: RecurringPayment): 'dd' | 'manual_monthly' | 'non_monthly' => {
+    const method = String(p.paymentMethod || 'manual').toLowerCase();
+    if (method === 'direct_debit' || method === 'dd') return 'dd';
+    if (!isMonthlyCycle(p.billingCycle)) return 'non_monthly';
+    return 'manual_monthly';
+  };
+  const groups = {
+    dd: sorted.filter((p) => groupOf(p) === 'dd'),
+    manual_monthly: sorted.filter((p) => groupOf(p) === 'manual_monthly'),
+    non_monthly: sorted.filter((p) => groupOf(p) === 'non_monthly'),
+  };
+
+  const markAllDdDone = async () => {
+    for (const p of groups.dd) {
+      if (isPaymentPaidForCurrentPeriod(p, history)) continue;
+      if (isPaymentReadOnly(p)) continue;
+      await onRecordPayment(p);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col overflow-y-auto px-4 sm:px-5 pt-4 pb-24 md:pb-6 space-y-4 text-left bg-slate-50 dark:bg-slate-950">
       <div className="flex items-start justify-between gap-3">
@@ -160,83 +184,124 @@ export default function PulseExpenses({
         </div>
       </div>
 
-      {/* List */}
-      <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
-        <div className="px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-          <p className="text-[11px] font-black text-slate-800 dark:text-slate-100">Bills</p>
-          <span className="text-[10px] font-bold text-slate-400">{sorted.length}</span>
-        </div>
-        {sorted.length === 0 ? (
-          <p className="px-3.5 py-10 text-center text-[12px] text-slate-400">No active expenses in this currency</p>
-        ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-            {sorted.map((p) => {
-              const paid = isPaymentPaidForCurrentPeriod(p, history);
-              const days = getDaysUntilPayment(p);
-              const color = getCategoryColor(p.category);
-              const status = paid
-                ? 'paid'
-                : days < 0
-                  ? 'overdue'
-                  : days === 0
-                    ? 'today'
-                    : days <= 3
-                      ? 'soon'
-                      : 'upcoming';
-              const statusStyle =
-                status === 'paid'
-                  ? { label: 'Paid', badge: 'bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/25', row: 'border-l-[3px] border-l-emerald-500', dot: 'bg-emerald-500' }
-                  : status === 'overdue'
-                    ? { label: 'Overdue', badge: 'bg-rose-500/15 text-rose-600 ring-1 ring-rose-500/25', row: 'border-l-[3px] border-l-rose-500 bg-rose-500/[0.03]', dot: 'bg-rose-500' }
-                    : status === 'today'
-                      ? { label: 'Due today', badge: 'bg-amber-500/15 text-amber-700 ring-1 ring-amber-500/25', row: 'border-l-[3px] border-l-amber-500', dot: 'bg-amber-500' }
-                      : status === 'soon'
-                        ? { label: 'Due soon', badge: 'bg-orange-500/15 text-orange-700 ring-1 ring-orange-500/25', row: 'border-l-[3px] border-l-orange-400', dot: 'bg-orange-500' }
-                        : { label: 'Upcoming', badge: 'bg-slate-100 dark:bg-slate-800 text-slate-500', row: 'border-l-[3px] border-l-slate-300 dark:border-l-slate-600', dot: 'bg-slate-400' };
-              return (
-                <li key={p.id} className={`px-3.5 py-2.5 flex items-center gap-3 ${statusStyle.row}`}>
-                  <div className="relative shrink-0">
-                    <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-[10px] font-black"
-                      style={{ backgroundColor: color || '#6366f1' }}
-                    >
-                      {(p.name || '?').slice(0, 2).toUpperCase()}
-                    </div>
-                    <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-slate-900 ${statusStyle.dot}`} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[12px] font-bold text-slate-900 dark:text-white truncate">{p.name}</p>
-                    <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                      <span className={`text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-md ${statusStyle.badge}`}>
-                        {statusStyle.label}
-                      </span>
-                      <span className="text-[10px] text-slate-500">
-                        {p.category || 'General'} · {p.currency}
-                        {!paid && days !== 0 && status !== 'overdue' ? ` · in ${days}d` : ''}
-                        {status === 'overdue' ? ` · ${Math.abs(days)}d late` : ''}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-[12px] font-black tabular-nums text-slate-900 dark:text-white">
-                      {formatCurrencyValue(p.amount, p.currency as any, countries)}
-                    </p>
-                    {!paid && !isPaymentReadOnly(p) && (
-                      <button
-                        type="button"
-                        onClick={() => onRecordPayment(p)}
-                        className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-600 mt-0.5"
+      {/* Grouped lists */}
+      {(
+        [
+          { key: 'dd' as const, title: 'Direct debit', items: groups.dd, accent: 'border-sky-200 dark:border-sky-900/50', head: 'text-sky-700 dark:text-sky-300' },
+          { key: 'manual_monthly' as const, title: 'Manual monthly', items: groups.manual_monthly, accent: 'border-violet-200 dark:border-violet-900/50', head: 'text-violet-700 dark:text-violet-300' },
+          { key: 'non_monthly' as const, title: 'Non-monthly', items: groups.non_monthly, accent: 'border-slate-200 dark:border-slate-800', head: 'text-slate-700 dark:text-slate-300' },
+        ] as const
+      ).map((group) => {
+        if (group.items.length === 0) return null;
+        return (
+          <div key={group.key} className={`rounded-2xl border ${group.accent} bg-white dark:bg-slate-900 overflow-hidden`}>
+            <div className="px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+              <div>
+                <p className={`text-[11px] font-black ${group.head}`}>{group.title}</p>
+                <p className="text-[9px] text-slate-500">
+                  {group.key === 'dd'
+                    ? 'Bank takes these automatically — tap DD done when settled'
+                    : group.key === 'manual_monthly'
+                      ? 'You pay these each month'
+                      : 'Other schedules'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-slate-400">{group.items.length}</span>
+                {group.key === 'dd' && !isReadOnly && (
+                  <button
+                    type="button"
+                    onClick={() => markAllDdDone()}
+                    className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wide bg-sky-600 text-white hover:bg-sky-700"
+                  >
+                    All DD done
+                  </button>
+                )}
+              </div>
+            </div>
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+              {group.items.map((p) => {
+                const paid = isPaymentPaidForCurrentPeriod(p, history);
+                const days = getDaysUntilPayment(p);
+                const color = getCategoryColor(p.category);
+                const status = paid
+                  ? 'paid'
+                  : days < 0
+                    ? 'overdue'
+                    : days === 0
+                      ? 'today'
+                      : days <= 3
+                        ? 'soon'
+                        : 'upcoming';
+                const statusStyle =
+                  status === 'paid'
+                    ? { label: 'Paid', badge: 'bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/25', row: 'border-l-[3px] border-l-emerald-500', dot: 'bg-emerald-500' }
+                    : status === 'overdue'
+                      ? { label: 'Overdue', badge: 'bg-rose-500/15 text-rose-600 ring-1 ring-rose-500/25', row: 'border-l-[3px] border-l-rose-500 bg-rose-500/[0.03]', dot: 'bg-rose-500' }
+                      : status === 'today'
+                        ? { label: 'Due today', badge: 'bg-amber-500/15 text-amber-700 ring-1 ring-amber-500/25', row: 'border-l-[3px] border-l-amber-500', dot: 'bg-amber-500' }
+                        : status === 'soon'
+                          ? { label: 'Due soon', badge: 'bg-orange-500/15 text-orange-700 ring-1 ring-orange-500/25', row: 'border-l-[3px] border-l-orange-400', dot: 'bg-orange-500' }
+                          : { label: 'Upcoming', badge: 'bg-slate-100 dark:bg-slate-800 text-slate-500', row: 'border-l-[3px] border-l-slate-300 dark:border-l-slate-600', dot: 'bg-slate-400' };
+                return (
+                  <li key={p.id} className={`px-3.5 py-2.5 flex items-center gap-3 ${statusStyle.row}`}>
+                    <div className="relative shrink-0">
+                      <div
+                        className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-[10px] font-black"
+                        style={{ backgroundColor: color || '#6366f1' }}
                       >
-                        <Check className="w-3 h-3" /> Pay
-                      </button>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
+                        {(p.name || '?').slice(0, 2).toUpperCase()}
+                      </div>
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-slate-900 ${statusStyle.dot}`} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12px] font-bold text-slate-900 dark:text-white truncate">{p.name}</p>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                        <span className={`text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-md ${statusStyle.badge}`}>
+                          {statusStyle.label}
+                        </span>
+                        {group.key === 'dd' && (
+                          <span className="text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-sky-500/15 text-sky-700 ring-1 ring-sky-500/25">
+                            DD
+                          </span>
+                        )}
+                        <span className="text-[10px] text-slate-500">
+                          {p.category || 'General'} · {p.currency}
+                          {!paid && days !== 0 && status !== 'overdue' ? ` · in ${days}d` : ''}
+                          {status === 'overdue' ? ` · ${Math.abs(days)}d late` : ''}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-[12px] font-black tabular-nums text-slate-900 dark:text-white">
+                        {formatCurrencyValue(p.amount, p.currency as any, countries)}
+                      </p>
+                      {!paid && !isPaymentReadOnly(p) && (
+                        <button
+                          type="button"
+                          onClick={() => onRecordPayment(p)}
+                          className={`inline-flex items-center gap-0.5 text-[9px] font-bold mt-0.5 ${
+                            group.key === 'dd' ? 'text-sky-600' : 'text-emerald-600'
+                          }`}
+                        >
+                          <Check className="w-3 h-3" />
+                          {group.key === 'dd' ? 'DD done?' : 'Pay'}
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      })}
+      {sorted.length === 0 && (
+        <p className="px-3.5 py-10 text-center text-[12px] text-slate-400 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+          No active expenses in this currency
+        </p>
+      )}
+
     </div>
   );
 }
