@@ -1629,21 +1629,6 @@ export default function App() {
               ? 'overflow-hidden'
               : 'overflow-y-auto'
           }`}>
-            {(activeTab === 'summary' || activeTab === 'expenses' || activeTab === 'configure' || activeTab === 'income' || activeTab === 'rewards' || activeTab === 'portfolio' || activeTab === 'history' || activeTab === 'reports' || activeTab === 'investment_plan') && (
-              <div className="hidden md:flex shrink-0 px-4 sm:px-5 pt-2 items-center justify-end">
-                <button
-                  type="button"
-                  onClick={togglePulse}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/50"
-                  title={uiPulse ? 'Switch to Classic layout' : 'Switch to Pulse layout'}
-                >
-                  <Sparkles className="w-3 h-3" />
-                  {uiPulse ? 'Pulse' : 'Classic'}
-                  <span className="opacity-60">·</span>
-                  {uiPulse ? 'Switch to Classic' : 'Try Pulse'}
-                </button>
-              </div>
-            )}
             {activeTab === 'summary' && hasFeature('core') ? (
               uiPulse ? (
                 <PulseDashboard
