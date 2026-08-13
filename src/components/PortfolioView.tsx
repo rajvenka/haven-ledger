@@ -2329,11 +2329,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
       )}
 
       <div className="flex gap-1.5">
-        <button onClick={() => setHoldingsTab('active')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'active' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Active ({activeHoldings.length})</button>
-        <button onClick={() => setHoldingsTab('sold')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'sold' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Sold ({soldHoldings.length})</button>
-        <button onClick={() => setHoldingsTab('search')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${holdingsTab === 'search' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}><Search className="w-3 h-3" /> Quote Search</button>
-        <button onClick={() => setHoldingsTab('settings')} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${holdingsTab === 'settings' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}><Settings className="w-3 h-3" /> Settings</button>
-        <button onClick={() => { setHoldingsTab('pnl_calendar'); }} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'pnl_calendar' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>P&L Calendar</button>
+        <button onClick={() => setHoldingsTab('active')} className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'active' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Active ({activeHoldings.length})</button>
+        <button onClick={() => setHoldingsTab('sold')} className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'sold' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Sold ({soldHoldings.length})</button>
+        <button onClick={() => setHoldingsTab('search')} className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${holdingsTab === 'search' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}><Search className="w-3 h-3" /> Quote Search</button>
+        <button onClick={() => setHoldingsTab('settings')} className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${holdingsTab === 'settings' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}><Settings className="w-3 h-3" /> Settings</button>
+        <button onClick={() => { setHoldingsTab('pnl_calendar'); }} className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${holdingsTab === 'pnl_calendar' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>P&L Calendar</button>
         {activeHoldings.some(h => h.holding_type === 'mutual_fund') && (
           <button
             onClick={() => { setHoldingsTab('mf-holdings'); loadMfHoldingsCache?.(); }}
@@ -3539,7 +3539,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
 
       {holdingsTab === 'pnl_calendar' && (
-        <div className="apple-card p-4">
+        <div className="apple-card p-3 sm:p-4 w-full min-w-0 max-w-full overflow-x-hidden">
           <PortfolioPnLCalendar
             rows={pnlCalendarRows}
             loading={pnlCalendarLoading}
