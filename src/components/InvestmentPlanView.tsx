@@ -363,54 +363,29 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   ];
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto px-3 sm:px-5 pt-3 sm:pt-4 pb-24 md:pb-4 space-y-4 text-left bg-slate-50 dark:bg-slate-950">
-      <div className="rounded-2xl bg-indigo-600 text-white p-4 shadow-lg shadow-indigo-600/25">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center">
-            <ClipboardList className="w-5 h-5 text-white" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-100">Plan</p>
-            <h2 className="text-xl font-black tracking-tight truncate">
-              {workspaceName ? `${workspaceName} Investment Plan` : 'Investment Plan'}
-            </h2>
-            <p className="text-[11px] font-semibold text-indigo-100/90">Contributions · Withdrawals · Splits · Recurring</p>
-          </div>
-        </div>
+    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-5 text-left bg-slate-50 dark:bg-slate-900">
+      <div className="flex items-center gap-2">
+        <ClipboardList className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white">{workspaceName ? `${workspaceName} Investment Plan` : 'Investment Plan'}</h2>
       </div>
 
       {portfolioMode === 'multiple' && planPortfolioNames.length > 1 && (
-        <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-violet-500/80 dark:text-violet-400/80 w-10">
-            Book
-          </span>
-          <div className="inline-flex items-center gap-0.5 p-1 rounded-2xl bg-violet-200 dark:bg-violet-950/70 border-2 border-violet-400 dark:border-violet-700">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button
+            onClick={() => setSelectedPlanPortfolios(new Set())}
+            className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${selectedPlanPortfolios.size === 0 ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}
+          >
+            All
+          </button>
+          {planPortfolioNames.map(p => (
             <button
-              type="button"
-              onClick={() => setSelectedPlanPortfolios(new Set())}
-              className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
-                selectedPlanPortfolios.size === 0
-                  ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30'
-                  : 'text-violet-700/70 dark:text-violet-300/70'
-              }`}
+              key={p}
+              onClick={() => setSelectedPlanPortfolios(prev => { const next = new Set(prev); if (next.has(p)) next.delete(p); else next.add(p); return next; })}
+              className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${selectedPlanPortfolios.has(p) ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}
             >
-              All
+              {p}
             </button>
-            {planPortfolioNames.map(p => (
-              <button
-                type="button"
-                key={p}
-                onClick={() => setSelectedPlanPortfolios(prev => { const next = new Set(prev); if (next.has(p)) next.delete(p); else next.add(p); return next; })}
-                className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
-                  selectedPlanPortfolios.has(p)
-                    ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30'
-                    : 'text-violet-700/70 dark:text-violet-300/70'
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
+          ))}
         </div>
       )}
 
@@ -456,23 +431,16 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
         </div>
       )}
 
-      <div className="sticky top-0 z-20 -mx-3 sm:-mx-5 px-3 sm:px-5 py-2 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur border-b border-indigo-200/60 dark:border-indigo-900/40">
-        <div className="flex gap-2 p-1 rounded-2xl bg-indigo-100 dark:bg-indigo-950/60 border-2 border-indigo-300 dark:border-indigo-700">
-          {TABS.map(tab => (
-            <button
-              type="button"
-              key={tab.key}
-              onClick={() => setPlanTab(tab.key)}
-              className={`flex-1 py-2.5 rounded-xl text-[12px] font-black uppercase tracking-wide transition-all cursor-pointer ${
-                planTab === tab.key
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/40'
-                  : 'text-indigo-800 dark:text-indigo-200 hover:bg-white/60 dark:hover:bg-indigo-900/40'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+      <div className="flex gap-1.5 flex-wrap">
+        {TABS.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setPlanTab(t.key)}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${planTab === t.key ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
       {planTab === 'overview' && (
@@ -485,11 +453,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           let running = 0;
           const chartData = events.map(e => { running += e.delta; return { date: e.date, total: running }; });
           return (
-            <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-indigo-500 bg-white dark:bg-slate-900 p-4 space-y-2 shadow-md">
-              <div className="flex items-center gap-2">
-                <span className="w-1.5 h-4 rounded-full bg-emerald-500" />
-                <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">Contribution Growth</span>
-              </div>
+            <div className="apple-card p-4 space-y-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Contribution Growth</span>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
@@ -513,8 +478,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           });
           const colors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'];
           return (
-            <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-indigo-500 bg-white dark:bg-slate-900 p-4 space-y-2 shadow-md">
-              <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-emerald-500 shrink-0" />Total Contribution by Person</span>
+            <div className="apple-card p-4 space-y-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Contribution by Person</span>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
@@ -537,8 +502,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
       {planTab === 'contributions' && (
         <>
         {portfolioRecurringPlans.some(p => p.active) && (
-          <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-indigo-500 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-md">
-            <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-indigo-500 shrink-0" />Fund Transfer Status</span>
+          <div className="apple-card p-4 space-y-3">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Fund Transfer Status</span>
             <p className="text-[9px] text-slate-400">Who's transferred their share for the current period, and who hasn't yet.</p>
             <div className="space-y-2">
               {portfolioRecurringPlans.filter(p => p.active).map(plan => {
@@ -572,9 +537,9 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           </div>
         )}
 
-        <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-indigo-500 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-md">
+        <div className="apple-card p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-emerald-500 shrink-0" />Recurring Contribution Plan</span>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Recurring Contribution Plan</span>
             {!isReadOnly && <button onClick={() => setIsAddingPlan(!isAddingPlan)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Add Plan</button>}
           </div>
           <p className="text-[10px] text-slate-400">What each person is expected to contribute on a schedule — separate from your Bills.</p>
@@ -589,7 +554,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                   setPlanAmount(''); setPlanNotes(''); setIsAddingPlan(false);
                 });
               }}
-              className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/80"
+              className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-900"
             >
               <select value={planMemberId} onChange={(e) => setPlanMemberId(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
                 <option value="">Who</option>
@@ -649,7 +614,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           </div>
         </div>
 
-        <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-indigo-500 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-md">
+        <div className="apple-card p-4 space-y-3">
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Split Among Workspace Members</span>
           <p className="text-[9px] text-slate-400">Everyone here is a member of this workspace. To add someone new, invite them via Family Sharing first.</p>
           <div className="space-y-1.5">
@@ -667,7 +632,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           {isAddingSplit && (
             <form
               onSubmit={async (e) => { e.preventDefault(); if (!splitMemberId || !splitPercent) return; await runAction(async () => { await addPortfolioSplit(splitMemberId, parseFloat(splitPercent), splitFrom, splitTo || undefined); setSplitPercent(''); setIsAddingSplit(false); }); }}
-              className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/80"
+              className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-900"
             >
               <select value={splitMemberId} onChange={(e) => setSplitMemberId(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
                 <option value="">Select person</option>
@@ -682,7 +647,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           </>
           )}
           {portfolioSplits.length > 0 && (
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 space-y-1">
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-900 space-y-1">
               <span className="text-[9px] font-bold text-slate-400 uppercase">Split History</span>
               {portfolioSplits.map(s => {
                 const m = workspaceMembers.find(x => x.uid === s.member_user_id);
@@ -697,15 +662,12 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           )}
         </div>
 
-        <div className="rounded-2xl border-2 border-indigo-300 dark:border-indigo-800 border-l-[6px] border-l-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/25 p-4 space-y-3 shadow-md shadow-indigo-500/10">
+        <div className="apple-card p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
-              <span className="w-1.5 h-4 rounded-full bg-indigo-500" />
-              <Wallet className="w-3.5 h-3.5" /> Contribution Log
-            </span>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Wallet className="w-3.5 h-3.5" /> Contribution Log</span>
             <div className="flex items-center gap-3">
-              {!isReadOnly && <button onClick={() => setIsAddingContribution(!isAddingContribution)} className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-600 text-white shadow-sm shadow-indigo-600/25 cursor-pointer hover:bg-indigo-500">+ Log Contribution</button>}
-              {!isReadOnly && <button onClick={() => setIsAddingWithdrawal(!isAddingWithdrawal)} className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500 text-white shadow-sm shadow-rose-500/25 cursor-pointer hover:bg-rose-400">+ Log Withdrawal</button>}
+              {!isReadOnly && <button onClick={() => setIsAddingContribution(!isAddingContribution)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Log Contribution</button>}
+              {!isReadOnly && <button onClick={() => setIsAddingWithdrawal(!isAddingWithdrawal)} className="text-[10px] font-bold text-rose-500 cursor-pointer">+ Log Withdrawal</button>}
             </div>
           </div>
           {isAddingContribution && (
@@ -908,7 +870,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           })()}
         </div>
 
-        <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-indigo-500 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-md">
+        <div className="apple-card p-4 space-y-3">
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Wallet className="w-3.5 h-3.5" /> Withdrawals</span>
           <p className="text-[9px] text-slate-400">Money taken out of the pool back to a person - separate from selling a stock, which stays in the pool as cash.</p>
           <div className="divide-y divide-slate-100 dark:divide-slate-900">
