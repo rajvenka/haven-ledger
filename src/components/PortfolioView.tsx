@@ -558,6 +558,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [zerodhaConnectStatus, setZerodhaConnectStatus] = useState<'idle' | 'exchanging' | 'ready' | 'error'>('idle');
   const [zerodhaSyncing, setZerodhaSyncing] = useState(false);
   const [zerodhaSyncError, setZerodhaSyncError] = useState<string | null>(null);
+  const [zerodhaTokenExpiredConnection, setZerodhaTokenExpiredConnection] = useState<any>(null);
   const [zerodhaDebug, setZerodhaDebug] = useState<any>(null);
   const [zerodhaConnectPortfolioId, setZerodhaConnectPortfolioId] = useState('');
   // Groww Trade API (India) — stocks only; MF stays on CSV import
@@ -1200,6 +1201,19 @@ export default function PortfolioView(props: PortfolioViewProps) {
     }
   };
 
+  const handleZerodhaReconnect = (connection: any) => {
+    setZerodhaApiKeyInput(connection.credentials?.api_key || '');
+    setZerodhaApiSecretInput(connection.credentials?.api_secret || '');
+    setZerodhaRequestTokenInput('');
+    setZerodhaAccessTokenInput('');
+    setZerodhaConnectStatus('idle');
+    setZerodhaSyncError(null);
+    setZerodhaTokenExpiredConnection(null);
+    setConnectionLabelInput(connection.connection_label || '');
+    setBrokerConnectPortfolioId(connection.portfolio_id || '');
+    setBrokerEditingType('zerodha');
+  };
+
   const handleZerodhaExchange = async () => {
     setZerodhaConnectStatus('exchanging');
     setZerodhaSyncError(null);
@@ -1260,6 +1274,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     if (!connection) return;
     setZerodhaSyncing(true);
     setZerodhaSyncError(null);
+    setZerodhaTokenExpiredConnection(null);
     setZerodhaDebug(null);
     setImportPreview(null);
     try {
@@ -1276,6 +1291,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const data = await resp.json().catch(() => ({}));
       setZerodhaDebug(data);
       if (!resp.ok) {
+        // Kite Connect access tokens expire daily by design (valid only until the next
+        // trading day) - this isn't a bug, it's expected behavior, so surfacing a clear
+        // reconnect path here matters more than the raw error text alone would.
+        const isTokenExpiry = resp.status === 401 || resp.status === 403 || /TokenException|access_token/i.test(data?.error || '');
+        if (isTokenExpiry) setZerodhaTokenExpiredConnection(connection);
         throw new Error(data.error || `Zerodha sync failed (${resp.status})`);
       }
       const holdings = (data.holdings || []).map((h: any) => ({
@@ -3133,7 +3153,22 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   )}
                 </div>
               )}
-              {zerodhaSyncError && <p className="text-[10px] text-rose-500">{zerodhaSyncError}</p>}
+              {zerodhaSyncError && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] text-rose-500">{zerodhaSyncError}</p>
+                  {zerodhaTokenExpiredConnection && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[9px] text-slate-400">Kite access tokens expire daily by design - this is expected, not a bug.</span>
+                      <button
+                        onClick={() => handleZerodhaReconnect(zerodhaTokenExpiredConnection)}
+                        className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer shrink-0"
+                      >
+                        Reconnect Zerodha
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
               {zerodhaDebug && !indiaBrokerEditing && (
                 <div className="text-[9px] text-slate-500 break-all bg-slate-50 dark:bg-slate-900 rounded p-2 space-y-1">
                   <div className="flex items-center justify-between">
