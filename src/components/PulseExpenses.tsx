@@ -2,7 +2,7 @@
  * Pulse Spend — next-gen Expenses (currency tiles + clean bill list).
  * Classic ExpensesView remains available.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   Plus,
   Globe,
@@ -50,6 +50,15 @@ export default function PulseExpenses({
     group: 'dd' | 'manual_monthly' | 'non_monthly';
     bucket: 'paid' | 'to_pay' | 'next';
   } | null>(null);
+  /** Mobile: shared metric slide (0=paid, 1=to_pay, 2=next) — all 3 method tiles move together */
+  const [metricIdx, setMetricIdx] = useState(0);
+  const metricTouchX = useRef<number | null>(null);
+  const METRIC_SLIDES = [
+    { bucket: 'paid' as const, label: 'This month paid', tone: 'text-emerald-600 dark:text-emerald-400' },
+    { bucket: 'to_pay' as const, label: 'This month to pay', tone: 'text-rose-600 dark:text-rose-400' },
+    { bucket: 'next' as const, label: 'Next month', tone: 'text-amber-600 dark:text-amber-400' },
+  ] as const;
+
   const [searchQ, setSearchQ] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'overdue' | 'today' | 'soon' | 'unpaid' | 'paid'>('all');
   const isPaymentReadOnly = (payment: RecurringPayment) => {
@@ -278,72 +287,154 @@ export default function PulseExpenses({
           </div>
         </div>
 
-        {/* Method tiles — stacked on mobile, 3 columns on desktop */}
-        <div className="mb-3 flex flex-col gap-3 lg:grid lg:grid-cols-3 lg:gap-3">
-          {(
+        {/* Method tiles
+            Mobile: 1 row × 3 method tiles; swipe changes metric (paid / to-pay / next) on ALL three together
+            Desktop (lg): 3 columns, each with all 3 metrics stacked
+        */}
+        {(() => {
+          const rows = (
             [
-              { key: 'dd', title: 'Direct debit', t: tilesDd, accent: 'sky' },
-              { key: 'manual', title: 'Manual monthly', t: tilesManual, accent: 'violet' },
-              { key: 'oneoff', title: 'One-off / non-monthly', t: tilesOneOff, accent: 'slate' },
+              { key: 'dd' as const, title: 'Direct debit', short: 'DD', t: tilesDd, accent: 'sky' },
+              { key: 'manual' as const, title: 'Manual monthly', short: 'Manual', t: tilesManual, accent: 'violet' },
+              { key: 'oneoff' as const, title: 'One-off / non-monthly', short: 'One-off', t: tilesOneOff, accent: 'slate' },
             ] as const
-          ).map((row) => {
-            if (row.t.paidCount + row.t.toPayCount + row.t.nextCount === 0) return null;
-            const chip =
-              row.accent === 'sky'
-                ? 'bg-sky-50 dark:bg-sky-950/40 border-sky-200/70 dark:border-sky-900/50'
-                : row.accent === 'violet'
-                  ? 'bg-violet-50 dark:bg-violet-950/40 border-violet-200/70 dark:border-violet-900/50'
-                  : 'bg-slate-50 dark:bg-slate-900/80 border-slate-200/80 dark:border-slate-800';
-            const head =
-              row.accent === 'sky'
-                ? 'text-sky-700 dark:text-sky-300'
-                : row.accent === 'violet'
-                  ? 'text-violet-700 dark:text-violet-300'
-                  : 'text-slate-600 dark:text-slate-300';
-            return (
-              <div key={row.key} className="min-w-0">
-                <p className={`text-[10px] font-black uppercase tracking-wider mb-1.5 ${head}`}>{row.title}</p>
-                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-0.5 lg:flex-col lg:overflow-visible lg:pb-0">
-                  {(
-                    [
-                      { bucket: 'paid' as const, label: 'This month paid', sum: row.t.paidSum, count: row.t.paidCount, tone: 'text-emerald-600 dark:text-emerald-400' },
-                      { bucket: 'to_pay' as const, label: 'This month to pay', sum: row.t.toPaySum, count: row.t.toPayCount, tone: 'text-rose-600 dark:text-rose-400' },
-                      { bucket: 'next' as const, label: 'Next month', sum: row.t.nextSum, count: row.t.nextCount, tone: 'text-amber-600 dark:text-amber-400' },
-                    ] as const
-                  ).map((tile) => {
-                    const g =
-                      row.key === 'dd' ? 'dd' : row.key === 'manual' ? 'manual_monthly' : 'non_monthly';
-                    const active = tileFilter?.group === g && tileFilter?.bucket === tile.bucket;
+          ).filter((row) => row.t.paidCount + row.t.toPayCount + row.t.nextCount > 0);
+          if (!rows.length) return null;
+
+          const chipOf = (accent: string) =>
+            accent === 'sky'
+              ? 'bg-sky-50 dark:bg-sky-950/40 border-sky-200/70 dark:border-sky-900/50'
+              : accent === 'violet'
+                ? 'bg-violet-50 dark:bg-violet-950/40 border-violet-200/70 dark:border-violet-900/50'
+                : 'bg-slate-50 dark:bg-slate-900/80 border-slate-200/80 dark:border-slate-800';
+          const headOf = (accent: string) =>
+            accent === 'sky'
+              ? 'text-sky-700 dark:text-sky-300'
+              : accent === 'violet'
+                ? 'text-violet-700 dark:text-violet-300'
+                : 'text-slate-600 dark:text-slate-300';
+          const groupOfKey = (key: string) =>
+            key === 'dd' ? 'dd' : key === 'manual' ? 'manual_monthly' : 'non_monthly';
+          const sumFor = (row: (typeof rows)[number], bucket: 'paid' | 'to_pay' | 'next') => {
+            if (bucket === 'paid') return { sum: row.t.paidSum, count: row.t.paidCount };
+            if (bucket === 'to_pay') return { sum: row.t.toPaySum, count: row.t.toPayCount };
+            return { sum: row.t.nextSum, count: row.t.nextCount };
+          };
+
+          const slide = METRIC_SLIDES[metricIdx] || METRIC_SLIDES[0];
+          const goMetric = (dir: number) => {
+            setMetricIdx((i) => (i + dir + METRIC_SLIDES.length) % METRIC_SLIDES.length);
+          };
+
+          return (
+            <div className="mb-3 space-y-2">
+              {/* Mobile: one row, shared metric */}
+              <div
+                className="lg:hidden"
+                onTouchStart={(e) => {
+                  metricTouchX.current = e.changedTouches[0]?.clientX ?? null;
+                }}
+                onTouchEnd={(e) => {
+                  const startX = metricTouchX.current;
+                  metricTouchX.current = null;
+                  if (startX == null) return;
+                  const dx = (e.changedTouches[0]?.clientX ?? startX) - startX;
+                  if (Math.abs(dx) < 40) return;
+                  goMetric(dx < 0 ? 1 : -1);
+                }}
+              >
+                <div className="flex items-center justify-between gap-2 mb-1.5 px-0.5">
+                  <p className={`text-[10px] font-black uppercase tracking-wider ${slide.tone}`}>{slide.label}</p>
+                  <div className="flex items-center gap-1.5">
+                    <button type="button" onClick={() => goMetric(-1)} className="px-1.5 py-0.5 text-[10px] font-bold text-slate-400">‹</button>
+                    {METRIC_SLIDES.map((s, i) => (
+                      <button
+                        key={s.bucket}
+                        type="button"
+                        onClick={() => setMetricIdx(i)}
+                        className={`h-1.5 rounded-full transition-all ${i === metricIdx ? 'w-4 bg-indigo-500' : 'w-1.5 bg-slate-300 dark:bg-slate-600'}`}
+                        aria-label={s.label}
+                      />
+                    ))}
+                    <button type="button" onClick={() => goMetric(1)} className="px-1.5 py-0.5 text-[10px] font-bold text-slate-400">›</button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {rows.map((row) => {
+                    const g = groupOfKey(row.key) as 'dd' | 'manual_monthly' | 'non_monthly';
+                    const { sum, count } = sumFor(row, slide.bucket);
+                    const active = tileFilter?.group === g && tileFilter?.bucket === slide.bucket;
                     return (
                       <button
-                        key={tile.bucket}
+                        key={row.key}
                         type="button"
                         onClick={() => {
                           if (active) {
                             setTileFilter(null);
                             return;
                           }
-                          setTileFilter({ group: g, bucket: tile.bucket });
+                          setTileFilter({ group: g, bucket: slide.bucket });
                           setPaidFilter('all');
                           setStatusFilter('all');
                         }}
-                        className={`shrink-0 min-w-[9.5rem] lg:min-w-0 lg:w-full rounded-2xl border p-3 text-left transition-all ${chip} ${
-                          active ? 'ring-2 ring-indigo-500 shadow-md' : 'hover:shadow-sm'
+                        className={`rounded-2xl border p-2.5 text-left transition-all ${chipOf(row.accent)} ${
+                          active ? 'ring-2 ring-indigo-500 shadow-md' : ''
                         }`}
                       >
-                        <p className={`text-[9px] font-black uppercase tracking-wider ${tile.tone}`}>{tile.label}</p>
-                        <p className="mt-1 text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
-                          {formatCurrencyValue(tile.sum, displayCcy as any, countries)}
+                        <p className={`text-[9px] font-black uppercase tracking-wider ${headOf(row.accent)}`}>{row.short}</p>
+                        <p className="mt-1 text-[13px] font-black tabular-nums text-slate-900 dark:text-white leading-tight">
+                          {formatCurrencyValue(sum, displayCcy as any, countries)}
                         </p>
-                        <p className="text-[10px] text-slate-500 mt-0.5">{tile.count} bills</p>
+                        <p className="text-[9px] text-slate-500 mt-0.5">{count} bills</p>
                       </button>
                     );
                   })}
                 </div>
+                <p className="text-[9px] text-slate-400 text-center mt-1.5">Swipe · all three methods stay on the same metric</p>
               </div>
-            );
-          })}
-        </div>
+
+              {/* Desktop: 3 columns × all metrics */}
+              <div className="hidden lg:grid lg:grid-cols-3 lg:gap-3">
+                {rows.map((row) => (
+                  <div key={row.key} className="min-w-0">
+                    <p className={`text-[10px] font-black uppercase tracking-wider mb-1.5 ${headOf(row.accent)}`}>{row.title}</p>
+                    <div className="flex flex-col gap-2">
+                      {METRIC_SLIDES.map((tile) => {
+                        const g = groupOfKey(row.key) as 'dd' | 'manual_monthly' | 'non_monthly';
+                        const { sum, count } = sumFor(row, tile.bucket);
+                        const active = tileFilter?.group === g && tileFilter?.bucket === tile.bucket;
+                        return (
+                          <button
+                            key={tile.bucket}
+                            type="button"
+                            onClick={() => {
+                              if (active) {
+                                setTileFilter(null);
+                                return;
+                              }
+                              setTileFilter({ group: g, bucket: tile.bucket });
+                              setPaidFilter('all');
+                              setStatusFilter('all');
+                            }}
+                            className={`w-full rounded-2xl border p-3 text-left transition-all ${chipOf(row.accent)} ${
+                              active ? 'ring-2 ring-indigo-500 shadow-md' : 'hover:shadow-sm'
+                            }`}
+                          >
+                            <p className={`text-[9px] font-black uppercase tracking-wider ${tile.tone}`}>{tile.label}</p>
+                            <p className="mt-1 text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
+                              {formatCurrencyValue(sum, displayCcy as any, countries)}
+                            </p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">{count} bills</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* FLOATING / STICKY filter bar — first sticky child of the scroller */}
         <div
