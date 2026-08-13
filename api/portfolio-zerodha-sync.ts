@@ -196,7 +196,7 @@ export default async function handler(req: any, res: any) {
             currentPrice: lastPrice > 0 ? lastPrice : avg,
             currency: "INR",
             isin: h.isin || undefined,
-            source: "Zerodha API",
+            source: "Zerodha",
             matchKey: `zerodha_${h.exchange || "NSE"}_${h.tradingsymbol}`,
           };
         })
@@ -231,7 +231,7 @@ export default async function handler(req: any, res: any) {
                 currentPrice: lastPrice > 0 ? lastPrice : avg,
                 currency: "INR",
                 isin: m.isin || undefined,
-                source: "Zerodha API (MF)",
+                source: "Zerodha MF",
                 matchKey: `zerodha_mf_${m.isin || m.tradingsymbol || m.folio}`,
               };
             })
@@ -262,7 +262,7 @@ export default async function handler(req: any, res: any) {
               buyPrice: avg,
               currentPrice: lastPrice > 0 ? lastPrice : avg,
               currency: "INR",
-              source: `Zerodha Position (${p.product || "NRML"})`,
+              source: "Zerodha Position",
               matchKey: `zerodha_pos_${p.exchange}_${p.tradingsymbol}_${p.product}`,
             };
           })
