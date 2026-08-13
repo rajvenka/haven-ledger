@@ -61,35 +61,40 @@ export default function PulseHistory({
 
   return (
     <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-left w-full max-w-full">
-      <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-              Payment history
-              <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-violet-600 text-white">
-                Pulse
-              </span>
-            </h1>
-            <p className="text-[10px] text-slate-400 font-bold">
-              {filtered.length} of {history.length} · total{' '}
-              {formatCurrencyValue(totalConverted, summaryCurrency)}
-            </p>
+      <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 space-y-2.5">
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-sky-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-sky-950/20 p-3 sm:p-3.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <History className="w-5 h-5 text-sky-500 shrink-0" />
+                <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                  Payment history
+                </h1>
+                <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-sky-600/90 text-white">
+                  Pulse
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">
+                {filtered.length} of {history.length}
+                {filtered.length > 0 ? ` · ${formatCurrencyValue(totalConverted, summaryCurrency)}` : ''}
+              </p>
+            </div>
+            {onClearHistory && history.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm('Clear all payment history?')) onClearHistory();
+                }}
+                className="shrink-0 text-[10px] font-bold text-rose-500 px-2 py-1 rounded-lg border border-rose-200/60 dark:border-rose-900/40"
+              >
+                Clear all
+              </button>
+            )}
           </div>
-          {onClearHistory && history.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                if (confirm('Clear all payment history?')) onClearHistory();
-              }}
-              className="text-[10px] font-bold text-rose-500"
-            >
-              Clear all
-            </button>
-          )}
         </div>
       </div>
 
-      <div className="shrink-0 px-3 sm:px-4 pb-2 space-y-2 border-b border-slate-100 dark:border-slate-900 bg-slate-50/90 dark:bg-slate-950/90">
+      <div className="shrink-0 px-3 sm:px-4 pb-2 space-y-2 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-sm">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
           <input
@@ -104,21 +109,26 @@ export default function PulseHistory({
             </button>
           )}
         </div>
-        <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-          {(['all', 'paid', 'delayed', 'carry'] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setStatusFilter(s)}
-              className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold capitalize ${
-                statusFilter === s
-                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
-                  : 'bg-white dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-800'
-              }`}
-            >
-              {s}
-            </button>
-          ))}
+        <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-500/80 w-10">
+            Status
+          </span>
+          <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-slate-100/90 dark:bg-slate-900/80 border border-slate-200/60 dark:border-slate-800">
+            {(['all', 'paid', 'delayed', 'carry'] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setStatusFilter(s)}
+                className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold capitalize transition-all ${
+                  statusFilter === s
+                    ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 shadow-md'
+                    : 'text-slate-600 dark:text-slate-300'
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
