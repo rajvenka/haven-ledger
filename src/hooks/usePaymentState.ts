@@ -227,6 +227,8 @@ export function usePaymentState() {
           isSuperAdmin: profile.is_super_admin ?? false,
           hasCompletedTour: profile.has_completed_tour ?? false,
           whatsappPhone: profile.whatsapp_phone ?? undefined,
+      digestEmail: profile.digest_email === true,
+      digestWhatsapp: profile.digest_whatsapp === true,
           licensePlanId: profile.license_plan_id ?? undefined,
           appNotificationsEnabled: profile.app_notifications_enabled, mobileNotificationsEnabled: profile.mobile_notifications_enabled,
         });
@@ -2290,6 +2292,25 @@ export function usePaymentState() {
     setUserProfile(prev => prev ? { ...prev, whatsappPhone: undefined } : prev);
   };
 
+  const updateDigestPrefs = async (prefs: { digestEmail?: boolean; digestWhatsapp?: boolean }) => {
+    if (!user) return;
+    const row: any = {};
+    if (prefs.digestEmail !== undefined) row.digest_email = prefs.digestEmail;
+    if (prefs.digestWhatsapp !== undefined) row.digest_whatsapp = prefs.digestWhatsapp;
+    if (!Object.keys(row).length) return;
+    const { error } = await supabase.from('profiles').update(row).eq('id', user.id);
+    if (error) throw error;
+    setUserProfile((prev) =>
+      prev
+        ? {
+            ...prev,
+            digestEmail: prefs.digestEmail !== undefined ? prefs.digestEmail : prev.digestEmail,
+            digestWhatsapp: prefs.digestWhatsapp !== undefined ? prefs.digestWhatsapp : prev.digestWhatsapp,
+          }
+        : prev
+    );
+  };
+
   const resetToDefaults = async () => {
     if (!user) return;
     setIsSyncing(true);
@@ -2375,7 +2396,7 @@ export function usePaymentState() {
     addCountry, updateCountry, deleteCountry,
     triggerNotification, dismissNotification, markAllNotificationsRead, clearNotifications,
     checkPaymentReminders, requestNotificationPermission, resetToDefaults, fetchAllUsersForAdmin, inviteNewUser, onboardUserWithPlan,
-    startWhatsAppVerification, disconnectWhatsApp,
+    startWhatsAppVerification, disconnectWhatsApp, updateDigestPrefs,
     accessPlans, createAccessPlan, updateAccessPlan, deleteAccessPlan,
     myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan, setSuperAdminStatus,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
