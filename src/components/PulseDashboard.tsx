@@ -177,8 +177,35 @@ export default function PulseDashboard({
   const monthLabel = now.toLocaleString(undefined, { month: 'long', year: 'numeric' });
 
   const upcomingList = [...dueNextWeek, ...overdue]
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-    .slice(0, 8);
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+  const isMonthlyCycle = (cycle?: string) => {
+    const c = String(cycle || 'monthly').toLowerCase();
+    return c === 'monthly' || c === 'weekly';
+  };
+
+  const groupOf = (ins: any): 'dd' | 'manual_monthly' | 'non_monthly' => {
+    const method = String(ins.paymentMethod || payments.find((p) => p.id === ins.paymentId)?.paymentMethod || 'manual').toLowerCase();
+    if (method === 'direct_debit' || method === 'dd') return 'dd';
+    const cycle = ins.billingCycle || payments.find((p) => p.id === ins.paymentId)?.billingCycle || 'monthly';
+    if (!isMonthlyCycle(cycle)) return 'non_monthly';
+    return 'manual_monthly';
+  };
+
+  const groupedUpcoming = {
+    dd: upcomingList.filter((ins) => groupOf(ins) === 'dd'),
+    manual_monthly: upcomingList.filter((ins) => groupOf(ins) === 'manual_monthly'),
+    non_monthly: upcomingList.filter((ins) => groupOf(ins) === 'non_monthly'),
+  };
+
+  const markDdDone = async (list: typeof upcomingList) => {
+    for (const ins of list) {
+      const payment = payments.find((p) => p.id === ins.paymentId);
+      if (payment && !isPaymentReadOnly(payment)) {
+        await onRecordPayment(payment, ins.dueDate);
+      }
+    }
+  };
 
   return (
     <div className="flex-1 flex flex-col overflow-y-auto px-4 sm:px-5 pt-4 pb-24 md:pb-6 space-y-4 text-left bg-slate-50 dark:bg-slate-950">
@@ -308,112 +335,174 @@ export default function PulseDashboard({
         </div>
       </div>
 
-      {/* Upcoming */}
-      <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
-        <div className="px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-800 space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-[11px] font-black text-slate-800 dark:text-slate-100">Coming up</p>
-            <span className="text-[10px] font-bold text-slate-400">{upcomingList.length}</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {([
-              ['overdue', 'Overdue'],
-              ['today', 'Today'],
-              ['soon', 'Soon'],
-              ['upcoming', 'Later'],
-            ] as [DueStatus, string][]).map(([key, lab]) => (
-              <span key={key} className="inline-flex items-center gap-1 text-[9px] font-bold text-slate-500">
-                <span className={`w-1.5 h-1.5 rounded-full ${STATUS_UI[key].dot}`} />
-                {lab}
-              </span>
-            ))}
-          </div>
-        </div>
-        {upcomingList.length === 0 ? (
-          <p className="px-3.5 py-8 text-center text-[12px] text-slate-400">Nothing due in the next week 🎉</p>
-        ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-            {upcomingList.map((ins) => {
-              const status = dueStatus(ins.dueDate, todayStr);
-              const ui = STATUS_UI[status];
-              const payment = payments.find((p) => p.id === ins.paymentId);
-              const label = String(ins.paymentName || payment?.name || 'Bill').trim();
-              const initials = label
-                .split(' ')
-                .filter(Boolean)
-                .map((w: string) => w[0])
-                .join('')
-                .slice(0, 2)
-                .toUpperCase();
-              const due = new Date(ins.dueDate + 'T12:00:00');
-              const today = new Date(todayStr + 'T12:00:00');
-              const dayDiff = Math.round((due.getTime() - today.getTime()) / 86400000);
-              const dayLabel =
-                status === 'overdue'
-                  ? `${Math.abs(dayDiff)}d late`
-                  : status === 'today'
-                    ? 'Today'
-                    : dayDiff === 1
-                      ? 'Tomorrow'
-                      : `in ${dayDiff}d`;
-              return (
-                <li
-                  key={`${ins.paymentId}-${ins.dueDate}`}
-                  className={`px-3.5 py-3 flex items-center gap-3 ${ui.row}`}
-                >
-                  <div className="relative shrink-0">
-                    <div
-                      className={`w-10 h-10 rounded-xl flex items-center justify-center text-[11px] font-black ${ui.avatar}`}
-                      title={label}
-                    >
-                      {initials || '·'}
-                    </div>
-                    <span
-                      className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full ring-2 ring-white dark:ring-slate-900 ${ui.dot}`}
-                      title={ui.label}
-                    />
+      {/* Upcoming — grouped */}
+      <div className="space-y-3">
+        {(
+          [
+            {
+              key: 'dd' as const,
+              title: 'Direct debit',
+              hint: 'Usually auto-paid — confirm when the bank has taken it',
+              items: groupedUpcoming.dd,
+              accent: 'border-sky-200 dark:border-sky-900/50',
+              header: 'text-sky-700 dark:text-sky-300',
+            },
+            {
+              key: 'manual_monthly' as const,
+              title: 'Manual monthly',
+              hint: 'You pay these each month',
+              items: groupedUpcoming.manual_monthly,
+              accent: 'border-violet-200 dark:border-violet-900/50',
+              header: 'text-violet-700 dark:text-violet-300',
+            },
+            {
+              key: 'non_monthly' as const,
+              title: 'Non-monthly',
+              hint: 'Weekly, quarterly, yearly, one-off…',
+              items: groupedUpcoming.non_monthly,
+              accent: 'border-slate-200 dark:border-slate-800',
+              header: 'text-slate-700 dark:text-slate-300',
+            },
+          ] as const
+        ).map((group) => {
+          if (group.items.length === 0) return null;
+          const show = group.items.slice(0, group.key === 'dd' ? 12 : 8);
+          return (
+            <div
+              key={group.key}
+              className={`rounded-2xl border ${group.accent} bg-white dark:bg-slate-900 overflow-hidden`}
+            >
+              <div className="px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-800 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className={`text-[11px] font-black ${group.header}`}>{group.title}</p>
+                    <p className="text-[9px] text-slate-500">{group.hint}</p>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-bold text-slate-900 dark:text-white truncate leading-snug">
-                      {label}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                      <span className={`text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-md ${ui.badge}`}>
-                        {ui.label}
-                      </span>
-                      <span className="text-[10px] font-bold text-slate-500">{dayLabel}</span>
-                      <span className="text-[10px] text-slate-400">·</span>
-                      <span className="text-[10px] text-slate-500">
-                        {formatDatePretty(new Date(ins.dueDate))}
-                      </span>
-                      {ins.currency && (
-                        <>
-                          <span className="text-[10px] text-slate-400">·</span>
-                          <span className="text-[10px] font-bold text-slate-400">{ins.currency}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-[13px] font-black tabular-nums text-slate-900 dark:text-white">
-                      {money(ins.amount, ins.currency, countries)}
-                    </p>
-                    {payment && !isPaymentReadOnly(payment) && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[10px] font-bold text-slate-400">{group.items.length}</span>
+                    {group.key === 'dd' && (
                       <button
                         type="button"
-                        onClick={() => onRecordPayment(payment, ins.dueDate)}
-                        className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 mt-0.5 hover:underline"
+                        disabled={isReadOnly}
+                        onClick={() => markDdDone(group.items)}
+                        className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wide bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
+                        title="Mark all visible direct debits as done for their due date"
                       >
-                        Mark paid
+                        All DD done
                       </button>
                     )}
                   </div>
-                </li>
-              );
-            })}
-          </ul>
+                </div>
+                {group.key === 'dd' && (
+                  <p className="text-[9px] text-sky-600/80 dark:text-sky-400/80">
+                    Tip: set payment method to Direct Debit on each bill so it lands here. One tap confirms the bank already paid it.
+                  </p>
+                )}
+              </div>
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                {show.map((ins) => {
+                  const status = dueStatus(ins.dueDate, todayStr);
+                  const ui = STATUS_UI[status];
+                  const payment = payments.find((p) => p.id === ins.paymentId);
+                  const label = String(ins.paymentName || payment?.name || 'Bill').trim();
+                  const initials = label
+                    .split(' ')
+                    .filter(Boolean)
+                    .map((w: string) => w[0])
+                    .join('')
+                    .slice(0, 2)
+                    .toUpperCase();
+                  const due = new Date(ins.dueDate + 'T12:00:00');
+                  const today = new Date(todayStr + 'T12:00:00');
+                  const dayDiff = Math.round((due.getTime() - today.getTime()) / 86400000);
+                  const dayLabel =
+                    status === 'overdue'
+                      ? `${Math.abs(dayDiff)}d late`
+                      : status === 'today'
+                        ? 'Today'
+                        : dayDiff === 1
+                          ? 'Tomorrow'
+                          : `in ${dayDiff}d`;
+                  return (
+                    <li
+                      key={`${ins.paymentId}-${ins.dueDate}`}
+                      className={`px-3.5 py-3 flex items-center gap-3 ${ui.row}`}
+                    >
+                      <div className="relative shrink-0">
+                        <div
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center text-[11px] font-black ${ui.avatar}`}
+                          title={label}
+                        >
+                          {initials || '·'}
+                        </div>
+                        <span
+                          className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full ring-2 ring-white dark:ring-slate-900 ${ui.dot}`}
+                          title={ui.label}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] font-bold text-slate-900 dark:text-white truncate leading-snug">
+                          {label}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                          <span className={`text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-md ${ui.badge}`}>
+                            {ui.label}
+                          </span>
+                          {group.key === 'dd' && (
+                            <span className="text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-sky-500/15 text-sky-700 dark:text-sky-300 ring-1 ring-sky-500/25">
+                              DD
+                            </span>
+                          )}
+                          <span className="text-[10px] font-bold text-slate-500">{dayLabel}</span>
+                          <span className="text-[10px] text-slate-400">·</span>
+                          <span className="text-[10px] text-slate-500">
+                            {formatDatePretty(new Date(ins.dueDate))}
+                          </span>
+                          {ins.currency && (
+                            <>
+                              <span className="text-[10px] text-slate-400">·</span>
+                              <span className="text-[10px] font-bold text-slate-400">{ins.currency}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-[13px] font-black tabular-nums text-slate-900 dark:text-white">
+                          {money(ins.amount, ins.currency, countries)}
+                        </p>
+                        {payment && !isPaymentReadOnly(payment) && (
+                          <button
+                            type="button"
+                            onClick={() => onRecordPayment(payment, ins.dueDate)}
+                            className={`text-[10px] font-bold mt-0.5 hover:underline ${
+                              group.key === 'dd'
+                                ? 'text-sky-600 dark:text-sky-400'
+                                : 'text-indigo-600 dark:text-indigo-400'
+                            }`}
+                          >
+                            {group.key === 'dd' ? 'DD done?' : 'Mark paid'}
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+              {group.items.length > show.length && (
+                <p className="px-3.5 py-2 text-[10px] text-slate-400 border-t border-slate-100 dark:border-slate-800">
+                  +{group.items.length - show.length} more
+                </p>
+              )}
+            </div>
+          );
+        })}
+        {upcomingList.length === 0 && (
+          <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 px-3.5 py-8 text-center text-[12px] text-slate-400">
+            Nothing due in the next week 🎉
+          </div>
         )}
       </div>
+
     </div>
   );
 }
