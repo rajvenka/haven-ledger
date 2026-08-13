@@ -1,7 +1,5 @@
 /**
- * Pulse Manage Bills — Pulse 1 redesign of ConfigurePayments.
- * Feature parity target: list, filters, method/category groups, active toggle,
- * expand history, edit/clone/delete, rich bulk (CSV/JSON), reorder.
+ * Pulse Manage Bills — list, filters, method groups, bulk import.
  */
 import React, { useMemo, useState } from 'react';
 import {
@@ -15,7 +13,6 @@ import {
   ToggleRight,
   ChevronDown,
   ChevronRight,
-  History,
   ClipboardList,
   FileSpreadsheet,
   CheckCircle,
@@ -70,7 +67,6 @@ function methodLabel(g: string) {
 export default function PulseBills({
   payments,
   history = [],
-  showFrequencyPatterns = true,
   onAddClick,
   onEditClick,
   onCloneClick,
@@ -89,6 +85,10 @@ export default function PulseBills({
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
   const [groupMode, setGroupMode] = useState<GroupMode>('method');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [bulkText, setBulkText] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState<string | null>(null);
+  const [bulkErr, setBulkErr] = useState<string | null>(null);
 
   const isPaymentReadOnly = (payment: RecurringPayment) => {
     if (!isReadOnly) return false;
@@ -141,7 +141,6 @@ export default function PulseBills({
         .sort((a, b) => a[0].localeCompare(b[0]))
         .map(([id, items]) => ({ id, label: id, items }));
     }
-    // method
     const order: Array<'direct_debit' | 'manual' | 'non_monthly'> = ['direct_debit', 'manual', 'non_monthly'];
     const map: Record<string, RecurringPayment[]> = { manual: [], direct_debit: [], non_monthly: [] };
     sortedFiltered.forEach((p) => map[billMethodGroup(p)].push(p));
@@ -176,25 +175,12 @@ export default function PulseBills({
     const sorted = [...paymentHistory].sort(
       (a, b) => new Date(b.paidDate).getTime() - new Date(a.paidDate).getTime()
     );
-    const lastPaid = sorted[0] || null;
-    const last6: { monthName: string; paid: boolean }[] = [];
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const now = new Date();
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date();
-      d.setMonth(now.getMonth() - i);
-      const yearMonthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      last6.push({
-        monthName: monthNames[d.getMonth()],
-        paid: paymentHistory.some((h) => h.paidDate.startsWith(yearMonthStr)),
-      });
-    }
-    return { total: paymentHistory.length, lastPaid, last6 };
+    return { total: sorted.length, lastPaid: sorted[0] || null };
   };
 
-  const toggleActive = (payment: RecurringPayment) => {
-    if (isPaymentReadOnly(payment)) return;
-    onUpdatePayment({ ...payment, active: !payment.active });
+  const toggleActive = (p: RecurringPayment) => {
+    if (isPaymentReadOnly(p)) return;
+    onUpdatePayment({ ...p, active: !p.active });
   };
 
   const movePayment = (payment: RecurringPayment, dir: -1 | 1) => {
@@ -210,18 +196,11 @@ export default function PulseBills({
     onUpdatePaymentsOrder(next.map((p, i) => ({ ...p, order: i })));
   };
 
-  // ---- Bulk ----
-  const [bulkText, setBulkText] = useState('');
-  const [bulkBusy, setBulkBusy] = useState(false);
-  const [bulkMsg, setBulkMsg] = useState<string | null>(null);
-  const [bulkErr, setBulkErr] = useState<string | null>(null);
-
   const parseBulkRows = (text: string): Omit<RecurringPayment, 'id'>[] => {
     const rows: Omit<RecurringPayment, 'id'>[] = [];
     const trimmed = text.trim();
     if (!trimmed) return rows;
 
-    // JSON array or object-with-array
     if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
       try {
         let arr: any[] = [];
@@ -252,32 +231,29 @@ export default function PulseBills({
             billingCycle,
             taggedFor,
             notes: item.notes || '',
-          });
+          } as any);
         }
-        return rows;
       } catch {
         /* fall through to CSV */
       }
+      if (rows.length) return rows;
     }
 
-    // CSV / TSV: Name, Amount, Currency, Day, Category [, Cycle, Method, Tag, Type]
-    for (const line of trimmed.split('\n').map((l) => l.trim()).filter(Boolean)) {
-      if (/^name\s*[,;\t]/i.test(line)) continue; // header
-      const parts = line.split(/[,;\t]/).map((p) => p.trim());
+    for (const line of trimmed.split('\n')) {
+      const parts = line.split(/[,\t]/).map((s) => s.trim());
       if (parts.length < 2) continue;
       const name = parts[0];
-      const amount = Number(String(parts[1]).replace(/[^0-9.]/g, ''));
+      const amount = Number(parts[1]);
       if (!name || !Number.isFinite(amount)) continue;
       const currency = (parts[2] || 'AUD').toUpperCase();
-      const dayOfMonth = Math.min(31, Math.max(1, parseInt(parts[3] || '1', 10) || 1));
+      const dayOfMonth = Math.min(31, Math.max(1, Number(parts[3]) || 1));
       const category = parts[4] || 'Other';
-      const rawCycle = (parts[5] || 'monthly').toLowerCase();
+      const rawCycle = parts[5] || 'monthly';
       const billingCycle = (BILLING_CYCLES.includes(rawCycle as any) ? rawCycle : 'monthly') as BillingCycle;
-      const paymentMethod = String(parts[6] || '').toLowerCase().includes('debit')
-        ? 'direct_debit'
-        : 'manual';
+      const methodRaw = (parts[6] || 'manual').toLowerCase();
+      const paymentMethod = methodRaw.includes('direct') || methodRaw === 'dd' ? 'direct_debit' : 'manual';
       const taggedFor = parts[7] || 'Self';
-      const paymentType = String(parts[8] || '').toLowerCase() === 'flexi' ? 'flexi' : 'fixed';
+      const paymentType = (parts[8] || 'fixed').toLowerCase() === 'flexi' ? 'flexi' : 'fixed';
       rows.push({
         name,
         amount,
@@ -290,7 +266,8 @@ export default function PulseBills({
         paymentMethod,
         billingCycle,
         taggedFor,
-      });
+        notes: '',
+      } as any);
     }
     return rows;
   };
@@ -368,7 +345,7 @@ export default function PulseBills({
         </div>
 
         {Object.keys(stats.byCcy).length > 0 && (
-          <div className="flex gap-1.5 overflow-x-auto overscroll-x-contain" style={{ scrollbarWidth: 'none' }}>
+          <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
             {Object.entries(stats.byCcy)
               .sort((a, b) => b[1] - a[1])
               .map(([ccy, amt]) => (
@@ -428,7 +405,6 @@ export default function PulseBills({
         </div>
       ) : (
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-          {/* Sticky filters — stay visible while scrolling bills */}
           <div className="sticky top-0 z-30 px-3 sm:px-4 py-2 space-y-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-xl shadow-[0_8px_24px_-12px_rgba(0,0,0,0.35)]">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
@@ -445,11 +421,8 @@ export default function PulseBills({
               )}
             </div>
 
-            {/* Status — Portfolio-style segmented track */}
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar" style={{ scrollbarWidth: 'none' }}>
-              <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-500/80 dark:text-slate-400/80 w-12">
-                Show
-              </span>
+            <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+              <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-500/80 w-12">Show</span>
               <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-slate-100/90 dark:bg-slate-900/80 border border-slate-200/60 dark:border-slate-800">
                 {(['all', 'active', 'paused'] as StatusFilter[]).map((s) => (
                   <button
@@ -468,11 +441,8 @@ export default function PulseBills({
               </div>
             </div>
 
-            {/* Method — same pattern as Book chips */}
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar" style={{ scrollbarWidth: 'none' }}>
-              <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-violet-500/80 dark:text-violet-400/80 w-12">
-                Method
-              </span>
+            <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+              <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-violet-500/80 w-12">Method</span>
               <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-violet-100/80 dark:bg-violet-950/50 border border-violet-200/60 dark:border-violet-900/60">
                 {(
                   [
@@ -489,7 +459,7 @@ export default function PulseBills({
                     className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all ${
                       methodFilter === id
                         ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30'
-                        : 'text-violet-700/70 dark:text-violet-300/70 hover:text-violet-900 dark:hover:text-violet-100'
+                        : 'text-violet-700/70 dark:text-violet-300/70'
                     }`}
                   >
                     {label}
@@ -498,11 +468,8 @@ export default function PulseBills({
               </div>
             </div>
 
-            {/* Group by */}
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar" style={{ scrollbarWidth: 'none' }}>
-              <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-indigo-500/80 dark:text-indigo-400/80 w-12">
-                Group
-              </span>
+            <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+              <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-indigo-500/80 w-12">Group</span>
               <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-indigo-100/80 dark:bg-indigo-950/50 border border-indigo-200/60 dark:border-indigo-900/60">
                 {(
                   [
@@ -527,12 +494,9 @@ export default function PulseBills({
               </div>
             </div>
 
-            {/* Tags / categories — own row (Portfolio View-currency style) */}
             {categories.length > 1 && (
-              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar" style={{ scrollbarWidth: 'none' }}>
-                <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-emerald-600/80 dark:text-emerald-400/80 w-12">
-                  Tag
-                </span>
+              <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+                <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-emerald-600/80 w-12">Tag</span>
                 <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-emerald-100/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-900/50">
                   {categories.map((c) => (
                     <button
@@ -551,6 +515,7 @@ export default function PulseBills({
                 </div>
               </div>
             )}
+          </div>
 
           <div className="px-3 sm:px-4 pb-28 space-y-4 pt-3">
             {sortedFiltered.length === 0 ? (
@@ -581,31 +546,40 @@ export default function PulseBills({
                 >
                   <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
                     <div>
-                      <h2 className={`text-[11px] font-black ${
-                        id === 'direct_debit' ? 'text-sky-700 dark:text-sky-300'
-                        : id === 'manual' ? 'text-violet-700 dark:text-violet-300'
-                        : 'text-slate-700 dark:text-slate-200'
-                      }`}>{label}</h2>
+                      <h2
+                        className={`text-[11px] font-black ${
+                          id === 'direct_debit'
+                            ? 'text-sky-700 dark:text-sky-300'
+                            : id === 'manual'
+                              ? 'text-violet-700 dark:text-violet-300'
+                              : 'text-slate-700 dark:text-slate-200'
+                        }`}
+                      >
+                        {label}
+                      </h2>
                       <p className="text-[9px] text-slate-500">
-                        {id === 'direct_debit' ? 'Bank takes these automatically'
-                          : id === 'manual' ? 'You pay these each month'
-                          : id === 'non_monthly' ? 'Other schedules'
-                          : 'Category group'}
+                        {id === 'direct_debit'
+                          ? 'Bank takes these automatically'
+                          : id === 'manual'
+                            ? 'You pay these each month'
+                            : id === 'non_monthly'
+                              ? 'Other schedules'
+                              : 'Category group'}
                       </p>
                     </div>
                     <span className="text-[10px] font-bold text-slate-400">{items.length}</span>
                   </div>
                   <ul className="divide-y divide-slate-100 dark:divide-slate-800/80">
                     {items.map((p) => {
-                      const expanded = expandedId === p.id;
-                      const hist = showFrequencyPatterns ? getHistoryStats(p.id) : null;
                       const ro = isPaymentReadOnly(p);
+                      const expanded = expandedId === p.id;
+                      const hist = getHistoryStats(p.id);
                       const catMeta = typeof getCategoryColor === 'function' ? getCategoryColor(p.category) : null;
                       const catColor =
                         (typeof catMeta === 'string' ? catMeta : (catMeta as any)?.iconBg || (catMeta as any)?.bg) ||
                         '#6366f1';
                       return (
-                        <li key={p.id} className={`${!p.active ? 'opacity-55' : ''}`}>
+                        <li key={p.id} className={!p.active ? 'opacity-55' : undefined}>
                           <div className="flex items-center gap-1.5 px-2.5 py-2.5">
                             <button
                               type="button"
@@ -614,12 +588,12 @@ export default function PulseBills({
                             >
                               {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                             </button>
-                            <div className="min-w-0 flex-1" onClick={() => !ro && onEditClick(p)}>
+                            <div className="min-w-0 flex-1 cursor-pointer" onClick={() => !ro && onEditClick(p)}>
                               <div className="flex items-center gap-1.5 min-w-0">
                                 <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: catColor }} />
                                 <p className="text-[13px] font-bold text-slate-900 dark:text-white truncate">{p.name}</p>
                               </div>
-                              <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                              <p className="text-[10px] text-slate-500 truncate mt-0.5">
                                 Day {p.dayOfMonth}
                                 {p.billingCycle && p.billingCycle !== 'monthly' ? ` · ${p.billingCycle}` : ''}
                                 {p.paymentMethod === 'direct_debit' ? ' · DD' : ''}
@@ -627,76 +601,48 @@ export default function PulseBills({
                                 {p.category ? ` · ${p.category}` : ''}
                               </p>
                             </div>
-                            <div className="shrink-0 text-right">
-                              <p className="text-[13px] font-black tabular-nums text-slate-900 dark:text-white">
+                            <div className="text-right shrink-0">
+                              <p className="text-[12px] font-black tabular-nums text-slate-900 dark:text-white">
                                 {formatCurrencyValue(p.amount, p.currency)}
                               </p>
-                              {p.paymentType === 'flexi' && (
-                                <p className="text-[9px] font-bold text-amber-500">flexi</p>
-                              )}
                             </div>
                             <button
                               type="button"
                               disabled={ro}
                               onClick={() => toggleActive(p)}
-                              className="shrink-0 p-1 disabled:opacity-40"
+                              className="shrink-0 p-1 text-slate-400 disabled:opacity-40"
                               title={p.active ? 'Pause' : 'Activate'}
                             >
-                              {p.active ? (
-                                <ToggleRight className="w-6 h-6 text-indigo-500" />
-                              ) : (
-                                <ToggleLeft className="w-6 h-6 text-slate-400" />
-                              )}
+                              {p.active ? <ToggleRight className="w-5 h-5 text-emerald-500" /> : <ToggleLeft className="w-5 h-5" />}
                             </button>
                           </div>
                           {expanded && (
-                            <div className="px-3 pb-3 pt-0 space-y-2 bg-slate-50/80 dark:bg-slate-950/40">
+                            <div className="px-3 pb-3 space-y-2">
                               {p.notes && (
                                 <p className="text-[10px] text-slate-500 italic line-clamp-3">&ldquo;{p.notes}&rdquo;</p>
                               )}
-                              {hist && (
-                                <div className="flex items-start gap-2">
-                                  <History className="w-3.5 h-3.5 text-indigo-500 mt-0.5 shrink-0" />
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-[10px] font-bold text-slate-600 dark:text-slate-300">
-                                      {hist.total === 0
-                                        ? 'No payment history yet'
-                                        : `${hist.total} log${hist.total === 1 ? '' : 's'}`}
-                                      {hist.lastPaid && (
-                                        <span className="text-slate-400 font-semibold"> · last {hist.lastPaid.paidDate}</span>
-                                      )}
-                                    </p>
-                                    <div className="flex gap-1 mt-1.5">
-                                      {hist.last6.map((m) => (
-                                        <div key={m.monthName} className="flex-1 text-center">
-                                          <div
-                                            className={`h-1.5 rounded-full ${
-                                              m.paid ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-800'
-                                            }`}
-                                          />
-                                          <p className="text-[8px] font-bold text-slate-400 mt-0.5">{m.monthName}</p>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                              <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+                              <p className="text-[10px] text-slate-400">
+                                {hist.total === 0
+                                  ? 'No payment history'
+                                  : `${hist.total} log${hist.total === 1 ? '' : 's'}`}
+                                {hist.lastPaid && (
+                                  <span className="text-slate-400 font-semibold"> · last {hist.lastPaid.paidDate}</span>
+                                )}
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
                                 {onUpdatePaymentsOrder && !ro && (
                                   <>
                                     <button
                                       type="button"
                                       onClick={() => movePayment(p, -1)}
-                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
-                                      title="Move up"
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
                                     >
                                       <ArrowUp className="w-3 h-3" />
                                     </button>
                                     <button
                                       type="button"
                                       onClick={() => movePayment(p, 1)}
-                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
-                                      title="Move down"
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
                                     >
                                       <ArrowDown className="w-3 h-3" />
                                     </button>
