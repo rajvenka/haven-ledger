@@ -1816,23 +1816,8 @@ export default function App() {
                 summaryCurrency={summaryCurrency}
               />
             ) : activeTab === 'rewards' ? (
-              uiPulse ? (
-                <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
-                <PulseMembership
-                  rewardsPerks={rewardsPerks}
-                  onAddReward={addReward}
-                  onUpdateReward={updateReward}
-                  onDeleteReward={deleteReward}
-                  giftCards={giftCards}
-                  onAddGiftCard={addGiftCard}
-                  onUpdateGiftCard={updateGiftCard}
-                  onRedeemGiftCard={redeemGiftCard}
-                  onDeleteGiftCard={deleteGiftCard}
-                  isReadOnly={isReadOnly}
-                />
-                </div>
-              ) : (
                 <RewardsTracker
+                  pulseMode={uiPulse}
                   rewardsPerks={rewardsPerks}
                   onAddReward={addReward}
                   onUpdateReward={updateReward}
@@ -1844,8 +1829,7 @@ export default function App() {
                   onDeleteGiftCard={deleteGiftCard}
                   isReadOnly={isReadOnly}
                 />
-              )
-            ) : activeTab === 'portfolio' ? (
+) : activeTab === 'portfolio' ? (
               uiPulse ? (
               <PortfolioV1View
                 isReadOnly={isReadOnly}
@@ -2003,25 +1987,8 @@ export default function App() {
                 loadMfHoldingsCache={loadMfHoldingsCache}
                               />
 ) : activeTab === 'income' ? (
-              uiPulse ? (
-                <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
-                  <PulseIncome
-                    incomeSources={incomeSources}
-                    incomeMode={incomeMode}
-                    monthlyIncome={monthlyIncome}
-                    summaryCurrency={summaryCurrency}
-                    countries={countries}
-                    payments={payments}
-                    history={history}
-                    addIncomeSource={addIncomeSource}
-                    deleteIncomeSource={deleteIncomeSource}
-                    updateIncomeMode={updateIncomeMode}
-                    updateMonthlyIncome={updateMonthlyIncome}
-                    isReadOnly={isReadOnly}
-                  />
-                </div>
-              ) : (
                 <IncomeView
+                    pulseMode={uiPulse}
                     incomeSources={incomeSources}
                     incomeMode={incomeMode}
                     monthlyIncome={monthlyIncome}
@@ -2035,8 +2002,7 @@ export default function App() {
                     updateMonthlyIncome={updateMonthlyIncome}
                     isReadOnly={isReadOnly}
                 />
-              )
-            ) : activeTab === 'admin_users' && userProfile?.isSuperAdmin ? (
+) : activeTab === 'admin_users' && userProfile?.isSuperAdmin ? (
               <AdminUsersView
                 fetchAllUsersForAdmin={fetchAllUsersForAdmin}
                 inviteNewUser={inviteNewUser}
@@ -2052,20 +2018,8 @@ export default function App() {
                 currentUserId={user?.id}
               />
             ) : activeTab === 'history' && hasFeature('core') ? (
-              uiPulse ? (
-                <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
-                  <PulseHistory
-                    history={history}
-                    onDeleteHistoryEntry={deleteHistoryEntry}
-                    onUpdateHistoryStatus={updateHistoryStatus}
-                    onClearHistory={clearHistory}
-                    rate={rate}
-                    summaryCurrency={summaryCurrency}
-                    countries={countries}
-                  />
-                </div>
-              ) : (
                 <PaymentHistoryView
+                    pulseMode={uiPulse}
                     history={history}
                     onDeleteHistoryEntry={deleteHistoryEntry}
                     onUpdateHistoryStatus={updateHistoryStatus}
@@ -2074,8 +2028,7 @@ export default function App() {
                     summaryCurrency={summaryCurrency}
                     countries={countries}
                 />
-              )
-            ) : (
+) : (
               <div className="flex-1 flex items-center justify-center p-8 text-center">
                 <p className="text-sm text-slate-400">This page isn't available on your current plan.</p>
               </div>
