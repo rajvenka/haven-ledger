@@ -1,7 +1,17 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  Briefcase, CreditCard, ArrowDownLeft, TrendingUp, RefreshCw, Coins,
-  Plus, Trash2, Check, Calendar
+  Briefcase,
+  CreditCard,
+  ArrowDownLeft,
+  TrendingUp,
+  RefreshCw,
+  Coins,
+  Plus,
+  Trash2,
+  Check,
+  Calendar,
+  Wallet,
+  Pencil,
 } from 'lucide-react';
 import { IncomeSource, Currency, CountryConfig, RecurringPayment, PaymentHistory } from '../types';
 import { convertCurrency } from '../utils/paymentUtils';
@@ -22,33 +32,46 @@ interface IncomeViewProps {
   isReadOnly?: boolean;
 }
 
-const CATEGORY_META: Record<IncomeSource['category'], { label: string; icon: any }> = {
-  salary: { label: 'Salary & Wages', icon: Briefcase },
-  cashback: { label: 'Cashback & Rewards', icon: CreditCard },
-  borrowing: { label: 'Borrowing', icon: ArrowDownLeft },
-  investment: { label: 'Investment Yield', icon: TrendingUp },
-  refund: { label: 'Refunds', icon: RefreshCw },
-  other: { label: 'Other', icon: Coins },
+const CATEGORY_META: Record<
+  IncomeSource['category'],
+  { label: string; icon: any; tint: string }
+> = {
+  salary: { label: 'Salary & wages', icon: Briefcase, tint: 'text-indigo-600 dark:text-indigo-400 bg-indigo-500/10' },
+  cashback: { label: 'Cashback & rewards', icon: CreditCard, tint: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10' },
+  borrowing: { label: 'Borrowing', icon: ArrowDownLeft, tint: 'text-amber-600 dark:text-amber-400 bg-amber-500/10' },
+  investment: { label: 'Investment yield', icon: TrendingUp, tint: 'text-violet-600 dark:text-violet-400 bg-violet-500/10' },
+  refund: { label: 'Refunds', icon: RefreshCw, tint: 'text-sky-600 dark:text-sky-400 bg-sky-500/10' },
+  other: { label: 'Other', icon: Coins, tint: 'text-slate-600 dark:text-slate-300 bg-slate-500/10' },
 };
 
 const FREQUENCY_LABEL: Record<IncomeSource['frequency'], string> = {
-  weekly: '/week', fortnightly: '/fortnight', monthly: '/month', adhoc: 'ad hoc', 'one-time': 'one-time',
+  weekly: '/week',
+  fortnightly: '/fortnight',
+  monthly: '/month',
+  adhoc: 'ad hoc',
+  'one-time': 'one-time',
 };
 
 function toMonthly(source: IncomeSource): number {
   switch (source.frequency) {
-    case 'weekly': return source.amount * 4.33;
-    case 'fortnightly': return source.amount * 2.17;
-    case 'monthly': return source.amount;
-    default: return 0;
+    case 'weekly':
+      return source.amount * 4.33;
+    case 'fortnightly':
+      return source.amount * 2.17;
+    case 'monthly':
+      return source.amount;
+    default:
+      return 0;
   }
 }
 
-const CATEGORY_COLORS = ['#007aff', '#34c759', '#ff9500', '#af52de', '#ff2d55', '#5ac8fa', '#ffcc00', '#8e8e93'];
-
 type Period = 'month' | 'quarter' | 'year' | 'custom';
 
-function getPeriodRange(period: Period, customStart: string, customEnd: string): { start: Date; end: Date; label: string } {
+function getPeriodRange(
+  period: Period,
+  customStart: string,
+  customEnd: string
+): { start: Date; end: Date; label: string } {
   const now = new Date();
   if (period === 'month') {
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -58,43 +81,21 @@ function getPeriodRange(period: Period, customStart: string, customEnd: string):
   if (period === 'quarter') {
     const start = new Date(now.getFullYear(), now.getMonth() - 2, 1);
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    return { start, end, label: 'Last 3 Months' };
+    return { start, end, label: 'Last 3 months' };
   }
   if (period === 'year') {
     const start = new Date(now.getFullYear(), 0, 1);
     const end = new Date(now.getFullYear(), 11, 31);
-    return { start, end, label: start.getFullYear().toString() };
+    return { start, end, label: String(now.getFullYear()) };
   }
   const start = customStart ? new Date(customStart) : new Date(now.getFullYear(), now.getMonth(), 1);
   const end = customEnd ? new Date(customEnd) : now;
-  return { start, end, label: `${start.toLocaleDateString()} \u2013 ${end.toLocaleDateString()}` };
-}
-
-function incomeForPeriod(sources: IncomeSource[], start: Date, end: Date): number {
-  const msPerDay = 86400000;
-  const daysInRange = Math.max(1, (end.getTime() - start.getTime()) / msPerDay);
-  const monthsInRange = Math.max(1, daysInRange / 30.44);
-
-  return sources.reduce((sum, s) => {
-    const payDate = s.payDate ? new Date(s.payDate) : null;
-
-    if (s.frequency === 'adhoc' || s.frequency === 'one-time') {
-      if (payDate && payDate >= start && payDate <= end) return sum + s.amount;
-      return sum;
-    }
-    if (payDate && payDate > end) return sum;
-
-    if (s.frequency === 'monthly') return sum + s.amount * monthsInRange;
-    if (s.frequency === 'weekly') return sum + s.amount * (daysInRange / 7);
-    if (s.frequency === 'fortnightly') return sum + s.amount * (daysInRange / 14);
-    return sum;
-  }, 0);
+  return { start, end, label: 'Custom' };
 }
 
 export default function IncomeView({
   pulseMode = false,
   incomeSources,
-  incomeMode,
   monthlyIncome,
   summaryCurrency,
   countries,
@@ -106,340 +107,483 @@ export default function IncomeView({
   updateMonthlyIncome,
   isReadOnly = false,
 }: IncomeViewProps) {
-  const [isAdding, setIsAdding] = useState(false);
+  const [isEditingTotal, setIsEditingTotal] = useState(false);
   const [tempMonthly, setTempMonthly] = useState(monthlyIncome);
-  const [isEditingSimple, setIsEditingSimple] = useState(false);
-  const [simpleError, setSimpleError] = useState<string | null>(null);
+  const [totalError, setTotalError] = useState<string | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState<Currency>(summaryCurrency);
   const [frequency, setFrequency] = useState<IncomeSource['frequency']>('monthly');
   const [category, setCategory] = useState<IncomeSource['category']>('salary');
   const [payDate, setPayDate] = useState('');
-
   const [period, setPeriod] = useState<Period>('month');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
 
-  const symbol = countries.find(c => c.currency === summaryCurrency)?.symbol || '$';
+  const symbol =
+    countries.find((c) => c.currency === summaryCurrency)?.symbol ||
+    (summaryCurrency === 'AUD' ? 'A$' : summaryCurrency === 'INR' ? '₹' : '$');
 
-  const totalMonthly = useMemo(() => incomeSources.reduce((sum, s) => sum + toMonthly(s), 0), [incomeSources]);
-  const canEditAsSingleFigure = incomeSources.length === 0 || (incomeSources.length === 1 && incomeSources[0].isSimpleTotal);
+  const sourcesInDisplayCcy = useMemo(() => {
+    return incomeSources.map((s) => {
+      const monthlyNative = toMonthly(s);
+      const monthly =
+        s.currency === summaryCurrency
+          ? monthlyNative
+          : convertCurrency(monthlyNative, s.currency, summaryCurrency, countries);
+      return { ...s, monthlyDisplay: monthly };
+    });
+  }, [incomeSources, summaryCurrency, countries]);
 
-  const { start: periodStart, end: periodEnd, label: periodLabel } = useMemo(
-    () => getPeriodRange(period, customStart, customEnd),
-    [period, customStart, customEnd]
+  const sourcesMonthlyTotal = useMemo(
+    () => sourcesInDisplayCcy.reduce((sum, s) => sum + (s.monthlyDisplay || 0), 0),
+    [sourcesInDisplayCcy]
   );
 
-  const periodIncome = useMemo(() => incomeForPeriod(incomeSources, periodStart, periodEnd), [incomeSources, periodStart, periodEnd]);
+  /** Prefer sum of sources when present; otherwise the single monthly figure. */
+  const displayTotal =
+    incomeSources.length > 0 ? sourcesMonthlyTotal : parseFloat(monthlyIncome) || 0;
 
-  const categoryBreakdown = useMemo(() => {
-    const byCategory: Record<string, number> = {};
-    history
-      .filter(h => h.status === 'paid')
-      .filter(h => {
-        const d = new Date(h.paidDate);
-        return d >= periodStart && d <= periodEnd;
-      })
-      .forEach(h => {
-        const payment = payments.find(p => p.id === h.paymentId);
-        const cat = payment?.category || 'Other';
-        const converted = convertCurrency(h.amount, h.currency, summaryCurrency, countries);
-        byCategory[cat] = (byCategory[cat] || 0) + converted;
-      });
-    return Object.entries(byCategory)
-      .map(([cat, amt]) => ({ category: cat, amount: amt, pct: periodIncome > 0 ? (amt / periodIncome) * 100 : 0 }))
-      .sort((a, b) => b.amount - a.amount);
-  }, [history, payments, periodStart, periodEnd, summaryCurrency, countries, periodIncome]);
+  const byCategory = useMemo(() => {
+    const map = new Map<string, number>();
+    sourcesInDisplayCcy.forEach((s) => {
+      if (!s.monthlyDisplay) return;
+      map.set(s.category, (map.get(s.category) || 0) + s.monthlyDisplay);
+    });
+    return Array.from(map.entries())
+      .map(([key, value]) => ({ key, value, ...CATEGORY_META[key as IncomeSource['category']] }))
+      .sort((a, b) => b.value - a.value);
+  }, [sourcesInDisplayCcy]);
 
-  const totalSpent = categoryBreakdown.reduce((sum, c) => sum + c.amount, 0);
-  const remaining = periodIncome - totalSpent;
+  const periodRange = getPeriodRange(period, customStart, customEnd);
 
-  const handleSaveSimple = async () => {
-    setSimpleError(null);
+  const expenseInPeriod = useMemo(() => {
+    let total = 0;
+    history.forEach((h) => {
+      const d = new Date(h.paidDate);
+      if (d < periodRange.start || d > periodRange.end) return;
+      const pay = payments.find((p) => p.id === h.paymentId);
+      const ccy = (pay?.currency || summaryCurrency) as Currency;
+      const amt =
+        ccy === summaryCurrency
+          ? Number(h.amount) || 0
+          : convertCurrency(Number(h.amount) || 0, ccy, summaryCurrency, countries);
+      total += amt;
+    });
+    return total;
+  }, [history, payments, periodRange, summaryCurrency, countries]);
+
+  const monthsInPeriod = useMemo(() => {
+    const ms = periodRange.end.getTime() - periodRange.start.getTime();
+    return Math.max(1, Math.round(ms / (30.44 * 24 * 3600 * 1000)));
+  }, [periodRange]);
+
+  const incomeInPeriod = displayTotal * monthsInPeriod;
+  const coveragePct = incomeInPeriod > 0 ? Math.min(999, (expenseInPeriod / incomeInPeriod) * 100) : 0;
+
+  const syncMonthlyFromSources = async (list: IncomeSource[]) => {
+    const sum = list.reduce((acc, s) => {
+      const native = toMonthly(s);
+      if (s.currency === summaryCurrency) return acc + native;
+      return acc + convertCurrency(native, s.currency, summaryCurrency, countries);
+    }, 0);
+    await updateMonthlyIncome(String(Math.round(sum * 100) / 100));
     try {
-      await updateMonthlyIncome(tempMonthly);
-      setIsEditingSimple(false);
-    } catch (err: any) {
-      setSimpleError(err.message || 'Could not save.');
+      await updateIncomeMode(list.length > 0 ? 'detailed' : 'simple');
+    } catch {
+      /* mode is optional persistence */
     }
   };
 
-  const handleAdd = (e: React.FormEvent) => {
+  const handleSaveTotal = async () => {
+    const n = parseFloat(tempMonthly);
+    if (!Number.isFinite(n) || n < 0) {
+      setTotalError('Enter a valid amount');
+      return;
+    }
+    setTotalError(null);
+    await updateMonthlyIncome(String(n));
+    try {
+      await updateIncomeMode('simple');
+    } catch {
+      /* ignore */
+    }
+    setIsEditingTotal(false);
+  };
+
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadOnly) return;
     const amt = parseFloat(amount);
-    if (!name.trim() || !amt || amt <= 0) return;
-    addIncomeSource({
-      name: name.trim(), amount: amt, frequency, category,
-      isRecurring: frequency !== 'adhoc' && frequency !== 'one-time',
+    if (!name.trim() || !Number.isFinite(amt) || amt <= 0) return;
+    const src: Omit<IncomeSource, 'id'> = {
+      name: name.trim(),
+      amount: amt,
+      currency,
+      frequency,
+      category,
+      isRecurring: frequency !== 'one-time' && frequency !== 'adhoc',
       payDate: payDate || undefined,
-    });
-    setName(''); setAmount(''); setFrequency('monthly'); setCategory('salary'); setPayDate('');
+    } as any;
+    await addIncomeSource(src);
+    await syncMonthlyFromSources([...incomeSources, { ...src, id: 'tmp' } as IncomeSource]);
+    setName('');
+    setAmount('');
+    setPayDate('');
+    setFrequency('monthly');
+    setCategory('salary');
     setIsAdding(false);
   };
 
-  const showPayDateField = frequency === 'monthly' || frequency === 'adhoc';
+  const handleDelete = async (id: string) => {
+    if (isReadOnly) return;
+    if (!confirm('Remove this income source?')) return;
+    await deleteIncomeSource(id);
+    const next = incomeSources.filter((s) => s.id !== id);
+    await syncMonthlyFromSources(next);
+  };
+
+  const card =
+    pulseMode
+      ? 'rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900'
+      : 'apple-card';
+
+  const showPayDateField = frequency === 'monthly' || frequency === 'adhoc' || frequency === 'one-time';
 
   return (
-    <div className={`flex-1 flex flex-col overflow-y-auto px-3 sm:px-5 pt-3 sm:pt-4 pb-24 md:pb-4 space-y-4 text-left animate-in fade-in-50 duration-300 ${pulseMode ? "bg-slate-50 dark:bg-slate-950" : "bg-slate-50 dark:bg-slate-900"}`}>
-      {pulseMode && (
-        <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-emerald-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/20 p-3 sm:p-3.5">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Briefcase className="w-5 h-5 text-emerald-500 shrink-0" />
-            <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">Income</h2>
-            <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-emerald-600/90 text-white">Pulse</span>
-          </div>
-          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">What&apos;s coming in, alongside what&apos;s going out</p>
-        </div>
-      )}
-
-      {!pulseMode && (
-      <div className="flex items-center justify-between">
+    <div
+      className={`w-full max-w-full min-w-0 space-y-4 px-3 sm:px-4 pt-2 sm:pt-3 pb-24 sm:pb-6 ${
+        pulseMode ? 'bg-slate-50 dark:bg-slate-950 min-h-full' : ''
+      }`}
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">Income</h2>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 font-semibold mt-0.5">What's coming in, alongside what's going out</p>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+            <Wallet className={`w-5 h-5 ${pulseMode ? 'text-emerald-500' : 'text-indigo-500'}`} />
+            Income
+          </h1>
+          <p className="text-[11px] text-slate-500 mt-0.5">
+            Monthly estimate for cashflow · {summaryCurrency}
+          </p>
         </div>
         {!isReadOnly && (
-          <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-lg text-[11px] font-bold gap-0.5">
-            <button
-              onClick={() => updateIncomeMode('simple')}
-              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${incomeMode === 'simple' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-400'}`}
-            >
-              Simple
-            </button>
-            <button
-              onClick={() => updateIncomeMode('detailed')}
-              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${incomeMode === 'detailed' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-400'}`}
-            >
-              Detailed
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setIsAdding(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
+          >
+            <Plus className="w-3.5 h-3.5" /> Add source
+          </button>
         )}
       </div>
-      )}
 
-      {pulseMode && !isReadOnly && (
-        <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-emerald-600/80 dark:text-emerald-400/80 w-10">Mode</span>
-          <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-emerald-100/80 dark:bg-emerald-950/50 border border-emerald-200/60 dark:border-emerald-900/60">
-            <button type="button" onClick={() => updateIncomeMode('simple')} className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${incomeMode === 'simple' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25' : 'text-emerald-800/70 dark:text-emerald-300/70'}`}>Simple</button>
-            <button type="button" onClick={() => updateIncomeMode('detailed')} className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${incomeMode === 'detailed' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25' : 'text-emerald-800/70 dark:text-emerald-300/70'}`}>Detailed</button>
-          </div>
-        </div>
-      )}
-
-      <div className="apple-card p-6">
-        <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Monthly Income</span>
-        {incomeMode === 'simple' && canEditAsSingleFigure ? (
-          isEditingSimple ? (
-            <div className="flex items-center gap-2 mt-2">
-              <span className="text-2xl font-black text-slate-400">{symbol}</span>
-              <input
-                autoFocus
-                type="number"
-                value={tempMonthly}
-                onChange={(e) => setTempMonthly(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSaveSimple()}
-                className="text-3xl font-black text-slate-900 dark:text-white bg-transparent border-b-2 border-indigo-500 outline-none w-40"
-              />
-              <button onClick={handleSaveSimple} className="p-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg cursor-pointer">
-                <Check className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
+      {/* Hero total */}
+      <div className={`${card} p-4 sm:p-5`}>
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Monthly income</p>
+        {isEditingTotal && incomeSources.length === 0 ? (
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-2xl font-black text-slate-400">{symbol}</span>
+            <input
+              autoFocus
+              type="number"
+              inputMode="decimal"
+              value={tempMonthly}
+              onChange={(e) => setTempMonthly(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSaveTotal()}
+              className="flex-1 text-3xl font-black bg-transparent border-b-2 border-indigo-500 outline-none text-slate-900 dark:text-white tabular-nums"
+            />
             <button
-              onClick={() => { if (!isReadOnly) { setTempMonthly(monthlyIncome); setIsEditingSimple(true); } }}
-              className="flex items-baseline gap-1 mt-2 cursor-pointer text-left"
-              disabled={isReadOnly}
+              type="button"
+              onClick={handleSaveTotal}
+              className="p-2 rounded-lg bg-indigo-600 text-white"
             >
-              <span className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">
-                {symbol}{(parseFloat(monthlyIncome) || 0).toLocaleString()}
-              </span>
-              {!isReadOnly && <span className="text-[10px] text-indigo-500 font-bold ml-2 self-end mb-1.5">tap to edit</span>}
+              <Check className="w-4 h-4" />
             </button>
-          )
+          </div>
         ) : (
-          <div className="text-4xl font-black text-slate-900 dark:text-white tracking-tight mt-2">
-            {symbol}{totalMonthly.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          <div className="mt-1 flex items-end gap-2 flex-wrap">
+            <p className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight tabular-nums">
+              {symbol}
+              {displayTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </p>
+            {!isReadOnly && incomeSources.length === 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setTempMonthly(monthlyIncome || String(displayTotal));
+                  setIsEditingTotal(true);
+                }}
+                className="mb-1.5 inline-flex items-center gap-1 text-[10px] font-bold text-indigo-500"
+              >
+                <Pencil className="w-3 h-3" /> Edit
+              </button>
+            )}
           </div>
         )}
-        {simpleError && <p className="text-[10px] text-red-500 font-semibold mt-2">{simpleError}</p>}
-        <p className="text-[10px] text-slate-400 mt-2">
-          {incomeMode === 'simple'
-            ? (canEditAsSingleFigure
-                ? 'One number, kept simple — switch to Detailed to break it down by source.'
-                : `Made up of ${incomeSources.length} sources — switch to Detailed to edit them individually.`)
-            : `Same total as Simple mode — ${incomeSources.filter(s => s.isRecurring).length} recurring source(s).`}
+        {totalError && <p className="text-[10px] text-rose-500 font-semibold mt-1">{totalError}</p>}
+        <p className="text-[11px] text-slate-500 mt-2">
+          {incomeSources.length === 0
+            ? 'Set a single monthly figure, or add sources below for a breakdown.'
+            : `From ${incomeSources.length} source${incomeSources.length === 1 ? '' : 's'} · totals feed Dashboard cashflow`}
         </p>
       </div>
 
-      {incomeSources.length > 0 && (
-        <div className="apple-card p-5 space-y-3.5">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Where It Goes</span>
-            <div className="flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg text-[10px] font-bold gap-0.5">
-              {(['month', 'quarter', 'year', 'custom'] as Period[]).map(p => (
-                <button
-                  key={p}
-                  onClick={() => setPeriod(p)}
-                  className={`px-2 py-1 rounded-md transition-all cursor-pointer ${period === p ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-400'}`}
+      {/* Category split */}
+      {byCategory.length > 0 && (
+        <div className={`${card} p-4 space-y-3`}>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">By category</p>
+          <div className="flex flex-wrap gap-2">
+            {byCategory.map((c) => {
+              const Icon = c.icon || Coins;
+              return (
+                <div
+                  key={c.key}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-bold ${c.tint}`}
                 >
-                  {p === 'month' ? 'Month' : p === 'quarter' ? '3 Months' : p === 'year' ? 'Year' : 'Custom'}
-                </button>
-              ))}
-            </div>
+                  <Icon className="w-3.5 h-3.5" />
+                  {c.label}
+                  <span className="opacity-80 tabular-nums">
+                    {symbol}
+                    {c.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </span>
+                </div>
+              );
+            })}
           </div>
-
-          {period === 'custom' && (
-            <div className="flex items-center gap-2">
-              <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className="flex-1 px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px]" />
-              <span className="text-slate-400 text-[10px]">to</span>
-              <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className="flex-1 px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px]" />
-            </div>
-          )}
-
-          <p className="text-[10px] text-slate-400 font-semibold">{periodLabel} · {symbol}{periodIncome.toLocaleString(undefined, { maximumFractionDigits: 0 })} income</p>
-
-          {categoryBreakdown.length === 0 ? (
-            <p className="text-[11px] text-slate-400 py-4 text-center">No paid transactions in this period yet.</p>
-          ) : (
-            <>
-              <div className="flex h-2.5 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
-                {categoryBreakdown.map((c, idx) => (
-                  <div
-                    key={c.category}
-                    style={{ width: `${Math.min(c.pct, 100)}%`, backgroundColor: CATEGORY_COLORS[idx % CATEGORY_COLORS.length] }}
-                    title={`${c.category}: ${c.pct.toFixed(1)}%`}
-                  />
-                ))}
-              </div>
-
-              <div className="space-y-2">
-                {categoryBreakdown.map((c, idx) => (
-                  <div key={c.category} className="flex items-center gap-2.5">
-                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: CATEGORY_COLORS[idx % CATEGORY_COLORS.length] }} />
-                    <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 flex-1 truncate">{c.category}</span>
-                    <span className="text-[11px] font-bold text-slate-900 dark:text-white">{symbol}{c.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-                    <span className="text-[9px] font-bold text-slate-400 w-10 text-right">{c.pct.toFixed(0)}%</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className={`flex items-center justify-between pt-2.5 border-t border-slate-100 dark:border-slate-800 text-[11px] font-black ${remaining >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
-                <span>{remaining >= 0 ? 'Remaining' : 'Over budget'}</span>
-                <span>{symbol}{Math.abs(remaining).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-              </div>
-            </>
-          )}
         </div>
       )}
 
-      {incomeMode === 'detailed' && (
-        <div className="space-y-3">
-          {incomeSources.length === 0 && !isAdding && (
-            <div className="apple-card p-8 flex flex-col items-center text-center gap-2">
-              <Coins className="w-8 h-8 text-slate-300 dark:text-slate-700" />
-              <p className="text-xs font-bold text-slate-500 dark:text-slate-400">No income sources yet</p>
-              <p className="text-[10px] text-slate-400 max-w-[220px]">Add your salary, side income, or anything else that comes in regularly.</p>
-            </div>
-          )}
+      {/* Spend coverage */}
+      <div className={`${card} p-4 space-y-3`}>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5" /> Spend vs income
+          </p>
+          <div className="inline-flex p-0.5 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+            {(['month', 'quarter', 'year', 'custom'] as Period[]).map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPeriod(p)}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-bold capitalize ${
+                  period === p
+                    ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
+                    : 'text-slate-500'
+                }`}
+              >
+                {p === 'quarter' ? '3 mo' : p}
+              </button>
+            ))}
+          </div>
+        </div>
+        {period === 'custom' && (
+          <div className="flex gap-2">
+            <input
+              type="date"
+              value={customStart}
+              onChange={(e) => setCustomStart(e.target.value)}
+              className="flex-1 px-2 py-1.5 rounded-lg text-[11px] bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
+            />
+            <input
+              type="date"
+              value={customEnd}
+              onChange={(e) => setCustomEnd(e.target.value)}
+              className="flex-1 px-2 py-1.5 rounded-lg text-[11px] bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
+            />
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <p className="text-[9px] font-bold text-slate-400 uppercase">Income · {periodRange.label}</p>
+            <p className="text-lg font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
+              {symbol}
+              {incomeInPeriod.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </p>
+          </div>
+          <div>
+            <p className="text-[9px] font-bold text-slate-400 uppercase">Logged spend</p>
+            <p className="text-lg font-black text-slate-900 dark:text-white tabular-nums">
+              {symbol}
+              {expenseInPeriod.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </p>
+          </div>
+        </div>
+        <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${
+              coveragePct > 100 ? 'bg-rose-500' : coveragePct > 80 ? 'bg-amber-500' : 'bg-emerald-500'
+            }`}
+            style={{ width: `${Math.min(100, coveragePct)}%` }}
+          />
+        </div>
+        <p className="text-[10px] text-slate-500">
+          {coveragePct === 0 && expenseInPeriod === 0
+            ? 'No spend logged in this period yet.'
+            : coveragePct > 100
+              ? `Spend is ${Math.round(coveragePct - 100)}% over estimated income.`
+              : `${Math.round(coveragePct)}% of estimated income spent.`}
+        </p>
+      </div>
 
-          {incomeSources.map(source => {
-            const Icon = CATEGORY_META[source.category].icon;
+      {/* Sources */}
+      <div className={`${card} overflow-hidden`}>
+        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div>
+            <p className="text-[12px] font-black text-slate-900 dark:text-white">Sources</p>
+            <p className="text-[10px] text-slate-500">Salary, cashback, yields — optional breakdown</p>
+          </div>
+          <span className="text-[10px] font-bold text-slate-400">{incomeSources.length}</span>
+        </div>
+
+        {incomeSources.length === 0 && !isAdding && (
+          <div className="px-4 py-8 text-center space-y-2">
+            <p className="text-[13px] font-bold text-slate-500">No sources yet</p>
+            <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+              A single monthly total is enough for Dashboard. Add sources if you want a split by salary, cashback, etc.
+            </p>
+            {!isReadOnly && (
+              <button
+                type="button"
+                onClick={() => setIsAdding(true)}
+                className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border border-dashed border-slate-300 dark:border-slate-700 text-slate-500 hover:text-indigo-600 hover:border-indigo-400"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add first source
+              </button>
+            )}
+          </div>
+        )}
+
+        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+          {sourcesInDisplayCcy.map((s) => {
+            const meta = CATEGORY_META[s.category] || CATEGORY_META.other;
+            const Icon = meta.icon;
             return (
-              <div key={source.id} className="apple-card p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 flex items-center justify-center shrink-0">
-                  <Icon className="w-4.5 h-4.5 text-indigo-600 dark:text-indigo-400" />
+              <li key={s.id} className="px-4 py-3 flex items-center gap-3">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${meta.tint}`}>
+                  <Icon className="w-4 h-4" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{source.name}</p>
-                  <p className="text-[10px] text-slate-400 font-semibold">
-                    {CATEGORY_META[source.category].label}
-                    {source.payDate && ` · ${new Date(source.payDate).toLocaleDateString()}`}
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-bold text-slate-900 dark:text-white truncate">{s.name}</p>
+                  <p className="text-[10px] text-slate-500 truncate">
+                    {meta.label} · {s.amount.toLocaleString()} {s.currency}
+                    {FREQUENCY_LABEL[s.frequency] || ''}
+                    {s.payDate ? ` · ${s.payDate}` : ''}
                   </p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-sm font-black text-slate-900 dark:text-white">{symbol}{source.amount.toLocaleString()}</p>
-                  <p className="text-[9px] text-slate-400 font-bold uppercase">{FREQUENCY_LABEL[source.frequency]}</p>
+                  <p className="text-[13px] font-black tabular-nums text-slate-900 dark:text-white">
+                    {symbol}
+                    {(s.monthlyDisplay || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </p>
+                  <p className="text-[9px] text-slate-400 font-bold">/mo</p>
                 </div>
                 {!isReadOnly && (
-                  <button onClick={() => deleteIncomeSource(source.id)} className="p-1.5 text-slate-300 hover:text-red-500 transition-colors cursor-pointer shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(s.id)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                  >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 )}
-              </div>
+              </li>
             );
           })}
+        </ul>
 
-          {!isReadOnly && (
-            isAdding ? (
-              <form onSubmit={handleAdd} className="apple-card p-4 space-y-3">
-                <input
-                  autoFocus
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Source name, e.g. Salary"
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="Amount"
-                    className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
-                  />
-                  <select
-                    value={frequency}
-                    onChange={(e) => setFrequency(e.target.value as IncomeSource['frequency'])}
-                    className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
-                  >
-                    <option value="weekly">Weekly</option>
-                    <option value="fortnightly">Fortnightly</option>
-                    <option value="monthly">Monthly</option>
-                    <option value="adhoc">Ad hoc</option>
-                    <option value="one-time">One-time</option>
-                  </select>
-                </div>
-                {showPayDateField && (
-                  <div>
-                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      {frequency === 'adhoc' ? 'Date received' : 'Pay date (this month)'}
-                    </label>
-                    <input
-                      type="date"
-                      value={payDate}
-                      onChange={(e) => setPayDate(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
-                    />
-                  </div>
-                )}
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as IncomeSource['category'])}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
-                >
-                  {Object.entries(CATEGORY_META).map(([key, meta]) => (
-                    <option key={key} value={key}>{meta.label}</option>
-                  ))}
-                </select>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setIsAdding(false)} className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black uppercase tracking-wider rounded-lg cursor-pointer">Cancel</button>
-                  <button type="submit" className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black uppercase tracking-wider rounded-lg cursor-pointer">Add</button>
-                </div>
-              </form>
-            ) : (
-              <button
-                onClick={() => setIsAdding(true)}
-                className="w-full py-3 border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-800 rounded-xl text-xs font-bold text-slate-400 hover:text-indigo-500 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+        {isAdding && !isReadOnly && (
+          <form onSubmit={handleAdd} className="p-4 border-t border-slate-100 dark:border-slate-800 space-y-2.5 bg-slate-50/50 dark:bg-slate-950/40">
+            <p className="text-[11px] font-black text-slate-700 dark:text-slate-200">New source</p>
+            <input
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Name (e.g. Primary salary)"
+              className="w-full px-3 py-2 rounded-xl text-[12px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                required
+                type="number"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="Amount"
+                className="px-3 py-2 rounded-xl text-[12px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
+              />
+              <select
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value as Currency)}
+                className="px-3 py-2 rounded-xl text-[12px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
               >
-                <Plus className="w-3.5 h-3.5" /> Add Income Source
+                {Array.from(new Set(countries.map((c) => c.currency))).map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={frequency}
+                onChange={(e) => setFrequency(e.target.value as IncomeSource['frequency'])}
+                className="px-3 py-2 rounded-xl text-[12px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
+              >
+                <option value="weekly">Weekly</option>
+                <option value="fortnightly">Fortnightly</option>
+                <option value="monthly">Monthly</option>
+                <option value="adhoc">Ad hoc</option>
+                <option value="one-time">One-time</option>
+              </select>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value as IncomeSource['category'])}
+                className="px-3 py-2 rounded-xl text-[12px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
+              >
+                {Object.entries(CATEGORY_META).map(([key, meta]) => (
+                  <option key={key} value={key}>
+                    {meta.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {showPayDateField && (
+              <input
+                type="date"
+                value={payDate}
+                onChange={(e) => setPayDate(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl text-[12px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
+              />
+            )}
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsAdding(false)}
+                className="flex-1 py-2 rounded-xl text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600"
+              >
+                Cancel
               </button>
-            )
-          )}
-        </div>
-      )}
+              <button type="submit" className="flex-1 py-2 rounded-xl text-[11px] font-bold bg-indigo-600 text-white">
+                Save source
+              </button>
+            </div>
+          </form>
+        )}
+
+        {!isAdding && incomeSources.length > 0 && !isReadOnly && (
+          <div className="p-3 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setIsAdding(true)}
+              className="w-full py-2.5 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-400 hover:text-indigo-500 hover:border-indigo-300 flex items-center justify-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add source
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
