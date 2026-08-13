@@ -1034,6 +1034,18 @@ export default function App() {
             
             <div className="flex gap-2">
               <button
+                type="button"
+                onClick={togglePulse}
+                title={uiPulse ? 'Switch to Classic layout' : 'Switch to Pulse layout'}
+                className={`flex-1 py-2 flex items-center justify-center rounded-xl border cursor-pointer transition-all duration-200 ${
+                  uiPulse
+                    ? 'bg-violet-100 dark:bg-violet-950/50 text-violet-600 dark:text-violet-300 border-violet-200 dark:border-violet-800'
+                    : 'bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-100 dark:border-slate-800/60 text-slate-500 dark:text-slate-400'
+                }`}
+              >
+                <Sparkles className="w-4 h-4" />
+              </button>
+              <button
                 onClick={() => {
                   const nextTheme = theme === 'light' ? 'dark' : 'light';
                   setTheme(nextTheme);
@@ -1514,8 +1526,7 @@ export default function App() {
             >
               <div className="flex items-center justify-end gap-0.5 w-max min-w-full">
               {/* Pulse / Classic icon — top bar, next to theme */}
-              {(activeTab === 'summary' || activeTab === 'expenses' || activeTab === 'configure' || activeTab === 'income' || activeTab === 'rewards' || activeTab === 'portfolio' || activeTab === 'history' || activeTab === 'reports' || activeTab === 'investment_plan') && (
-                <button
+              <button
                   type="button"
                   onClick={togglePulse}
                   title={uiPulse ? 'Switch to Classic layout' : 'Switch to Pulse layout'}
@@ -1526,11 +1537,7 @@ export default function App() {
                   }`}
                 >
                   <Sparkles className="w-4.5 h-4.5" />
-                  <span className="absolute -top-0.5 -right-0.5 px-1 min-w-[1.1rem] h-3.5 rounded-full bg-violet-600 text-white text-[7px] font-black leading-3.5 flex items-center justify-center tracking-tight">
-                    new
-                  </span>
                 </button>
-              )}
 
               {/* Quick Access Theme Toggle Button */}
               <button
