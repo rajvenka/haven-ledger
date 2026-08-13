@@ -1809,6 +1809,7 @@ export default function App() {
                 setViewMode={setViewMode}
                 activeSubTab={settingsSubTab}
                 onActiveSubTabChange={setSettingsSubTab}
+                pulseMode={uiPulse}
               />
             ) : activeTab === 'ai' ? (
               <AiInsights 
@@ -2020,6 +2021,7 @@ export default function App() {
                 onSetUserPlan={adminSetUserPlan}
                 onSetSuperAdmin={setSuperAdminStatus}
                 currentUserId={user?.id}
+                pulseMode={uiPulse}
               />
             ) : activeTab === 'history' && hasFeature('core') ? (
                 <PaymentHistoryView
