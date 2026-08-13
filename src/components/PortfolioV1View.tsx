@@ -1,3 +1,4 @@
+import PortfolioPnLCalendar from './PortfolioPnLCalendar';
 /**
  * Portfolio_V1 — ultimate summary-first redesign.
  * Classic PortfolioView remains the full-feature workbench.
@@ -5,7 +6,7 @@
  * Category tiles: India MF · India Stocks · US Stocks · CFD · Commodities · Options
  * Each tile expands for sub-totals + top holdings. Portfolio chips keep Sasi/Raj separate.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -63,6 +64,8 @@ interface Props {
   deletePortfolioBrokerConnection?: (id: string) => Promise<void>;
   markBrokerConnectionSynced?: (id: string) => Promise<void>;
   updatePortfolioHoldingLivePrice?: (id: string, price: number, previousClose?: number | null, priceSource?: string | null) => Promise<void>;
+  snapshotPortfolioDailyPositions?: (currencies?: string[], timezone?: string) => Promise<void>;
+  loadPortfolioDailyPositions?: (fromDate: string, toDate: string, portfolioId?: string | null) => Promise<any[]>;
   markPriceLookupFailed?: (id: string) => Promise<void>;
 }
 
@@ -383,6 +386,11 @@ export default function PortfolioV1View({
   const [showLotsOnly, setShowLotsOnly] = useState(false);
   const [moversMode, setMoversMode] = useState<'overall' | 'day'>('overall');
   const [moversUnit, setMoversUnit] = useState<'pct' | 'dollar'>('pct');
+  const [showPnlCalendar, setShowPnlCalendar] = useState(false);
+  const [pnlCalendarRows, setPnlCalendarRows] = useState<any[]>([]);
+  const [pnlCalendarLoading, setPnlCalendarLoading] = useState(false);
+  const [pnlCalendarCcy, setPnlCalendarCcy] = useState<string>(String(baseCurrency || 'INR').toUpperCase());
+
   const [viewCurrency, setViewCurrency] = useState<string>(() => {
     try {
       const last = localStorage.getItem('portfolio_v1_view_ccy');
@@ -583,7 +591,7 @@ export default function PortfolioV1View({
   }, [portfolioBrokerConnections, portfolioFilter, portfolios]);
 
   // Prefer workspace default portfolio over "All" on first load / when pending.
-  React.useEffect(() => {
+  useEffect(() => {
     if (portfolioFilter !== '__pending__' && portfolioFilter !== 'All') return;
     // Only auto-pick default when we are still on the initial pending state, or
     // when user has not chosen a book yet and a default exists.
@@ -601,7 +609,7 @@ export default function PortfolioV1View({
   }, [portfolioFilter, portfolios, portfoliosPresent]);
 
   // If current book was emptied / hidden, fall back to default (else All).
-  React.useEffect(() => {
+  useEffect(() => {
     if (portfolioFilter === 'All' || portfolioFilter === '__pending__') return;
     if (!portfoliosPresent.some((p: any) => p.id === portfolioFilter)) {
       const defaultId =
@@ -618,7 +626,7 @@ export default function PortfolioV1View({
 
   // When a specific book is selected, align View currency with that book's currency
   // so Movers $ amounts match the INR/AUD/USD book (not a leftover USD view chip).
-  React.useEffect(() => {
+  useEffect(() => {
     if (portfolioFilter === 'All' || portfolioFilter === '__pending__') return;
     const book = (portfolios || []).find((p: any) => String(p.id) === String(portfolioFilter));
     const ccy = String(book?.currency || '').toUpperCase();
@@ -1160,6 +1168,34 @@ export default function PortfolioV1View({
     }
   };
 
+
+  const reloadPnlCalendar = async () => {
+    if (!loadPortfolioDailyPositions) return;
+    setPnlCalendarLoading(true);
+    try {
+      const to = new Date();
+      const from = new Date(to.getFullYear() - 1, to.getMonth(), to.getDate());
+      const pid = portfolioFilter !== 'All' && portfolioFilter !== '__pending__' ? portfolioFilter : null;
+      const data = await loadPortfolioDailyPositions(
+        from.toISOString().slice(0, 10),
+        to.toISOString().slice(0, 10),
+        pid
+      );
+      setPnlCalendarRows(data || []);
+      const ccySet = Array.from(new Set((data || []).map((r: any) => String(r.currency || '').toUpperCase()).filter(Boolean)));
+      if (ccySet.length && !ccySet.includes(pnlCalendarCcy)) setPnlCalendarCcy(ccySet[0]);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setPnlCalendarLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showPnlCalendar) reloadPnlCalendar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPnlCalendar, portfolioFilter]);
+
   const toggleCategory = (id: CategoryId) => {
     if (categoryFilter === id && expandedCategory === id) {
       setCategoryFilter('All');
@@ -1499,6 +1535,29 @@ export default function PortfolioV1View({
         )}
       </div>
 
+      
+      {showPnlCalendar && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 sm:p-4">
+          <PortfolioPnLCalendar
+            rows={pnlCalendarRows}
+            loading={pnlCalendarLoading}
+            currencies={Array.from(new Set([
+              ...pnlCalendarRows.map((r: any) => String(r.currency || '').toUpperCase()).filter(Boolean),
+              String(baseCurrency || viewCurrency || 'INR').toUpperCase(),
+            ]))}
+            selectedCurrency={pnlCalendarCcy}
+            onCurrencyChange={setPnlCalendarCcy}
+            portfolioLabel={
+              portfolioFilter !== 'All' && portfolioFilter !== '__pending__'
+                ? (portfolios || []).find((p: any) => p.id === portfolioFilter)?.name
+                : undefined
+            }
+            canSnapshot={!isReadOnly}
+            onRefreshSnapshot={snapshotPortfolioDailyPositions}
+            onReload={reloadPnlCalendar}
+          />
+        </div>
+      )}
       {/* Near SL */}
       {hasLotsForSelectedBook && tightStops.length > 0 && (
         <div className="rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/90 dark:bg-amber-950/25 px-3 py-2.5">
@@ -1534,7 +1593,18 @@ export default function PortfolioV1View({
       {/* Gainers / losers */}
       <div className="space-y-2 w-full">
         <div className="flex items-center justify-between gap-2 px-0.5">
+          <div className="flex items-center justify-between gap-2 w-full flex-wrap">
           <p className="text-[11px] font-black uppercase tracking-wider text-slate-500">Movers</p>
+          <button
+            type="button"
+            onClick={() => setShowPnlCalendar((v) => !v)}
+            className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+              showPnlCalendar ? 'bg-violet-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+            }`}
+          >
+            P&L Calendar
+          </button>
+        </div>
           <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5">
             <button
               type="button"
