@@ -364,9 +364,19 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
 
   return (
     <div className="flex-1 flex flex-col overflow-y-auto px-3 sm:px-5 pt-3 sm:pt-4 pb-24 md:pb-4 space-y-4 text-left bg-slate-50 dark:bg-slate-950">
-      <div className="flex items-center gap-2">
-        <ClipboardList className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-        <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">{workspaceName ? `${workspaceName} Investment Plan` : 'Investment Plan'}</h2>
+      <div className="relative overflow-hidden rounded-2xl border border-indigo-200/60 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50 via-white to-violet-50/60 dark:from-indigo-950/40 dark:via-slate-900 dark:to-violet-950/30 p-3.5 sm:p-4">
+        <div className="absolute -right-6 -top-6 w-28 h-28 rounded-full bg-indigo-400/15 blur-2xl pointer-events-none" />
+        <div className="relative flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/30">
+            <ClipboardList className="w-4.5 h-4.5" />
+          </div>
+          <div>
+            <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight leading-tight">
+              {workspaceName ? `${workspaceName} Investment Plan` : 'Investment Plan'}
+            </h2>
+            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Contributions · withdrawals · splits · recurring</p>
+          </div>
+        </div>
       </div>
 
       {portfolioMode === 'multiple' && planPortfolioNames.length > 1 && (
@@ -447,22 +457,22 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
       )}
 
       <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-        <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-500/80 dark:text-slate-400/80 w-10">
+        <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-indigo-500/90 dark:text-indigo-400/90 w-10">
           View
         </span>
-        <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-slate-100/90 dark:bg-slate-900/80 border border-slate-200/60 dark:border-slate-800">
-          {TABS.map(t => (
+        <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-indigo-100/80 dark:bg-indigo-950/50 border border-indigo-200/60 dark:border-indigo-900/60">
+          {TABS.map(tab => (
             <button
               type="button"
-              key={t.key}
-              onClick={() => setPlanTab(t.key)}
-              className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
-                planTab === t.key
-                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 shadow-md'
-                  : 'text-slate-600 dark:text-slate-300'
+              key={tab.key}
+              onClick={() => setPlanTab(tab.key)}
+              className={`shrink-0 px-3.5 py-1.5 rounded-full text-[11px] font-bold transition-all cursor-pointer ${
+                planTab === tab.key
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                  : 'text-indigo-700/70 dark:text-indigo-300/70 hover:text-indigo-900 dark:hover:text-indigo-100'
               }`}
             >
-              {t.label}
+              {tab.label}
             </button>
           ))}
         </div>
@@ -478,8 +488,11 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           let running = 0;
           const chartData = events.map(e => { running += e.delta; return { date: e.date, total: running }; });
           return (
-            <div className="apple-card p-4 space-y-2">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Contribution Growth</span>
+            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-2 shadow-sm">
+              <div className="flex items-center gap-2">
+                <span className="w-1.5 h-4 rounded-full bg-emerald-500" />
+                <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">Contribution Growth</span>
+              </div>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
@@ -503,8 +516,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           });
           const colors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'];
           return (
-            <div className="apple-card p-4 space-y-2">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Contribution by Person</span>
+            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-2 shadow-sm">
+              <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-emerald-500 shrink-0" />Total Contribution by Person</span>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
@@ -527,8 +540,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
       {planTab === 'contributions' && (
         <>
         {portfolioRecurringPlans.some(p => p.active) && (
-          <div className="apple-card p-4 space-y-3">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Fund Transfer Status</span>
+          <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm">
+            <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-indigo-500 shrink-0" />Fund Transfer Status</span>
             <p className="text-[9px] text-slate-400">Who's transferred their share for the current period, and who hasn't yet.</p>
             <div className="space-y-2">
               {portfolioRecurringPlans.filter(p => p.active).map(plan => {
@@ -562,9 +575,9 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           </div>
         )}
 
-        <div className="apple-card p-4 space-y-3">
+        <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Recurring Contribution Plan</span>
+            <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-emerald-500 shrink-0" />Recurring Contribution Plan</span>
             {!isReadOnly && <button onClick={() => setIsAddingPlan(!isAddingPlan)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Add Plan</button>}
           </div>
           <p className="text-[10px] text-slate-400">What each person is expected to contribute on a schedule — separate from your Bills.</p>
@@ -579,7 +592,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                   setPlanAmount(''); setPlanNotes(''); setIsAddingPlan(false);
                 });
               }}
-              className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-900"
+              className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/80"
             >
               <select value={planMemberId} onChange={(e) => setPlanMemberId(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
                 <option value="">Who</option>
@@ -639,7 +652,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           </div>
         </div>
 
-        <div className="apple-card p-4 space-y-3">
+        <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm">
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Split Among Workspace Members</span>
           <p className="text-[9px] text-slate-400">Everyone here is a member of this workspace. To add someone new, invite them via Family Sharing first.</p>
           <div className="space-y-1.5">
@@ -657,7 +670,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           {isAddingSplit && (
             <form
               onSubmit={async (e) => { e.preventDefault(); if (!splitMemberId || !splitPercent) return; await runAction(async () => { await addPortfolioSplit(splitMemberId, parseFloat(splitPercent), splitFrom, splitTo || undefined); setSplitPercent(''); setIsAddingSplit(false); }); }}
-              className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-900"
+              className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/80"
             >
               <select value={splitMemberId} onChange={(e) => setSplitMemberId(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
                 <option value="">Select person</option>
@@ -672,7 +685,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           </>
           )}
           {portfolioSplits.length > 0 && (
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-900 space-y-1">
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 space-y-1">
               <span className="text-[9px] font-bold text-slate-400 uppercase">Split History</span>
               {portfolioSplits.map(s => {
                 const m = workspaceMembers.find(x => x.uid === s.member_user_id);
@@ -687,12 +700,15 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           )}
         </div>
 
-        <div className="apple-card p-4 space-y-3">
+        <div className="rounded-2xl border border-indigo-200/80 dark:border-indigo-900/50 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm shadow-indigo-500/5">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Wallet className="w-3.5 h-3.5" /> Contribution Log</span>
+            <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+              <span className="w-1.5 h-4 rounded-full bg-indigo-500" />
+              <Wallet className="w-3.5 h-3.5" /> Contribution Log
+            </span>
             <div className="flex items-center gap-3">
-              {!isReadOnly && <button onClick={() => setIsAddingContribution(!isAddingContribution)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Log Contribution</button>}
-              {!isReadOnly && <button onClick={() => setIsAddingWithdrawal(!isAddingWithdrawal)} className="text-[10px] font-bold text-rose-500 cursor-pointer">+ Log Withdrawal</button>}
+              {!isReadOnly && <button onClick={() => setIsAddingContribution(!isAddingContribution)} className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-600 text-white shadow-sm shadow-indigo-600/25 cursor-pointer hover:bg-indigo-500">+ Log Contribution</button>}
+              {!isReadOnly && <button onClick={() => setIsAddingWithdrawal(!isAddingWithdrawal)} className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500 text-white shadow-sm shadow-rose-500/25 cursor-pointer hover:bg-rose-400">+ Log Withdrawal</button>}
             </div>
           </div>
           {isAddingContribution && (
@@ -895,7 +911,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           })()}
         </div>
 
-        <div className="apple-card p-4 space-y-3">
+        <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm">
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Wallet className="w-3.5 h-3.5" /> Withdrawals</span>
           <p className="text-[9px] text-slate-400">Money taken out of the pool back to a person - separate from selling a stock, which stays in the pool as cash.</p>
           <div className="divide-y divide-slate-100 dark:divide-slate-900">
