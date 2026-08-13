@@ -2075,7 +2075,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     // constraint per fund, so an accidental double-entry would otherwise fail the save.
     const seen = new Set<string>();
     const deduped = cleaned.filter(r => {
-      const key = r.stockName.toLowerCase();
+      const key = String(r.stockName || '').toLowerCase();
       if (seen.has(key)) return false;
       seen.add(key);
       return true;

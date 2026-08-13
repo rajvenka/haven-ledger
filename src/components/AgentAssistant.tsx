@@ -213,7 +213,7 @@ export default function AgentAssistant({
         let matched = payments.find(p => p.id === data.paymentId);
         if (!matched && data.paymentName) {
           // Fallback fuzzy search by name
-          matched = payments.find(p => p.name.toLowerCase().includes(data.paymentName.toLowerCase()) || data.paymentName.toLowerCase().includes(p.name.toLowerCase()));
+          matched = payments.find(p => String(p.name || '').toLowerCase().includes(data.paymentName.toLowerCase()) || data.paymentName.toLowerCase().includes(String(p.name || '').toLowerCase()));
         }
 
         if (matched) {
@@ -238,7 +238,7 @@ export default function AgentAssistant({
 
         let matched = payments.find(p => p.id === data.paymentId);
         if (!matched && data.paymentName) {
-          matched = payments.find(p => p.name.toLowerCase().includes(data.paymentName.toLowerCase()) || data.paymentName.toLowerCase().includes(p.name.toLowerCase()));
+          matched = payments.find(p => String(p.name || '').toLowerCase().includes(data.paymentName.toLowerCase()) || data.paymentName.toLowerCase().includes(String(p.name || '').toLowerCase()));
         }
 
         if (matched && onUpdatePayment) {

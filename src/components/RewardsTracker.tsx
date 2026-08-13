@@ -497,9 +497,9 @@ export default function RewardsTracker({
     return rewardsPerks.filter(p => {
       const details = getPerkStatusDetails(p);
       
-      const matchesSearch = p.providerName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        p.bonusValue.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.applicantName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      const matchesSearch = String(p.providerName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+        String(p.bonusValue || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        String(p.applicantName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (p.notes && p.notes.toLowerCase().includes(searchTerm.toLowerCase()));
       
       const matchesCategory = categoryFilter === 'All' || p.category === categoryFilter;

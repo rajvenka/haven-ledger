@@ -44,11 +44,13 @@ export default function PaymentHistoryView({
   // Group items by Month-Year for elegant visual partitioning (e.g., "June 2026")
   const groupedHistoryByMonth: Record<string, PaymentHistory[]> = {};
 
-  // Filter based on search input
+  // Filter based on search input - defensive against any field being undefined on a given
+  // record, since this runs across every history item on every keystroke and would crash
+  // the whole screen otherwise.
   const filteredHistory = history.filter(item => 
-    item.paymentName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    item.currency.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.paidDate.includes(searchTerm)
+    String(item.paymentName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+    String(item.currency || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    String(item.paidDate || '').includes(searchTerm)
   );
 
   filteredHistory.forEach(item => {
