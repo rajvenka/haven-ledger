@@ -1763,12 +1763,12 @@ export default function PortfolioV1View({
                   {money(totalPortfolioTile.market, totalPortfolioTile.displayCcy)}
                 </p>
                 <p
-                  className={`text-[10px] font-bold tabular-nums ${
+                  className={`text-[12px] sm:text-[13px] font-black tabular-nums leading-tight ${
                     formatTotalPerf().positive ? 'text-emerald-600' : 'text-rose-600'
                   }`}
                 >
                   {formatTotalPerf().text}
-                  <span className="ml-1 text-[8px] font-bold text-slate-400 normal-case">{perfLabel}</span>
+                  <span className="ml-1 text-[10px] font-bold text-slate-400 normal-case">{perfLabel}</span>
                 </p>
               </div>
             </button>
@@ -1802,12 +1802,12 @@ export default function PortfolioV1View({
                         {money(primary.market, primary.currency)}
                       </p>
                       <p
-                        className={`text-[10px] font-bold tabular-nums ${
+                        className={`text-[12px] sm:text-[13px] font-black tabular-nums leading-tight ${
                           formatBucketPerf(primary).positive ? 'text-emerald-600' : 'text-rose-600'
                         }`}
                       >
                         {formatBucketPerf(primary).text}
-                        <span className="ml-1 text-[8px] font-bold text-slate-400">{perfLabel}</span>
+                        <span className="ml-1 text-[10px] font-bold text-slate-400">{perfLabel}</span>
                       </p>
                     </div>
                   )}
@@ -2291,11 +2291,15 @@ export default function PortfolioV1View({
                             </p>
                           </div>
                           <div className="text-right shrink-0">
-                            <p className="text-[13px] font-bold tabular-nums">{money(marketValue(h), ccy)}</p>
-                            <p className={`text-[11px] font-black tabular-nums ${p >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            <p className="text-[14px] font-black tabular-nums text-slate-900 dark:text-white">{money(marketValue(h), ccy)}</p>
+                            <p className={`text-[12px] font-black tabular-nums ${p >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                               {pct(p)}
-                              {d != null ? ` · d ${pct(d)}` : ''}
                             </p>
+                            {d != null && (
+                              <p className={`text-[12px] font-bold tabular-nums ${d >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                Day {pct(d)}
+                              </p>
+                            )}
                           </div>
                         </div>
                         {stop != null && stop > 0 && (
