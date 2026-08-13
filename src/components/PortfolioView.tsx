@@ -134,6 +134,17 @@ function isCommodityHolding(h: any): boolean {
 }
 
 /** Webull (and similar) equity options store price as premium×100. Yahoo must not overwrite. */
+
+/** Broker + type label used by filter pills (must match between options and filter match). */
+function holdingFilterCombo(h: any): string {
+  const broker = String(h.broker || 'Other').trim() || 'Other';
+  const t = String(h.holding_type || '').toLowerCase();
+  if (t === 'mutual_fund' || t === 'mf') return `${broker} MF`;
+  if (t === 'options' || t === 'option') return `${broker} Options`;
+  if (isOptionsHolding(h)) return `${broker} Options`;
+  return `${broker} Stock`;
+}
+
 function isOptionsHolding(h: any): boolean {
   const t = String(h.holding_type || '').toLowerCase();
   if (t === 'options' || t === 'option') return true;
@@ -727,7 +738,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const holdingPortfolioName = portfolioMode === 'multiple' ? (portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned') : null;
       if (portfolioMode === 'multiple') portfolioNames.add(holdingPortfolioName!);
       if (selectedPortfolioNames.size > 0 && portfolioMode === 'multiple' && !selectedPortfolioNames.has(holdingPortfolioName!)) return;
-      combos.add(`${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`);
+      combos.add(holdingFilterCombo(h));
       if (h.source) sources.add(h.source); else hasUnclassified = true;
       if (h.change_flag && CHANGE_FLAG_LABELS[h.change_flag]) changes.add(CHANGE_FLAG_LABELS[h.change_flag]);
       const moveLabel = getSinceUploadLabel(h);
@@ -756,7 +767,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const selectedPriceMoves = filterOptions.priceMoves.filter(p => holdingFilters.has(p));
       const selectedPortfolios = filterOptions.portfolioNames.filter(p => holdingFilters.has(p));
       list = activeHoldings.filter(h => {
-        const combo = `${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`;
+        const combo = holdingFilterCombo(h);
         const comboOk = selectedCombos.length === 0 || selectedCombos.includes(combo);
         const sourceOk = selectedSources.length === 0 || (h.source ? selectedSources.includes(h.source) : selectedSources.includes(UNCLASSIFIED_LABEL));
         const changeLabel = h.change_flag ? CHANGE_FLAG_LABELS[h.change_flag] : null;
@@ -826,7 +837,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     const portfolioNames = new Set<string>();
     let hasUnclassified = false;
     soldHoldings.forEach(h => {
-      combos.add(`${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`);
+      combos.add(holdingFilterCombo(h));
       if (h.source) sources.add(h.source); else hasUnclassified = true;
       if (portfolioMode === 'multiple') portfolioNames.add(portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned');
     });
@@ -855,7 +866,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const selectedSources = soldFilterOptions.sources.filter(s => soldHoldingFilters.has(s));
       const selectedPortfolios = soldFilterOptions.portfolioNames.filter(p => soldHoldingFilters.has(p));
       list = soldHoldings.filter(h => {
-        const combo = `${h.broker} ${h.holding_type === 'mutual_fund' ? 'MF' : 'Stock'}`;
+        const combo = holdingFilterCombo(h);
         const comboOk = selectedCombos.length === 0 || selectedCombos.includes(combo);
         const sourceOk = selectedSources.length === 0 || (h.source ? selectedSources.includes(h.source) : selectedSources.includes(UNCLASSIFIED_LABEL));
         const portfolioName = portfolioMode === 'multiple' ? (portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned') : null;
@@ -3466,9 +3477,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
           >
             All
           </button>
-          {filterOptions.portfolioNames.map(p => (
-            <button key={p} onClick={() => toggleHoldingFilter(p)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(p) ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}>{p}</button>
-          ))}
+          {filterOptions.portfolioNames.map(p => {
+            const count = activeHoldings.filter((h: any) => (portfolios.find((x: any) => x.id === h.portfolio_id)?.name || 'Unassigned') === p).length;
+            return (
+              <button key={p} onClick={() => toggleHoldingFilter(p)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(p) ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}>{p} · {count}</button>
+            );
+          })}
         </div>
       )}
       <div className="flex items-center gap-2 flex-wrap">
@@ -4117,9 +4131,17 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   Symbol Not Found ({activeHoldings.filter(h => h.price_lookup_failed).length})
                 </button>
               )}
-              {filterOptions.combos.map(c => (
-                <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${brokerPillClass(c, holdingFilters.has(c))}`}>{c}</button>
-              ))}
+              {filterOptions.combos.map(c => {
+                const count = activeHoldings.filter((h: any) => {
+                  const holdingPortfolioName = portfolioMode === 'multiple' ? (portfolios.find((p: any) => p.id === h.portfolio_id)?.name || 'Unassigned') : null;
+                  const selectedPortfolioNames = filterOptions.portfolioNames.filter(p => holdingFilters.has(p));
+                  if (selectedPortfolioNames.length > 0 && portfolioMode === 'multiple' && !selectedPortfolioNames.includes(holdingPortfolioName!)) return false;
+                  return holdingFilterCombo(h) === c;
+                }).length;
+                return (
+                  <button key={c} onClick={() => toggleHoldingFilter(c)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${brokerPillClass(c, holdingFilters.has(c))}`}>{c} · {count}</button>
+                );
+              })}
               {showFilters && filterOptions.sources.map(s => (
                 <button key={s} onClick={() => toggleHoldingFilter(s)} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${holdingFilters.has(s) ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}>{s}</button>
               ))}
@@ -4157,8 +4179,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
               return from === subtotalCurrency ? val : convertToBase(val, from, subtotalCurrency, workspaceCurrencyRates);
             };
             const fmtSub = (n: number) => portfolioMode === 'multiple' ? fmtCur(n, subtotalCurrency) : fmt(n);
-            const subInvested = filteredActiveHoldings.reduce((s, h) => s + conv(h, Number(h.buy_price) * Number(h.quantity)), 0);
-            const subCurrent = filteredActiveHoldings.reduce((s, h) => s + conv(h, Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity)), 0);
+            // Same rules as headline Total Stock Investment / Current Holding Value
+            // (leveraged eToro uses net value / reserved cash, not raw price×qty).
+            const subInvested = filteredActiveHoldings.reduce((s, h) => s + conv(h, actualInvestment(h)), 0);
+            const subCurrent = filteredActiveHoldings.reduce((s, h) => s + conv(h, actualCurrentValue(h)), 0);
             const subGain = subCurrent - subInvested;
             const subGainPct = subInvested > 0 ? (subGain / subInvested) * 100 : 0;
             const subDailyEligible = filteredActiveHoldings.filter(h => h.live_price != null && h.previous_close != null);
