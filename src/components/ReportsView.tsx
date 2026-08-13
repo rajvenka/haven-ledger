@@ -238,13 +238,18 @@ export default function ReportsView(props: ReportsViewProps) {
   return (
     <div className={`flex-1 flex flex-col overflow-y-auto px-3 sm:px-5 pt-3 sm:pt-4 pb-24 md:pb-4 space-y-4 text-left ${pulseMode ? 'bg-slate-50 dark:bg-slate-950' : 'bg-slate-50 dark:bg-slate-900'}`}>
       {pulseMode ? (
-        <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-violet-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-violet-950/20 p-3 sm:p-3.5">
-          <div className="flex items-center gap-2 flex-wrap">
-            <FileBarChart className="w-5 h-5 text-violet-500 shrink-0" />
-            <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
-              {workspaceName ? `${workspaceName} Reports` : 'Reports'}
-            </h2>
-            <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-violet-600/90 text-white">Pulse</span>
+        <div className="rounded-2xl bg-violet-600 text-white p-4 shadow-lg shadow-violet-600/25">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+              <FileBarChart className="w-5 h-5 text-white" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-100">Pulse</p>
+              <h2 className="text-xl font-black tracking-tight truncate">
+                {workspaceName ? `${workspaceName} Reports` : 'Reports'}
+              </h2>
+              <p className="text-[11px] font-semibold text-violet-100/90">Overview · insights · activity · movement</p>
+            </div>
           </div>
         </div>
       ) : (
@@ -280,13 +285,21 @@ export default function ReportsView(props: ReportsViewProps) {
       )}
 
       {pulseMode ? (
-        <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-violet-500/80 dark:text-violet-400/80 w-10">View</span>
-          <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-violet-100/80 dark:bg-violet-950/50 border border-violet-200/60 dark:border-violet-900/60">
-            {TABS.map(tab => (
-              <button type="button" key={tab.key} onClick={() => setReportTab(tab.key)} className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${reportTab === tab.key ? 'bg-violet-600 text-white shadow-md shadow-violet-600/25' : 'text-violet-700/70 dark:text-violet-300/70'}`}>{tab.label}</button>
-            ))}
-          </div>
+        <div className="flex gap-1 p-1 rounded-2xl bg-violet-100 dark:bg-violet-950/60 border-2 border-violet-300 dark:border-violet-700 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          {TABS.map(tab => (
+            <button
+              type="button"
+              key={tab.key}
+              onClick={() => setReportTab(tab.key)}
+              className={`shrink-0 flex-1 px-3 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wide transition-all cursor-pointer ${
+                reportTab === tab.key
+                  ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30'
+                  : 'text-violet-900 dark:text-violet-100'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       ) : (
         <div className="flex gap-1.5 flex-wrap">
