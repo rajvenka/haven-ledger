@@ -1250,12 +1250,21 @@ export function usePaymentState() {
       leverage: h.leverage ?? null, stop_loss_rate: h.stopLossRate ?? null, take_profit_rate: h.takeProfitRate ?? null,
       etoro_net_value_amount: h.etoroNetValueAmount ?? null,
       // Stamp live_price on import for brokers that supply a real mark in the file/API.
+      // live_price_source is optional (column may not exist yet) — omit on bulk insert
       ...((['eToro', 'Webull', 'Stake'].includes(broker) && h.currentPrice != null)
-        ? { live_price: h.currentPrice, live_price_updated_at: new Date().toISOString(), live_price_source: broker }
+        ? { live_price: h.currentPrice, live_price_updated_at: new Date().toISOString() }
         : {}),
     };
     });
-    const { data: inserted, error } = await supabase.from('portfolio_holdings').insert(rows).select('id, current_price');
+    let { data: inserted, error } = await supabase.from('portfolio_holdings').insert(rows).select('id, current_price');
+    if (error && /live_price_source|schema cache|column/i.test(String(error.message || ''))) {
+      const cleaned = rows.map((r: any) => {
+        const c = { ...r };
+        delete c.live_price_source;
+        return c;
+      });
+      ({ data: inserted, error } = await supabase.from('portfolio_holdings').insert(cleaned).select('id, current_price'));
+    }
     if (error) throw error;
     const snapshotRows = (inserted ?? []).filter(r => r.current_price != null).map(r => ({ workspace_id: activeWorkspaceId, holding_id: r.id, price: r.current_price }));
     if (snapshotRows.length > 0) await supabase.from('portfolio_price_history').insert(snapshotRows);
