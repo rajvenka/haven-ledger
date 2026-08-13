@@ -317,6 +317,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [hPortfolioId, setHPortfolioId] = useState('');
   const [importPortfolioId, setImportPortfolioId] = useState('');
   const [importPortfolioConfirmed, setImportPortfolioConfirmed] = useState(false);
+  /** After portfolio pick: choose sync vs file, or null until chosen. */
+  const [importPath, setImportPath] = useState<'sync' | 'file' | null>(null);
   const [historicalPortfolioId, setHistoricalPortfolioId] = useState('');
   const [historicalPortfolioConfirmed, setHistoricalPortfolioConfirmed] = useState(false);
   const defaultPortfolioId = portfolios.find((p: any) => p.is_default)?.id || portfolios[0]?.id || '';
@@ -1003,7 +1005,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
       // going stale forever. Only applied when both sides actually carry a source value,
       // so this doesn't change matching for brokers that never set one.
       if (parsed.source && h.source) {
-        return h.symbol === parsed.symbol.toUpperCase() && h.holding_type === parsed.holdingType && h.source === parsed.source && !h.folio_number && !parsed.folioNumber;
+        // Normalize so "eToro CFD/Leveraged" matches new "CFD", option position ids collapse to Options
+        const sameSource =
+          h.source === parsed.source ||
+          normalizeSourceTag(h.source, h) === normalizeSourceTag(parsed.source, { holding_type: parsed.holdingType, source: parsed.source });
+        return h.symbol === parsed.symbol.toUpperCase() && h.holding_type === parsed.holdingType && sameSource && !h.folio_number && !parsed.folioNumber;
       }
       return h.symbol === parsed.symbol.toUpperCase() && h.holding_type === parsed.holdingType && !h.folio_number && !parsed.folioNumber;
     });
@@ -1182,6 +1188,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
       if (!resp.ok) throw new Error(data?.error || `Webull sync failed (${resp.status})`);
       setImportTemplate('universal');
       setImportPortfolioId(connection.portfolio_id ?? '');
+      setImportPortfolioConfirmed(true);
+      setImportPath('sync');
       setImportRawParsed(data.holdings ?? []);
       setIsImporting(true);
       await markBrokerConnectionSynced?.(connection.id);
@@ -1282,8 +1290,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
         setImportPortfolioConfirmed(true);
       }
       setImportTemplate('zerodha');
-      setImportSourceTag('Zerodha API');
+      setImportSourceTag('Zerodha');
       setImportBuyDate(todayStr());
+      setImportPortfolioConfirmed(true);
+      setImportPath('sync');
       setImportRawParsed(holdings);
       setIsImporting(true);
       await markBrokerConnectionSynced?.(connection.id);
@@ -1389,8 +1399,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
         setImportPortfolioConfirmed(true);
       }
       setImportTemplate('groww_stocks');
-      setImportSourceTag('Groww API');
+      setImportSourceTag('Groww');
       setImportBuyDate(todayStr());
+      setImportPortfolioConfirmed(true);
+      setImportPath('sync');
       setImportRawParsed(holdings);
       setIsImporting(true);
       await markBrokerConnectionSynced?.(connection.id);
@@ -1445,6 +1457,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
       if (!resp.ok) throw new Error(data?.error || `eToro sync failed (${resp.status})`);
       setImportTemplate('universal');
       setImportPortfolioId(connection.portfolio_id ?? '');
+      setImportPortfolioConfirmed(true);
+      setImportPath('sync');
       setImportRawParsed(data.holdings);
       setIsImporting(true);
       await markBrokerConnectionSynced?.(connection.id);
@@ -3685,7 +3699,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
               </button>
             )}
             <button
-              onClick={() => { setIsImporting(!isImporting); setImportPreview(null); setImportRawParsed(null); setImportPortfolioConfirmed(false); }}
+              onClick={() => { setIsImporting(!isImporting); setImportPreview(null); setImportRawParsed(null); setImportPortfolioConfirmed(false); setImportPath(null); }}
               className="px-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
             >
               <Upload className="w-3.5 h-3.5" /> Import/Sync with Broker
@@ -3750,9 +3764,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <div className="apple-card p-4 space-y-3">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Import Holdings File</span>
 
-              {portfolioMode === 'multiple' && !importPortfolioConfirmed ? (
+                            {portfolioMode === 'multiple' && !importPortfolioConfirmed ? (
                 <>
-                  <p className="text-[10px] text-slate-400">Step 1 of 2 - which portfolio should this file go into?</p>
+                  <p className="text-[10px] text-slate-400">Step 1 — which portfolio?</p>
                   <select
                     value={importPortfolioId || defaultPortfolioId}
                     onChange={(e) => setImportPortfolioId(e.target.value)}
@@ -3760,57 +3774,98 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   >
                     {portfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.currency})</option>)}
                   </select>
-                  {(() => {
-                    const pid = importPortfolioId || defaultPortfolioId;
-                    const linked = (portfolioBrokerConnections || []).filter((c: any) => String(c.portfolio_id || '') === String(pid || ''));
-                    if (linked.length === 0) return null;
-                    return (
-                      <div className="rounded-xl border border-indigo-100 dark:border-indigo-900/40 bg-indigo-50/50 dark:bg-indigo-950/20 p-2.5 space-y-1.5">
-                        <p className="text-[9px] font-black uppercase tracking-wider text-indigo-500">Linked brokers — sync without leaving Import</p>
-                        {linked.map((conn: any) => (
-                          <div key={conn.id} className="flex items-center justify-between gap-2">
-                            <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate">{conn.connection_label || conn.broker_type}</span>
-                            <button
-                              type="button"
-                              disabled={etoroSyncing || webullSyncing || zerodhaSyncing || growwSyncing}
-                              onClick={() => {
-                                if (conn.broker_type === 'webull') handleWebullSync(conn);
-                                else if (conn.broker_type === 'etoro') handleEtoroSync(conn);
-                                else if (conn.broker_type === 'zerodha') handleZerodhaSync(conn);
-                                else if (conn.broker_type === 'groww') handleGrowwSync(conn);
-                              }}
-                              className="shrink-0 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer"
-                            >
-                              {(conn.broker_type === 'webull' && webullSyncing) || (conn.broker_type === 'etoro' && etoroSyncing) || (conn.broker_type === 'zerodha' && zerodhaSyncing) || (conn.broker_type === 'groww' && growwSyncing) ? 'Syncing…' : 'Sync'}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })()}
                   <button
                     type="button"
-                    onClick={() => setImportPortfolioConfirmed(true)}
+                    onClick={() => { setImportPortfolioConfirmed(true); setImportPath(null); }}
                     className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black uppercase tracking-wider rounded-lg cursor-pointer"
                   >
-                    Next: Choose File
+                    Next
                   </button>
-                </>
-              ) : (
+                </>) : (
               <>
               {portfolioMode === 'multiple' && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900 rounded-2xl px-3 py-2">
-                    <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-400">Step 2 of 2 - importing into: {portfolios.find((p: any) => p.id === (importPortfolioId || defaultPortfolioId))?.name}</span>
-                    <button type="button" onClick={() => setImportPortfolioConfirmed(false)} className="text-[9px] font-bold text-indigo-500 hover:text-indigo-600 cursor-pointer shrink-0">Change</button>
+                    <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-400">
+                      Importing into: {portfolios.find((p: any) => p.id === (importPortfolioId || defaultPortfolioId))?.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => { setImportPortfolioConfirmed(false); setImportPath(null); setImportRawParsed(null); setImportPreview(null); }}
+                      className="text-[9px] font-bold text-indigo-500 hover:text-indigo-600 cursor-pointer shrink-0"
+                    >
+                      Change
+                    </button>
                   </div>
-                  {(() => {
-                    const pid = importPortfolioId || defaultPortfolioId;
-                    const linked = (portfolioBrokerConnections || []).filter((c: any) => String(c.portfolio_id || '') === String(pid || ''));
-                    if (linked.length === 0) return null;
-                    return (
-                      <div className="flex flex-wrap gap-1.5">
-                        {linked.map((conn: any) => (
+                </div>
+              )}
+
+              {/* Path chooser: Sync from broker OR Import file */}
+              {!importRawParsed && (() => {
+                const pid = importPortfolioId || defaultPortfolioId;
+                const linked = (portfolioBrokerConnections || []).filter((c: any) => String(c.portfolio_id || '') === String(pid || ''));
+                const book = portfolios.find((p: any) => p.id === pid);
+                const ccy = String(book?.currency || '').toUpperCase();
+                const suggested: BrokerTemplate[] =
+                  ccy === 'INR' ? ['zerodha', 'groww_stocks', 'groww_mf', 'universal'] :
+                  ccy === 'AUD' ? ['stake', 'universal'] :
+                  ['universal'];
+                // Always include universal
+                if (!suggested.includes('universal')) suggested.push('universal');
+
+                if (!importPath) {
+                  return (
+                    <div className="space-y-2">
+                      <p className="text-[10px] text-slate-400">How do you want to add holdings?</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          disabled={linked.length === 0}
+                          onClick={() => setImportPath('sync')}
+                          className={`text-left rounded-2xl border p-3 transition-all ${
+                            linked.length === 0
+                              ? 'border-slate-200 dark:border-slate-800 opacity-40 cursor-not-allowed'
+                              : 'border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/20 hover:ring-2 hover:ring-indigo-400 cursor-pointer'
+                          }`}
+                        >
+                          <p className="text-[12px] font-black text-indigo-700 dark:text-indigo-300">Sync from broker</p>
+                          <p className="text-[9px] text-slate-500 mt-0.5">
+                            {linked.length === 0
+                              ? 'No broker linked to this book — connect in Settings first'
+                              : linked.map((c: any) => c.connection_label || c.broker_type).join(', ')}
+                          </p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setImportPath('file');
+                            setImportTemplate(suggested[0] || 'universal');
+                          }}
+                          className="text-left rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/40 p-3 hover:ring-2 hover:ring-slate-400 cursor-pointer transition-all"
+                        >
+                          <p className="text-[12px] font-black text-slate-800 dark:text-slate-100">Import file</p>
+                          <p className="text-[9px] text-slate-500 mt-0.5">
+                            {ccy === 'INR' ? 'Zerodha / Groww XLSX or universal template'
+                              : ccy === 'AUD' ? 'Stake Portfolio Valuation or universal template'
+                              : 'Universal template (any broker)'}
+                          </p>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (importPath === 'sync') {
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Sync from linked broker</p>
+                        <button type="button" onClick={() => setImportPath(null)} className="text-[9px] font-bold text-slate-400 cursor-pointer">← Back</button>
+                      </div>
+                      {linked.length === 0 ? (
+                        <p className="text-[10px] text-slate-400">No linked brokers on this book.</p>
+                      ) : (
+                        linked.map((conn: any) => (
                           <button
                             key={conn.id}
                             type="button"
@@ -3821,50 +3876,73 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               else if (conn.broker_type === 'zerodha') handleZerodhaSync(conn);
                               else if (conn.broker_type === 'groww') handleGrowwSync(conn);
                             }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 cursor-pointer disabled:opacity-50"
+                            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black uppercase cursor-pointer"
                           >
-                            <RefreshCw className="w-3 h-3" />
-                            Sync {conn.connection_label || conn.broker_type}
+                            <RefreshCw className={`w-3.5 h-3.5 ${(conn.broker_type === 'etoro' && etoroSyncing) || (conn.broker_type === 'webull' && webullSyncing) || (conn.broker_type === 'zerodha' && zerodhaSyncing) || (conn.broker_type === 'groww' && growwSyncing) ? 'animate-spin' : ''}`} />
+                            {(conn.broker_type === 'etoro' && etoroSyncing) || (conn.broker_type === 'webull' && webullSyncing) || (conn.broker_type === 'zerodha' && zerodhaSyncing) || (conn.broker_type === 'groww' && growwSyncing)
+                              ? 'Syncing…'
+                              : `Sync ${conn.connection_label || conn.broker_type}`}
                           </button>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-              <div className="flex gap-1.5 flex-wrap">
-                <button type="button" onClick={() => { setImportTemplate('zerodha'); setImportPreview(null); setImportRawParsed(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'zerodha' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Zerodha (Stocks + MF)</button>
-                <button type="button" onClick={() => { setImportTemplate('groww_stocks'); setImportPreview(null); setImportRawParsed(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'groww_stocks' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Stocks</button>
-                <button type="button" onClick={() => { setImportTemplate('groww_mf'); setImportPreview(null); setImportRawParsed(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'groww_mf' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Groww Mutual Funds</button>
-                <button type="button" onClick={() => { setImportTemplate('stake'); setImportPreview(null); setImportRawParsed(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'stake' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Stake (AU)</button>
-                <button type="button" onClick={() => { setImportTemplate('universal'); setImportPreview(null); setImportRawParsed(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === 'universal' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Universal Template</button>
-              </div>
-              <p className="text-[9px] text-slate-400">
-                {importTemplate === 'zerodha' && "Console → Holdings → Download as XLSX (stocks and mutual funds are both detected automatically)"}
-                {importTemplate === 'groww_stocks' && "Groww app → Reports → Stocks Holdings Statement (XLSX)"}
-                {importTemplate === 'groww_mf' && "Groww app → Reports → Mutual Funds Holdings Statement (XLSX)"}
-                {importTemplate === 'stake' && "Stake → download Portfolio Valuation XLSX as-is (tabs Aus Equities + Wall St Equities). No edits needed. ASX→AUD, Wall St→USD. Cost basis not in file — buy price starts at market."}
-                {importTemplate === 'universal' && "For any broker without a dedicated import yet - fill in the template with your holdings, any currency."}
-                {' '}· Prices/quantities come from the file at export time. Already-imported holdings are automatically skipped.
-              </p>
-              {importTemplate === 'universal' && (
-                <button
-                  type="button"
-                  onClick={() => downloadUniversalTemplate()}
-                  className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" /> Download blank template
-                </button>
-              )}
+                        ))
+                      )}
+                      {(etoroSyncError || webullSyncError || zerodhaSyncError || growwSyncError) && (
+                        <p className="text-[10px] text-rose-500">{etoroSyncError || webullSyncError || zerodhaSyncError || growwSyncError}</p>
+                      )}
+                    </div>
+                  );
+                }
 
-              <label className="flex flex-col items-center justify-center gap-2 px-4 py-6 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500 rounded-xl cursor-pointer transition-colors bg-slate-50/50 dark:bg-slate-900/50">
-                <Upload className="w-5 h-5 text-slate-400" />
-                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{importParsing ? 'Reading file…' : 'Click to choose your .xlsx file'}</span>
-                <span className="text-[10px] text-slate-400">or drag it here</span>
-                <input type="file" accept=".xlsx,.xls" onChange={handleImportFile} disabled={importParsing} className="hidden" />
-              </label>
+                // importPath === 'file'
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Import file</p>
+                      <button type="button" onClick={() => { setImportPath(null); setImportPreview(null); setImportRawParsed(null); }} className="text-[9px] font-bold text-slate-400 cursor-pointer">← Back</button>
+                    </div>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {suggested.map((tpl) => {
+                        const labels: Record<string, string> = {
+                          zerodha: 'Zerodha (Stocks + MF)',
+                          groww_stocks: 'Groww Stocks',
+                          groww_mf: 'Groww Mutual Funds',
+                          stake: 'Stake (AU)',
+                          universal: 'Universal Template',
+                        };
+                        return (
+                          <button
+                            key={tpl}
+                            type="button"
+                            onClick={() => { setImportTemplate(tpl); setImportPreview(null); setImportRawParsed(null); }}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === tpl ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+                          >
+                            {labels[tpl] || tpl}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[9px] text-slate-400">
+                      {importTemplate === 'zerodha' && 'Console → Holdings → Download as XLSX (stocks and mutual funds detected automatically)'}
+                      {importTemplate === 'groww_stocks' && 'Groww app → Reports → Stocks Holdings Statement (XLSX)'}
+                      {importTemplate === 'groww_mf' && 'Groww app → Reports → Mutual Funds Holdings Statement (XLSX)'}
+                      {importTemplate === 'stake' && 'Stake Portfolio Valuation XLSX as downloaded (Aus Equities + Wall St Equities tabs).'}
+                      {importTemplate === 'universal' && 'Any broker — fill the blank template. Already-imported holdings are skipped.'}
+                    </p>
+                    {importTemplate === 'universal' && (
+                      <button type="button" onClick={() => downloadUniversalTemplate()} className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
+                        <Download className="w-3.5 h-3.5" /> Download blank template
+                      </button>
+                    )}
+                    <label className="flex flex-col items-center justify-center gap-2 px-4 py-6 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500 rounded-xl cursor-pointer transition-colors bg-slate-50/50 dark:bg-slate-900/50">
+                      <Upload className="w-5 h-5 text-slate-400" />
+                      <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{importParsing ? 'Reading file…' : 'Click to choose your .xlsx file'}</span>
+                      <span className="text-[10px] text-slate-400">or drag it here</span>
+                      <input type="file" accept=".xlsx,.xls" onChange={handleImportFile} disabled={importParsing} className="hidden" />
+                    </label>
+                  </div>
+                );
+              })()}
 
-              {importPreview && (
+                            {importPreview && (
                 <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-900">
                   <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
                     {importPreview.fresh.length} new holding{importPreview.fresh.length !== 1 ? 's' : ''} found
