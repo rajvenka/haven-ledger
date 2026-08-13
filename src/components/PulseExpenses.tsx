@@ -42,6 +42,7 @@ export default function PulseExpenses({
   isReadOnly = false,
   currentUserUid,
 }: Props) {
+  const [paidFilter, setPaidFilter] = useState<'all' | 'unpaid' | 'paid'>('unpaid');
   const isPaymentReadOnly = (payment: RecurringPayment) => {
     if (!isReadOnly) return false;
     if (currentUserUid && payment.userId === currentUserUid) return false;
@@ -86,7 +87,13 @@ export default function PulseExpenses({
 
   const displayCcy = isAll ? defaultCurrency : activeCurrency;
 
-  const sorted = [...filteredPayments].sort((a, b) => getDaysUntilPayment(a) - getDaysUntilPayment(b));
+  const sortedAll = [...filteredPayments].sort((a, b) => getDaysUntilPayment(a) - getDaysUntilPayment(b));
+  const sorted = sortedAll.filter((p) => {
+    const paid = isPaymentPaidForCurrentPeriod(p, history);
+    if (paidFilter === 'unpaid') return !paid;
+    if (paidFilter === 'paid') return paid;
+    return true;
+  });
 
   const isMonthlyCycle = (cycle?: string) => {
     const c = String(cycle || 'monthly').toLowerCase();
@@ -181,6 +188,35 @@ export default function PulseExpenses({
             {formatCurrencyValue(paidSoFar, displayCcy as any, countries)}
           </p>
           <p className="text-[10px] text-slate-500 mt-0.5">{displayCcy}</p>
+        </div>
+      </div>
+
+      {/* All / To be paid / Paid */}
+      <div className="flex items-center gap-2">
+        <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 shrink-0">Show</span>
+        <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          {([
+            ['all', 'All'],
+            ['unpaid', 'To be paid'],
+            ['paid', 'Paid'],
+          ] as const).map(([id, lab]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setPaidFilter(id)}
+              className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                paidFilter === id
+                  ? id === 'unpaid'
+                    ? 'bg-rose-600 text-white shadow-md shadow-rose-600/25'
+                    : id === 'paid'
+                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
+                      : 'bg-slate-800 dark:bg-white text-white dark:text-slate-900 shadow-md'
+                  : 'text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              {lab}
+            </button>
+          ))}
         </div>
       </div>
 
