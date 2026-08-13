@@ -9,6 +9,8 @@ interface WorkspaceMemberLite {
 }
 
 interface InvestmentPlanViewProps {
+  /** When true, Portfolio-level Pulse chrome; features identical to classic */
+  pulseMode?: boolean;
   workspaceName?: string;
   workspaceMembers: WorkspaceMemberLite[];
   isReadOnly?: boolean;
@@ -51,6 +53,7 @@ type PlanTab = 'overview' | 'contributions';
 
 export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const {
+    pulseMode = false,
     workspaceName, workspaceMembers, isReadOnly, currentUserId, dismissedReminderKey, onDismissContributionReminder,
     portfolios: allPortfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
@@ -363,30 +366,43 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   ];
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-5 text-left bg-slate-50 dark:bg-slate-900">
-      <div className="flex items-center gap-2">
-        <ClipboardList className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-        <h2 className="text-lg font-bold text-slate-900 dark:text-white">{workspaceName ? `${workspaceName} Investment Plan` : 'Investment Plan'}</h2>
-      </div>
+    <div className={`flex-1 flex flex-col overflow-y-auto px-3 sm:px-5 pt-3 sm:pt-4 pb-24 md:pb-4 space-y-4 text-left ${pulseMode ? 'bg-slate-50 dark:bg-slate-950' : 'bg-slate-50 dark:bg-slate-900'}`}>
+      {pulseMode ? (
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950/20 p-3 sm:p-3.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <ClipboardList className="w-5 h-5 text-indigo-500 shrink-0" />
+            <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
+              {workspaceName ? `${workspaceName} Investment Plan` : 'Investment Plan'}
+            </h2>
+            <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-indigo-600/90 text-white">Pulse</span>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <ClipboardList className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">{workspaceName ? `${workspaceName} Investment Plan` : 'Investment Plan'}</h2>
+        </div>
+      )}
 
       {portfolioMode === 'multiple' && planPortfolioNames.length > 1 && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <button
-            onClick={() => setSelectedPlanPortfolios(new Set())}
-            className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${selectedPlanPortfolios.size === 0 ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}
-          >
-            All
-          </button>
-          {planPortfolioNames.map(p => (
-            <button
-              key={p}
-              onClick={() => setSelectedPlanPortfolios(prev => { const next = new Set(prev); if (next.has(p)) next.delete(p); else next.add(p); return next; })}
-              className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${selectedPlanPortfolios.has(p) ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
+        pulseMode ? (
+          <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-violet-500/80 dark:text-violet-400/80 w-10">Book</span>
+            <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-violet-100/80 dark:bg-violet-950/50 border border-violet-200/60 dark:border-violet-900/60">
+              <button type="button" onClick={() => setSelectedPlanPortfolios(new Set())} className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${selectedPlanPortfolios.size === 0 ? 'bg-violet-600 text-white shadow-md shadow-violet-600/25' : 'text-violet-700/70 dark:text-violet-300/70'}`}>All</button>
+              {planPortfolioNames.map(p => (
+                <button type="button" key={p} onClick={() => setSelectedPlanPortfolios(prev => { const next = new Set(prev); if (next.has(p)) next.delete(p); else next.add(p); return next; })} className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${selectedPlanPortfolios.has(p) ? 'bg-violet-600 text-white shadow-md shadow-violet-600/25' : 'text-violet-700/70 dark:text-violet-300/70'}`}>{p}</button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button onClick={() => setSelectedPlanPortfolios(new Set())} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${selectedPlanPortfolios.size === 0 ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}>All</button>
+            {planPortfolioNames.map(p => (
+              <button key={p} onClick={() => setSelectedPlanPortfolios(prev => { const next = new Set(prev); if (next.has(p)) next.delete(p); else next.add(p); return next; })} className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${selectedPlanPortfolios.has(p) ? 'bg-violet-600 text-white' : 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400'}`}>{p}</button>
+            ))}
+          </div>
+        )
       )}
 
       {formError && (
@@ -431,17 +447,22 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
         </div>
       )}
 
-      <div className="flex gap-1.5 flex-wrap">
-        {TABS.map(t => (
-          <button
-            key={t.key}
-            onClick={() => setPlanTab(t.key)}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${planTab === t.key ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {pulseMode ? (
+        <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-indigo-500/80 dark:text-indigo-400/80 w-10">View</span>
+          <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-indigo-100/80 dark:bg-indigo-950/50 border border-indigo-200/60 dark:border-indigo-900/60">
+            {TABS.map(tab => (
+              <button type="button" key={tab.key} onClick={() => setPlanTab(tab.key)} className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${planTab === tab.key ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25' : 'text-indigo-700/70 dark:text-indigo-300/70'}`}>{tab.label}</button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="flex gap-1.5 flex-wrap">
+          {TABS.map(t => (
+            <button key={t.key} onClick={() => setPlanTab(t.key)} className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${planTab === t.key ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{t.label}</button>
+          ))}
+        </div>
+      )}
 
       {planTab === 'overview' && (
         <>
