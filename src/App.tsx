@@ -664,7 +664,7 @@ export default function App() {
             {/* Menu Sections */}
             <div className="space-y-5">
               {/* SECTION: ANALYTICS & OVERVIEW */}
-              {(hasFeature('core') || hasFeature('ai') || hasFeature('portfolio')) && (
+              {(hasFeature('core') || hasFeature('ai')) && (
               <div className="space-y-1">
                 <span className="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 tracking-wider uppercase block text-left">
                   Overview & Stats
@@ -690,25 +690,6 @@ export default function App() {
                   </button>
                   )}
 
-                  {hasFeature('portfolio') && (
-                  <button
-                    id="tour-tab-portfolio-desktop"
-                    onClick={() => setActiveTab('portfolio')}
-                    className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
-                      activeTab === 'portfolio'
-                        ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
-                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Briefcase className="w-4 h-4 shrink-0 opacity-80" />
-                      <span>Portfolio</span>
-                    </div>
-                    {activeTab === 'portfolio' && (
-                      <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
-                    )}
-                  </button>
-                  )}
 
 
                   {hasFeature('core') && (
@@ -848,8 +829,23 @@ export default function App() {
                   Investment
                 </span>
                 <nav className="flex flex-col gap-1 text-left">
-                  
-
+                  <button
+                    id="tour-tab-portfolio-desktop"
+                    onClick={() => setActiveTab('portfolio')}
+                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                      activeTab === 'portfolio'
+                        ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Briefcase className="w-4 h-4 shrink-0 opacity-80" />
+                      <span>Portfolio</span>
+                    </div>
+                    {activeTab === 'portfolio' && (
+                      <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
+                    )}
+                  </button>
 
                   <button
                     id="tour-tab-investment_plan-desktop"
