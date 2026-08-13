@@ -175,6 +175,7 @@ export default function App() {
     onboardUserWithPlan,
     startWhatsAppVerification,
     disconnectWhatsApp,
+    updateDigestPrefs,
     accessPlans,
     createAccessPlan,
     updateAccessPlan,
@@ -1769,6 +1770,7 @@ export default function App() {
                 myUpgradeRequest={myUpgradeRequest}
                 onRequestUpgrade={requestUpgrade}
                 onDisconnectWhatsApp={disconnectWhatsApp}
+                onUpdateDigestPrefs={updateDigestPrefs}
                 onCreateFamily={async () => { await createWorkspace(activeWorkspace?.type === 'business' ? 'My Business' : 'My Family', activeWorkspace?.type || 'family'); }}
                 activeWorkspace={activeWorkspace}
                 onRenameWorkspace={renameWorkspace}
