@@ -1180,15 +1180,9 @@ export default function PortfolioV1View({
             <div className="flex items-center gap-2 flex-wrap">
               <Briefcase className="w-5 h-5 text-indigo-500" />
               <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                Portfolio
+                {workspaceName ? `${workspaceName} Portfolio` : 'Portfolio'}
               </h1>
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-600 text-white">
-                V1
-              </span>
             </div>
-            {workspaceName ? (
-              <p className="text-[12px] text-slate-500 mt-1">{workspaceName}</p>
-            ) : null}
           </div>
         </div>
 
