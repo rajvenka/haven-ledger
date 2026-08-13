@@ -46,6 +46,7 @@ export default function PulseExpenses({
 }: Props) {
   const [paidFilter, setPaidFilter] = useState<'all' | 'unpaid' | 'paid'>('unpaid');
   const [searchQ, setSearchQ] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'overdue' | 'today' | 'soon' | 'unpaid' | 'paid'>('all');
   const isPaymentReadOnly = (payment: RecurringPayment) => {
     if (!isReadOnly) return false;
     if (currentUserUid && payment.userId === currentUserUid) return false;
@@ -94,8 +95,15 @@ export default function PulseExpenses({
   const q = searchQ.trim().toLowerCase();
   const sorted = sortedAll.filter((p) => {
     const paid = isPaymentPaidForCurrentPeriod(p, history);
+    const days = getDaysUntilPayment(p);
     if (paidFilter === 'unpaid' && paid) return false;
     if (paidFilter === 'paid' && !paid) return false;
+    // Status badge filters
+    if (statusFilter === 'overdue' && (paid || days >= 0)) return false;
+    if (statusFilter === 'today' && (paid || days !== 0)) return false;
+    if (statusFilter === 'soon' && (paid || days <= 0 || days > 3)) return false;
+    if (statusFilter === 'unpaid' && paid) return false;
+    if (statusFilter === 'paid' && !paid) return false;
     if (!q) return true;
     const hay = [p.name, p.category, p.taggedFor, p.currency, p.paymentMethod, p.notes]
       .filter(Boolean)
@@ -231,23 +239,30 @@ export default function PulseExpenses({
           )}
         </div>
 
-        {/* Quick status counts */}
+        {/* Quick status counts — clickable */}
         <div className="flex flex-wrap gap-1.5">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-600 ring-1 ring-rose-500/20">
-            Overdue <span className="tabular-nums">{openCounts.overdue}</span>
-          </span>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 ring-1 ring-amber-500/20">
-            Today <span className="tabular-nums">{openCounts.today}</span>
-          </span>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-orange-500/15 text-orange-700 dark:text-orange-400 ring-1 ring-orange-500/20">
-            Soon <span className="tabular-nums">{openCounts.soon}</span>
-          </span>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-            Open <span className="tabular-nums">{openCounts.unpaid}</span>
-          </span>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/20">
-            Paid <span className="tabular-nums">{openCounts.paid}</span>
-          </span>
+          {([
+            ['overdue', 'Overdue', openCounts.overdue, 'bg-rose-500/15 text-rose-600 ring-1 ring-rose-500/20'],
+            ['today', 'Today', openCounts.today, 'bg-amber-500/15 text-amber-700 dark:text-amber-400 ring-1 ring-amber-500/20'],
+            ['soon', 'Soon', openCounts.soon, 'bg-orange-500/15 text-orange-700 dark:text-orange-400 ring-1 ring-orange-500/20'],
+            ['unpaid', 'Open', openCounts.unpaid, 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'],
+            ['paid', 'Paid', openCounts.paid, 'bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/20'],
+          ] as const).map(([id, lab, count, cls]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => {
+                setStatusFilter((prev) => (prev === id ? 'all' : id));
+                if (id === 'paid') setPaidFilter('paid');
+                else if (id === 'unpaid' || id === 'overdue' || id === 'today' || id === 'soon') setPaidFilter('unpaid');
+              }}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer ${cls} ${
+                statusFilter === id ? 'ring-2 ring-offset-1 ring-offset-slate-50 dark:ring-offset-slate-950 ring-violet-500 scale-[1.02]' : 'hover:opacity-90'
+              }`}
+            >
+              {lab} <span className="tabular-nums">{count}</span>
+            </button>
+          ))}
         </div>
 
         {/* All / To be paid / Paid */}
