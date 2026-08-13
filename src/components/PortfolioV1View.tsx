@@ -375,7 +375,7 @@ export default function PortfolioV1View({
   markBrokerConnectionSynced,
   updatePortfolioHoldingLivePrice,
 }: Props) {
-  const [portfolioFilter, setPortfolioFilter] = useState<string>('All');
+  const [portfolioFilter, setPortfolioFilter] = useState<string>('__pending__');
   const [brokerFilter, setBrokerFilter] = useState<string>('All');
   const [categoryFilter, setCategoryFilter] = useState<CategoryId | 'All'>('All');
   const [expandedCategory, setExpandedCategory] = useState<CategoryId | null>(null);
@@ -576,16 +576,38 @@ export default function PortfolioV1View({
     );
   }, [portfolioBrokerConnections, portfolioFilter]);
 
-  // If current book was emptied / hidden, return to All books
+  // Prefer workspace default portfolio over "All" on first load / when pending.
+  React.useEffect(() => {
+    if (portfolioFilter !== '__pending__' && portfolioFilter !== 'All') return;
+    // Only auto-pick default when we are still on the initial pending state, or
+    // when user has not chosen a book yet and a default exists.
+    if (portfolioFilter === 'All' && portfoliosPresent.length === 0) return;
+    const defaultId =
+      (portfolios || []).find((p: any) => p.is_default)?.id ||
+      portfoliosPresent[0]?.id ||
+      (portfolios || [])[0]?.id ||
+      null;
+    if (portfolioFilter === '__pending__') {
+      if (defaultId) setPortfolioFilter(String(defaultId));
+      else setPortfolioFilter('All');
+      return;
+    }
+  }, [portfolioFilter, portfolios, portfoliosPresent]);
+
+  // If current book was emptied / hidden, fall back to default (else All).
   React.useEffect(() => {
     if (portfolioFilter === 'All' || portfolioFilter === '__pending__') return;
     if (!portfoliosPresent.some((p: any) => p.id === portfolioFilter)) {
-      setPortfolioFilter('All');
+      const defaultId =
+        (portfolios || []).find((p: any) => p.is_default)?.id ||
+        portfoliosPresent[0]?.id ||
+        null;
+      setPortfolioFilter(defaultId ? String(defaultId) : 'All');
       setBrokerFilter('All');
       setCategoryFilter('All');
       setExpandedCategory(null);
     }
-  }, [portfolioFilter, portfoliosPresent]);
+  }, [portfolioFilter, portfoliosPresent, portfolios]);
 
   const categoryOrder: CategoryId[] = [
     'india_mf',
