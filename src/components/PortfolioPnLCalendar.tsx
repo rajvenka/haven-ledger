@@ -384,6 +384,76 @@ export default function PortfolioPnLCalendar({
         </div>
       </div>
 
+      {/* Book filter — own row, horizontal scroll (many portfolios) */}
+      {portfolios.length > 0 && onPortfolioChange && (
+        <div className="min-w-0 w-full">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-violet-500/80 w-10">
+              Book
+            </span>
+            <div className="min-w-0 flex-1 overflow-x-auto no-scrollbar overscroll-x-contain touch-pan-x">
+              <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-violet-100/80 dark:bg-violet-950/40 border border-violet-200/60 dark:border-violet-900/50 w-max max-w-none">
+                <button
+                  type="button"
+                  onClick={() => onPortfolioChange('all')}
+                  className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold ${
+                    selectedPortfolioId === 'all'
+                      ? 'bg-violet-600 text-white shadow-md shadow-violet-600/25'
+                      : 'text-violet-800/70 dark:text-violet-300/70'
+                  }`}
+                >
+                  All
+                </button>
+                {portfolios.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => onPortfolioChange(p.id)}
+                    className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold max-w-[8.5rem] truncate ${
+                      selectedPortfolioId === p.id
+                        ? 'bg-violet-600 text-white shadow-md shadow-violet-600/25'
+                        : 'text-violet-800/70 dark:text-violet-300/70'
+                    }`}
+                    title={p.name}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Currency filter — scroll if many */}
+      {currenciesForBook.length > 0 && (
+        <div className="min-w-0 w-full">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-emerald-500/80 w-10">
+              Ccy
+            </span>
+            <div className="min-w-0 flex-1 overflow-x-auto no-scrollbar">
+              <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-emerald-100/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-900/50 w-max">
+                {currenciesForBook.map((ccy) => (
+                  <button
+                    key={ccy}
+                    type="button"
+                    onClick={() => onCurrencyChange(ccy)}
+                    className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold ${
+                      selectedCurrency === ccy
+                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
+                        : 'text-emerald-800/70 dark:text-emerald-300/70'
+                    }`}
+                  >
+                    {ccy}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Data status banner */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 px-3 py-2 text-[10px] text-slate-500 space-y-0.5">
         <p>
