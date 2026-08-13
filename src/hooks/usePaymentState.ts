@@ -946,7 +946,7 @@ export function usePaymentState() {
     }
     const { error } = await supabase.from('countries').delete().eq('id', id);
     if (error) throw error;
-    if (summaryCurrency.toUpperCase() === target.currency.toUpperCase()) {
+    if (String(summaryCurrency || '').toUpperCase() === String(target.currency || '').toUpperCase()) {
       const fallback = countries.find(c => c.id !== id);
       if (fallback) saveSummaryCurrency(fallback.currency);
     }

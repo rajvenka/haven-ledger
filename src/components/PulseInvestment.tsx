@@ -101,17 +101,17 @@ export default function PulseInvestment(props: any) {
   return (
     <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-left w-full max-w-full">
       <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 space-y-2.5">
-        <div className="rounded-2xl bg-indigo-600 text-white p-4 shadow-lg shadow-indigo-600/25">
+        <div className="rounded-2xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200/70 dark:border-indigo-900/50 text-indigo-900 dark:text-indigo-100 p-4">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                <ClipboardList className="w-5 h-5 text-white" />
+              <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center shrink-0">
+                <ClipboardList className="w-5 h-5 text-indigo-600 dark:text-indigo-300" />
               </div>
               <div className="min-w-0">
               <h1 className="text-xl font-black tracking-tight truncate">
                 {workspaceName ? `${workspaceName} Investment Plan` : 'Investment Plan'}
               </h1>
-              <p className="text-[11px] font-semibold text-indigo-100/90">
+              <p className="text-[11px] font-semibold text-indigo-600/80 dark:text-indigo-300/80">
                 In {money(contribTotal)} · Out {money(withTotal)} · Net {money(contribTotal - withTotal)}
               </p>
               </div>
@@ -120,7 +120,7 @@ export default function PulseInvestment(props: any) {
               <button
                 type="button"
                 onClick={() => setOpen(true)}
-                className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold bg-white/20 hover:bg-white/30 text-white border border-white/30"
+                className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white"
               >
                 <Plus className="w-3.5 h-3.5" /> Add
               </button>

@@ -318,8 +318,8 @@ export function convertCurrency(
 
   if (Array.isArray(rateOrCountries)) {
     const resolvedCountries = rateOrCountries.length > 0 ? rateOrCountries : INITIAL_COUNTRIES;
-    const fromCountry = resolvedCountries.find(c => c.currency.toUpperCase() === from.toUpperCase());
-    const toCountry = resolvedCountries.find(c => c.currency.toUpperCase() === to.toUpperCase());
+    const fromCountry = resolvedCountries.find(c => String(c.currency || '').toUpperCase() === String(from || '').toUpperCase());
+    const toCountry = resolvedCountries.find(c => String(c.currency || '').toUpperCase() === String(to || '').toUpperCase());
     if (!fromCountry || !toCountry) return amount;
     
     // Convert to base currency (AUD) first: amount / fromCountry.rateToAUD
@@ -347,7 +347,7 @@ export function formatCurrencyValue(
   countries: CountryConfig[] = INITIAL_COUNTRIES
 ): string {
   const resolvedCountries = countries && countries.length > 0 ? countries : INITIAL_COUNTRIES;
-  const c = resolvedCountries.find(item => item.currency.toUpperCase() === currency.toUpperCase());
+  const c = resolvedCountries.find(item => String(item.currency || '').toUpperCase() === String(currency || '').toUpperCase());
   const symbol = c ? c.symbol : '$';
   try {
     return new Intl.NumberFormat('en-US', {

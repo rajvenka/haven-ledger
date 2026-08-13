@@ -1358,7 +1358,7 @@ export default function AccountInfo({
           <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Default Currency</span>
           <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-md text-xs font-semibold gap-1 overflow-x-auto no-scrollbar">
             {countries.reduce((acc: CountryConfig[], c) => {
-              if (!acc.some(item => item.currency.toUpperCase() === c.currency.toUpperCase())) {
+              if (!acc.some(item => String(item.currency || '').toUpperCase() === String(c.currency || '').toUpperCase())) {
                 acc.push(c);
               }
               return acc;
@@ -1367,7 +1367,7 @@ export default function AccountInfo({
                 <button
                   onClick={() => onSaveSummaryCurrency(c.currency)}
                   className={`px-3 py-1.5 text-[11px] font-semibold rounded flex items-center gap-1 transition-all cursor-pointer ${
-                    summaryCurrency.toUpperCase() === c.currency.toUpperCase()
+                    String(summaryCurrency || '').toUpperCase() === String(c.currency || '').toUpperCase()
                       ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/50 dark:border-slate-700'
                       : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
                   }`}

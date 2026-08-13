@@ -59,9 +59,11 @@ export default function PulseExpenses({
   const activeCurrency = isAll ? defaultCurrency : activeCountry?.currency || defaultCurrency;
 
   const convertCurrency = (amount: number, fromCurr: string, toCurr: string) => {
-    if (fromCurr.toUpperCase() === toCurr.toUpperCase()) return amount;
-    const fromCountry = countries.find((c) => c.currency.toUpperCase() === fromCurr.toUpperCase());
-    const toCountry = countries.find((c) => c.currency.toUpperCase() === toCurr.toUpperCase());
+    const from = String(fromCurr || '').toUpperCase();
+    const to = String(toCurr || '').toUpperCase();
+    if (from === to) return amount;
+    const fromCountry = countries.find((c) => String(c.currency || '').toUpperCase() === from);
+    const toCountry = countries.find((c) => String(c.currency || '').toUpperCase() === to);
     if (!fromCountry || !toCountry) return amount;
     const audAmount = amount / fromCountry.rateToAUD;
     return audAmount * toCountry.rateToAUD;
@@ -70,7 +72,7 @@ export default function PulseExpenses({
   const filteredPayments = useMemo(() => {
     const active = payments.filter((p) => p.active);
     if (isAll) return active;
-    return active.filter((p) => p.currency.toUpperCase() === String(activeCurrency).toUpperCase());
+    return active.filter((p) => String(p.currency || '').toUpperCase() === String(activeCurrency).toUpperCase());
   }, [payments, isAll, activeCurrency]);
 
   const now = new Date();
@@ -80,7 +82,7 @@ export default function PulseExpenses({
     .filter((h) => h.paidDate.startsWith(currentMonthStr))
     .reduce((sum, h) => {
       if (isAll) return sum + convertCurrency(h.amount, h.currency, defaultCurrency);
-      return h.currency.toUpperCase() === String(activeCurrency).toUpperCase() ? sum + h.amount : sum;
+      return String(h.currency || '').toUpperCase() === String(activeCurrency).toUpperCase() ? sum + h.amount : sum;
     }, 0);
 
   const dueOpen = filteredPayments.filter((p) => !isPaymentPaidForCurrentPeriod(p, history));

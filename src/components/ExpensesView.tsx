@@ -58,7 +58,7 @@ export default function ExpensesView({
   
   React.useEffect(() => {
     if (defaultCurrency && !activeTabCountryId) {
-      const match = countries.find(c => c.currency.toUpperCase() === defaultCurrency.toUpperCase());
+      const match = countries.find(c => String(c.currency || '').toUpperCase() === String(defaultCurrency).toUpperCase());
       if (match) {
         setActiveTabCountryId(match.id);
       } else if (countries.length > 0) {
@@ -87,19 +87,23 @@ export default function ExpensesView({
   const isAllSelected = activeTabCountryId === 'ALL';
   const activeCurrency = activeCountry ? activeCountry.currency : 'AUD';
   
-  // Filter payments specifically for the active selection
+  // Filter payments specifically for the active selection - defensive against payments with
+  // no currency set at all (would otherwise crash here immediately whenever a specific
+  // country tab, not "All", is selected).
   const filteredPayments = isAllSelected
     ? payments
-    : payments.filter(p => p.currency.toUpperCase() === activeCurrency.toUpperCase());
+    : payments.filter(p => String(p.currency || '').toUpperCase() === String(activeCurrency).toUpperCase());
   
   const now = new Date();
   const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
   // Helper function to convert any currency to another using our country configurations
   const convertCurrency = (amount: number, fromCurr: string, toCurr: string) => {
-    if (fromCurr.toUpperCase() === toCurr.toUpperCase()) return amount;
-    const fromCountry = countries.find(c => c.currency.toUpperCase() === fromCurr.toUpperCase());
-    const toCountry = countries.find(c => c.currency.toUpperCase() === toCurr.toUpperCase());
+    const from = String(fromCurr || '').toUpperCase();
+    const to = String(toCurr || '').toUpperCase();
+    if (from === to) return amount;
+    const fromCountry = countries.find(c => String(c.currency || '').toUpperCase() === from);
+    const toCountry = countries.find(c => String(c.currency || '').toUpperCase() === to);
     if (!fromCountry || !toCountry) return amount;
     const audAmount = amount / fromCountry.rateToAUD;
     return audAmount * toCountry.rateToAUD;
@@ -112,7 +116,7 @@ export default function ExpensesView({
       if (isAllSelected) {
         return sum + convertCurrency(h.amount, h.currency, defaultCurrency || 'AUD');
       }
-      return h.currency.toUpperCase() === activeCurrency.toUpperCase() ? sum + h.amount : sum;
+      return String(h.currency || '').toUpperCase() === String(activeCurrency).toUpperCase() ? sum + h.amount : sum;
     }, 0);
 
   // 2. Due Next Week (converted to default currency if "ALL")
@@ -534,8 +538,8 @@ export default function ExpensesView({
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           {isAllSelected && (
-                            <span className="text-[10px] leading-none shrink-0" title={countries.find(c => c.currency.toUpperCase() === p.currency.toUpperCase())?.name}>
-                              {countries.find(c => c.currency.toUpperCase() === p.currency.toUpperCase())?.flag || '🌐'}
+                            <span className="text-[10px] leading-none shrink-0" title={countries.find(c => String(c.currency || '').toUpperCase() === String(p.currency || '').toUpperCase())?.name}>
+                              {countries.find(c => String(c.currency || '').toUpperCase() === String(p.currency || '').toUpperCase())?.flag || '🌐'}
                             </span>
                           )}
                           <span className="text-xs font-bold text-slate-900 dark:text-white truncate">

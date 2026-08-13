@@ -346,7 +346,7 @@ export default function PaymentModal({
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-semibold">
-                      {countries.find(c => c.currency.toUpperCase() === currency.toUpperCase())?.symbol || '$'}
+                      {countries.find(c => String(c.currency || '').toUpperCase() === String(currency || '').toUpperCase())?.symbol || '$'}
                     </span>
                     <input
                       id="input-amount"
@@ -373,7 +373,7 @@ export default function PaymentModal({
                         type="button"
                         onClick={() => setCurrency(c.currency)}
                         className={`flex-1 py-1.5 px-2 text-[10px] font-bold rounded flex items-center justify-center gap-1 transition-all shrink-0 cursor-pointer ${
-                          currency.toUpperCase() === c.currency.toUpperCase()
+                          String(currency || '').toUpperCase() === String(c.currency || '').toUpperCase()
                             ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/50'
                             : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
                         }`}

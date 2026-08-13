@@ -2453,7 +2453,7 @@ export default function App() {
                       </label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-semibold">
-                          {countries.find(c => c.currency.toUpperCase() === recordingTransactionPayment.currency.toUpperCase())?.symbol || '$'}
+                          {countries.find(c => String(c.currency || '').toUpperCase() === String(recordingTransactionPayment.currency || '').toUpperCase())?.symbol || '$'}
                         </span>
                         <input
                           type="number"

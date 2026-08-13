@@ -114,16 +114,16 @@ export default function PulseReports(props: any) {
   return (
     <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-left w-full max-w-full">
       <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 space-y-2.5">
-        <div className="rounded-2xl bg-violet-600 text-white p-4 shadow-lg shadow-violet-600/25">
+        <div className="rounded-2xl bg-violet-50 dark:bg-violet-950/30 border border-violet-200/70 dark:border-violet-900/50 text-violet-900 dark:text-violet-100 p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-              <FileBarChart className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center shrink-0">
+              <FileBarChart className="w-5 h-5 text-violet-600 dark:text-violet-300" />
             </div>
             <div className="min-w-0">
               <h1 className="text-xl font-black tracking-tight truncate">
                 {workspaceName ? `${workspaceName} Reports` : 'Reports'}
               </h1>
-              <p className="text-[11px] font-semibold text-violet-100/90">
+              <p className="text-[11px] font-semibold text-violet-600/80 dark:text-violet-300/80">
                 {active.length} active holdings
                 {portfolioDividends?.length ? ` · ${portfolioDividends.length} dividends` : ''}
                 {portfolioFees?.length ? ` · ${portfolioFees.length} fees` : ''}
