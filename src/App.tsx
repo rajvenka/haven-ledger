@@ -2211,9 +2211,16 @@ export default function App() {
                 <div className="w-12 h-1 bg-slate-300 dark:bg-slate-800 rounded-full mx-auto mt-3 shrink-0" />
                 
                 <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-900 shrink-0">
-                  <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                    Log Transaction Bill
-                  </h3>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 dark:text-white tracking-tight">
+                      Log payment
+                    </h3>
+                    <p className="text-[10px] text-slate-500 mt-0.5 truncate max-w-[16rem]">
+                      {recordingTransactionPayment?.name}
+                      {recordingTransactionPayment?.billingCycle ? ` · ${recordingTransactionPayment.billingCycle}` : ''}
+                      {recordingTransactionPayment?.paymentMethod === 'direct_debit' ? ' · DD' : ''}
+                    </p>
+                  </div>
                   <button
                     onClick={() => {
                       setRecordingTransactionPayment(null);
@@ -2309,7 +2316,7 @@ export default function App() {
                     )}
 
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
-                      Log current billing transaction for <strong>"{recordingTransactionPayment.name}"</strong> ({recordingTransactionPayment.billingCycle || 'monthly'}).
+                      Confirm status, amount, and date. For direct debit, “Paid” means the bank has already taken it.
                     </p>
 
                     {/* Status Picker - Segmented Card Style */}
@@ -2434,14 +2441,14 @@ export default function App() {
                           setTransactionSuccessMessage(null);
                           setTransactionError(null);
                         }}
-                        className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-lg transition-all cursor-pointer"
+                        className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-2xl transition-all cursor-pointer"
                       >
                         Cancel
                       </button>
                       <button
                         type="submit"
                         disabled={isSyncing}
-                        className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs rounded-lg shadow transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                        className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs rounded-2xl shadow-lg shadow-indigo-600/25 transition-all cursor-pointer flex items-center justify-center gap-1.5"
                       >
                         {isSyncing ? (
                           <>
