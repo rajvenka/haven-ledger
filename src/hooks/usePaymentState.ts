@@ -1749,7 +1749,7 @@ export function usePaymentState() {
     const { error } = await supabase.rpc('snapshot_portfolio_daily_positions', {
       p_workspace_id: activeWorkspaceId,
       p_currencies: currencies ?? null,
-      p_timezone: timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+      p_timezone: timezone ?? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'),
     });
     if (error) {
       console.error('snapshot_portfolio_daily_positions', error);
