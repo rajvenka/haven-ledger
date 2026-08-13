@@ -1,14 +1,7 @@
 /**
- * Pulse Manage Bills — primary bills workbench.
- * Classic ConfigurePayments remains available via Classic toggle.
- *
- * Design principles (from classic analysis + Pulse Expenses patterns):
- * 1. Sticky filter bar (search + status + method + category) — works with long lists on mobile
- * 2. Group by payment method: Manual monthly / Direct debit / Non-monthly
- * 3. Compact rows: name, amount, due day, category, active toggle, actions
- * 4. Expand row for 6-month payment pattern + last paid
- * 5. Summary chips: active count, paused, monthly estimate by primary currencies
- * 6. Bulk import stays as secondary mode (preserve power feature)
+ * Pulse Manage Bills — Pulse 1 redesign of ConfigurePayments.
+ * Feature parity target: list, filters, method/category groups, active toggle,
+ * expand history, edit/clone/delete, rich bulk (CSV/JSON), reorder.
  */
 import React, { useMemo, useState } from 'react';
 import {
@@ -28,6 +21,8 @@ import {
   CheckCircle,
   AlertCircle,
   Layers,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { RecurringPayment, PaymentHistory, getCategoryColor, BillingCycle } from '../types';
 import { formatCurrencyValue } from '../utils/paymentUtils';
@@ -42,6 +37,7 @@ interface Props {
   onDeleteClick: (id: string) => void;
   onUpdatePayment: (payment: RecurringPayment) => void;
   onAddBulkPayments?: (payments: Omit<RecurringPayment, 'id'>[]) => Promise<any>;
+  onUpdatePaymentsOrder?: (orderedPayments: RecurringPayment[]) => void;
   isReadOnly?: boolean;
   currentUserUid?: string;
   customizedTags?: string[];
@@ -50,23 +46,22 @@ interface Props {
 type StatusFilter = 'all' | 'active' | 'paused';
 type MethodFilter = 'all' | 'manual' | 'direct_debit' | 'non_monthly';
 type Mode = 'list' | 'bulk';
+type GroupMode = 'method' | 'category' | 'none';
 
-const MONTHLY_CYCLES = new Set(['monthly', 'weekly']);
+const BILLING_CYCLES: BillingCycle[] = [
+  'weekly', 'monthly', '2-months', '3-months', '4-months', '6-months', 'yearly', 'once',
+];
 
-function billGroup(p: RecurringPayment): 'manual' | 'direct_debit' | 'non_monthly' {
+function billMethodGroup(p: RecurringPayment): 'manual' | 'direct_debit' | 'non_monthly' {
   const cycle = String(p.billingCycle || 'monthly').toLowerCase();
-  if (!MONTHLY_CYCLES.has(cycle) && cycle !== 'once') {
-    // non-monthly recurring
-    if (cycle !== 'monthly' && cycle !== 'weekly') return 'non_monthly';
-  }
-  if (cycle === 'once' || cycle === 'yearly' || cycle === '2-months' || cycle === '3-months' || cycle === '4-months' || cycle === '6-months') {
+  if (['once', 'yearly', '2-months', '3-months', '4-months', '6-months'].includes(cycle)) {
     return 'non_monthly';
   }
   if (p.paymentMethod === 'direct_debit') return 'direct_debit';
   return 'manual';
 }
 
-function groupLabel(g: string) {
+function methodLabel(g: string) {
   if (g === 'direct_debit') return 'Direct debit';
   if (g === 'non_monthly') return 'Non-monthly';
   return 'Manual monthly';
@@ -82,6 +77,7 @@ export default function PulseBills({
   onDeleteClick,
   onUpdatePayment,
   onAddBulkPayments,
+  onUpdatePaymentsOrder,
   isReadOnly = false,
   currentUserUid,
   customizedTags = ['Bank', 'Home', 'Father', 'Mother', 'Self'],
@@ -91,6 +87,7 @@ export default function PulseBills({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [methodFilter, setMethodFilter] = useState<MethodFilter>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
+  const [groupMode, setGroupMode] = useState<GroupMode>('method');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const isPaymentReadOnly = (payment: RecurringPayment) => {
@@ -109,29 +106,49 @@ export default function PulseBills({
     return payments.filter((p) => {
       if (statusFilter === 'active' && !p.active) return false;
       if (statusFilter === 'paused' && p.active) return false;
-      const g = billGroup(p);
-      if (methodFilter !== 'all' && g !== methodFilter) return false;
+      if (methodFilter !== 'all' && billMethodGroup(p) !== methodFilter) return false;
       if (categoryFilter !== 'All' && p.category !== categoryFilter) return false;
       if (q) {
-        const hay = `${p.name} ${p.category} ${p.taggedFor || ''} ${p.notes || ''}`.toLowerCase();
+        const hay = `${p.name} ${p.category} ${p.taggedFor || ''} ${p.notes || ''} ${p.billingCycle || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
   }, [payments, search, statusFilter, methodFilter, categoryFilter]);
 
+  const sortedFiltered = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      const ao = a.order ?? 9999;
+      const bo = b.order ?? 9999;
+      if (ao !== bo) return ao - bo;
+      if (a.active !== b.active) return a.active ? -1 : 1;
+      return (a.dayOfMonth || 1) - (b.dayOfMonth || 1) || a.name.localeCompare(b.name);
+    });
+  }, [filtered]);
+
   const grouped = useMemo(() => {
+    if (groupMode === 'none') {
+      return [{ id: 'all', label: 'All bills', items: sortedFiltered }];
+    }
+    if (groupMode === 'category') {
+      const map = new Map<string, RecurringPayment[]>();
+      sortedFiltered.forEach((p) => {
+        const c = p.category || 'Other';
+        if (!map.has(c)) map.set(c, []);
+        map.get(c)!.push(p);
+      });
+      return Array.from(map.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([id, items]) => ({ id, label: id, items }));
+    }
+    // method
     const order: Array<'manual' | 'direct_debit' | 'non_monthly'> = ['manual', 'direct_debit', 'non_monthly'];
     const map: Record<string, RecurringPayment[]> = { manual: [], direct_debit: [], non_monthly: [] };
-    filtered.forEach((p) => map[billGroup(p)].push(p));
-    order.forEach((k) => {
-      map[k].sort((a, b) => {
-        if (a.active !== b.active) return a.active ? -1 : 1;
-        return (a.dayOfMonth || 1) - (b.dayOfMonth || 1) || a.name.localeCompare(b.name);
-      });
-    });
-    return order.map((id) => ({ id, items: map[id] })).filter((g) => g.items.length > 0);
-  }, [filtered]);
+    sortedFiltered.forEach((p) => map[billMethodGroup(p)].push(p));
+    return order
+      .map((id) => ({ id, label: methodLabel(id), items: map[id] }))
+      .filter((g) => g.items.length > 0);
+  }, [sortedFiltered, groupMode]);
 
   const stats = useMemo(() => {
     const active = payments.filter((p) => p.active).length;
@@ -156,7 +173,9 @@ export default function PulseBills({
 
   const getHistoryStats = (paymentId: string) => {
     const paymentHistory = history.filter((h) => h.paymentId === paymentId);
-    const sorted = [...paymentHistory].sort((a, b) => new Date(b.paidDate).getTime() - new Date(a.paidDate).getTime());
+    const sorted = [...paymentHistory].sort(
+      (a, b) => new Date(b.paidDate).getTime() - new Date(a.paidDate).getTime()
+    );
     const lastPaid = sorted[0] || null;
     const last6: { monthName: string; paid: boolean }[] = [];
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -178,11 +197,103 @@ export default function PulseBills({
     onUpdatePayment({ ...payment, active: !payment.active });
   };
 
-  // ---- Bulk (minimal but usable) ----
+  const movePayment = (payment: RecurringPayment, dir: -1 | 1) => {
+    if (!onUpdatePaymentsOrder || isReadOnly) return;
+    const ordered = [...payments].sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999));
+    const idx = ordered.findIndex((p) => p.id === payment.id);
+    const j = idx + dir;
+    if (idx < 0 || j < 0 || j >= ordered.length) return;
+    const next = [...ordered];
+    const tmp = next[idx];
+    next[idx] = next[j];
+    next[j] = tmp;
+    onUpdatePaymentsOrder(next.map((p, i) => ({ ...p, order: i })));
+  };
+
+  // ---- Bulk ----
   const [bulkText, setBulkText] = useState('');
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkMsg, setBulkMsg] = useState<string | null>(null);
   const [bulkErr, setBulkErr] = useState<string | null>(null);
+
+  const parseBulkRows = (text: string): Omit<RecurringPayment, 'id'>[] => {
+    const rows: Omit<RecurringPayment, 'id'>[] = [];
+    const trimmed = text.trim();
+    if (!trimmed) return rows;
+
+    // JSON array or object-with-array
+    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+      try {
+        let arr: any[] = [];
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) arr = parsed;
+        else arr = (Object.values(parsed).find((v) => Array.isArray(v)) as any[]) || [];
+        for (const item of arr) {
+          const name = item.name || item.billName || item.paymentName || '';
+          const amount = Number(item.amount);
+          if (!name || !Number.isFinite(amount)) continue;
+          const rawCurrency = String(item.currency || 'AUD').toUpperCase();
+          const dayOfMonth = Math.min(31, Math.max(1, Number(item.dayOfMonth) || 1));
+          const category = item.category || 'Other';
+          const rawCycle = item.billingCycle || item.frequency || 'monthly';
+          const billingCycle = (BILLING_CYCLES.includes(rawCycle) ? rawCycle : 'monthly') as BillingCycle;
+          const rawTag = item.taggedFor || 'Self';
+          const taggedFor = customizedTags.find((t) => t.toLowerCase() === String(rawTag).toLowerCase()) || rawTag;
+          rows.push({
+            name,
+            amount,
+            currency: rawCurrency as any,
+            dayOfMonth,
+            category,
+            active: item.active !== false,
+            reminderDaysBefore: Number(item.reminderDaysBefore) || 2,
+            paymentType: item.paymentType === 'flexi' ? 'flexi' : 'fixed',
+            paymentMethod: item.paymentMethod === 'direct_debit' ? 'direct_debit' : 'manual',
+            billingCycle,
+            taggedFor,
+            notes: item.notes || '',
+          });
+        }
+        return rows;
+      } catch {
+        /* fall through to CSV */
+      }
+    }
+
+    // CSV / TSV: Name, Amount, Currency, Day, Category [, Cycle, Method, Tag, Type]
+    for (const line of trimmed.split('\n').map((l) => l.trim()).filter(Boolean)) {
+      if (/^name\s*[,;\t]/i.test(line)) continue; // header
+      const parts = line.split(/[,;\t]/).map((p) => p.trim());
+      if (parts.length < 2) continue;
+      const name = parts[0];
+      const amount = Number(String(parts[1]).replace(/[^0-9.]/g, ''));
+      if (!name || !Number.isFinite(amount)) continue;
+      const currency = (parts[2] || 'AUD').toUpperCase();
+      const dayOfMonth = Math.min(31, Math.max(1, parseInt(parts[3] || '1', 10) || 1));
+      const category = parts[4] || 'Other';
+      const rawCycle = (parts[5] || 'monthly').toLowerCase();
+      const billingCycle = (BILLING_CYCLES.includes(rawCycle as any) ? rawCycle : 'monthly') as BillingCycle;
+      const paymentMethod = String(parts[6] || '').toLowerCase().includes('debit')
+        ? 'direct_debit'
+        : 'manual';
+      const taggedFor = parts[7] || 'Self';
+      const paymentType = String(parts[8] || '').toLowerCase() === 'flexi' ? 'flexi' : 'fixed';
+      rows.push({
+        name,
+        amount,
+        currency: currency as any,
+        dayOfMonth,
+        category,
+        active: true,
+        reminderDaysBefore: 2,
+        paymentType,
+        paymentMethod,
+        billingCycle,
+        taggedFor,
+      });
+    }
+    return rows;
+  };
 
   const runBulk = async () => {
     if (!onAddBulkPayments || isReadOnly) return;
@@ -190,37 +301,11 @@ export default function PulseBills({
     setBulkMsg(null);
     setBulkErr(null);
     try {
-      const lines = bulkText
-        .split('\n')
-        .map((l) => l.trim())
-        .filter(Boolean);
-      const rows: Omit<RecurringPayment, 'id'>[] = [];
-      for (const line of lines) {
-        // name, amount, currency, day, category
-        const parts = line.split(/[,\t]/).map((p) => p.trim());
-        if (parts.length < 2) continue;
-        const name = parts[0];
-        const amount = Number(String(parts[1]).replace(/[^0-9.]/g, ''));
-        if (!name || !Number.isFinite(amount)) continue;
-        const currency = (parts[2] || 'AUD').toUpperCase() as any;
-        const dayOfMonth = Math.min(31, Math.max(1, parseInt(parts[3] || '1', 10) || 1));
-        const category = parts[4] || 'Other';
-        rows.push({
-          name,
-          amount,
-          currency,
-          dayOfMonth,
-          category,
-          active: true,
-          reminderDaysBefore: 2,
-          paymentType: 'fixed',
-          paymentMethod: 'manual',
-          billingCycle: 'monthly' as BillingCycle,
-          taggedFor: 'Self',
-        });
-      }
+      const rows = parseBulkRows(bulkText);
       if (!rows.length) {
-        setBulkErr('No valid rows. Use: Name, Amount, Currency, Day, Category');
+        setBulkErr(
+          'No valid rows. CSV: Name, Amount, Currency, Day, Category, Cycle, Method, Tag, Type — or paste a JSON array.'
+        );
         return;
       }
       await onAddBulkPayments(rows);
@@ -236,7 +321,6 @@ export default function PulseBills({
 
   return (
     <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-left w-full max-w-full">
-      {/* Header */}
       <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 space-y-2">
         <div className="flex items-center justify-between gap-2">
           <div>
@@ -286,7 +370,6 @@ export default function PulseBills({
           </div>
         </div>
 
-        {/* Monthly estimate chips */}
         {Object.keys(stats.byCcy).length > 0 && (
           <div className="flex gap-1.5 overflow-x-auto overscroll-x-contain" style={{ scrollbarWidth: 'none' }}>
             {Object.entries(stats.byCcy)
@@ -306,14 +389,25 @@ export default function PulseBills({
 
       {mode === 'bulk' ? (
         <div className="flex-1 overflow-y-auto px-3 sm:px-4 pb-24 space-y-3">
-          <p className="text-[11px] text-slate-500">
-            One bill per line: <span className="font-bold">Name, Amount, Currency, Day, Category</span>
-          </p>
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 space-y-2 text-[11px] text-slate-500">
+            <p className="font-bold text-slate-700 dark:text-slate-200">Bulk import</p>
+            <p>
+              <span className="font-bold">CSV / TSV</span> (one per line):
+              <br />
+              Name, Amount, Currency, Day, Category, Cycle, Method, Tag, Type
+            </p>
+            <p>
+              <span className="font-bold">JSON</span>: array of objects with name, amount, currency,
+              dayOfMonth, category, billingCycle, paymentMethod, taggedFor, paymentType, notes
+            </p>
+          </div>
           <textarea
             value={bulkText}
             onChange={(e) => setBulkText(e.target.value)}
-            rows={10}
-            placeholder={'Netflix, 17.99, AUD, 15, Entertainment\nRent, 2200, AUD, 1, Rent'}
+            rows={12}
+            placeholder={
+              'Netflix, 17.99, AUD, 15, Entertainment, monthly, manual, Self, fixed\nRent, 2200, AUD, 1, Rent, monthly, direct_debit, Home, fixed'
+            }
             className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 text-[12px] font-mono"
           />
           {bulkMsg && (
@@ -337,7 +431,6 @@ export default function PulseBills({
         </div>
       ) : (
         <>
-          {/* Sticky filters */}
           <div className="shrink-0 px-3 sm:px-4 pb-2 space-y-2 border-b border-slate-100 dark:border-slate-900 bg-slate-50/90 dark:bg-slate-950/90 backdrop-blur-sm z-20">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
@@ -348,7 +441,11 @@ export default function PulseBills({
                 className="w-full pl-9 pr-8 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[12px] font-medium"
               />
               {search && (
-                <button type="button" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1">
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1"
+                >
                   <X className="w-3.5 h-3.5 text-slate-400" />
                 </button>
               )}
@@ -391,33 +488,57 @@ export default function PulseBills({
                 </button>
               ))}
             </div>
-            {categories.length > 2 && (
-              <div className="flex gap-1.5 overflow-x-auto overscroll-x-contain" style={{ scrollbarWidth: 'none' }}>
-                {categories.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setCategoryFilter(c)}
-                    className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                      categoryFilter === c
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-white dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-800'
-                    }`}
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="flex gap-1.5 overflow-x-auto overscroll-x-contain" style={{ scrollbarWidth: 'none' }}>
+              <span className="shrink-0 self-center text-[9px] font-black uppercase tracking-widest text-slate-400">
+                Group
+              </span>
+              {(
+                [
+                  ['method', 'Method'],
+                  ['category', 'Category'],
+                  ['none', 'Flat'],
+                ] as [GroupMode, string][]
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setGroupMode(id)}
+                  className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                    groupMode === id
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-white dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+              {categories.length > 2 && (
+                <>
+                  <span className="w-px bg-slate-200 dark:bg-slate-800 shrink-0 self-stretch" />
+                  {categories.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setCategoryFilter(c)}
+                      className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                        categoryFilter === c
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-white dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-800'
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
           </div>
 
-          {/* List */}
           <div className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-4 pb-28 space-y-4 pt-3">
-            {filtered.length === 0 ? (
+            {sortedFiltered.length === 0 ? (
               <div className="text-center py-16 space-y-2">
                 <Layers className="w-8 h-8 text-slate-300 mx-auto" />
                 <p className="text-[13px] font-bold text-slate-500">No bills match</p>
-                <p className="text-[11px] text-slate-400">Clear filters or add a bill</p>
                 {!isReadOnly && (
                   <button
                     type="button"
@@ -429,12 +550,10 @@ export default function PulseBills({
                 )}
               </div>
             ) : (
-              grouped.map(({ id, items }) => (
+              grouped.map(({ id, label, items }) => (
                 <section key={id} className="space-y-1.5">
                   <div className="flex items-center gap-2 px-0.5">
-                    <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                      {groupLabel(id)}
-                    </h2>
+                    <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</h2>
                     <span className="text-[10px] font-bold text-slate-300">{items.length}</span>
                   </div>
                   <ul className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800/80">
@@ -448,28 +567,23 @@ export default function PulseBills({
                         '#6366f1';
                       return (
                         <li key={p.id} className={`${!p.active ? 'opacity-55' : ''}`}>
-                          <div className="flex items-center gap-2 px-3 py-2.5">
+                          <div className="flex items-center gap-1.5 px-2.5 py-2.5">
                             <button
                               type="button"
                               onClick={() => setExpandedId(expanded ? null : p.id)}
                               className="shrink-0 p-0.5 text-slate-400"
-                              title="Details"
                             >
                               {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                             </button>
                             <div className="min-w-0 flex-1" onClick={() => !ro && onEditClick(p)}>
                               <div className="flex items-center gap-1.5 min-w-0">
-                                <span
-                                  className="w-1.5 h-1.5 rounded-full shrink-0"
-                                  style={{ backgroundColor: catColor }}
-                                />
-                                <p className="text-[13px] font-bold text-slate-900 dark:text-white truncate">
-                                  {p.name}
-                                </p>
+                                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: catColor }} />
+                                <p className="text-[13px] font-bold text-slate-900 dark:text-white truncate">{p.name}</p>
                               </div>
                               <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
                                 Day {p.dayOfMonth}
                                 {p.billingCycle && p.billingCycle !== 'monthly' ? ` · ${p.billingCycle}` : ''}
+                                {p.paymentMethod === 'direct_debit' ? ' · DD' : ''}
                                 {p.taggedFor ? ` · ${p.taggedFor}` : ''}
                                 {p.category ? ` · ${p.category}` : ''}
                               </p>
@@ -510,10 +624,7 @@ export default function PulseBills({
                                         ? 'No payment history yet'
                                         : `${hist.total} log${hist.total === 1 ? '' : 's'}`}
                                       {hist.lastPaid && (
-                                        <span className="text-slate-400 font-semibold">
-                                          {' '}
-                                          · last {hist.lastPaid.paidDate}
-                                        </span>
+                                        <span className="text-slate-400 font-semibold"> · last {hist.lastPaid.paidDate}</span>
                                       )}
                                     </p>
                                     <div className="flex gap-1 mt-1.5">
@@ -531,7 +642,27 @@ export default function PulseBills({
                                   </div>
                                 </div>
                               )}
-                              <div className="flex items-center gap-1.5 pt-1">
+                              <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+                                {onUpdatePaymentsOrder && !ro && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => movePayment(p, -1)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
+                                      title="Move up"
+                                    >
+                                      <ArrowUp className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => movePayment(p, 1)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
+                                      title="Move down"
+                                    >
+                                      <ArrowDown className="w-3 h-3" />
+                                    </button>
+                                  </>
+                                )}
                                 <button
                                   type="button"
                                   disabled={ro}
@@ -554,7 +685,7 @@ export default function PulseBills({
                                   type="button"
                                   disabled={ro}
                                   onClick={() => {
-                                    if (confirm(`Delete “${p.name}”?`)) onDeleteClick(p.id);
+                                    if (confirm(`Delete "${p.name}"?`)) onDeleteClick(p.id);
                                   }}
                                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/40 disabled:opacity-40 ml-auto"
                                 >
