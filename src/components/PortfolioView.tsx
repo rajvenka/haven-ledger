@@ -1210,8 +1210,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setZerodhaSyncError(null);
     setZerodhaTokenExpiredConnection(null);
     setConnectionLabelInput(connection.connection_label || '');
-    setBrokerConnectPortfolioId(connection.portfolio_id || '');
-    setBrokerEditingType('zerodha');
+    setZerodhaConnectPortfolioId(connection.portfolio_id || '');
+    setIndiaBrokerEditing(true);
   };
 
   const handleZerodhaExchange = async () => {
