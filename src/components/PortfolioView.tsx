@@ -3805,14 +3805,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
               {!importRawParsed && (() => {
                 const pid = importPortfolioId || defaultPortfolioId;
                 const linked = (portfolioBrokerConnections || []).filter((c: any) => String(c.portfolio_id || '') === String(pid || ''));
-                const book = portfolios.find((p: any) => p.id === pid);
-                const ccy = String(book?.currency || '').toUpperCase();
-                const suggested: BrokerTemplate[] =
-                  ccy === 'INR' ? ['zerodha', 'groww_stocks', 'groww_mf', 'universal'] :
-                  ccy === 'AUD' ? ['stake', 'universal'] :
-                  ['universal'];
-                // Always include universal
-                if (!suggested.includes('universal')) suggested.push('universal');
+                // Always offer every file template — user picks; never infer from portfolio name/currency alone.
+                const allTemplates: { id: BrokerTemplate; label: string; hint: string }[] = [
+                  { id: 'zerodha', label: 'Zerodha', hint: 'Stocks + MF XLSX' },
+                  { id: 'groww_stocks', label: 'Groww Stocks', hint: 'Holdings statement' },
+                  { id: 'groww_mf', label: 'Groww MF', hint: 'MF holdings XLSX' },
+                  { id: 'stake', label: 'Stake (AU)', hint: 'Portfolio Valuation' },
+                  { id: 'universal', label: 'Universal', hint: 'Any broker CSV/XLSX' },
+                ];
 
                 if (!importPath) {
                   return (
@@ -3840,15 +3840,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           type="button"
                           onClick={() => {
                             setImportPath('file');
-                            setImportTemplate(suggested[0] || 'universal');
+                            // Keep current template if set; default Stake when name hints AU, else universal
+                            if (!importTemplate) setImportTemplate('universal');
                           }}
                           className="text-left rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/40 p-3 hover:ring-2 hover:ring-slate-400 cursor-pointer transition-all"
                         >
                           <p className="text-[12px] font-black text-slate-800 dark:text-slate-100">Import file</p>
                           <p className="text-[9px] text-slate-500 mt-0.5">
-                            {ccy === 'INR' ? 'Zerodha / Groww XLSX or universal template'
-                              : ccy === 'AUD' ? 'Stake Portfolio Valuation or universal template'
-                              : 'Universal template (any broker)'}
+                            Choose template: Zerodha, Groww, Stake, Universal…
                           </p>
                         </button>
                       </div>
@@ -3893,39 +3892,36 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   );
                 }
 
-                // importPath === 'file'
+                // importPath === 'file' — full template list (chip row like currency)
                 return (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Import file</p>
                       <button type="button" onClick={() => { setImportPath(null); setImportPreview(null); setImportRawParsed(null); }} className="text-[9px] font-bold text-slate-400 cursor-pointer">← Back</button>
                     </div>
-                    <div className="flex gap-1.5 flex-wrap">
-                      {suggested.map((tpl) => {
-                        const labels: Record<string, string> = {
-                          zerodha: 'Zerodha (Stocks + MF)',
-                          groww_stocks: 'Groww Stocks',
-                          groww_mf: 'Groww Mutual Funds',
-                          stake: 'Stake (AU)',
-                          universal: 'Universal Template',
-                        };
-                        return (
-                          <button
-                            key={tpl}
-                            type="button"
-                            onClick={() => { setImportTemplate(tpl); setImportPreview(null); setImportRawParsed(null); }}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer ${importTemplate === tpl ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
-                          >
-                            {labels[tpl] || tpl}
-                          </button>
-                        );
-                      })}
+                    <p className="text-[9px] text-slate-400">Pick the format that matches your download — not the portfolio name.</p>
+                    <div className="inline-flex flex-wrap items-center gap-0.5 p-0.5 rounded-full bg-slate-100/90 dark:bg-slate-900/80 border border-slate-200/70 dark:border-slate-700/60">
+                      {allTemplates.map((tpl) => (
+                        <button
+                          key={tpl.id}
+                          type="button"
+                          onClick={() => { setImportTemplate(tpl.id); setImportPreview(null); setImportRawParsed(null); }}
+                          title={tpl.hint}
+                          className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                            importTemplate === tpl.id
+                              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25'
+                              : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                          }`}
+                        >
+                          {tpl.label}
+                        </button>
+                      ))}
                     </div>
                     <p className="text-[9px] text-slate-400">
                       {importTemplate === 'zerodha' && 'Console → Holdings → Download as XLSX (stocks and mutual funds detected automatically)'}
                       {importTemplate === 'groww_stocks' && 'Groww app → Reports → Stocks Holdings Statement (XLSX)'}
                       {importTemplate === 'groww_mf' && 'Groww app → Reports → Mutual Funds Holdings Statement (XLSX)'}
-                      {importTemplate === 'stake' && 'Stake Portfolio Valuation XLSX as downloaded (Aus Equities + Wall St Equities tabs).'}
+                      {importTemplate === 'stake' && 'Stake → Portfolio Valuation XLSX as downloaded (tabs: Aus Equities + Wall St Equities). ASX→AUD / Stake AU, Wall St→USD / Stake US.'}
                       {importTemplate === 'universal' && 'Any broker — fill the blank template. Already-imported holdings are skipped.'}
                     </p>
                     {importTemplate === 'universal' && (
