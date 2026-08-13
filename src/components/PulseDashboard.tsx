@@ -263,31 +263,57 @@ export default function PulseDashboard({
             {upcomingList.map((ins) => {
               const isOd = ins.dueDate < todayStr;
               const payment = payments.find((p) => p.id === ins.paymentId);
+              const label = String(ins.paymentName || payment?.name || 'Bill').trim();
+              const initials = label
+                .split(' ')
+                .filter(Boolean)
+                .map((w: string) => w[0])
+                .join('')
+                .slice(0, 2)
+                .toUpperCase();
               return (
-                <li key={`${ins.paymentId}-${ins.dueDate}`} className="px-3.5 py-2.5 flex items-center gap-3">
+                <li key={`${ins.paymentId}-${ins.dueDate}`} className="px-3.5 py-3 flex items-center gap-3">
                   <div
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                      isOd ? 'bg-rose-100 text-rose-600 dark:bg-rose-950/50' : 'bg-slate-100 text-slate-600 dark:bg-slate-800'
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-[11px] font-black ${
+                      isOd
+                        ? 'bg-rose-500/15 text-rose-500 ring-1 ring-rose-500/30'
+                        : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 ring-1 ring-indigo-500/20'
                     }`}
+                    title={label}
                   >
-                    {isOd ? <Bell className="w-4 h-4" /> : <Calendar className="w-4 h-4" />}
+                    {initials || (isOd ? '!' : '·')}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[12px] font-bold text-slate-900 dark:text-white truncate">{ins.name}</p>
-                    <p className="text-[10px] text-slate-500">
-                      {isOd ? 'Overdue · ' : ''}
-                      {formatDatePretty(new Date(ins.dueDate))}
+                    <p className="text-[13px] font-bold text-slate-900 dark:text-white truncate leading-snug">
+                      {label}
                     </p>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                      <span
+                        className={`text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-md ${
+                          isOd
+                            ? 'bg-rose-500/15 text-rose-500'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                        }`}
+                      >
+                        {isOd ? 'Overdue' : 'Due'}
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        {formatDatePretty(new Date(ins.dueDate))}
+                      </span>
+                      {ins.currency && (
+                        <span className="text-[10px] font-bold text-slate-400">{ins.currency}</span>
+                      )}
+                    </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-[12px] font-black tabular-nums text-slate-900 dark:text-white">
+                    <p className="text-[13px] font-black tabular-nums text-slate-900 dark:text-white">
                       {money(ins.amount, ins.currency, countries)}
                     </p>
                     {payment && !isPaymentReadOnly(payment) && (
                       <button
                         type="button"
                         onClick={() => onRecordPayment(payment, ins.dueDate)}
-                        className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 mt-0.5"
+                        className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 mt-0.5 hover:underline"
                       >
                         Mark paid
                       </button>
