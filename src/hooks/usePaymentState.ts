@@ -1251,7 +1251,7 @@ export function usePaymentState() {
       etoro_net_value_amount: h.etoroNetValueAmount ?? null,
       // Stamp live_price on import for brokers that supply a real mark in the file/API.
       ...((['eToro', 'Webull', 'Stake'].includes(broker) && h.currentPrice != null)
-        ? { live_price: h.currentPrice, live_price_updated_at: new Date().toISOString() }
+        ? { live_price: h.currentPrice, live_price_updated_at: new Date().toISOString(), live_price_source: broker }
         : {}),
     };
     });
@@ -1587,10 +1587,24 @@ export function usePaymentState() {
   // this was the source of a real corruption bug where the two would overwrite each other.
   // previousClose (from Yahoo's own prior-close reference) powers the Daily Change headline
   // metric, distinct from Since Upload which compares against the file-sourced LTP instead.
-  const updatePortfolioHoldingLivePrice = async (id: string, price: number, previousClose?: number | null) => {
+  const updatePortfolioHoldingLivePrice = async (
+    id: string,
+    price: number,
+    previousClose?: number | null,
+    priceSource?: string | null,
+  ) => {
     const row: any = { live_price: price, live_price_updated_at: new Date().toISOString(), price_lookup_failed: false };
     if (previousClose !== undefined) row.previous_close = previousClose;
-    const { error } = await supabase.from('portfolio_holdings').update(row).eq('id', id);
+    // Tag which feed wrote this mark: Yahoo | Webull | eToro | Zerodha | Groww | MF | Import
+    if (priceSource != null && String(priceSource).trim() !== '') {
+      row.live_price_source = String(priceSource).trim();
+    }
+    let { error } = await supabase.from('portfolio_holdings').update(row).eq('id', id);
+    // Graceful if column not migrated yet
+    if (error && priceSource && /live_price_source|schema cache|column/i.test(String(error.message || ''))) {
+      delete row.live_price_source;
+      ({ error } = await supabase.from('portfolio_holdings').update(row).eq('id', id));
+    }
     if (error) throw error;
     // Record price history on every refresh, not just rare paths (initial import, historical
     // backfill) - this was the actual root cause of the Movement tab's drill-down computing
@@ -2021,7 +2035,7 @@ export function usePaymentState() {
     let updated = 0;
     for (const row of rows ?? []) {
       const price = upperSymbolToPrice.get(row.symbol.toUpperCase());
-      if (price != null) { await updatePortfolioHoldingLivePrice(row.id, price); updated++; }
+      if (price != null) { await updatePortfolioHoldingLivePrice(row.id, price, null, 'eToro'); updated++; }
     }
     // Thrown (not just logged) so it surfaces via confirmImport's stepErrors to the person,
     // rather than silently doing nothing the way this step did before with no visibility at
