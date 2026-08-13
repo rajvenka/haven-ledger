@@ -1466,26 +1466,46 @@ export default function App() {
               right after it holds an identical (invisible) copy so page content doesn't
               render underneath the now out-of-flow header. */}
           <header
-            className="md:hidden fixed top-0 left-0 right-0 px-4 py-3 bg-white dark:bg-slate-950 border-b border-slate-100 dark:border-slate-900 flex justify-between items-center z-30"
+            className="md:hidden fixed top-0 left-0 right-0 px-3 py-3 bg-white dark:bg-slate-950 border-b border-slate-100 dark:border-slate-900 flex items-center gap-2 z-30 min-w-0"
             style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.75rem)' }}
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 shrink-0 max-w-[42%]">
               <button
                 onClick={() => setIsMobileMenuOpen(true)}
-                className="p-1.5 -ml-1 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+                className="p-1.5 -ml-0.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer shrink-0"
                 title="Open Navigation Drawer"
               >
                 <Menu className="w-5.5 h-5.5" />
               </button>
-              <div>
-                <h1 className="text-base font-black tracking-tight text-slate-950 dark:text-white flex items-center gap-1.5 text-left animate-none">
-                  <span>Haven Vault</span>
-                  <span className="w-1.5 h-1.5 bg-indigo-600 dark:bg-indigo-500 rounded-full animate-ping" />
+              <div className="min-w-0">
+                <h1 className="text-sm font-black tracking-tight text-slate-950 dark:text-white flex items-center gap-1 text-left animate-none truncate">
+                  <span className="truncate">Haven Vault</span>
+                  <span className="w-1.5 h-1.5 bg-indigo-600 dark:bg-indigo-500 rounded-full animate-ping shrink-0" />
                 </h1>
               </div>
             </div>
 
-            <div className="flex items-center gap-1">
+            <div
+              className="flex-1 min-w-0 overflow-x-auto overscroll-x-contain touch-pan-x"
+              style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
+            >
+              <div className="flex items-center justify-end gap-0.5 w-max min-w-full">
+              {/* Pulse / Classic icon — top bar, next to theme */}
+              {(activeTab === 'summary' || activeTab === 'expenses' || activeTab === 'configure' || activeTab === 'income' || activeTab === 'rewards' || activeTab === 'portfolio' || activeTab === 'history') && (
+                <button
+                  type="button"
+                  onClick={togglePulse}
+                  title={uiPulse ? 'Switch to Classic layout' : 'Switch to Pulse layout'}
+                  className={`shrink-0 p-2 rounded-full transition-colors cursor-pointer ${
+                    uiPulse
+                      ? 'bg-violet-100 dark:bg-violet-950/50 text-violet-600 dark:text-violet-300'
+                      : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 hover:text-violet-600'
+                  }`}
+                >
+                  <Sparkles className="w-4.5 h-4.5" />
+                </button>
+              )}
+
               {/* Quick Access Theme Toggle Button */}
               <button
                 onClick={() => {
@@ -1494,7 +1514,7 @@ export default function App() {
                   localStorage.setItem('pm_theme', nextTheme);
                 }}
                 title={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
-                className="p-2 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-full text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                className="shrink-0 p-2 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-full text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
               >
                 {theme === 'light' ? (
                   <Moon className="w-4.5 h-4.5" />
@@ -1506,7 +1526,7 @@ export default function App() {
               {/* Header Action: Guided tour trigger */}
               <button
                 onClick={() => setShowTour(true)}
-                className="p-2 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-full text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                className="shrink-0 p-2 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-full text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
                 title="Take the guided tour"
               >
                 <Compass className="w-4.5 h-4.5" />
@@ -1518,7 +1538,7 @@ export default function App() {
                   setIsNotifDrawerOpen(true);
                   markAllNotificationsRead();
                 }}
-                className="p-2 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-full text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 relative transition-colors cursor-pointer"
+                className="shrink-0 p-2 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-full text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 relative transition-colors cursor-pointer"
               >
                 <Bell className="w-4.5 h-4.5" />
                 {unreadNotifCount > 0 && (
@@ -1534,7 +1554,7 @@ export default function App() {
               {user && hasFeature('agent') && (
                 <button
                   onClick={toggleAgent}
-                  className={`p-2 rounded-full transition-colors cursor-pointer ${isAgentOpen ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30' : 'text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-900'}`}
+                  className={`shrink-0 p-2 rounded-full transition-colors cursor-pointer ${isAgentOpen ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30' : 'text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-900'}`}
                   title="Haven AI Agent"
                 >
                   <Sparkles className="w-4.5 h-4.5" />
@@ -1543,7 +1563,7 @@ export default function App() {
               {user && hasFeature('chat') && (
                 <button
                   onClick={toggleFamilyChat}
-                  className={`p-2 rounded-full transition-colors cursor-pointer ${isFamilyChatOpen ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30' : 'text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-900'}`}
+                  className={`shrink-0 p-2 rounded-full transition-colors cursor-pointer ${isFamilyChatOpen ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30' : 'text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-900'}`}
                   title="Family Chat"
                 >
                   <MessageSquare className="w-4.5 h-4.5" />
@@ -1553,7 +1573,7 @@ export default function App() {
               {/* User Profile avatar + Loading indicator */}
               <button 
                 onClick={() => setIsProfileScopeModalOpen(true)}
-                className="relative flex items-center gap-1.5 ml-1 pl-1 pr-2.5 py-0.5 bg-slate-50 hover:bg-slate-100/80 dark:bg-slate-900 dark:hover:bg-slate-850 rounded-full border border-slate-150 dark:border-slate-855 transition-colors cursor-pointer group"
+                className="shrink-0 relative flex items-center gap-1.5 ml-1 pl-1 pr-2.5 py-0.5 bg-slate-50 hover:bg-slate-100/80 dark:bg-slate-900 dark:hover:bg-slate-850 rounded-full border border-slate-150 dark:border-slate-855 transition-colors cursor-pointer group"
               >
                 <div className="w-5.5 h-5.5 rounded-full bg-indigo-150 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400 flex items-center justify-center text-[9px] font-black uppercase shrink-0 group-hover:scale-105 transition-transform">
                   {userProfile?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U'}
@@ -1569,6 +1589,7 @@ export default function App() {
                   </div>
                 )}
               </button>
+              </div>
             </div>
           </header>
 
@@ -1583,7 +1604,7 @@ export default function App() {
               : 'overflow-y-auto'
           }`}>
             {(activeTab === 'summary' || activeTab === 'expenses' || activeTab === 'configure' || activeTab === 'income' || activeTab === 'rewards' || activeTab === 'portfolio' || activeTab === 'history') && (
-              <div className="shrink-0 px-4 sm:px-5 pt-2 flex items-center justify-end">
+              <div className="hidden md:flex shrink-0 px-4 sm:px-5 pt-2 items-center justify-end">
                 <button
                   type="button"
                   onClick={togglePulse}
