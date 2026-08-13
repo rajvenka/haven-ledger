@@ -10,6 +10,8 @@ import {
   Check,
   ChevronRight,
   Wallet,
+  Search,
+  X,
 } from 'lucide-react';
 import { RecurringPayment, CountryConfig, PaymentHistory, getCategoryColor } from '../types';
 import {
@@ -43,6 +45,7 @@ export default function PulseExpenses({
   currentUserUid,
 }: Props) {
   const [paidFilter, setPaidFilter] = useState<'all' | 'unpaid' | 'paid'>('unpaid');
+  const [searchQ, setSearchQ] = useState('');
   const isPaymentReadOnly = (payment: RecurringPayment) => {
     if (!isReadOnly) return false;
     if (currentUserUid && payment.userId === currentUserUid) return false;
@@ -88,12 +91,30 @@ export default function PulseExpenses({
   const displayCcy = isAll ? defaultCurrency : activeCurrency;
 
   const sortedAll = [...filteredPayments].sort((a, b) => getDaysUntilPayment(a) - getDaysUntilPayment(b));
+  const q = searchQ.trim().toLowerCase();
   const sorted = sortedAll.filter((p) => {
     const paid = isPaymentPaidForCurrentPeriod(p, history);
-    if (paidFilter === 'unpaid') return !paid;
-    if (paidFilter === 'paid') return paid;
-    return true;
+    if (paidFilter === 'unpaid' && paid) return false;
+    if (paidFilter === 'paid' && !paid) return false;
+    if (!q) return true;
+    const hay = [p.name, p.category, p.taggedFor, p.currency, p.paymentMethod, p.notes]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return hay.includes(q);
   });
+
+  const openCounts = {
+    overdue: sortedAll.filter((p) => !isPaymentPaidForCurrentPeriod(p, history) && getDaysUntilPayment(p) < 0).length,
+    today: sortedAll.filter((p) => !isPaymentPaidForCurrentPeriod(p, history) && getDaysUntilPayment(p) === 0).length,
+    soon: sortedAll.filter((p) => {
+      if (isPaymentPaidForCurrentPeriod(p, history)) return false;
+      const d = getDaysUntilPayment(p);
+      return d > 0 && d <= 3;
+    }).length,
+    unpaid: sortedAll.filter((p) => !isPaymentPaidForCurrentPeriod(p, history)).length,
+    paid: sortedAll.filter((p) => isPaymentPaidForCurrentPeriod(p, history)).length,
+  };
 
   const isMonthlyCycle = (cycle?: string) => {
     const c = String(cycle || 'monthly').toLowerCase();
@@ -191,8 +212,44 @@ export default function PulseExpenses({
         </div>
       </div>
 
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+        <input
+          type="search"
+          value={searchQ}
+          onChange={(e) => setSearchQ(e.target.value)}
+          placeholder="Search bills, category, tag…"
+          className="w-full pl-9 pr-9 py-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[12px] font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+        />
+        {searchQ && (
+          <button type="button" onClick={() => setSearchQ('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* Quick status counts */}
+      <div className="flex flex-wrap gap-1.5">
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-600 ring-1 ring-rose-500/20">
+          Overdue <span className="tabular-nums">{openCounts.overdue}</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 ring-1 ring-amber-500/20">
+          Today <span className="tabular-nums">{openCounts.today}</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-orange-500/15 text-orange-700 dark:text-orange-400 ring-1 ring-orange-500/20">
+          Soon <span className="tabular-nums">{openCounts.soon}</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+          Open <span className="tabular-nums">{openCounts.unpaid}</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/20">
+          Paid <span className="tabular-nums">{openCounts.paid}</span>
+        </span>
+      </div>
+
       {/* All / To be paid / Paid */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 shrink-0">Show</span>
         <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
           {([
