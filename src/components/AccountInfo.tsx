@@ -102,6 +102,7 @@ interface AccountInfoProps {
   setViewMode?: (mode: 'personal' | 'family-combined' | 'family-only') => void;
   activeSubTab?: 'preferences' | 'security' | 'members' | 'groups' | 'chat' | 'invite';
   onActiveSubTabChange?: (tab: 'preferences' | 'security' | 'members' | 'groups' | 'chat' | 'invite') => void;
+  pulseMode?: boolean;
 }
 
 export default function AccountInfo({
@@ -171,6 +172,7 @@ export default function AccountInfo({
   setViewMode,
   activeSubTab,
   onActiveSubTabChange,
+  pulseMode = false,
 }: AccountInfoProps) {
   const [localActiveSubTab, setLocalActiveSubTab] = useState<'preferences' | 'security' | 'members' | 'groups' | 'chat' | 'invite'>('preferences');
   const currentSubTab = activeSubTab !== undefined ? activeSubTab : localActiveSubTab;
@@ -409,40 +411,63 @@ export default function AccountInfo({
   const personalPercentReal = totalSum > 0 ? (personalTotal / totalSum) * 100 : 100;
   const familyPercentReal = totalSum > 0 ? (familyOnlyTotal / totalSum) * 100 : 0;
 
+  const settingsPageTitle =
+    currentSubTab === 'security'
+      ? 'Account Security'
+      : currentSubTab === 'members' || currentSubTab === 'groups' || currentSubTab === 'chat'
+        ? 'Workspace & team'
+        : currentSubTab === 'invite'
+          ? 'Invitations'
+          : 'Preferences';
+  const settingsPageBlurb =
+    currentSubTab === 'security'
+      ? 'Password · data scope · backups'
+      : currentSubTab === 'members' || currentSubTab === 'groups' || currentSubTab === 'chat'
+        ? 'Members · roles · invite code'
+        : 'Theme · digests · workspace defaults';
+  const sectionCardClass = pulseMode
+    ? 'bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-200/80 dark:border-slate-800 shadow-sm'
+    : 'bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm';
+
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-4 text-left bg-slate-50 dark:bg-slate-900">
-      
-      {/* Title Bar with Instructions Toggle */}
-      <div className="flex justify-between items-center px-1 shrink-0">
-        <div className="flex items-center gap-2">
-          <Sliders className="w-4.5 h-4.5 text-indigo-600" />
-          <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Haven Vault Config</h3>
+    <div
+      className={
+        pulseMode
+          ? 'flex-1 flex flex-col overflow-y-auto px-4 sm:px-5 pt-3 pb-24 md:pb-4 space-y-4 text-left bg-slate-50 dark:bg-slate-950'
+          : 'flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-4 text-left bg-slate-50 dark:bg-slate-900'
+      }
+    >
+      {pulseMode ? (
+        <div className="flex items-start justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Sliders className="w-5 h-5 text-indigo-500/80 dark:text-indigo-400/80 shrink-0" />
+            <div className="min-w-0">
+              <h2 className="text-lg sm:text-xl font-black tracking-tight text-slate-900 dark:text-white truncate">{settingsPageTitle}</h2>
+              <p className="text-[10px] font-medium text-slate-400">{settingsPageBlurb}</p>
+            </div>
+          </div>
+          <button type="button" onClick={() => handleToggleInstructions(!showInstructions)} className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold text-slate-500 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-sm">
+            {showInstructions ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5 text-indigo-500" />}
+            <span className="hidden sm:inline">{showInstructions ? 'Hide tips' : 'Tips'}</span>
+          </button>
         </div>
-        
-        {/* Toggle Button: Show/Hide Instructions */}
-        <button
-          onClick={() => handleToggleInstructions(!showInstructions)}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm transition-all cursor-pointer hover:shadow"
-        >
-          {showInstructions ? (
-            <>
-              <EyeOff className="w-3.5 h-3.5 text-slate-400" />
-              <span>Hide Instructions</span>
-            </>
-          ) : (
-            <>
-              <Eye className="w-3.5 h-3.5 text-indigo-500" />
-              <span>Show Instructions</span>
-            </>
-          )}
-        </button>
-      </div>
+      ) : (
+        <div className="flex justify-between items-center px-1 shrink-0">
+          <div className="flex items-center gap-2">
+            <Sliders className="w-4.5 h-4.5 text-indigo-600" />
+            <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Haven Vault Config</h3>
+          </div>
+          <button onClick={() => handleToggleInstructions(!showInstructions)} className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-indigo-600 dark:text-slate-400 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm cursor-pointer">
+            {showInstructions ? (<><EyeOff className="w-3.5 h-3.5 text-slate-400" /><span>Hide Instructions</span></>) : (<><Eye className="w-3.5 h-3.5 text-indigo-500" /><span>Show Instructions</span></>)}
+          </button>
+        </div>
+      )}
 
       {/* Scope Data View shown inside Security */}
       {currentSubTab === 'security' && (
         <>
           {/* Section 1: Scope Data View */}
-          <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3.5 text-left animate-in fade-in-50 duration-200">
+          <div className={`${sectionCardClass} space-y-3.5 text-left animate-in fade-in-50 duration-200`}>
             <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
               <Layers className="w-4 h-4 text-indigo-500" /> Section 1: Scope Data View
             </h4>
@@ -642,7 +667,7 @@ export default function AccountInfo({
           )}
 
           {activeWorkspace && (
-            <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+            <div className={`${sectionCardClass} space-y-3`}>
               <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
                 <Layers className="w-4 h-4 text-indigo-500" /> Portfolio Mode
               </h4>
@@ -983,7 +1008,7 @@ export default function AccountInfo({
           )}
           {/* Invite code / share panel — hosts see it, and solo users can create a family to get one */}
           {(familyRole === 'host' || !familyRole) && (
-            <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+            <div className={`${sectionCardClass} space-y-3`}>
               <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
                 <Users className="w-4 h-4 text-indigo-500" /> Your Workspace Invite Code
               </h4>
@@ -1196,7 +1221,7 @@ export default function AccountInfo({
 
           {/* Join a family by code — shown to anyone not already the host of one */}
           {familyRole !== 'host' && (
-            <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+            <div className={`${sectionCardClass} space-y-3`}>
               <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
                 <UserPlus className="w-4 h-4 text-indigo-500" /> Join a Workspace
               </h4>
@@ -1872,7 +1897,7 @@ export default function AccountInfo({
         <>
           
           {/* Daily digests — Email + WhatsApp */}
-          <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 shrink-0">
+          <div className={`${sectionCardClass} space-y-3 shrink-0`}>
             <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
               Daily digests
             </h4>
@@ -1916,7 +1941,7 @@ export default function AccountInfo({
           </div>
 
 {/* Connect WhatsApp */}
-          <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 shrink-0">
+          <div className={`${sectionCardClass} space-y-3 shrink-0`}>
             <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
               <MessageSquare className="w-4 h-4 text-emerald-500" /> Connect WhatsApp
             </h4>
@@ -1984,7 +2009,7 @@ export default function AccountInfo({
           </div>
 
           {/* Backup and Restore Utilities Accordion (High Density Styled Cards) */}
-          <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 shrink-0">
+          <div className={`${sectionCardClass} space-y-3 shrink-0`}>
         <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
           <ShieldAlert className="w-4 h-4 text-indigo-500" /> Backup, Sync & Danger Zone
         </h4>
