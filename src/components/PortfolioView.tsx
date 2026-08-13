@@ -3814,7 +3814,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 {importTemplate === 'zerodha' && "Console → Holdings → Download as XLSX (stocks and mutual funds are both detected automatically)"}
                 {importTemplate === 'groww_stocks' && "Groww app → Reports → Stocks Holdings Statement (XLSX)"}
                 {importTemplate === 'groww_mf' && "Groww app → Reports → Mutual Funds Holdings Statement (XLSX)"}
-                {importTemplate === 'stake' && "Stake → Statements / Portfolio Valuation (XLSX). Aus equities → AUD/ASX; Wall St → USD. No cost basis in file — buy price starts at market (edit later). Target an AUD book e.g. Stake-AU."}
+                {importTemplate === 'stake' && "Stake → download Portfolio Valuation XLSX as-is (tabs Aus Equities + Wall St Equities). No edits needed. ASX→AUD, Wall St→USD. Cost basis not in file — buy price starts at market."}
                 {importTemplate === 'universal' && "For any broker without a dedicated import yet - fill in the template with your holdings, any currency."}
                 {' '}· Prices/quantities come from the file at export time. Already-imported holdings are automatically skipped.
               </p>
