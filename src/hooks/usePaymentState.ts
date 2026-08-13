@@ -1227,6 +1227,7 @@ export function usePaymentState() {
   // Bulk import from a broker file - inserts many holdings in one request, then refreshes once.
   const bulkAddPortfolioHoldings = async (holdings: {
     holdingType: 'stock' | 'mutual_fund' | 'options'; broker: string; symbol: string; isin?: string; folioNumber?: string; exchange: string; quantity: number; buyPrice: number; buyDate: string; currentPrice?: number; source?: string; currency?: string;
+    ticker?: string;
     leverage?: number; stopLossRate?: number; takeProfitRate?: number; etoroNetValueAmount?: number;
   }[], portfolioId?: string) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
@@ -1242,7 +1243,7 @@ export function usePaymentState() {
       return {
       workspace_id: activeWorkspaceId, created_by: user?.id ?? null, portfolio_id: portfolioId ?? null,
       holding_type: holdingType, broker, symbol: h.symbol.toUpperCase(), isin: h.isin ?? null, folio_number: h.folioNumber ?? null, exchange: h.exchange,
-      ticker: ['Zerodha', 'Groww', 'eToro', 'Webull', 'Stake'].includes(broker) ? h.symbol.toUpperCase() : null,
+      ticker: (h.ticker && String(h.ticker).trim()) || (['Zerodha', 'Groww', 'eToro', 'Webull', 'Stake'].includes(broker) ? h.symbol.toUpperCase() : null),
       quantity: h.quantity, buy_price: h.buyPrice, buy_date: h.buyDate,
       current_price: h.currentPrice ?? null, current_price_updated_at: h.currentPrice != null ? new Date().toISOString() : null,
       reference_price: h.currentPrice ?? h.buyPrice, reference_date: new Date().toISOString().slice(0, 10),
