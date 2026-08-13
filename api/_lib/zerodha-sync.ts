@@ -29,7 +29,7 @@ async function kiteGet(path: string, apiKey: string, accessToken: string) {
   return { ok: resp.ok, status: resp.status, data, bodySample: text.slice(0, 800) };
 }
 
-export default async function handler(req: any, res: any) {
+export async function zerodhaHandler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;

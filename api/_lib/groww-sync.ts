@@ -84,7 +84,7 @@ async function exchangeToken(apiKey: string, apiSecret: string) {
   };
 }
 
-export default async function handler(req: any, res: any) {
+export async function growwHandler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;

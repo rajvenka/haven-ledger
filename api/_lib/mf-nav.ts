@@ -141,7 +141,7 @@ async function fetchLatestNav(schemeCode: string | number): Promise<{ nav: numbe
   return { nav, schemeName: data?.meta?.scheme_name || String(schemeCode), httpStatus: resp.status };
 }
 
-export default async function handler(req: any, res: any) {
+export async function mfNavHandler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;

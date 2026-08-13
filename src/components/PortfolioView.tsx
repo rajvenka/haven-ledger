@@ -647,7 +647,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         // since Yahoo doesn't meaningfully index Indian MF schemes. Matched the same way
         // portfolio-mf-nav.ts matches for the live NAV refresh, so a name found here is
         // guaranteed to also resolve correctly during refresh.
-        const resp = await fetch(`/api/portfolio-mf-search?q=${encodeURIComponent(quoteSearchQuery.trim())}`);
+        const resp = await fetch(`/api/portfolio-mf?action=search&q=${encodeURIComponent(quoteSearchQuery.trim())}`);
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || 'Search failed.');
         setQuoteSearchResults(data.results || []);
@@ -1156,10 +1156,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setWebullConnectStatus('connecting');
     setWebullDebug(null);
     try {
-      const resp = await fetch('/api/portfolio-webull-sync', {
+      const resp = await fetch('/api/portfolio-broker-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'connect', appKey: webullAppKeyInput.trim(), appSecret: webullAppSecretInput.trim(), region: webullRegionInput }),
+        body: JSON.stringify({ broker: 'webull', action: 'connect', appKey: webullAppKeyInput.trim(), appSecret: webullAppSecretInput.trim(), region: webullRegionInput }),
       });
       const data = await resp.json();
       setWebullDebug(data.debug ?? null);
@@ -1184,10 +1184,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const pollWebullToken = async (tokenId: string, portfolioId?: string, attempt = 0) => {
     if (attempt > 60) { setWebullConnectStatus('error'); return; } // ~300s at 5s intervals, matching Webull's own documented window
     try {
-      const resp = await fetch('/api/portfolio-webull-sync', {
+      const resp = await fetch('/api/portfolio-broker-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'check', appKey: webullAppKeyInput.trim(), appSecret: webullAppSecretInput.trim(), region: webullRegionInput, tokenId }),
+        body: JSON.stringify({ broker: 'webull', action: 'check', appKey: webullAppKeyInput.trim(), appSecret: webullAppSecretInput.trim(), region: webullRegionInput, tokenId }),
       });
       const data = await resp.json();
       setWebullDebug(data.debug ?? null);
@@ -1217,10 +1217,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
     try {
       let resp: Response;
       try {
-        resp = await fetch('/api/portfolio-webull-sync', {
+        resp = await fetch('/api/portfolio-broker-sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          body: JSON.stringify({ broker: 'webull',
             action: 'sync',
             appKey: connection.credentials?.app_key,
             appSecret: connection.credentials?.app_secret,
@@ -1267,10 +1267,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setZerodhaSyncError(null);
     setZerodhaDebug(null);
     try {
-      const resp = await fetch('/api/portfolio-zerodha-sync', {
+      const resp = await fetch('/api/portfolio-broker-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: JSON.stringify({ broker: 'zerodha',
           action: 'exchange',
           apiKey: zerodhaApiKeyInput.trim(),
           apiSecret: zerodhaApiSecretInput.trim(),
@@ -1326,10 +1326,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setZerodhaDebug(null);
     setImportPreview(null);
     try {
-      const resp = await fetch('/api/portfolio-zerodha-sync', {
+      const resp = await fetch('/api/portfolio-broker-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: JSON.stringify({ broker: 'zerodha',
           action: 'sync',
           apiKey: connection.credentials?.api_key,
           accessToken: connection.credentials?.access_token,
@@ -1382,10 +1382,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setGrowwSyncError(null);
     try {
       // Verify credentials by obtaining an access token immediately
-      const resp = await fetch('/api/portfolio-groww-sync', {
+      const resp = await fetch('/api/portfolio-broker-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: JSON.stringify({ broker: 'groww',
           action: 'exchange',
           apiKey: growwApiKeyInput.trim(),
           apiSecret: growwApiSecretInput.trim(),
@@ -1428,10 +1428,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setGrowwDebug(null);
     setImportPreview(null);
     try {
-      const resp = await fetch('/api/portfolio-groww-sync', {
+      const resp = await fetch('/api/portfolio-broker-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: JSON.stringify({ broker: 'groww',
           action: 'sync',
           apiKey: connection.credentials?.api_key,
           apiSecret: connection.credentials?.api_secret,
@@ -1496,10 +1496,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const webullConn = portfolioBrokerConnections.find((c: any) => c.broker_type === 'webull');
       let resp: Response;
       try {
-        resp = await fetch('/api/portfolio-etoro-sync', {
+        resp = await fetch('/api/portfolio-broker-sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          body: JSON.stringify({ broker: 'etoro',
             apiKey: connection.credentials?.api_key,
             userKey: connection.credentials?.user_key,
             webullAppKey: webullConn?.credentials?.app_key,
@@ -1812,10 +1812,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
             const ex = String(h.exchange || 'NSE').toUpperCase() === 'BSE' ? 'BSE' : 'NSE';
             return `${ex}_${sym}`;
           });
-          const resp = await fetch('/api/portfolio-groww-sync', {
+          const resp = await fetch('/api/portfolio-broker-sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+            body: JSON.stringify({ broker: 'groww',
               action: 'ltp',
               apiKey: conn.credentials.api_key,
               apiSecret: conn.credentials.api_secret,
@@ -1846,10 +1846,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
       for (const { conn, holdings } of zerodhaGroups.values()) {
         try {
           const instruments = holdings.map(instrumentKey);
-          const qResp = await fetch('/api/portfolio-zerodha-sync', {
+          const qResp = await fetch('/api/portfolio-broker-sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'quote', apiKey: conn.credentials.api_key, accessToken: conn.credentials.access_token, instruments }),
+            body: JSON.stringify({ broker: 'zerodha', action: 'quote', apiKey: conn.credentials.api_key, accessToken: conn.credentials.access_token, instruments }),
           });
           const qData = await qResp.json().catch(() => ({}));
           if (!qResp.ok) throw new Error(qData?.error || 'Zerodha quote failed');
@@ -1911,7 +1911,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       let mfFailed = 0;
       if (mutualFunds.length > 0) {
         const funds = mutualFunds.map(h => ({ id: h.id, isin: h.isin, name: h.symbol }));
-        const mfResp = await fetch('/api/portfolio-mf-nav', {
+        const mfResp = await fetch('/api/portfolio-mf?action=nav', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ funds }),

@@ -94,7 +94,7 @@ async function webullSnapshotFetch(host: string, appKey: string, appSecret: stri
   return { prices: result, debug };
 }
 
-export default async function handler(req: any, res: any) {
+export async function etoroHandler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;

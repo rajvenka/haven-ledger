@@ -428,7 +428,7 @@ export function usePaymentState() {
   // that fund's underlying stock holdings), caches every stock row, and returns the result
   // so the caller can update its own view immediately without waiting for a full reload.
   const fetchAndCacheMfHoldings = async (isin: string | null, name: string) => {
-    const resp = await fetch('/api/portfolio-mf-holdings', {
+    const resp = await fetch('/api/portfolio-mf?action=holdings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ isin, name }),

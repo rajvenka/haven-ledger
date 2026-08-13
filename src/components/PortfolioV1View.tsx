@@ -1162,10 +1162,10 @@ export default function PortfolioV1View({
       }
 
       if (selectedBroker === 'groww') {
-        const resp = await fetch('/api/portfolio-groww-sync', {
+        const resp = await fetch('/api/portfolio-broker-sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          body: JSON.stringify({ broker: 'groww',
             action: 'exchange',
             apiKey: credFields.api_key?.trim(),
             apiSecret: credFields.api_secret?.trim(),
@@ -1193,10 +1193,10 @@ export default function PortfolioV1View({
         const appKey = credFields.app_key.trim();
         const appSecret = credFields.app_secret.trim();
         setConnectOk('Webull: starting verification — approve on your phone if prompted…');
-        const connectResp = await fetch('/api/portfolio-webull-sync', {
+        const connectResp = await fetch('/api/portfolio-broker-sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'connect', appKey, appSecret, region }),
+          body: JSON.stringify({ broker: 'webull', action: 'connect', appKey, appSecret, region }),
         });
         const connectData = await connectResp.json().catch(() => ({}));
         if (!(connectData.status === 'pending_verification' && connectData.tokenId)) {
@@ -1208,10 +1208,10 @@ export default function PortfolioV1View({
         let expiresAt: string | null = null;
         for (let attempt = 0; attempt < 60; attempt++) {
           await new Promise((r) => setTimeout(r, 5000));
-          const checkResp = await fetch('/api/portfolio-webull-sync', {
+          const checkResp = await fetch('/api/portfolio-broker-sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'check', appKey, appSecret, region, tokenId: connectData.tokenId }),
+            body: JSON.stringify({ broker: 'webull', action: 'check', appKey, appSecret, region, tokenId: connectData.tokenId }),
           });
           const checkData = await checkResp.json().catch(() => ({}));
           if (checkData.verified && checkData.token) {
@@ -1264,10 +1264,10 @@ export default function PortfolioV1View({
 
       if (type === 'etoro') {
         const webullConn = (portfolioBrokerConnections || []).find((c: any) => c.broker_type === 'webull');
-        const resp = await fetch('/api/portfolio-etoro-sync', {
+        const resp = await fetch('/api/portfolio-broker-sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          body: JSON.stringify({ broker: 'etoro',
             apiKey: cred.api_key,
             userKey: cred.user_key,
             webullAppKey: webullConn?.credentials?.app_key,
@@ -1293,10 +1293,10 @@ export default function PortfolioV1View({
           return `${ex}_${sym}`;
         });
         if (instruments.length === 0) throw new Error('No Groww holdings to price in this book.');
-        const resp = await fetch('/api/portfolio-groww-sync', {
+        const resp = await fetch('/api/portfolio-broker-sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          body: JSON.stringify({ broker: 'groww',
             action: 'ltp',
             apiKey: cred.api_key,
             apiSecret: cred.api_secret,
@@ -1320,10 +1320,10 @@ export default function PortfolioV1View({
         );
         const instruments = holdings.map((h: any) => `${h.exchange || 'NSE'}:${h.ticker || h.symbol}`);
         if (instruments.length === 0) throw new Error('No Zerodha holdings to price in this book.');
-        const resp = await fetch('/api/portfolio-zerodha-sync', {
+        const resp = await fetch('/api/portfolio-broker-sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          body: JSON.stringify({ broker: 'zerodha',
             action: 'quote',
             apiKey: cred.api_key,
             accessToken: cred.access_token,
@@ -1344,10 +1344,10 @@ export default function PortfolioV1View({
         if (!cred.token) {
           throw new Error('Webull token missing — re-connect and approve on your phone, then Sync again.');
         }
-        const resp = await fetch('/api/portfolio-webull-sync', {
+        const resp = await fetch('/api/portfolio-broker-sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          body: JSON.stringify({ broker: 'webull',
             action: 'sync',
             appKey: cred.app_key,
             appSecret: cred.app_secret,
