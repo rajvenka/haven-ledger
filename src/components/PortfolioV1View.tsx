@@ -1538,7 +1538,7 @@ export default function PortfolioV1View({
                 type="button"
                 onClick={openImport}
                 disabled={isReadOnly}
-                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold text-teal-800 dark:text-teal-200 hover:bg-teal-200/70 dark:hover:bg-teal-900/50 disabled:opacity-50 transition-all"
+                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold bg-teal-600 text-white shadow-md shadow-teal-600/30 hover:bg-teal-700 disabled:opacity-50 transition-all"
                 title="Import holdings from CSV / broker export"
               >
                 Import
@@ -2391,6 +2391,14 @@ export default function PortfolioV1View({
                       </select>
                     </label>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => { setConnectOpen(false); openImport(); }}
+                    className="w-full mb-2 py-2.5 rounded-xl text-[12px] font-black bg-teal-600 text-white hover:bg-teal-700"
+                  >
+                    Import CSV / broker export
+                  </button>
+                  <p className="text-[10px] text-slate-400 mb-2">Or connect a broker for live Refresh:</p>
                   <div className="grid grid-cols-2 gap-2">
                     {(Object.keys(BROKER_META) as BrokerType[]).map((key) => {
                       const m = BROKER_META[key];
