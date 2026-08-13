@@ -244,11 +244,10 @@ export default function ReportsView(props: ReportsViewProps) {
               <FileBarChart className="w-5 h-5 text-white" />
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-100">Pulse</p>
               <h2 className="text-xl font-black tracking-tight truncate">
                 {workspaceName ? `${workspaceName} Reports` : 'Reports'}
               </h2>
-              <p className="text-[11px] font-semibold text-violet-100/90">Overview · insights · activity · movement</p>
+              <p className="text-[11px] font-semibold text-violet-100/90">Overview · dividends · fees · snapshots</p>
             </div>
           </div>
         </div>
