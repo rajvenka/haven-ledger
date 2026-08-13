@@ -1,4 +1,5 @@
 import PortfolioPnLCalendar from './PortfolioPnLCalendar';
+import { parseBrokerFile, BrokerTemplate, downloadUniversalTemplate } from '../utils/brokerImport';
 /**
  * Portfolio_V1 — ultimate summary-first redesign.
  * Classic PortfolioView remains the full-feature workbench.
@@ -30,7 +31,7 @@ import {
   Trash2,
 } from 'lucide-react';
 
-type BrokerType = 'etoro' | 'ig' | 'webull' | 'zerodha' | 'groww';
+type BrokerType = 'etoro' | 'ig' | 'webull' | 'zerodha' | 'groww' | 'moomoo' | 'tiger' | 'stake';
 
 type CategoryId =
   | 'india_mf'
@@ -65,6 +66,7 @@ interface Props {
   markBrokerConnectionSynced?: (id: string) => Promise<void>;
   updatePortfolioHoldingLivePrice?: (id: string, price: number, previousClose?: number | null, priceSource?: string | null) => Promise<void>;
   snapshotPortfolioDailyPositions?: (currencies?: string[], timezone?: string) => Promise<void>;
+  bulkAddPortfolioHoldings?: (holdings: any[], portfolioId?: string) => Promise<any>;
   loadPortfolioDailyPositions?: (fromDate: string, toDate: string, portfolioId?: string | null) => Promise<any[]>;
   markPriceLookupFailed?: (id: string) => Promise<void>;
 }
@@ -114,6 +116,37 @@ const BROKER_META: Record<
       { key: 'app_secret', label: 'App Secret', placeholder: 'Webull app secret', secret: true },
       { key: 'region', label: 'Region', placeholder: 'au / us / hk (default au)' },
       { key: 'connection_label', label: 'Connection name', placeholder: 'e.g. Webull-Sasi' },
+    ],
+  },
+  moomoo: {
+    label: 'Moomoo',
+    color: 'text-orange-600 dark:text-orange-400',
+    bg: 'bg-orange-50 dark:bg-orange-950/40',
+    ring: 'ring-orange-500',
+    fields: [
+      { key: 'account_id', label: 'Account ID (optional)', placeholder: 'Moomoo account id' },
+      { key: 'api_key', label: 'API Key (optional)', placeholder: 'For future live sync' },
+      { key: 'connection_label', label: 'Connection name', placeholder: 'e.g. Moomoo-AU' },
+    ],
+  },
+  tiger: {
+    label: 'Tiger',
+    color: 'text-amber-700 dark:text-amber-400',
+    bg: 'bg-amber-50 dark:bg-amber-950/40',
+    ring: 'ring-amber-500',
+    fields: [
+      { key: 'account_id', label: 'Account ID (optional)', placeholder: 'Tiger account id' },
+      { key: 'api_key', label: 'API Key (optional)', placeholder: 'For future live sync' },
+      { key: 'connection_label', label: 'Connection name', placeholder: 'e.g. Tiger-AU' },
+    ],
+  },
+  stake: {
+    label: 'Stake',
+    color: 'text-pink-600 dark:text-pink-400',
+    bg: 'bg-pink-50 dark:bg-pink-950/40',
+    ring: 'ring-pink-500',
+    fields: [
+      { key: 'connection_label', label: 'Connection name', placeholder: 'e.g. Stake-AU' },
     ],
   },
 };
@@ -398,6 +431,7 @@ export default function PortfolioV1View({
   updatePortfolioHoldingLivePrice,
   snapshotPortfolioDailyPositions,
   loadPortfolioDailyPositions,
+  bulkAddPortfolioHoldings,
 }: Props) {
   const [portfolioFilter, setPortfolioFilter] = useState<string>('__pending__');
   const [brokerFilter, setBrokerFilter] = useState<string>('All');
@@ -455,6 +489,13 @@ export default function PortfolioV1View({
   const [connectError, setConnectError] = useState<string | null>(null);
   const [connectOk, setConnectOk] = useState<string | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importTemplate, setImportTemplate] = useState<BrokerTemplate>('universal');
+  const [importPortfolioId, setImportPortfolioId] = useState('');
+  const [importBusy, setImportBusy] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [importErr, setImportErr] = useState<string | null>(null);
+
 
   const multiPortfolio = portfolioMode === 'multiple' || (portfolios || []).length > 1;
 
@@ -736,7 +777,7 @@ export default function PortfolioV1View({
 
   /** Card / total performance line respects global Day|$ filters. */
   const perfLabel = moversMode === 'day' ? 'today' : 'all time';
-  const formatBucketPerf = (primary: { pnl: number; pnlPct: number; dayPnl: number; dayPct: number | null; dayCount?: number; currency: string } | null) => {
+  const formatBucketPerf = (primary: { pnl: number; pnlPct: number; dayPnl: number; dayPct: number | null; currency: string } | null) => {
     if (!primary) return { text: '—', positive: true };
     if (moversMode === 'day') {
       if (primary.dayPct == null && !(primary.dayPnl || primary.dayCount)) {
@@ -961,6 +1002,50 @@ export default function PortfolioV1View({
     }
     return rows.sort((a, b) => a.dist - b.dist);
   }, [filtered, lotsByHoldingId]);
+
+  const openImport = () => {
+    setImportOpen(true);
+    setImportMsg(null);
+    setImportErr(null);
+    setImportPortfolioId(
+      portfolioFilter !== 'All' && portfolioFilter !== '__pending__'
+        ? portfolioFilter
+        : portfolios?.[0]?.id || ''
+    );
+  };
+
+  const runPulseImport = async (file: File) => {
+    if (!bulkAddPortfolioHoldings || isReadOnly) return;
+    setImportBusy(true);
+    setImportErr(null);
+    setImportMsg(null);
+    try {
+      const parsed = await parseBrokerFile(file, importTemplate);
+      if (!parsed.length) throw new Error('No holdings found in file');
+      const buyDate = new Date().toISOString().slice(0, 10);
+      const rows = parsed.map((p) => ({
+        holdingType: (p.holdingType === 'mutual_fund' ? 'mutual_fund' : p.holdingType === 'options' ? 'options' : 'stock') as any,
+        broker: p.broker || (importTemplate === 'moomoo' ? 'Moomoo' : importTemplate === 'tiger' ? 'Tiger' : importTemplate === 'stake' ? 'Stake' : 'Import'),
+        symbol: p.symbol,
+        isin: p.isin,
+        folioNumber: p.folioNumber,
+        exchange: p.exchange || '',
+        quantity: p.quantity,
+        buyPrice: p.buyPrice || 0,
+        buyDate,
+        currentPrice: p.currentPrice,
+        source: p.source || p.broker,
+        currency: p.currency || 'USD',
+        ticker: p.symbol,
+      }));
+      await bulkAddPortfolioHoldings(rows, importPortfolioId || undefined);
+      setImportMsg(`Imported ${rows.length} holding${rows.length === 1 ? '' : 's'}.`);
+    } catch (e: any) {
+      setImportErr(e?.message || 'Import failed');
+    } finally {
+      setImportBusy(false);
+    }
+  };
 
   const openConnect = () => {
     setConnectOpen(true);
@@ -1449,6 +1534,15 @@ export default function PortfolioV1View({
             </div>
             {/* Connect + Refresh pinned — not inside horizontal scroller */}
             <div className="shrink-0 inline-flex items-center gap-0.5 p-0.5 rounded-full bg-teal-100/90 dark:bg-teal-950/50 border border-teal-200/70 dark:border-teal-800/60">
+              <button
+                type="button"
+                onClick={openImport}
+                disabled={isReadOnly}
+                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold text-teal-800 dark:text-teal-200 hover:bg-teal-200/70 dark:hover:bg-teal-900/50 disabled:opacity-50 transition-all"
+                title="Import holdings from CSV / broker export"
+              >
+                Import
+              </button>
               <button
                 type="button"
                 onClick={openConnect}
@@ -2142,7 +2236,89 @@ export default function PortfolioV1View({
       </div>
 
       {/* Connect modal */}
-      {connectOpen && (
+      
+      {importOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-3" onClick={() => !importBusy && setImportOpen(false)}>
+          <div className="w-full sm:max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 space-y-3 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-[14px] font-black text-slate-900 dark:text-white">Import holdings</h3>
+              <button type="button" onClick={() => setImportOpen(false)} className="text-slate-400 text-[12px] font-bold">Close</button>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Upload a broker export or universal CSV. Moomoo &amp; Tiger: use Symbol, Quantity, Avg Cost, Market Price, Currency columns.
+            </p>
+            {(portfolios || []).length > 0 && (
+              <div>
+                <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Portfolio book</p>
+                <select
+                  value={importPortfolioId}
+                  onChange={(e) => setImportPortfolioId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl text-[12px] bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
+                >
+                  {(portfolios || []).map((p: any) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div>
+              <p className="text-[9px] font-black uppercase text-slate-400 mb-1.5">Template</p>
+              <div className="flex flex-wrap gap-1.5">
+                {([
+                  ['universal', 'Universal'],
+                  ['stake', 'Stake'],
+                  ['zerodha', 'Zerodha'],
+                  ['groww_stocks', 'Groww'],
+                  ['groww_mf', 'Groww MF'],
+                  ['moomoo', 'Moomoo'],
+                  ['tiger', 'Tiger'],
+                ] as [BrokerTemplate, string][]).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setImportTemplate(id)}
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                      importTemplate === id
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {importTemplate === 'universal' && (
+              <button type="button" onClick={() => downloadUniversalTemplate()} className="text-[11px] font-bold text-teal-600">
+                Download universal CSV template
+              </button>
+            )}
+            <label className={`block w-full py-3 rounded-xl border-2 border-dashed text-center text-[12px] font-bold cursor-pointer ${
+              importBusy ? 'opacity-50 pointer-events-none' : 'border-teal-300 dark:border-teal-800 text-teal-700 dark:text-teal-300 hover:bg-teal-50/50 dark:hover:bg-teal-950/20'
+            }`}>
+              {importBusy ? 'Importing…' : 'Choose file (CSV / XLSX)'}
+              <input
+                type="file"
+                accept=".csv,.xlsx,.xls,.tsv,text/csv"
+                className="hidden"
+                disabled={importBusy}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = '';
+                  if (f) runPulseImport(f);
+                }}
+              />
+            </label>
+            {importMsg && <p className="text-[11px] font-bold text-emerald-600">{importMsg}</p>}
+            {importErr && <p className="text-[11px] font-bold text-rose-600">{importErr}</p>}
+            <p className="text-[10px] text-slate-400">
+              Live Sync (Connect → Refresh) updates prices for linked brokers. Full position import uses this Import flow — including Moomoo &amp; Tiger CSV.
+            </p>
+          </div>
+        </div>
+      )}
+
+{connectOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
           <div className="w-full sm:max-w-md bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-t-3xl">
