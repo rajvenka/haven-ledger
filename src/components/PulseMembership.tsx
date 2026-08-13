@@ -97,8 +97,11 @@ export default function PulseMembership({
       <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 space-y-2">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
+            <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
               Membership
+              <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-violet-600 text-white">
+                Pulse
+              </span>
             </h1>
             <p className="text-[10px] text-slate-400 font-bold">
               {rewardsPerks.length} memberships · {giftCards.length} gift cards
