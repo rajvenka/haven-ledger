@@ -285,7 +285,7 @@ export default function PortfolioPnLCalendar({
   };
 
   return (
-    <div className="w-full min-w-0 max-w-full overflow-x-hidden space-y-3 box-border">
+    <div className="w-full min-w-0 max-w-full overflow-x-hidden space-y-3 box-border isolate">
       {/* Title + mode controls */}
       <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
         <div className="flex items-center gap-2 min-w-0">
