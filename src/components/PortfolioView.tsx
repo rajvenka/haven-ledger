@@ -2620,7 +2620,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
               <select
                 value={targetPortfolioId}
                 onChange={(e) => { setBrokerConnectPortfolioId(e.target.value); setBrokerEditingType(null); }}
-                className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-semibold appearance-none shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
               >
                 {usAuList.map((p: any) => <option key={p.id || 'ws'} value={p.id}>{p.name}{p.currency ? ` (${p.currency})` : ''}</option>)}
               </select>
@@ -2919,7 +2919,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <select
                   value={targetPortfolioId}
                   onChange={(e) => { setZerodhaConnectPortfolioId(e.target.value); setIndiaBrokerEditing(false); }}
-                  className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-semibold appearance-none shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                 >
                   {indiaList.map((p: any) => <option key={p.id || 'ws'} value={p.id}>{p.name}{p.currency ? ` (${p.currency})` : ''}</option>)}
                 </select>
@@ -2933,7 +2933,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                     value={connectionLabelInput}
                     onChange={(e) => setConnectionLabelInput(e.target.value)}
                     placeholder="Connection name (e.g. Zerodha-1)"
-                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-semibold appearance-none shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                   />
                   <input
                     type="text"
@@ -3120,21 +3120,21 @@ export default function PortfolioView(props: PortfolioViewProps) {
                     placeholder="Connection name (e.g. Groww-1)"
                     value={connectionLabelInput}
                     onChange={(e) => setConnectionLabelInput(e.target.value)}
-                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-semibold appearance-none shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                   />
                   <input
                     type="password"
                     placeholder="Groww API Key"
                     value={growwApiKeyInput}
                     onChange={(e) => setGrowwApiKeyInput(e.target.value)}
-                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-semibold appearance-none shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                   />
                   <input
                     type="password"
                     placeholder="Groww API Secret"
                     value={growwApiSecretInput}
                     onChange={(e) => setGrowwApiSecretInput(e.target.value)}
-                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-semibold appearance-none shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                   />
                   <p className="text-[9px] text-slate-400">Stocks only via API. Mutual funds: use CSV import (groww_mf).</p>
                   <div className="flex gap-2">
@@ -3216,7 +3216,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <select
               value={cashBalancePortfolioId || portfolios[0]?.id || ''}
               onChange={(e) => { setCashBalancePortfolioId(e.target.value); setEditingCashLocation(null); }}
-              className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+              className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-semibold appearance-none shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
             >
               {portfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
@@ -3287,7 +3287,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <select
                   value={baselinePortfolioId ?? ''}
                   onChange={(e) => { setBookedPlPortfolioId(e.target.value); setEditingBookedPlBaseline(false); }}
-                  className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-semibold appearance-none shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                 >
                   {portfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
@@ -3364,7 +3364,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 <select
                   value={projPortfolioId ?? ''}
                   onChange={(e) => { setProjectedBalancePortfolioId(e.target.value); setEditingProjectedBankBalance(false); }}
-                  className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-semibold appearance-none shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                 >
                   {portfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
@@ -3377,7 +3377,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                     onChange={(e) => setProjectedBankBalanceAmountInput(e.target.value)}
                     placeholder="Amount"
                     autoFocus
-                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-semibold appearance-none shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                   />
                   <div className="flex gap-1.5">
                     <button
@@ -3727,10 +3727,38 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   <select
                     value={importPortfolioId || defaultPortfolioId}
                     onChange={(e) => setImportPortfolioId(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
+                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-semibold appearance-none shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                   >
                     {portfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.currency})</option>)}
                   </select>
+                  {(() => {
+                    const pid = importPortfolioId || defaultPortfolioId;
+                    const linked = (portfolioBrokerConnections || []).filter((c: any) => String(c.portfolio_id || '') === String(pid || ''));
+                    if (linked.length === 0) return null;
+                    return (
+                      <div className="rounded-xl border border-indigo-100 dark:border-indigo-900/40 bg-indigo-50/50 dark:bg-indigo-950/20 p-2.5 space-y-1.5">
+                        <p className="text-[9px] font-black uppercase tracking-wider text-indigo-500">Linked brokers — sync without leaving Import</p>
+                        {linked.map((conn: any) => (
+                          <div key={conn.id} className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate">{conn.connection_label || conn.broker_type}</span>
+                            <button
+                              type="button"
+                              disabled={etoroSyncing || webullSyncing || zerodhaSyncing || growwSyncing}
+                              onClick={() => {
+                                if (conn.broker_type === 'webull') handleWebullSync(conn);
+                                else if (conn.broker_type === 'etoro') handleEtoroSync(conn);
+                                else if (conn.broker_type === 'zerodha') handleZerodhaSync(conn);
+                                else if (conn.broker_type === 'groww') handleGrowwSync(conn);
+                              }}
+                              className="shrink-0 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer"
+                            >
+                              {(conn.broker_type === 'webull' && webullSyncing) || (conn.broker_type === 'etoro' && etoroSyncing) || (conn.broker_type === 'zerodha' && zerodhaSyncing) || (conn.broker_type === 'groww' && growwSyncing) ? 'Syncing…' : 'Sync'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   <button
                     type="button"
                     onClick={() => setImportPortfolioConfirmed(true)}
@@ -3742,9 +3770,37 @@ export default function PortfolioView(props: PortfolioViewProps) {
               ) : (
               <>
               {portfolioMode === 'multiple' && (
-                <div className="flex items-center justify-between bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900 rounded-lg px-3 py-2">
-                  <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-400">Step 2 of 2 - importing into: {portfolios.find((p: any) => p.id === (importPortfolioId || defaultPortfolioId))?.name}</span>
-                  <button type="button" onClick={() => setImportPortfolioConfirmed(false)} className="text-[9px] font-bold text-indigo-500 hover:text-indigo-600 cursor-pointer shrink-0">Change</button>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900 rounded-2xl px-3 py-2">
+                    <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-400">Step 2 of 2 - importing into: {portfolios.find((p: any) => p.id === (importPortfolioId || defaultPortfolioId))?.name}</span>
+                    <button type="button" onClick={() => setImportPortfolioConfirmed(false)} className="text-[9px] font-bold text-indigo-500 hover:text-indigo-600 cursor-pointer shrink-0">Change</button>
+                  </div>
+                  {(() => {
+                    const pid = importPortfolioId || defaultPortfolioId;
+                    const linked = (portfolioBrokerConnections || []).filter((c: any) => String(c.portfolio_id || '') === String(pid || ''));
+                    if (linked.length === 0) return null;
+                    return (
+                      <div className="flex flex-wrap gap-1.5">
+                        {linked.map((conn: any) => (
+                          <button
+                            key={conn.id}
+                            type="button"
+                            disabled={etoroSyncing || webullSyncing || zerodhaSyncing || growwSyncing}
+                            onClick={() => {
+                              if (conn.broker_type === 'webull') handleWebullSync(conn);
+                              else if (conn.broker_type === 'etoro') handleEtoroSync(conn);
+                              else if (conn.broker_type === 'zerodha') handleZerodhaSync(conn);
+                              else if (conn.broker_type === 'groww') handleGrowwSync(conn);
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 cursor-pointer disabled:opacity-50"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                            Sync {conn.connection_label || conn.broker_type}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
               <div className="flex gap-1.5 flex-wrap">
