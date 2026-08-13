@@ -114,11 +114,26 @@ const fmtCur = (n: number, currency: string = 'INR') => {
 // rather than the reverse (how many dollars is one rupee). Falls back to the raw amount
 // unconverted if no rate has been set yet, rather than silently hiding data - better to
 // show something clearly than nothing at all.
-const convertToBase = (amount: number, fromCurrency: string, baseCurrency: string, rates: any[]): number => {
-  if (fromCurrency === baseCurrency) return amount;
-  const rate = rates.find((r: any) => r.currency === fromCurrency)?.rate_to_base;
-  if (!rate) return amount;
-  return amount * rate;
+// Fixed cross-currency conversion bug: previously only worked correctly when converting TO
+// the workspace's actual base currency, since rate_to_base is always defined relative to
+// that one fixed base. Called with a single-portfolio's own currency as the target (e.g.
+// AUD for a portfolio holding USD positions too), it silently applied the wrong rate -
+// confirmed ~67x inflation for a real case (USD holding inside an AUD-labeled portfolio,
+// workspace base INR: was multiplying by the USD->INR rate directly instead of properly
+// cross-converting via USD->INR->AUD). Now takes the true workspace base as an explicit
+// parameter so it can distinguish "target is the real base" from "target is some other
+// display currency" and cross-convert correctly in the latter case.
+// Also fixed the dangerous silent fallback: a missing rate used to return the raw,
+// unconverted amount as-is (e.g. treating 1 GBP as 1 INR) with no way to detect it had
+// happened. Now returns null on a missing rate so callers can exclude the amount and warn,
+// rather than silently corrupting the total.
+const convertToBase = (amount: number, fromCurrency: string, targetCurrency: string, rates: any[], workspaceBaseCurrency: string): number => {
+  if (fromCurrency === targetCurrency) return amount;
+  const rateFor = (ccy: string) => ccy === workspaceBaseCurrency ? 1 : rates.find((r: any) => r.currency === ccy)?.rate_to_base;
+  const fromRate = rateFor(fromCurrency);
+  const toRate = rateFor(targetCurrency);
+  if (fromRate == null || toRate == null) return 0; // excluded, not silently mis-converted - detected separately for the warning banner
+  return (amount * fromRate) / toRate;
 };
 
 // eToro commodities/CFDs must never go through Yahoo/Webull equity snapshots.
@@ -2175,12 +2190,23 @@ export default function PortfolioView(props: PortfolioViewProps) {
   // whose portfolios are genuinely single-currency - nothing changes for them.
   const convHeader = (h: any, val: number) => {
     const from = headerHoldingCurrency(h);
-    return from === headerDisplayCurrency ? val : convertToBase(val, from, headerDisplayCurrency, workspaceCurrencyRates);
+    return from === headerDisplayCurrency ? val : convertToBase(val, from, headerDisplayCurrency, workspaceCurrencyRates, baseCurrency);
   };
   const fmtHeader = (n: number) => portfolioMode === 'multiple' ? fmtCur(n, headerDisplayCurrency) : fmt(n);
 
-  const totalContributed = headerContributions.reduce((s: number, c: any) => s + Number(c.amount), 0);
-  const totalWithdrawn = headerWithdrawals.reduce((s: number, w: any) => s + Number(w.amount), 0);
+  // Contributions/withdrawals previously summed raw with no currency conversion at all -
+  // wrong whenever "All" (or any multi-currency selection) spans portfolios/records in
+  // different currencies. Each contribution's own currency field, falling back to the
+  // portfolio it belongs to, then the workspace base as a last resort.
+  const contribCurrency = (c: any) => c.currency || portfolios.find((p: any) => p.id === (c.portfolio_id ?? null))?.currency || baseCurrency;
+  const totalContributed = headerContributions.reduce((s: number, c: any) => {
+    const ccy = contribCurrency(c);
+    return s + (ccy === headerDisplayCurrency ? Number(c.amount) : convertToBase(Number(c.amount), ccy, headerDisplayCurrency, workspaceCurrencyRates, baseCurrency));
+  }, 0);
+  const totalWithdrawn = headerWithdrawals.reduce((s: number, w: any) => {
+    const ccy = contribCurrency(w);
+    return s + (ccy === headerDisplayCurrency ? Number(w.amount) : convertToBase(Number(w.amount), ccy, headerDisplayCurrency, workspaceCurrencyRates, baseCurrency));
+  }, 0);
   const netContributed = totalContributed - totalWithdrawn;
   const totalInvestedActive = filteredActiveHoldings.reduce((s, h) => s + convHeader(h, actualInvestment(h)), 0);
   // Raw, full-exposure figures for leveraged holdings specifically - what "Total Stock
@@ -2256,31 +2282,57 @@ export default function PortfolioView(props: PortfolioViewProps) {
     // misleading auto-calculated figure.
     const isLeveragedPortfolio = portfolioHoldingsForPid.some((h: any) => h.leverage != null && Number(h.leverage) > 1);
     if (isLeveragedPortfolio) return total;
+    // Cash balances/projected amounts/contributions have no currency field of their own -
+    // they're scoped by portfolio_id, so the portfolio's own declared currency is the real
+    // source of truth for what unit these figures are actually in. Previously summed raw
+    // with no conversion at all - wrong whenever the display currency differs from this
+    // specific portfolio's own currency (e.g. "All" selected while this portfolio is USD).
+    const pCurrency = portfolios.find((p: any) => p.id === pid)?.currency || baseCurrency;
+    const toDisplay = (v: number) => pCurrency === headerDisplayCurrency ? v : convertToBase(v, pCurrency, headerDisplayCurrency, workspaceCurrencyRates, baseCurrency);
     const cashRows = portfolioCashBalances.filter((c: any) => (c.portfolio_id ?? null) === (pid ?? null));
     const cashSum = cashRows.reduce((s: number, c: any) => s + Number(c.amount), 0);
     const cashLatest = cashRows.reduce((latest: string | null, c: any) => (!latest || c.updated_at > latest) ? c.updated_at : latest, null as string | null);
     const projectedRow = portfolioProjectedBankBalances.find((p: any) => (p.portfolio_id ?? null) === (pid ?? null));
     if (projectedRow && (!cashLatest || projectedRow.updated_at > cashLatest)) {
-      return total + Number(projectedRow.projected_amount);
+      return total + toDisplay(Number(projectedRow.projected_amount));
     }
     if (cashLatest && cashSum !== 0) {
-      return total + cashSum;
+      return total + toDisplay(cashSum);
     }
     // Neither manual source has a meaningful value for this portfolio (never set, or every
     // entry sums to exactly zero - which almost never reflects an actually-maintained zero
     // balance, more likely a leftover placeholder) - fall back to the auto-calculated figure
     // rather than showing a misleading zero.
-    const pNetContributed = portfolioContributions.filter((c: any) => (c.portfolio_id ?? null) === (pid ?? null)).reduce((s: number, c: any) => s + Number(c.amount), 0)
-      - portfolioWithdrawals.filter((w: any) => (w.portfolio_id ?? null) === (pid ?? null)).reduce((s: number, w: any) => s + Number(w.amount), 0);
+    const pNetContributed = toDisplay(portfolioContributions.filter((c: any) => (c.portfolio_id ?? null) === (pid ?? null)).reduce((s: number, c: any) => s + Number(c.amount), 0)
+      - portfolioWithdrawals.filter((w: any) => (w.portfolio_id ?? null) === (pid ?? null)).reduce((s: number, w: any) => s + Number(w.amount), 0));
     const pActiveCostBasis = portfolioHoldingsForPid.reduce((s, h) => s + convHeader(h, actualInvestment(h)), 0);
     return total + (pNetContributed - pActiveCostBasis + getPortfolioBookedPL(pid));
   }, 0);
   const currentValueActive = filteredActiveHoldings.reduce((s, h) => s + convHeader(h, actualCurrentValue(h)), 0);
   const unrealizedGain = currentValueActive - totalInvestedActive;
-  const realizedGain = soldHoldings.reduce((s, h) => s + (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity), 0);
-  const totalDividends = portfolioDividends.reduce((s, d) => s + Number(d.amount), 0);
-  const totalFees = portfolioFees.reduce((s, f) => s + Number(f.amount), 0);
-  const totalInvestedAllTime = totalInvestedActive + soldHoldings.reduce((s, h) => s + Number(h.buy_price) * Number(h.quantity), 0);
+  // sold holdings carry their own currency directly (from portfolio_holdings); dividends and
+  // fees don't, so their portfolio's own declared currency is the source of truth for them,
+  // same reasoning as balanceCash above. Previously all four of these summed raw with no
+  // conversion at all - wrong whenever these span multiple currencies.
+  const recordCurrencyByPortfolio = (portfolioId: any) => portfolios.find((p: any) => p.id === (portfolioId ?? null))?.currency || baseCurrency;
+  const realizedGain = soldHoldings.reduce((s, h) => {
+    const ccy = h.currency || recordCurrencyByPortfolio(h.portfolio_id);
+    const val = (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity);
+    return s + (ccy === headerDisplayCurrency ? val : convertToBase(val, ccy, headerDisplayCurrency, workspaceCurrencyRates, baseCurrency));
+  }, 0);
+  const totalDividends = portfolioDividends.reduce((s, d: any) => {
+    const ccy = recordCurrencyByPortfolio(d.portfolio_id);
+    return s + (ccy === headerDisplayCurrency ? Number(d.amount) : convertToBase(Number(d.amount), ccy, headerDisplayCurrency, workspaceCurrencyRates, baseCurrency));
+  }, 0);
+  const totalFees = portfolioFees.reduce((s, f: any) => {
+    const ccy = recordCurrencyByPortfolio(f.portfolio_id);
+    return s + (ccy === headerDisplayCurrency ? Number(f.amount) : convertToBase(Number(f.amount), ccy, headerDisplayCurrency, workspaceCurrencyRates, baseCurrency));
+  }, 0);
+  const totalInvestedAllTime = totalInvestedActive + soldHoldings.reduce((s, h) => {
+    const ccy = h.currency || recordCurrencyByPortfolio(h.portfolio_id);
+    const val = Number(h.buy_price) * Number(h.quantity);
+    return s + (ccy === headerDisplayCurrency ? val : convertToBase(val, ccy, headerDisplayCurrency, workspaceCurrencyRates, baseCurrency));
+  }, 0);
   // Net Gain for a leveraged view = Total Stock Investment - Current Holding Value, which
   // (per the verified relationship above) equals exactly the raw dollar P/L - a cleaner,
   // more direct figure than the cash-portfolio formula, which depends on Balance Cash (now
@@ -4496,7 +4548,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             const holdingCurrency = (h: any) => h.currency || portfolios.find((p: any) => p.id === h.portfolio_id)?.currency || 'INR';
             const conv = (h: any, val: number) => {
               const from = holdingCurrency(h);
-              return from === subtotalCurrency ? val : convertToBase(val, from, subtotalCurrency, workspaceCurrencyRates);
+              return from === subtotalCurrency ? val : convertToBase(val, from, subtotalCurrency, workspaceCurrencyRates, baseCurrency);
             };
             const fmtSub = (n: number) => portfolioMode === 'multiple' ? fmtCur(n, subtotalCurrency) : fmt(n);
             // Same rules as headline Total Stock Investment / Current Holding Value
@@ -5129,7 +5181,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
             const soldHoldingCurrency = (h: any) => h.currency || portfolios.find((p: any) => p.id === h.portfolio_id)?.currency || 'INR';
             const convSold = (h: any, val: number) => {
               const from = soldHoldingCurrency(h);
-              return from === soldDisplayCurrency ? val : convertToBase(val, from, soldDisplayCurrency, workspaceCurrencyRates);
+              return from === soldDisplayCurrency ? val : convertToBase(val, from, soldDisplayCurrency, workspaceCurrencyRates, baseCurrency);
             };
             const fmtSold = (n: number) => portfolioMode === 'multiple' ? fmtCur(n, soldDisplayCurrency) : fmt(n);
             const buyValue = filteredSoldHoldings.reduce((s, h) => s + convSold(h, Number(h.buy_price) * Number(h.quantity)), 0);

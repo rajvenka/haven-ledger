@@ -126,15 +126,14 @@ export default function IncomeView({
     (summaryCurrency === 'AUD' ? 'A$' : summaryCurrency === 'INR' ? '₹' : '$');
 
   const sourcesInDisplayCcy = useMemo(() => {
-    return incomeSources.map((s) => {
-      const monthlyNative = toMonthly(s);
-      const monthly =
-        s.currency === summaryCurrency
-          ? monthlyNative
-          : convertCurrency(monthlyNative, s.currency, summaryCurrency, countries);
-      return { ...s, monthlyDisplay: monthly };
-    });
-  }, [incomeSources, summaryCurrency, countries]);
+    // IncomeSource has no currency field in the database - there's no per-source currency
+    // concept yet, income is always implicitly in the workspace's display currency. This
+    // used to branch on s.currency, which was always undefined, so it silently always took
+    // the "different currency" path and called convertCurrency with an undefined fromCurr -
+    // harmless after the earlier defensive fix (falls through to the raw value unchanged),
+    // but dishonest about what was actually happening. Simplified to match reality.
+    return incomeSources.map((s) => ({ ...s, monthlyDisplay: toMonthly(s) }));
+  }, [incomeSources]);
 
   const sourcesMonthlyTotal = useMemo(
     () => sourcesInDisplayCcy.reduce((sum, s) => sum + (s.monthlyDisplay || 0), 0),
@@ -183,11 +182,8 @@ export default function IncomeView({
   const coveragePct = incomeInPeriod > 0 ? Math.min(999, (expenseInPeriod / incomeInPeriod) * 100) : 0;
 
   const syncMonthlyFromSources = async (list: IncomeSource[]) => {
-    const sum = list.reduce((acc, s) => {
-      const native = toMonthly(s);
-      if (s.currency === summaryCurrency) return acc + native;
-      return acc + convertCurrency(native, s.currency, summaryCurrency, countries);
-    }, 0);
+    // Same simplification as sourcesInDisplayCcy above - no per-source currency field exists.
+    const sum = list.reduce((acc, s) => acc + toMonthly(s), 0);
     await updateMonthlyIncome(String(Math.round(sum * 100) / 100));
     try {
       await updateIncomeMode(list.length > 0 ? 'detailed' : 'simple');
