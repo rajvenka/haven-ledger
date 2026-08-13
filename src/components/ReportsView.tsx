@@ -64,7 +64,7 @@ function InsightCard({ title, items, pctKey, subFn, isOpen, onToggle, fmt, value
   const dataKey = valueKey ?? pctKey;
   const chartData = items.map(h => ({ name: h.symbol.length > 10 ? h.symbol.slice(0, 10) + '…' : h.symbol, pct: h[dataKey] }));
   return (
-    <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-2 shadow-sm">
+    <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-4 space-y-2 shadow-md">
       <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">{title} <span className="text-slate-300 dark:text-slate-600 normal-case font-bold">({items.length})</span></span>
       {items.length === 0 ? (
         <p className="text-[11px] text-slate-300 dark:text-slate-700 py-2">None right now.</p>
@@ -234,17 +234,17 @@ export default function ReportsView(props: ReportsViewProps) {
 
   return (
     <div className="flex-1 flex flex-col overflow-y-auto px-3 sm:px-5 pt-3 sm:pt-4 pb-24 md:pb-4 space-y-4 text-left bg-slate-50 dark:bg-slate-950">
-      <div className="relative overflow-hidden rounded-2xl border border-violet-200/60 dark:border-violet-900/50 bg-gradient-to-br from-violet-50 via-white to-indigo-50/60 dark:from-violet-950/40 dark:via-slate-900 dark:to-indigo-950/30 p-3.5 sm:p-4">
-        <div className="absolute -right-6 -top-6 w-28 h-28 rounded-full bg-violet-400/15 blur-2xl pointer-events-none" />
-        <div className="relative flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-violet-600 text-white flex items-center justify-center shadow-md shadow-violet-600/30">
-            <FileBarChart className="w-4.5 h-4.5" />
+      <div className="rounded-2xl bg-violet-600 text-white p-4 shadow-lg shadow-violet-600/25">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center">
+            <FileBarChart className="w-5 h-5 text-white" />
           </div>
-          <div>
-            <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight leading-tight">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-100">Analytics</p>
+            <h2 className="text-xl font-black tracking-tight truncate">
               {workspaceName ? `${workspaceName} Reports` : 'Reports'}
             </h2>
-            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Allocation · activity · movement · summary</p>
+            <p className="text-[11px] font-semibold text-violet-100/90">Overview · Insights · Activity · Movement · Summary</p>
           </div>
         </div>
       </div>
@@ -258,7 +258,7 @@ export default function ReportsView(props: ReportsViewProps) {
           <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-violet-500/80 dark:text-violet-400/80 w-10">
             Book
           </span>
-          <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-violet-100/80 dark:bg-violet-950/50 border border-violet-200/60 dark:border-violet-900/60">
+          <div className="inline-flex items-center gap-0.5 p-1 rounded-2xl bg-violet-200 dark:bg-violet-950/70 border-2 border-violet-400 dark:border-violet-700">
             <button
               type="button"
               onClick={() => setSelectedReportPortfolios(new Set())}
@@ -288,20 +288,17 @@ export default function ReportsView(props: ReportsViewProps) {
         </div>
       )}
 
-      <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-        <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-violet-500/90 dark:text-violet-400/90 w-10">
-          View
-        </span>
-        <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-violet-100/80 dark:bg-violet-950/50 border border-violet-200/60 dark:border-violet-900/60">
+      <div className="sticky top-0 z-20 -mx-3 sm:-mx-5 px-3 sm:px-5 py-2 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur border-b border-violet-200/60 dark:border-violet-900/40">
+        <div className="flex gap-1 p-1 rounded-2xl bg-violet-100 dark:bg-violet-950/60 border-2 border-violet-300 dark:border-violet-700 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {TABS.map(tab => (
             <button
               type="button"
               key={tab.key}
               onClick={() => setReportTab(tab.key)}
-              className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold transition-all cursor-pointer ${
+              className={`shrink-0 px-3 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wide transition-all cursor-pointer ${
                 reportTab === tab.key
-                  ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30'
-                  : 'text-violet-700/70 dark:text-violet-300/70 hover:text-violet-900 dark:hover:text-violet-100'
+                  ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/40'
+                  : 'text-violet-800 dark:text-violet-200 hover:bg-white/60 dark:hover:bg-violet-900/40'
               }`}
             >
               {tab.label}
@@ -323,7 +320,7 @@ export default function ReportsView(props: ReportsViewProps) {
           const data = Array.from(bySource.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
           const colors = ['#6366f1', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'];
           return (
-            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm">
+            <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-md">
               <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-indigo-500 shrink-0" />Portfolio Allocation (by Source)</span>
               <div className="flex items-center gap-4">
                 <div className="w-32 h-32 shrink-0">
@@ -409,7 +406,7 @@ export default function ReportsView(props: ReportsViewProps) {
           const colors = ['#6366f1', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'];
 
           return (
-            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm">
+            <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-md">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-black text-violet-700 dark:text-violet-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-violet-500 shrink-0" />Investment Breakdown · {levelLabel}</span>
                 {drillPath.length > 0 && (
@@ -543,7 +540,7 @@ export default function ReportsView(props: ReportsViewProps) {
         const currentMetricLabel = isActiveView ? metricLabels[classificationMetric] : soldMetricLabels[classificationSoldMetric];
 
           return (
-          <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-2 shadow-sm">
+          <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-4 space-y-2 shadow-md">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-black text-violet-700 dark:text-violet-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-violet-500 shrink-0" />Classification Performance</span>
               <div className="flex gap-1.5">
@@ -652,7 +649,7 @@ export default function ReportsView(props: ReportsViewProps) {
             .sort((a, b) => a.changePct - b.changePct);
           if (data.length === 0) return null;
           return (
-            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm">
+            <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-md">
               <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-emerald-500 shrink-0" />Price Change by Stock (Since Reference)</span>
               <div className="h-64 overflow-x-auto">
                 <div style={{ minWidth: `${data.length * 55}px`, height: '100%' }}>
@@ -709,7 +706,7 @@ export default function ReportsView(props: ReportsViewProps) {
           ];
 
           return (
-            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-4 shadow-sm">
+            <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-4 space-y-4 shadow-md">
               <div>
                 <span className="text-[10px] font-black text-amber-700 dark:text-amber-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-amber-500 shrink-0" />Target Progress</span>
                 <p className="text-[9px] text-slate-400 mt-0.5">"On/Off Target" compares price progress made vs. time elapsed toward your target date (pacing). Holdings with no target date are shown as On Target with price-only progress.</p>
@@ -961,7 +958,7 @@ export default function ReportsView(props: ReportsViewProps) {
               </p>
             </div>
 
-            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-4 space-y-2.5">
+            <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-4 space-y-2.5 shadow-md">
               <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-indigo-500 shrink-0" />Top 10 Mutual Funds by Value</span>
               {mfByValue.length === 0 ? (
                 <p className="text-[11px] text-slate-400 text-center py-3">No mutual fund holdings in this portfolio.</p>
@@ -1009,7 +1006,7 @@ export default function ReportsView(props: ReportsViewProps) {
               )}
             </div>
 
-            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-4 space-y-2.5">
+            <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-4 space-y-2.5 shadow-md">
               <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-indigo-500 shrink-0" />Top 10 Holdings Across All Funds, by Stock</span>
               {aggregatedStocks.length === 0 ? (
                 <p className="text-[11px] text-slate-400 text-center py-3">No underlying holdings data yet - fetch it from the Portfolio page's MF Holdings tab first.</p>
@@ -1105,7 +1102,7 @@ export default function ReportsView(props: ReportsViewProps) {
               </p>
             </div>
 
-            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-4 space-y-2.5">
+            <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-4 space-y-2.5 shadow-md">
               <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-indigo-500 shrink-0" />Top 10 Common Holdings by Combined Value</span>
               {combinedStocks.length === 0 ? (
                 <p className="text-[11px] text-slate-400 text-center py-3">No overlap found yet - either no stock is held both directly and through a fund, or MF holdings data hasn't been fetched yet (Portfolio page's MF Holdings tab).</p>
@@ -1243,7 +1240,7 @@ export default function ReportsView(props: ReportsViewProps) {
             </DetailBucket>
           );
           return (
-            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm">
+            <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-md">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-indigo-500 shrink-0" />New Stocks Added</span>
                 <span className="text-xs font-black text-slate-900 dark:text-white">{totalCountAllBuckets} stock{totalCountAllBuckets !== 1 ? 's' : ''} · {fmt(totalInvestedAllBuckets)}</span>
@@ -1319,7 +1316,7 @@ export default function ReportsView(props: ReportsViewProps) {
             </DetailBucket>
           );
           return (
-            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm">
+            <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-md">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-indigo-500 shrink-0" />Recently Sold</span>
                 <span className="text-xs font-black text-slate-900 dark:text-white">{totalCountAllBuckets} stock{totalCountAllBuckets !== 1 ? 's' : ''} · {fmt(totalSoldAllBuckets)}</span>
@@ -1343,7 +1340,7 @@ export default function ReportsView(props: ReportsViewProps) {
           );
         })()}
 
-        <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm">
+        <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-md">
           <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-indigo-500 shrink-0" />Month-wise Profit & Loss</span>
           {(() => {
             const monthMap = new Map<string, { realized: number; dividends: number; fees: number }>();
@@ -1409,7 +1406,7 @@ export default function ReportsView(props: ReportsViewProps) {
       )}
 
       {reportTab === 'movement' && (
-        <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm">
+        <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-md">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <span className="text-[10px] font-black text-sky-700 dark:text-sky-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-sky-500 shrink-0" />Monthly Movement Report</span>
             {!isReadOnly && (
@@ -1621,7 +1618,7 @@ export default function ReportsView(props: ReportsViewProps) {
         </div>
 
         {/* Money flow: contributed -> deployed -> current value, as a visual progression */}
-        <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm">
+        <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-md">
           <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-indigo-500 shrink-0" />Money Flow</span>
           <div className="space-y-2.5">
             <div>
@@ -1645,7 +1642,7 @@ export default function ReportsView(props: ReportsViewProps) {
 
         {/* What's driving the gain - a chart makes it obvious at a glance which pieces help vs hurt */}
         {plComponents.length > 0 && (
-          <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-2 shadow-sm">
+          <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-4 space-y-2 shadow-md">
             <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-indigo-500 shrink-0" />What's Driving It</span>
             <div style={{ height: Math.max(80, plComponents.length * 32) }}>
               <ResponsiveContainer width="100%" height="100%">
@@ -1663,7 +1660,7 @@ export default function ReportsView(props: ReportsViewProps) {
         )}
 
         {/* Full numbers, always available for anyone who wants the precise breakdown */}
-        <details className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-4 space-y-2 group">
+        <details className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 shadow-md p-4 space-y-2 group">
           <summary className="text-[10px] font-black text-slate-400 uppercase tracking-wider cursor-pointer list-none flex items-center justify-between">
             Full Breakdown
             <ChevronLeft className="w-3.5 h-3.5 -rotate-90 group-open:rotate-90 transition-transform" />
@@ -1681,7 +1678,7 @@ export default function ReportsView(props: ReportsViewProps) {
           </div>
         </details>
 
-        <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm">
+        <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-md">
           <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-indigo-500 shrink-0" />Per-Person Share (based on today's split)</span>
           {currentSplits.filter(s => s.percent > 0).length > 0 && (
             <div className="h-32">
@@ -1711,7 +1708,7 @@ export default function ReportsView(props: ReportsViewProps) {
           <p className="text-[9px] text-slate-400 pt-1">Gain split uses today's active percentage — historical contributions are tracked exactly per person in the Portfolio page.</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-2 shadow-sm">
+        <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-4 space-y-2 shadow-md">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Gift className="w-3.5 h-3.5" /> Dividends</span>
             {!isReadOnly && <QuickAddDividend onAdd={addPortfolioDividend} />}
@@ -1749,7 +1746,7 @@ export default function ReportsView(props: ReportsViewProps) {
           })()}
         </div>
 
-        <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-2 shadow-sm">
+        <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-4 space-y-2 shadow-md">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5" /> AMC & Fees</span>
             {!isReadOnly && <QuickAddFee onAdd={addPortfolioFee} />}
