@@ -1746,11 +1746,13 @@ export function usePaymentState() {
   // ---------- Daily P&L positions (portfolio_daily_positions) ----------
   const snapshotPortfolioDailyPositions = async (currencies?: string[], timezone?: string) => {
     if (!activeWorkspaceId) return;
-    const { error } = await supabase.rpc('snapshot_portfolio_daily_positions', {
+    const params: Record<string, unknown> = {
       p_workspace_id: activeWorkspaceId,
-      p_currencies: currencies ?? null,
       p_timezone: timezone ?? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'),
-    });
+    };
+    // Only pass currencies when caller scopes the run — null can break some RPC signatures
+    if (currencies && currencies.length > 0) params.p_currencies = currencies;
+    const { error } = await supabase.rpc('snapshot_portfolio_daily_positions', params);
     if (error) {
       console.error('snapshot_portfolio_daily_positions', error);
       throw error;
