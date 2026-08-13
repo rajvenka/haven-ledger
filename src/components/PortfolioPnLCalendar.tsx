@@ -2,7 +2,7 @@
  * P&L Calendar — daily snapshots from portfolio_daily_positions.
  * Day P&L computed on read (lag market_value by holding), never summed across currencies.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Calendar, ChevronLeft, ChevronRight, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react';
 
 export type DailyPositionRow = {
@@ -24,8 +24,11 @@ export type DailyPositionRow = {
 type DayAgg = {
   date: string;
   currency: string;
-  dayPnl: number;
-  symbols: { symbol: string; dayPnl: number; marketValue: number; broker?: string | null }[];
+  /** null = baseline day (first snapshot, no prior close to compare) */
+  dayPnl: number | null;
+  marketValue: number;
+  symbolCount: number;
+  symbols: { symbol: string; dayPnl: number | null; marketValue: number; broker?: string | null }[];
 };
 
 function money(n: number, ccy: string) {
@@ -54,7 +57,7 @@ function moneyFine(n: number, ccy: string) {
   }
 }
 
-/** Build per-day, per-currency P&L from raw snapshot rows (window lag in JS). */
+/** Build per-day, per-currency aggregates. First snapshot day has dayPnl=null (baseline). */
 export function buildDayAggregates(rows: DailyPositionRow[]): DayAgg[] {
   const byHolding = new Map<string, DailyPositionRow[]>();
   for (const r of rows) {
@@ -62,30 +65,69 @@ export function buildDayAggregates(rows: DailyPositionRow[]): DayAgg[] {
     if (!byHolding.has(key)) byHolding.set(key, []);
     byHolding.get(key)!.push(r);
   }
-  // date+currency → symbols
+
   const map = new Map<string, DayAgg>();
+
+  const ensure = (date: string, currency: string) => {
+    const k = `${date}|${currency}`;
+    if (!map.has(k)) {
+      map.set(k, {
+        date,
+        currency,
+        dayPnl: 0,
+        marketValue: 0,
+        symbolCount: 0,
+        symbols: [],
+      });
+    }
+    return map.get(k)!;
+  };
+
+  // Track whether any lag-based pnl was applied for a day
+  const hasLagPnl = new Set<string>();
+
   for (const list of byHolding.values()) {
     list.sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
     for (let i = 0; i < list.length; i++) {
       const cur = list[i];
+      const ccy = String(cur.currency || 'USD').toUpperCase();
+      const agg = ensure(cur.snapshot_date, ccy);
+      const mv = Number(cur.market_value);
+      if (Number.isFinite(mv)) agg.marketValue += mv;
+      agg.symbolCount += 1;
+
       const prev = i > 0 ? list[i - 1] : null;
-      if (!prev) continue; // first snapshot has no prior day P&L
+      if (!prev) {
+        agg.symbols.push({
+          symbol: cur.symbol,
+          dayPnl: null,
+          marketValue: mv,
+          broker: cur.broker,
+        });
+        continue;
+      }
       const dayPnl = Number(cur.market_value) - Number(prev.market_value);
       if (!Number.isFinite(dayPnl)) continue;
-      const k = `${cur.snapshot_date}|${cur.currency}`;
-      if (!map.has(k)) {
-        map.set(k, { date: cur.snapshot_date, currency: cur.currency, dayPnl: 0, symbols: [] });
-      }
-      const agg = map.get(k)!;
-      agg.dayPnl += dayPnl;
+      const k = `${cur.snapshot_date}|${ccy}`;
+      hasLagPnl.add(k);
+      if (agg.dayPnl == null) agg.dayPnl = 0;
+      agg.dayPnl = (agg.dayPnl || 0) + dayPnl;
       agg.symbols.push({
         symbol: cur.symbol,
         dayPnl,
-        marketValue: Number(cur.market_value),
+        marketValue: mv,
         broker: cur.broker,
       });
     }
   }
+
+  // Mark pure baseline days (no lag contribution) as dayPnl = null
+  for (const [k, agg] of map.entries()) {
+    if (!hasLagPnl.has(k)) {
+      agg.dayPnl = null;
+    }
+  }
+
   return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
@@ -115,21 +157,29 @@ export default function PortfolioPnLCalendar({
   const [mode, setMode] = useState<'month' | 'year'>('month');
   const [cursor, setCursor] = useState(() => {
     const n = new Date();
-    return { y: n.getFullYear(), m: n.getMonth() }; // m 0-11
+    return { y: n.getFullYear(), m: n.getMonth() };
   });
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [snapBusy, setSnapBusy] = useState(false);
+  const [snapError, setSnapError] = useState<string | null>(null);
 
-  const aggs = useMemo(() => {
-    const all = buildDayAggregates(rows);
-    return all.filter((a) => a.currency.toUpperCase() === selectedCurrency.toUpperCase());
-  }, [rows, selectedCurrency]);
+  const filteredRows = useMemo(
+    () => rows.filter((r) => String(r.currency || '').toUpperCase() === selectedCurrency.toUpperCase()),
+    [rows, selectedCurrency]
+  );
+
+  const aggs = useMemo(() => buildDayAggregates(filteredRows), [filteredRows]);
 
   const byDate = useMemo(() => {
     const m = new Map<string, DayAgg>();
     aggs.forEach((a) => m.set(a.date, a));
     return m;
   }, [aggs]);
+
+  const distinctDates = useMemo(
+    () => Array.from(new Set(filteredRows.map((r) => r.snapshot_date))).sort(),
+    [filteredRows]
+  );
 
   const monthLabel = useMemo(() => {
     const d = new Date(cursor.y, cursor.m, 1);
@@ -138,7 +188,7 @@ export default function PortfolioPnLCalendar({
 
   const monthCells = useMemo(() => {
     const first = new Date(cursor.y, cursor.m, 1);
-    const startPad = (first.getDay() + 6) % 7; // Mon=0
+    const startPad = (first.getDay() + 6) % 7;
     const daysInMonth = new Date(cursor.y, cursor.m + 1, 0).getDate();
     const cells: { date: string | null; day: number | null }[] = [];
     for (let i = 0; i < startPad; i++) cells.push({ date: null, day: null });
@@ -155,23 +205,31 @@ export default function PortfolioPnLCalendar({
       const prefix = `${cursor.y}-${String(m + 1).padStart(2, '0')}`;
       let sum = 0;
       let count = 0;
+      let hasPnl = false;
       byDate.forEach((agg, date) => {
         if (date.startsWith(prefix)) {
-          sum += agg.dayPnl;
           count += 1;
+          if (agg.dayPnl != null) {
+            sum += agg.dayPnl;
+            hasPnl = true;
+          }
         }
       });
-      return { m, label: new Date(cursor.y, m, 1).toLocaleString(undefined, { month: 'short' }), sum, count };
+      return { m, label: new Date(cursor.y, m, 1).toLocaleString(undefined, { month: 'short' }), sum, count, hasPnl };
     });
   }, [cursor.y, byDate]);
 
   const monthTotal = useMemo(() => {
     const prefix = `${cursor.y}-${String(cursor.m + 1).padStart(2, '0')}`;
     let sum = 0;
+    let has = false;
     byDate.forEach((agg, date) => {
-      if (date.startsWith(prefix)) sum += agg.dayPnl;
+      if (date.startsWith(prefix) && agg.dayPnl != null) {
+        sum += agg.dayPnl;
+        has = true;
+      }
     });
-    return sum;
+    return has ? sum : null;
   }, [cursor, byDate]);
 
   const drill = selectedDay ? byDate.get(selectedDay) : null;
@@ -190,9 +248,12 @@ export default function PortfolioPnLCalendar({
   const runSnap = async () => {
     if (!onRefreshSnapshot) return;
     setSnapBusy(true);
+    setSnapError(null);
     try {
       await onRefreshSnapshot();
       await onReload?.();
+    } catch (e: any) {
+      setSnapError(e?.message || String(e));
     } finally {
       setSnapBusy(false);
     }
@@ -262,6 +323,29 @@ export default function PortfolioPnLCalendar({
         </div>
       </div>
 
+      {/* Data status banner */}
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 px-3 py-2 text-[10px] text-slate-500 space-y-0.5">
+        <p>
+          <span className="font-bold text-slate-700 dark:text-slate-200">{filteredRows.length}</span> snapshot rows ·{' '}
+          <span className="font-bold text-slate-700 dark:text-slate-200">{distinctDates.length}</span> day(s) for{' '}
+          <span className="font-bold">{selectedCurrency}</span>
+          {distinctDates.length > 0 && (
+            <> · latest <span className="font-bold">{distinctDates[distinctDates.length - 1]}</span></>
+          )}
+        </p>
+        {distinctDates.length === 0 && (
+          <p>
+            No rows in <code className="text-[9px]">portfolio_daily_positions</code> yet. Tap <span className="font-bold">Snapshot now</span> after prices are fresh, or wait for market-close cron.
+          </p>
+        )}
+        {distinctDates.length === 1 && (
+          <p>
+            Only <span className="font-bold">1 trading day</span> captured. Day P&L needs a <span className="font-bold">second day</span> to compare. Today’s cells show portfolio value (baseline); green/red P&L appears from day 2 onward.
+          </p>
+        )}
+        {snapError && <p className="text-rose-600 font-bold">Snapshot failed: {snapError}</p>}
+      </div>
+
       <div className="flex items-center justify-between">
         <button type="button" onClick={() => shift(-1)} className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
           <ChevronLeft className="w-4 h-4" />
@@ -273,10 +357,10 @@ export default function PortfolioPnLCalendar({
           {mode === 'month' && (
             <p
               className={`text-[11px] font-bold tabular-nums ${
-                monthTotal >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                monthTotal == null ? 'text-slate-400' : monthTotal >= 0 ? 'text-emerald-600' : 'text-rose-600'
               }`}
             >
-              {money(monthTotal, selectedCurrency)} month net
+              {monthTotal == null ? 'No day P&L yet this month' : `${money(monthTotal, selectedCurrency)} month net`}
             </p>
           )}
         </div>
@@ -304,19 +388,19 @@ export default function PortfolioPnLCalendar({
                 return <div key={`e-${i}`} className="min-h-[64px] border-t border-r border-slate-50 dark:border-slate-800/50 bg-slate-50/40 dark:bg-slate-950/30" />;
               }
               const agg = byDate.get(c.date);
-              const pnl = agg?.dayPnl;
               const selected = selectedDay === c.date;
+              const pnl = agg?.dayPnl;
               return (
                 <button
                   key={c.date}
                   type="button"
-                  onClick={() => setSelectedDay(c.date)}
+                  onClick={() => agg && setSelectedDay(c.date)}
                   className={`min-h-[64px] border-t border-r border-slate-50 dark:border-slate-800/50 p-1.5 text-left transition-colors ${
-                    selected ? 'bg-violet-50 dark:bg-violet-950/40 ring-2 ring-inset ring-violet-500' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                    selected ? 'bg-violet-50 dark:bg-violet-950/40 ring-2 ring-inset ring-violet-500' : agg ? 'hover:bg-slate-50 dark:hover:bg-slate-800/40' : ''
                   }`}
                 >
                   <p className="text-[10px] font-bold text-slate-500">{c.day}</p>
-                  {pnl != null && Number.isFinite(pnl) ? (
+                  {agg && pnl != null ? (
                     <p
                       className={`text-[10px] sm:text-[11px] font-black tabular-nums mt-0.5 leading-tight ${
                         pnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
@@ -324,6 +408,11 @@ export default function PortfolioPnLCalendar({
                     >
                       {pnl >= 0 ? '+' : ''}
                       {Math.abs(pnl) >= 1000 ? money(pnl, selectedCurrency) : moneyFine(pnl, selectedCurrency)}
+                    </p>
+                  ) : agg ? (
+                    <p className="text-[9px] text-slate-400 mt-0.5 leading-tight">
+                      {money(agg.marketValue, selectedCurrency)}
+                      <span className="block text-[8px] opacity-70">baseline</span>
                     </p>
                   ) : (
                     <p className="text-[9px] text-slate-300 dark:text-slate-600 mt-1">—</p>
@@ -348,10 +437,10 @@ export default function PortfolioPnLCalendar({
               <p className="text-[11px] font-black text-slate-700 dark:text-slate-200">{ym.label}</p>
               <p
                 className={`text-[13px] font-black tabular-nums mt-1 ${
-                  ym.count === 0 ? 'text-slate-300' : ym.sum >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                  ym.count === 0 ? 'text-slate-300' : !ym.hasPnl ? 'text-slate-500' : ym.sum >= 0 ? 'text-emerald-600' : 'text-rose-600'
                 }`}
               >
-                {ym.count === 0 ? '—' : money(ym.sum, selectedCurrency)}
+                {ym.count === 0 ? '—' : ym.hasPnl ? money(ym.sum, selectedCurrency) : `${ym.count}d snap`}
               </p>
               <p className="text-[9px] text-slate-400 mt-0.5">{ym.count} days</p>
             </button>
@@ -359,20 +448,26 @@ export default function PortfolioPnLCalendar({
         </div>
       )}
 
-      {/* Day drill-down */}
       {drill && (
         <div className="rounded-2xl border border-violet-200 dark:border-violet-900/50 bg-violet-50/40 dark:bg-violet-950/20 p-3 space-y-2">
           <div className="flex items-center justify-between gap-2">
             <div>
               <p className="text-[11px] font-black text-slate-900 dark:text-white">{drill.date}</p>
-              <p
-                className={`text-sm font-black tabular-nums ${
-                  drill.dayPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                }`}
-              >
-                {drill.dayPnl >= 0 ? <TrendingUp className="inline w-3.5 h-3.5 mr-1" /> : <TrendingDown className="inline w-3.5 h-3.5 mr-1" />}
-                {moneyFine(drill.dayPnl, drill.currency)}
-              </p>
+              {drill.dayPnl != null ? (
+                <p
+                  className={`text-sm font-black tabular-nums ${
+                    drill.dayPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                  }`}
+                >
+                  {drill.dayPnl >= 0 ? <TrendingUp className="inline w-3.5 h-3.5 mr-1" /> : <TrendingDown className="inline w-3.5 h-3.5 mr-1" />}
+                  {moneyFine(drill.dayPnl, drill.currency)}
+                </p>
+              ) : (
+                <p className="text-sm font-black tabular-nums text-slate-600 dark:text-slate-300">
+                  {moneyFine(drill.marketValue, drill.currency)}{' '}
+                  <span className="text-[10px] font-bold text-slate-400">value (baseline day)</span>
+                </p>
+              )}
             </div>
             <button type="button" onClick={() => setSelectedDay(null)} className="text-[10px] font-bold text-slate-400">
               Close
@@ -380,26 +475,24 @@ export default function PortfolioPnLCalendar({
           </div>
           <ul className="divide-y divide-slate-200/60 dark:divide-slate-800 max-h-56 overflow-y-auto">
             {[...drill.symbols]
-              .sort((a, b) => Math.abs(b.dayPnl) - Math.abs(a.dayPnl))
+              .sort((a, b) => Math.abs(b.dayPnl ?? 0) - Math.abs(a.dayPnl ?? 0))
               .map((s, i) => (
                 <li key={`${s.symbol}-${i}`} className="py-1.5 flex items-center justify-between gap-2 text-[11px]">
                   <div className="min-w-0">
                     <p className="font-bold text-slate-800 dark:text-slate-100 truncate">{s.symbol}</p>
                     {s.broker && <p className="text-[9px] text-slate-400">{s.broker}</p>}
                   </div>
-                  <p className={`font-black tabular-nums shrink-0 ${s.dayPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {moneyFine(s.dayPnl, drill.currency)}
+                  <p
+                    className={`font-black tabular-nums shrink-0 ${
+                      s.dayPnl == null ? 'text-slate-500' : s.dayPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                    }`}
+                  >
+                    {s.dayPnl == null ? moneyFine(s.marketValue, drill.currency) : moneyFine(s.dayPnl, drill.currency)}
                   </p>
                 </li>
               ))}
           </ul>
         </div>
-      )}
-
-      {!loading && aggs.length === 0 && (
-        <p className="text-[12px] text-slate-400 text-center py-6 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
-          No daily snapshots for {selectedCurrency} yet. Cron captures after market close, or tap <span className="font-bold">Snapshot now</span> after refreshing prices.
-        </p>
       )}
     </div>
   );
