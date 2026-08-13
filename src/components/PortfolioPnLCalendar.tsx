@@ -137,6 +137,10 @@ interface Props {
   currencies: string[];
   selectedCurrency: string;
   onCurrencyChange: (ccy: string) => void;
+  /** Books to filter by (eToro Raj, Zerodha, …). Optional. */
+  portfolios?: { id: string; name: string; currency?: string }[];
+  selectedPortfolioId?: string; // 'all' or portfolio uuid
+  onPortfolioChange?: (id: string) => void;
   portfolioLabel?: string;
   onRefreshSnapshot?: () => Promise<void>;
   onReload?: () => Promise<void>;
@@ -149,6 +153,9 @@ export default function PortfolioPnLCalendar({
   currencies,
   selectedCurrency,
   onCurrencyChange,
+  portfolios = [],
+  selectedPortfolioId = 'all',
+  onPortfolioChange,
   portfolioLabel,
   onRefreshSnapshot,
   onReload,
@@ -163,10 +170,28 @@ export default function PortfolioPnLCalendar({
   const [snapBusy, setSnapBusy] = useState(false);
   const [snapError, setSnapError] = useState<string | null>(null);
 
-  const filteredRows = useMemo(
-    () => rows.filter((r) => String(r.currency || '').toUpperCase() === selectedCurrency.toUpperCase()),
-    [rows, selectedCurrency]
-  );
+  const filteredRows = useMemo(() => {
+    return rows.filter((r) => {
+      if (selectedPortfolioId && selectedPortfolioId !== 'all') {
+        if (String(r.portfolio_id || '') !== String(selectedPortfolioId)) return false;
+      }
+      return String(r.currency || '').toUpperCase() === selectedCurrency.toUpperCase();
+    });
+  }, [rows, selectedCurrency, selectedPortfolioId]);
+
+  // Currencies available for the selected book (or all books)
+  const currenciesForBook = useMemo(() => {
+    const scoped =
+      selectedPortfolioId && selectedPortfolioId !== 'all'
+        ? rows.filter((r) => String(r.portfolio_id || '') === String(selectedPortfolioId))
+        : rows;
+    const set = new Set(
+      scoped.map((r) => String(r.currency || '').toUpperCase()).filter(Boolean)
+    );
+    // fall back to parent list if no rows yet
+    if (set.size === 0) currencies.forEach((c) => set.add(c));
+    return Array.from(set).sort();
+  }, [rows, selectedPortfolioId, currencies]);
 
   const aggs = useMemo(() => buildDayAggregates(filteredRows), [filteredRows]);
 
@@ -270,9 +295,45 @@ export default function PortfolioPnLCalendar({
           )}
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
-          {currencies.length > 0 && (
+          {portfolios.length > 0 && onPortfolioChange && (
+            <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-violet-100/80 dark:bg-violet-950/40 border border-violet-200/60 dark:border-violet-900/50 max-w-full overflow-x-auto no-scrollbar">
+              <span className="px-1.5 text-[8px] font-black uppercase tracking-wider text-violet-600/80 dark:text-violet-400/80 shrink-0">
+                Book
+              </span>
+              <button
+                type="button"
+                onClick={() => onPortfolioChange('all')}
+                className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                  selectedPortfolioId === 'all'
+                    ? 'bg-violet-600 text-white shadow-md'
+                    : 'text-violet-800/70 dark:text-violet-300/70'
+                }`}
+              >
+                All
+              </button>
+              {portfolios.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => onPortfolioChange(p.id)}
+                  className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold max-w-[9rem] truncate ${
+                    selectedPortfolioId === p.id
+                      ? 'bg-violet-600 text-white shadow-md'
+                      : 'text-violet-800/70 dark:text-violet-300/70'
+                  }`}
+                  title={p.name}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          )}
+          {currenciesForBook.length > 0 && (
             <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-emerald-100/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-900/50">
-              {currencies.map((ccy) => (
+              <span className="px-1.5 text-[8px] font-black uppercase tracking-wider text-emerald-600/80 dark:text-emerald-400/80 shrink-0">
+                Ccy
+              </span>
+              {currenciesForBook.map((ccy) => (
                 <button
                   key={ccy}
                   type="button"
@@ -327,8 +388,13 @@ export default function PortfolioPnLCalendar({
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 px-3 py-2 text-[10px] text-slate-500 space-y-0.5">
         <p>
           <span className="font-bold text-slate-700 dark:text-slate-200">{filteredRows.length}</span> snapshot rows ·{' '}
-          <span className="font-bold text-slate-700 dark:text-slate-200">{distinctDates.length}</span> day(s) for{' '}
-          <span className="font-bold">{selectedCurrency}</span>
+          <span className="font-bold text-slate-700 dark:text-slate-200">{distinctDates.length}</span> day(s)
+          {selectedPortfolioId && selectedPortfolioId !== 'all' && (
+            <> · <span className="font-bold text-violet-600 dark:text-violet-300">
+              {portfolios.find((p) => p.id === selectedPortfolioId)?.name || 'book'}
+            </span></>
+          )}
+          {' '}· <span className="font-bold">{selectedCurrency}</span>
           {distinctDates.length > 0 && (
             <> · latest <span className="font-bold">{distinctDates[distinctDates.length - 1]}</span></>
           )}
