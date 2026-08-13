@@ -122,6 +122,11 @@ export default function App() {
     addReward,
     updateReward,
     deleteReward,
+    giftCards,
+    addGiftCard,
+    updateGiftCard,
+    redeemGiftCard,
+    deleteGiftCard,
     incomeSources,
     addIncomeSource,
     deleteIncomeSource,
@@ -1766,6 +1771,11 @@ export default function App() {
                 onAddReward={addReward}
                 onUpdateReward={updateReward}
                 onDeleteReward={deleteReward}
+                giftCards={giftCards}
+                onAddGiftCard={addGiftCard}
+                onUpdateGiftCard={updateGiftCard}
+                onRedeemGiftCard={redeemGiftCard}
+                onDeleteGiftCard={deleteGiftCard}
                 isReadOnly={isReadOnly}
               />
             ) : activeTab === 'portfolio' ? (
