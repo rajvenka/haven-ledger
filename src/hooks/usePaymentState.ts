@@ -1742,6 +1742,39 @@ export function usePaymentState() {
 
   // Takes a snapshot of today's portfolio value, grouped by source tag (plus an overall
   // TOTAL row), so it can be compared against a later snapshot in the Monthly Movement Report.
+
+  // ---------- Daily P&L positions (portfolio_daily_positions) ----------
+  const snapshotPortfolioDailyPositions = async (currencies?: string[], timezone?: string) => {
+    if (!activeWorkspaceId) return;
+    const { error } = await supabase.rpc('snapshot_portfolio_daily_positions', {
+      p_workspace_id: activeWorkspaceId,
+      p_currencies: currencies ?? null,
+      p_timezone: timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+    });
+    if (error) {
+      console.error('snapshot_portfolio_daily_positions', error);
+      throw error;
+    }
+  };
+
+  const loadPortfolioDailyPositions = async (fromDate: string, toDate: string, portfolioId?: string | null) => {
+    if (!activeWorkspaceId) return [] as any[];
+    let q = supabase
+      .from('portfolio_daily_positions')
+      .select('*')
+      .eq('workspace_id', activeWorkspaceId)
+      .gte('snapshot_date', fromDate)
+      .lte('snapshot_date', toDate)
+      .order('snapshot_date', { ascending: true });
+    if (portfolioId) q = q.eq('portfolio_id', portfolioId);
+    const { data, error } = await q;
+    if (error) {
+      console.error('loadPortfolioDailyPositions', error);
+      throw error;
+    }
+    return data || [];
+  };
+
   const takePortfolioSnapshot = async (date: string, groups: { label: string; invested: number; current: number }[]) => {
     if (!activeWorkspaceId) throw new Error('Select a workspace first.');
     // Delete any existing snapshot for this date first - taking a snapshot again on the same
@@ -2334,6 +2367,7 @@ export function usePaymentState() {
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
     portfolioHoldings, portfolioDataLoading, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
+    snapshotPortfolioDailyPositions, loadPortfolioDailyPositions,
     portfolioPriceHistory,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
