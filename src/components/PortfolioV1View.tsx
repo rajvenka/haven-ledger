@@ -291,6 +291,13 @@ function dayChangePct(h: any): number | null {
   if (!Number.isFinite(live) || !Number.isFinite(prev) || prev <= 0) return null;
   return ((live - prev) / prev) * 100;
 }
+function dayChangeDollar(h: any): number | null {
+  const live = Number(h.live_price);
+  const prev = Number(h.previous_close);
+  const qty = Number(h.quantity || 0);
+  if (!Number.isFinite(live) || !Number.isFinite(prev) || !Number.isFinite(qty)) return null;
+  return (live - prev) * qty;
+}
 function stopLossDistancePct(h: any): number | null {
   const stop = Number(h.stop_loss_rate);
   const live = livePrice(h);
@@ -337,22 +344,34 @@ function classifyHolding(h: any): CategoryId {
 }
 
 function summarizeBucket(holdings: any[]) {
-  const byCcy: Record<string, { market: number; invested: number; pnl: number; count: number }> = {};
+  const byCcy: Record<
+    string,
+    { market: number; invested: number; pnl: number; dayPnl: number; dayBase: number; count: number; dayCount: number }
+  > = {};
   holdings.forEach((h) => {
     const ccy = String(h.currency || 'USD').toUpperCase();
-    if (!byCcy[ccy]) byCcy[ccy] = { market: 0, invested: 0, pnl: 0, count: 0 };
+    if (!byCcy[ccy]) byCcy[ccy] = { market: 0, invested: 0, pnl: 0, dayPnl: 0, dayBase: 0, count: 0, dayCount: 0 };
     const inv = invested(h);
     const mv = marketValue(h);
     byCcy[ccy].market += mv;
     byCcy[ccy].invested += inv;
     byCcy[ccy].pnl += mv - inv;
     byCcy[ccy].count += 1;
+    const dd = dayChangeDollar(h);
+    if (dd != null) {
+      byCcy[ccy].dayPnl += dd;
+      const prev = Number(h.previous_close);
+      const qty = Number(h.quantity || 0);
+      if (Number.isFinite(prev) && Number.isFinite(qty)) byCcy[ccy].dayBase += prev * qty;
+      byCcy[ccy].dayCount += 1;
+    }
   });
   const tiles = Object.entries(byCcy)
     .map(([currency, v]) => ({
       currency,
       ...v,
       pnlPct: v.invested > 0 ? (v.pnl / v.invested) * 100 : 0,
+      dayPct: v.dayBase > 0 ? (v.dayPnl / v.dayBase) * 100 : null,
     }))
     .sort((a, b) => b.market - a.market);
   return {
@@ -386,8 +405,8 @@ export default function PortfolioV1View({
   const [expandedCategory, setExpandedCategory] = useState<CategoryId | null>(null);
   const [holdingsExpanded, setHoldingsExpanded] = useState(true);
   const [showLotsOnly, setShowLotsOnly] = useState(false);
-  const [moversMode, setMoversMode] = useState<'overall' | 'day'>('overall');
-  const [moversUnit, setMoversUnit] = useState<'pct' | 'dollar'>('pct');
+  const [moversMode, setMoversMode] = useState<'overall' | 'day'>('day');
+  const [moversUnit, setMoversUnit] = useState<'pct' | 'dollar'>('dollar');
   const [showPnlCalendar, setShowPnlCalendar] = useState(false);
   const [pnlCalendarRows, setPnlCalendarRows] = useState<any[]>([]);
   const [pnlCalendarLoading, setPnlCalendarLoading] = useState(false);
@@ -681,22 +700,97 @@ export default function PortfolioV1View({
 
     let market = 0;
     let inv = 0;
+    let dayPnl = 0;
+    let dayBase = 0;
+    let dayCount = 0;
     for (const h of scoped) {
       const nativeCcy = String(h.currency || displayCcy).toUpperCase();
       market += convertAmount(marketValue(h), nativeCcy, displayCcy, workspaceCurrencyRates, baseCurrency);
       inv += convertAmount(invested(h), nativeCcy, displayCcy, workspaceCurrencyRates, baseCurrency);
+      const dd = dayChangeDollar(h);
+      if (dd != null) {
+        dayPnl += convertAmount(dd, nativeCcy, displayCcy, workspaceCurrencyRates, baseCurrency);
+        const prev = Number(h.previous_close);
+        const qty = Number(h.quantity || 0);
+        if (Number.isFinite(prev) && Number.isFinite(qty)) {
+          dayBase += convertAmount(prev * qty, nativeCcy, displayCcy, workspaceCurrencyRates, baseCurrency);
+        }
+        dayCount += 1;
+      }
     }
     const pnlAmt = market - inv;
-    const pnlPct = inv > 0 ? (pnlAmt / inv) * 100 : 0;
+    const pnlPctVal = inv > 0 ? (pnlAmt / inv) * 100 : 0;
+    const dayPctVal = dayBase > 0 ? (dayPnl / dayBase) * 100 : null;
     return {
       displayCcy,
       market,
       invested: inv,
       pnlAmt,
-      pnlPct,
+      pnlPct: pnlPctVal,
+      dayPnl,
+      dayPct: dayPctVal,
+      dayCount,
       count: scoped.length,
     };
   }, [scoped, portfolioFilter, portfolios, viewCurrency, workspaceCurrencyRates, baseCurrency]);
+
+  /** Card / total performance line respects global Day|$ filters. */
+  const perfLabel = moversMode === 'day' ? 'today' : 'all time';
+  const formatBucketPerf = (primary: { pnl: number; pnlPct: number; dayPnl: number; dayPct: number | null; currency: string } | null) => {
+    if (!primary) return { text: '—', positive: true };
+    if (moversMode === 'day') {
+      if (primary.dayPct == null && !(primary.dayPnl || primary.dayCount)) {
+        return { text: '—', positive: true };
+      }
+      if (moversUnit === 'dollar') {
+        const v = primary.dayPnl || 0;
+        return { text: moneyPrecise(v, primary.currency), positive: v >= 0 };
+      }
+      const v = primary.dayPct;
+      if (v == null) return { text: '—', positive: true };
+      return { text: pct(v), positive: v >= 0 };
+    }
+    if (moversUnit === 'dollar') {
+      return { text: moneyPrecise(primary.pnl, primary.currency), positive: primary.pnl >= 0 };
+    }
+    return { text: pct(primary.pnlPct), positive: primary.pnlPct >= 0 };
+  };
+  const formatTotalPerf = () => {
+    if (moversMode === 'day') {
+      if (totalPortfolioTile.dayCount === 0) return { text: '—', positive: true };
+      if (moversUnit === 'dollar') {
+        const v = totalPortfolioTile.dayPnl;
+        return { text: moneyPrecise(v, totalPortfolioTile.displayCcy), positive: v >= 0 };
+      }
+      const v = totalPortfolioTile.dayPct;
+      if (v == null) return { text: '—', positive: true };
+      return { text: pct(v), positive: v >= 0 };
+    }
+    if (moversUnit === 'dollar') {
+      const v = totalPortfolioTile.pnlAmt;
+      return { text: moneyPrecise(v, totalPortfolioTile.displayCcy), positive: v >= 0 };
+    }
+    return { text: pct(totalPortfolioTile.pnlPct), positive: totalPortfolioTile.pnlPct >= 0 };
+  };
+  const formatHoldingPerf = (h: any) => {
+    if (moversMode === 'day') {
+      if (moversUnit === 'dollar') {
+        const v = dayChangeDollar(h);
+        if (v == null) return { text: '—', positive: true };
+        return { text: moneyPrecise(v, String(h.currency || 'USD').toUpperCase()), positive: v >= 0 };
+      }
+      const v = dayChangePct(h);
+      if (v == null) return { text: '—', positive: true };
+      return { text: pct(v), positive: v >= 0 };
+    }
+    if (moversUnit === 'dollar') {
+      const v = pnl(h);
+      return { text: moneyPrecise(v, String(h.currency || 'USD').toUpperCase()), positive: v >= 0 };
+    }
+    return { text: pct(pnlPct(h)), positive: pnlPct(h) >= 0 };
+  };
+
+
 
   const filtered = useMemo(() => {
     let list = scoped;
@@ -1395,6 +1489,61 @@ export default function PortfolioV1View({
               {connectOk || connectError}
             </p>
           )}
+
+        {/* Global performance filters — apply to cards + movers */}
+        <div className="flex items-center gap-2 flex-wrap pt-0.5">
+          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-400 w-10">
+            P&amp;L
+          </span>
+          <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5">
+            <button
+              type="button"
+              onClick={() => setMoversMode('day')}
+              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                moversMode === 'day'
+                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500'
+              }`}
+            >
+              Day
+            </button>
+            <button
+              type="button"
+              onClick={() => setMoversMode('overall')}
+              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                moversMode === 'overall'
+                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500'
+              }`}
+            >
+              Overall
+            </button>
+          </div>
+          <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5">
+            <button
+              type="button"
+              onClick={() => setMoversUnit('dollar')}
+              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                moversUnit === 'dollar'
+                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500'
+              }`}
+            >
+              $
+            </button>
+            <button
+              type="button"
+              onClick={() => setMoversUnit('pct')}
+              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                moversUnit === 'pct'
+                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500'
+              }`}
+            >
+              %
+            </button>
+          </div>
+        </div>
         </div>
       </div>
 
@@ -1460,10 +1609,11 @@ export default function PortfolioV1View({
                 </p>
                 <p
                   className={`text-[10px] font-bold tabular-nums ${
-                    totalPortfolioTile.pnlPct >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                    formatTotalPerf().positive ? 'text-emerald-600' : 'text-rose-600'
                   }`}
                 >
-                  {pct(totalPortfolioTile.pnlPct)}
+                  {formatTotalPerf().text}
+                  <span className="ml-1 text-[8px] font-bold text-slate-400 normal-case">{perfLabel}</span>
                 </p>
               </div>
             </button>
@@ -1498,10 +1648,11 @@ export default function PortfolioV1View({
                       </p>
                       <p
                         className={`text-[10px] font-bold tabular-nums ${
-                          primary.pnlPct >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                          formatBucketPerf(primary).positive ? 'text-emerald-600' : 'text-rose-600'
                         }`}
                       >
-                        {pct(primary.pnlPct)}
+                        {formatBucketPerf(primary).text}
+                        <span className="ml-1 text-[8px] font-bold text-slate-400">{perfLabel}</span>
                       </p>
                     </div>
                   )}
@@ -1523,8 +1674,12 @@ export default function PortfolioV1View({
                         <span className="font-bold text-slate-500">{c.currency}</span>
                         <span className="tabular-nums font-bold text-slate-800 dark:text-slate-100">
                           {money(c.market, c.currency)}
-                          <span className={`ml-1.5 ${c.pnlPct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                            {pct(c.pnlPct)}
+                          <span
+                            className={`ml-1.5 ${
+                              formatBucketPerf(c as any).positive ? 'text-emerald-600' : 'text-rose-600'
+                            }`}
+                          >
+                            {formatBucketPerf(c as any).text}
                           </span>
                         </span>
                       </div>
@@ -1541,10 +1696,10 @@ export default function PortfolioV1View({
                             </span>
                             <span
                               className={`shrink-0 font-bold tabular-nums ${
-                                pnlPct(h) >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                                formatHoldingPerf(h).positive ? 'text-emerald-600' : 'text-rose-600'
                               }`}
                             >
-                              {pct(pnlPct(h))}
+                              {formatHoldingPerf(h).text}
                             </span>
                           </div>
                         ))}
@@ -1638,7 +1793,12 @@ export default function PortfolioV1View({
       <div className="space-y-2 w-full">
         <div className="flex items-center justify-between gap-2 px-0.5 flex-wrap">
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-[11px] font-black uppercase tracking-wider text-slate-500">Movers</p>
+            <p className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+              Movers
+              <span className="ml-1.5 text-[9px] font-bold text-slate-400 normal-case tracking-normal">
+                {perfLabel} · {moversUnit === 'dollar' ? '$' : '%'}
+              </span>
+            </p>
             <button
               type="button"
               onClick={() => setShowPnlCalendar((v) => !v)}
@@ -1648,56 +1808,6 @@ export default function PortfolioV1View({
             >
               P&L Calendar
             </button>
-          </div>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5">
-              <button
-                type="button"
-                onClick={() => setMoversMode('overall')}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                  moversMode === 'overall'
-                    ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
-                    : 'text-slate-500'
-                }`}
-              >
-                Overall
-              </button>
-              <button
-                type="button"
-                onClick={() => setMoversMode('day')}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                  moversMode === 'day'
-                    ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
-                    : 'text-slate-500'
-                }`}
-              >
-                Day
-              </button>
-            </div>
-            <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5">
-              <button
-                type="button"
-                onClick={() => setMoversUnit('pct')}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                  moversUnit === 'pct'
-                    ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
-                    : 'text-slate-500'
-                }`}
-              >
-                %
-              </button>
-              <button
-                type="button"
-                onClick={() => setMoversUnit('dollar')}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                  moversUnit === 'dollar'
-                    ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
-                    : 'text-slate-500'
-                }`}
-              >
-                $
-              </button>
-            </div>
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
