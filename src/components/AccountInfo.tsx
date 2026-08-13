@@ -51,6 +51,7 @@ interface AccountInfoProps {
   onUpdateLandingTab?: (tab: string | null) => Promise<void>;
   hasFeature?: (feature: string) => boolean;
   onDisconnectWhatsApp?: () => Promise<void>;
+  onUpdateDigestPrefs?: (prefs: { digestEmail?: boolean; digestWhatsapp?: boolean }) => Promise<void>;
   accessPlans?: { id: string; name: string; description?: string; features: string[]; isSystem: boolean }[];
   myUpgradeRequest?: { id: string; planName: string; status: string } | null;
   onRequestUpgrade?: (planId: string) => Promise<void>;
@@ -119,6 +120,7 @@ export default function AccountInfo({
   onUpdateLandingTab,
   hasFeature,
   onDisconnectWhatsApp,
+    onUpdateDigestPrefs,
   accessPlans = [],
   myUpgradeRequest,
   onRequestUpgrade,
@@ -1868,7 +1870,52 @@ export default function AccountInfo({
 
       {currentSubTab === 'security' && (
         <>
-          {/* Connect WhatsApp */}
+          
+          {/* Daily digests — Email + WhatsApp */}
+          <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 shrink-0">
+            <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+              Daily digests
+            </h4>
+            <p className="text-[10px] text-slate-500">
+              Morning brief: bills due/overdue + simple portfolio mark. Email is free-tier friendly; WhatsApp needs Meta Cloud API (and may need a template for cold pushes).
+            </p>
+            <label className="flex items-center justify-between gap-3 text-[12px] font-bold text-slate-800 dark:text-slate-100">
+              <span>Email digest</span>
+              <input
+                type="checkbox"
+                checked={!!userProfile?.digestEmail}
+                onChange={async (e) => {
+                  try {
+                    await onUpdateDigestPrefs?.({ digestEmail: e.target.checked });
+                  } catch (err: any) {
+                    alert(err?.message || 'Could not save — run SQL to add digest_email column (see NOTIFICATIONS.md)');
+                  }
+                }}
+                className="rounded border-slate-300"
+              />
+            </label>
+            <label className="flex items-center justify-between gap-3 text-[12px] font-bold text-slate-800 dark:text-slate-100">
+              <span>WhatsApp digest</span>
+              <input
+                type="checkbox"
+                checked={!!userProfile?.digestWhatsapp}
+                disabled={!userProfile?.whatsappPhone}
+                onChange={async (e) => {
+                  try {
+                    await onUpdateDigestPrefs?.({ digestWhatsapp: e.target.checked });
+                  } catch (err: any) {
+                    alert(err?.message || 'Could not save — link WhatsApp first / add digest_whatsapp column');
+                  }
+                }}
+                className="rounded border-slate-300"
+              />
+            </label>
+            {!userProfile?.whatsappPhone && (
+              <p className="text-[9px] text-slate-400">Link WhatsApp below before enabling WhatsApp digest.</p>
+            )}
+          </div>
+
+{/* Connect WhatsApp */}
           <div className="bg-white dark:bg-slate-950 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 shrink-0">
             <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
               <MessageSquare className="w-4 h-4 text-emerald-500" /> Connect WhatsApp
@@ -1905,7 +1952,7 @@ export default function AccountInfo({
             ) : waCode ? (
               <div className="space-y-2">
                 <p className="text-[11px] text-slate-600 dark:text-slate-300">
-                  Text this code to our WhatsApp number to finish linking:
+                  Text this code to the Haven WhatsApp business number (see NOTIFICATIONS.md / WHATSAPP_BUSINESS_DISPLAY) to finish linking:
                 </p>
                 <div className="px-3 py-2 bg-slate-50 dark:bg-slate-900 rounded-lg font-mono text-lg font-bold tracking-widest text-center text-emerald-600 dark:text-emerald-400">
                   {waCode}
