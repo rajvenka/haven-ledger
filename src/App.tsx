@@ -652,6 +652,18 @@ export default function App() {
                 never reachable at all from the desktop sidebar layout. */}
             <div className="flex items-center gap-1">
               <button
+                type="button"
+                onClick={togglePulse}
+                title={uiPulse ? 'Switch to Classic layout' : 'Switch to Pulse layout'}
+                className={`p-2 rounded-full transition-colors cursor-pointer ${
+                  uiPulse
+                    ? 'bg-violet-100 dark:bg-violet-950/50 text-violet-600 dark:text-violet-300'
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 hover:text-violet-600'
+                }`}
+              >
+                <Sparkles className="w-4 h-4" />
+              </button>
+              <button
                 onClick={() => {
                   const nextTheme = theme === 'light' ? 'dark' : 'light';
                   setTheme(nextTheme);
