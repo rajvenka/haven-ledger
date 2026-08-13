@@ -336,8 +336,8 @@ export default function PortfolioPnLCalendar({
               Book
             </span>
             <div
-              className="flex-1 min-w-0 overflow-x-auto overscroll-x-contain touch-pan-x"
-              style={{ WebkitOverflowScrolling: 'touch' }}
+              className="w-0 flex-1 min-w-0 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x"
+              style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
             >
               <div className="flex items-center gap-1 pr-2 w-max">
                 <button
@@ -380,8 +380,8 @@ export default function PortfolioPnLCalendar({
               Ccy
             </span>
             <div
-              className="flex-1 min-w-0 overflow-x-auto overscroll-x-contain touch-pan-x"
-              style={{ WebkitOverflowScrolling: 'touch' }}
+              className="w-0 flex-1 min-w-0 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x"
+              style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
             >
               <div className="flex items-center gap-1 pr-2 w-max">
                 {currenciesForBook.map((ccy) => (
