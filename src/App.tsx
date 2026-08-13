@@ -122,11 +122,6 @@ export default function App() {
     addReward,
     updateReward,
     deleteReward,
-    giftCards,
-    addGiftCard,
-    updateGiftCard,
-    redeemGiftCard,
-    deleteGiftCard,
     incomeSources,
     addIncomeSource,
     deleteIncomeSource,
@@ -1643,6 +1638,7 @@ export default function App() {
               )
             ) : activeTab === 'expenses' && hasFeature('core') ? (
               uiPulse ? (
+                <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
                 <PulseExpenses
                   payments={payments}
                   history={history}
@@ -1656,6 +1652,7 @@ export default function App() {
                   isReadOnly={userProfile?.role === 'view'}
                   currentUserUid={user?.uid}
                 />
+                </div>
               ) : (
                 <ExpensesView
                   payments={payments}
@@ -1765,11 +1762,6 @@ export default function App() {
                 onAddReward={addReward}
                 onUpdateReward={updateReward}
                 onDeleteReward={deleteReward}
-                giftCards={giftCards}
-                onAddGiftCard={addGiftCard}
-                onUpdateGiftCard={updateGiftCard}
-                onRedeemGiftCard={redeemGiftCard}
-                onDeleteGiftCard={deleteGiftCard}
                 isReadOnly={isReadOnly}
               />
             ) : activeTab === 'portfolio' ? (
