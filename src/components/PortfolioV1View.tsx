@@ -246,6 +246,22 @@ const HOLDING_COLUMNS: { key: string; label: string; defaultOn: boolean; desktop
 ];
 
 const DEFAULT_COLS = new Set(HOLDING_COLUMNS.filter((c) => c.defaultOn).map((c) => c.key));
+const DEFAULT_COL_ORDER = HOLDING_COLUMNS.map((c) => c.key);
+const COL_LAYOUT: Record<string, { label: string; align: 'left' | 'right'; fr: string }> = {
+  type: { label: 'Type', align: 'left', fr: 'minmax(3rem, 0.8fr)' },
+  portfolio: { label: 'Portfolio', align: 'left', fr: 'minmax(3.5rem, 0.9fr)' },
+  broker: { label: 'Broker', align: 'left', fr: 'minmax(3rem, 0.8fr)' },
+  qty: { label: 'Qty', align: 'right', fr: 'minmax(2.5rem, 0.7fr)' },
+  buy: { label: 'Buy', align: 'right', fr: 'minmax(3rem, 0.8fr)' },
+  live: { label: 'Live', align: 'right', fr: 'minmax(3rem, 0.8fr)' },
+  day: { label: 'Day', align: 'right', fr: 'minmax(2.5rem, 0.7fr)' },
+  value: { label: 'Value', align: 'right', fr: 'minmax(3.5rem, 1fr)' },
+  pnl: { label: 'P&L%', align: 'right', fr: 'minmax(2.5rem, 0.7fr)' },
+  pnl_amt: { label: 'P&L$', align: 'right', fr: 'minmax(3rem, 0.8fr)' },
+  stop: { label: 'Stop', align: 'right', fr: 'minmax(3rem, 0.85fr)' },
+  lev: { label: 'Lev', align: 'right', fr: 'minmax(2rem, 0.5fr)' },
+  currency: { label: 'Ccy', align: 'right', fr: 'minmax(2rem, 0.5fr)' },
+};
 
 function money(n: number, currency = 'INR') {
   if (!Number.isFinite(n)) return '—';
@@ -474,6 +490,28 @@ export default function PortfolioV1View({
     } catch { /* ignore */ }
     return new Set(DEFAULT_COLS);
   });
+  const [colOrder, setColOrder] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('portfolio_v1_col_order');
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr) && arr.length) {
+          const known = new Set(DEFAULT_COL_ORDER);
+          const cleaned = (arr as string[]).filter((k) => known.has(k));
+          for (const k of DEFAULT_COL_ORDER) {
+            if (!cleaned.includes(k)) cleaned.push(k);
+          }
+          return cleaned;
+        }
+      }
+    } catch { /* ignore */ }
+    return [...DEFAULT_COL_ORDER];
+  });
+  const persistColOrder = (order: string[]) => {
+    try {
+      localStorage.setItem('portfolio_v1_col_order', JSON.stringify(order));
+    } catch { /* ignore */ }
+  };
   const toggleCol = (key: string) => {
     setVisibleCols((prev) => {
       const next = new Set(prev);
@@ -484,6 +522,26 @@ export default function PortfolioV1View({
       } catch { /* ignore */ }
       return next;
     });
+  };
+  const moveCol = (key: string, dir: -1 | 1) => {
+    setColOrder((prev) => {
+      const i = prev.indexOf(key);
+      if (i < 0) return prev;
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      persistColOrder(next);
+      return next;
+    });
+  };
+  const resetColLayout = () => {
+    setVisibleCols(new Set(DEFAULT_COLS));
+    setColOrder([...DEFAULT_COL_ORDER]);
+    try {
+      localStorage.setItem('portfolio_v1_cols', JSON.stringify(Array.from(DEFAULT_COLS)));
+      localStorage.setItem('portfolio_v1_col_order', JSON.stringify(DEFAULT_COL_ORDER));
+    } catch { /* ignore */ }
   };
   const colOn = (key: string) => visibleCols.has(key);
 
@@ -549,27 +607,20 @@ export default function PortfolioV1View({
   }
 
 
-  // Desktop table columns — rebuilt whenever the user toggles Columns so widths reflow.
+  // Desktop table columns — visibility + user order (persisted).
   const desktopCols = useMemo(() => {
-    // Equal flexible tracks so hiding a column redistributes width (no empty gap left behind).
     const cols: { key: string; label: string; align: 'left' | 'right'; fr: string }[] = [
       { key: 'symbol', label: 'Symbol', align: 'left', fr: 'minmax(6rem, 1.4fr)' },
     ];
-    if (colOn('type')) cols.push({ key: 'type', label: 'Type', align: 'left', fr: 'minmax(3rem, 0.8fr)' });
-    if (colOn('portfolio') && multiPortfolio) cols.push({ key: 'portfolio', label: 'Portfolio', align: 'left', fr: 'minmax(3.5rem, 0.9fr)' });
-    if (colOn('broker')) cols.push({ key: 'broker', label: 'Broker', align: 'left', fr: 'minmax(3rem, 0.8fr)' });
-    if (colOn('qty')) cols.push({ key: 'qty', label: 'Qty', align: 'right', fr: 'minmax(2.5rem, 0.7fr)' });
-    if (colOn('buy')) cols.push({ key: 'buy', label: 'Buy', align: 'right', fr: 'minmax(3rem, 0.8fr)' });
-    if (colOn('live')) cols.push({ key: 'live', label: 'Live', align: 'right', fr: 'minmax(3rem, 0.8fr)' });
-    if (colOn('day')) cols.push({ key: 'day', label: 'Day', align: 'right', fr: 'minmax(2.5rem, 0.7fr)' });
-    if (colOn('value')) cols.push({ key: 'value', label: 'Value', align: 'right', fr: 'minmax(3.5rem, 1fr)' });
-    if (colOn('pnl')) cols.push({ key: 'pnl', label: 'P&L%', align: 'right', fr: 'minmax(2.5rem, 0.7fr)' });
-    if (colOn('pnl_amt')) cols.push({ key: 'pnl_amt', label: 'P&L$', align: 'right', fr: 'minmax(3rem, 0.8fr)' });
-    if (colOn('stop')) cols.push({ key: 'stop', label: 'Stop', align: 'right', fr: 'minmax(3rem, 0.85fr)' });
-    if (colOn('lev')) cols.push({ key: 'lev', label: 'Lev', align: 'right', fr: 'minmax(2rem, 0.5fr)' });
-    if (colOn('currency')) cols.push({ key: 'currency', label: 'Ccy', align: 'right', fr: 'minmax(2rem, 0.5fr)' });
+    for (const key of colOrder) {
+      if (!colOn(key)) continue;
+      if (key === 'portfolio' && !multiPortfolio) continue;
+      const layout = COL_LAYOUT[key];
+      if (!layout) continue;
+      cols.push({ key, ...layout });
+    }
     return cols;
-  }, [visibleCols, multiPortfolio]);
+  }, [visibleCols, colOrder, multiPortfolio]);
 
   const desktopGridStyle = useMemo(
     () => ({
