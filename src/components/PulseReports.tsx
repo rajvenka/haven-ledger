@@ -9,6 +9,7 @@ import { Gift, Receipt, FileBarChart, Trash2, Plus, X, Check } from 'lucide-reac
 export default function PulseReports(props: any) {
   const {
     isReadOnly,
+    workspaceName,
     baseCurrency = 'INR',
     portfolioHoldings = [],
     portfolioDividends = [],
@@ -114,16 +115,20 @@ export default function PulseReports(props: any) {
     <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-left w-full max-w-full">
       <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 space-y-2.5">
         <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-violet-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-violet-950/20 p-3 sm:p-3.5">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <FileBarChart className="w-5 h-5 text-violet-500 shrink-0" />
             <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
-              Reports
+              {workspaceName ? `${workspaceName} Reports` : 'Reports'}
             </h1>
             <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-violet-600/90 text-white">
               Pulse
             </span>
           </div>
           <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">
-            {active.length} holdings · {portfolioDividends?.length || 0} dividends · {portfolioFees?.length || 0} fees
+            {active.length} active holdings
+            {portfolioDividends?.length ? ` · ${portfolioDividends.length} dividends` : ''}
+            {portfolioFees?.length ? ` · ${portfolioFees.length} fees` : ''}
+            {portfolioSnapshots?.length ? ` · ${portfolioSnapshots.length} snapshots` : ''}
           </p>
         </div>
 
@@ -146,7 +151,7 @@ export default function PulseReports(props: any) {
                 onClick={() => setTab(id)}
                 className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all ${
                   tab === id
-                    ? 'bg-violet-600 text-white shadow-violet-600/25'
+                    ? 'bg-violet-600 text-white shadow-md shadow-violet-600/25'
                     : 'text-violet-700/70 dark:text-violet-300/70'
                 }`}
               >
