@@ -239,7 +239,7 @@ const HOLDING_COLUMNS: { key: string; label: string; defaultOn: boolean; desktop
   { key: 'day', label: 'Day %', defaultOn: true, desktopOnly: true },
   { key: 'value', label: 'Value', defaultOn: true },
   { key: 'pnl', label: 'P&L %', defaultOn: true },
-  { key: 'pnl_amt', label: 'P&L $', defaultOn: false, desktopOnly: true },
+  { key: 'pnl_amt', label: 'P&L $', defaultOn: true },
   { key: 'stop', label: 'Stop loss', defaultOn: true, desktopOnly: true },
   { key: 'lev', label: 'Lev', defaultOn: true, desktopOnly: true },
   { key: 'currency', label: 'Ccy', defaultOn: false, desktopOnly: true },
@@ -464,7 +464,12 @@ export default function PortfolioV1View({
       const raw = localStorage.getItem('portfolio_v1_cols');
       if (raw) {
         const arr = JSON.parse(raw);
-        if (Array.isArray(arr) && arr.length) return new Set(arr);
+        if (Array.isArray(arr) && arr.length) {
+          const s = new Set(arr as string[]);
+          // Ensure $ P&L is available next to % (was off by default historically)
+          if (s.has('pnl') && !s.has('pnl_amt')) s.add('pnl_amt');
+          return s;
+        }
       }
     } catch { /* ignore */ }
     return new Set(DEFAULT_COLS);
