@@ -40,6 +40,8 @@ import IPhoneFrame from './components/IPhoneFrame';
 
 import PaymentModal from './components/PaymentModal';
 import Dashboard from './components/Dashboard';
+import PulseDashboard from './components/PulseDashboard';
+import PulseExpenses from './components/PulseExpenses';
 import ConfigurePayments from './components/ConfigurePayments';
 import AccountInfo from './components/AccountInfo';
 import PaymentHistoryView from './components/PaymentHistoryView';
@@ -238,6 +240,16 @@ export default function App() {
   });
 
   const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'configure' | 'account' | 'history' | 'ai' | 'income' | 'rewards' | 'portfolio' | 'portfolio_v1' | 'investment_plan' | 'reports' | 'admin_users'>('summary');
+  const [uiPulse, setUiPulse] = useState<boolean>(() => {
+    try { return localStorage.getItem('haven_ui_pulse') === '1'; } catch { return false; }
+  });
+  const togglePulse = () => {
+    setUiPulse((v) => {
+      const next = !v;
+      try { localStorage.setItem('haven_ui_pulse', next ? '1' : '0'); } catch { /* ignore */ }
+      return next;
+    });
+  };
   const lastLandingWorkspaceId = React.useRef<string | null>(null);
   const [settingsSubTab, setSettingsSubTab] = useState<'preferences' | 'team'>('preferences');
   const [isAgentOpen, setIsAgentOpen] = useState(false);
@@ -1582,32 +1594,78 @@ export default function App() {
 
           {/* Dynamic page content body */}
           <main className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col min-h-0">
+            {(activeTab === 'summary' || activeTab === 'expenses') && hasFeature('core') && (
+              <div className="px-4 sm:px-5 pt-2 flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={togglePulse}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/50"
+                  title={uiPulse ? 'Switch to Classic layout' : 'Switch to Pulse layout'}
+                >
+                  <Sparkles className="w-3 h-3" />
+                  {uiPulse ? 'Pulse' : 'Classic'}
+                  <span className="opacity-60">·</span>
+                  {uiPulse ? 'Classic' : 'Try Pulse'}
+                </button>
+              </div>
+            )}
             {activeTab === 'summary' && hasFeature('core') ? (
-              <Dashboard 
-                payments={payments}
-                history={history}
-                countries={countries}
-                summaryCurrency={summaryCurrency}
-                onRecordPayment={handleRecordPayment}
-                onNavigateToBills={() => setActiveTab('configure')}
-                isReadOnly={userProfile?.role === 'view'}
-                monthlyIncomeEstimate={parseFloat(monthlyIncome) || 0}
-                incomeSources={incomeSources}
-              />
+              uiPulse ? (
+                <PulseDashboard
+                  payments={payments}
+                  history={history}
+                  countries={countries}
+                  summaryCurrency={summaryCurrency}
+                  onRecordPayment={handleRecordPayment}
+                  onNavigateToBills={() => setActiveTab('configure')}
+                  isReadOnly={userProfile?.role === 'view'}
+                  currentUserUid={user?.uid}
+                  monthlyIncomeEstimate={parseFloat(monthlyIncome) || 0}
+                  incomeSources={incomeSources}
+                />
+              ) : (
+                <Dashboard
+                  payments={payments}
+                  history={history}
+                  countries={countries}
+                  summaryCurrency={summaryCurrency}
+                  onRecordPayment={handleRecordPayment}
+                  onNavigateToBills={() => setActiveTab('configure')}
+                  isReadOnly={userProfile?.role === 'view'}
+                  monthlyIncomeEstimate={parseFloat(monthlyIncome) || 0}
+                  incomeSources={incomeSources}
+                />
+              )
             ) : activeTab === 'expenses' && hasFeature('core') ? (
-              <ExpensesView
-                payments={payments}
-                history={history}
-                countries={countries}
-                defaultCurrency={summaryCurrency}
-                onAddCountry={addCountry}
-                onDeleteCountry={deleteCountry}
-                onUpdateCountry={updateCountry}
-                onAddExpenseClick={handleOpenAddModalForCurrency}
-                onRecordPayment={handleRecordPayment}
-                isReadOnly={userProfile?.role === 'view'}
-                currentUserUid={user?.uid}
-              />
+              uiPulse ? (
+                <PulseExpenses
+                  payments={payments}
+                  history={history}
+                  countries={countries}
+                  defaultCurrency={summaryCurrency}
+                  onAddCountry={addCountry}
+                  onDeleteCountry={deleteCountry}
+                  onUpdateCountry={updateCountry}
+                  onAddExpenseClick={handleOpenAddModalForCurrency}
+                  onRecordPayment={handleRecordPayment}
+                  isReadOnly={userProfile?.role === 'view'}
+                  currentUserUid={user?.uid}
+                />
+              ) : (
+                <ExpensesView
+                  payments={payments}
+                  history={history}
+                  countries={countries}
+                  defaultCurrency={summaryCurrency}
+                  onAddCountry={addCountry}
+                  onDeleteCountry={deleteCountry}
+                  onUpdateCountry={updateCountry}
+                  onAddExpenseClick={handleOpenAddModalForCurrency}
+                  onRecordPayment={handleRecordPayment}
+                  isReadOnly={userProfile?.role === 'view'}
+                  currentUserUid={user?.uid}
+                />
+              )
             ) : activeTab === 'configure' && hasFeature('core') ? (
               <ConfigurePayments 
                 payments={payments}
