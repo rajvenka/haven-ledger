@@ -12,6 +12,7 @@ export interface ParsedHolding {
   currentPrice: number;
   source?: string;
   currency?: 'INR' | 'USD' | 'AUD' | 'EUR' | 'GBP' | 'SGD' | 'AED' | 'CAD';
+  buyDate?: string;
   leverage?: number;
   stopLossRate?: number;
   takeProfitRate?: number;
@@ -68,101 +69,205 @@ function parseZerodhaSheet(rows: any[][], holdingType: 'stock' | 'mutual_fund'):
 }
 
 
-/** Stake (AU) Portfolio Valuation export.
- * Single sheet typically has sections:
- *   Aus Equities: Symbol | Name | Weighting | Units | Mkt. Price | Mkt. Value
- *   Wall St Equities: Symbol | Name | Weighting | Units | Mkt. Price | Mkt. Value (US$) | Mkt. Value (A$)
- * No average cost — buyPrice is set to market price (P&L starts at 0 until you edit cost).
+/** Stake (AU) Portfolio Valuation export (as downloaded from Stake).
+ *
+ * Real Stake XLSX has separate tabs:
+ *   - "Aus Equities"     → Symbol | Name | Weighting | Units | Mkt. Price | Mkt. Value          (AUD / ASX)
+ *   - "Wall St Equities" → Symbol | Name | Weighting | Units | Mkt. Price | Mkt. Value (US$)…  (USD / US)
+ *   - Summary / Disclaimers ignored
+ *
+ * Older single-sheet exports with in-sheet section headers are still supported.
+ * No average cost in file — buyPrice starts at market price (edit cost later).
  */
-function parseStakeRows(rows: any[][]): ParsedHolding[] {
+function stakeHeaderIndexes(headers: string[]) {
+  const idxSymbol = headers.findIndex(h => /^symbol$/i.test(h));
+  const idxUnits = headers.findIndex(h => /^units$/i.test(h) || /^qty$/i.test(h) || /^quantity$/i.test(h));
+  const idxMktPrice = headers.findIndex(h => /^mkt\.?\s*price$/i.test(h) || /^market\s*price$/i.test(h) || /^price$/i.test(h));
+  const idxName = headers.findIndex(h => /^name$/i.test(h) || /^company$/i.test(h));
+  return { idxSymbol, idxUnits, idxMktPrice, idxName };
+}
+
+function parseStakeDataRows(
+  rows: any[][],
+  headerIdx: number,
+  section: 'aus' | 'wall',
+  statementDate?: string,
+): ParsedHolding[] {
   const results: ParsedHolding[] = [];
+  const headers = (rows[headerIdx] || []).map((h: any) => String(h ?? '').trim());
+  const { idxSymbol, idxUnits, idxMktPrice, idxName } = stakeHeaderIndexes(headers);
+  if (idxSymbol < 0 || idxUnits < 0) return results;
+
+  const buyDate = statementDate || new Date().toISOString().slice(0, 10);
+
+  for (let r = headerIdx + 1; r < rows.length; r++) {
+    const data = rows[r] || [];
+    const dataJoined = data.map((c: any) => String(c ?? '').trim()).join(' ').toLowerCase();
+    if (
+      dataJoined.includes('aus equities') ||
+      dataJoined.includes('wall st') ||
+      dataJoined.includes('disclaimer') ||
+      dataJoined.includes('glossary') ||
+      dataJoined.includes('report type')
+    ) {
+      break;
+    }
+    const sym = String(data[idxSymbol] ?? '').trim();
+    if (!sym || /^(symbol|equities|disclaimer|glossary|summary|name|total)$/i.test(sym)) continue;
+
+    const units = Number(String(data[idxUnits] ?? '').replace(/,/g, ''));
+    if (!Number.isFinite(units) || units === 0) continue;
+
+    let price = idxMktPrice >= 0 ? Number(String(data[idxMktPrice] ?? '').replace(/[$,]/g, '')) : NaN;
+    if (!Number.isFinite(price) || price < 0) price = 0;
+
+    const name = idxName >= 0 && data[idxName] != null ? String(data[idxName]).trim() : undefined;
+
+    if (section === 'aus') {
+      results.push({
+        holdingType: 'stock',
+        broker: 'Stake',
+        symbol: sym.toUpperCase(),
+        exchange: 'ASX',
+        quantity: units,
+        buyPrice: price,
+        currentPrice: price,
+        buyDate,
+        currency: 'AUD',
+        source: name,
+      });
+    } else {
+      results.push({
+        holdingType: 'stock',
+        broker: 'Stake',
+        symbol: sym.toUpperCase(),
+        exchange: 'US',
+        quantity: units,
+        buyPrice: price,
+        currentPrice: price,
+        buyDate,
+        currency: 'USD',
+        source: name,
+      });
+    }
+  }
+  return results;
+}
+
+/** Parse one sheet: either a dedicated Aus/Wall St tab, or legacy in-sheet sections. */
+function parseStakeRows(rows: any[][], sheetName?: string, statementDate?: string): ParsedHolding[] {
+  const results: ParsedHolding[] = [];
+  const nameLower = String(sheetName || '').toLowerCase().trim();
+
+  // --- Preferred path: Stake's multi-tab export ---
+  // Sheet is already "Aus Equities" or "Wall St Equities" with header on row 1.
+  const sheetIsAus = /aus\s*equit/i.test(nameLower);
+  const sheetIsWall = /wall\s*st/i.test(nameLower) || /us\s*equit/i.test(nameLower) || /wallstreet/i.test(nameLower);
+  if (sheetIsAus || sheetIsWall) {
+    let headerIdx = -1;
+    for (let j = 0; j < Math.min(rows.length, 15); j++) {
+      const r = rows[j] || [];
+      if (r.some((c: any) => /^symbol$/i.test(String(c ?? '').trim()))) {
+        headerIdx = j;
+        break;
+      }
+    }
+    if (headerIdx >= 0) {
+      results.push(...parseStakeDataRows(rows, headerIdx, sheetIsWall ? 'wall' : 'aus', statementDate));
+    }
+    return results;
+  }
+
+  // --- Legacy / alternate: section headers inside one sheet ---
   let i = 0;
   while (i < rows.length) {
     const row = rows[i] || [];
     const cells = row.map((c: any) => String(c ?? '').trim());
     const joined = cells.join(' ').toLowerCase();
     const isAus = cells.some((c: string) => /^aus equities$/i.test(c)) || joined.includes('aus equities');
-    const isWall = cells.some((c: string) => /wall\s*st equities/i.test(c)) || joined.includes('wall st equities');
-    if (!isAus && !isWall) { i++; continue; }
-
+    const isWall =
+      cells.some((c: string) => /wall\s*st equities/i.test(c)) ||
+      joined.includes('wall st equities') ||
+      joined.includes('wall street equities');
+    if (!isAus && !isWall) {
+      i++;
+      continue;
+    }
     const section: 'aus' | 'wall' = isWall ? 'wall' : 'aus';
     let headerIdx = -1;
-    for (let j = i; j < Math.min(i + 8, rows.length); j++) {
+    for (let j = i; j < Math.min(i + 10, rows.length); j++) {
       const r = rows[j] || [];
-      if (r.some((c: any) => typeof c === 'string' && String(c).trim() === 'Symbol')) {
+      if (r.some((c: any) => /^symbol$/i.test(String(c ?? '').trim()))) {
         headerIdx = j;
         break;
       }
     }
-    if (headerIdx === -1) { i++; continue; }
+    if (headerIdx === -1) {
+      i++;
+      continue;
+    }
+    const chunk = parseStakeDataRows(rows, headerIdx, section, statementDate);
+    results.push(...chunk);
+    // Advance past this section's data rows
+    i = headerIdx + 1 + chunk.length;
+    // Also skip until next section-looking row or end
+    while (i < rows.length) {
+      const joined2 = (rows[i] || []).map((c: any) => String(c ?? '').trim()).join(' ').toLowerCase();
+      if (joined2.includes('aus equities') || joined2.includes('wall st')) break;
+      if (joined2.includes('disclaimer') || joined2.includes('glossary')) break;
+      i++;
+    }
+  }
 
-    const headers = (rows[headerIdx] || []).map((h: any) => String(h ?? '').trim());
-    const idxSymbol = headers.findIndex(h => /^symbol$/i.test(h));
-    const idxUnits = headers.findIndex(h => /^units$/i.test(h) || /^qty$/i.test(h) || /^quantity$/i.test(h));
-    const idxMktPrice = headers.findIndex(h => /^mkt\.?\s*price$/i.test(h) || /^market price$/i.test(h));
-    const idxMktValUsd = headers.findIndex(h => /mkt\.?\s*value\s*\(us\$\)/i.test(h));
-    const idxMktVal = headers.findIndex(h => /^mkt\.?\s*value$/i.test(h) || /^market value$/i.test(h));
-    const idxName = headers.findIndex(h => /^name$/i.test(h));
-
-    let r = headerIdx + 1;
-    for (; r < rows.length; r++) {
-      const data = rows[r] || [];
-      const dataJoined = data.map((c: any) => String(c ?? '').trim()).join(' ').toLowerCase();
-      if (
-        dataJoined.includes('aus equities') ||
-        dataJoined.includes('wall st equities') ||
-        dataJoined.includes('disclaimer') ||
-        dataJoined.includes('glossary')
-      ) {
+  // --- Fallback: sheet has Symbol/Units/Mkt.Price header but no section title ---
+  // Treat as AUD ASX if sheet name suggests AU, else try to detect from columns.
+  if (results.length === 0) {
+    let headerIdx = -1;
+    for (let j = 0; j < Math.min(rows.length, 20); j++) {
+      const headers = (rows[j] || []).map((h: any) => String(h ?? '').trim());
+      const hasSymbol = headers.some(h => /^symbol$/i.test(h));
+      const hasUnits = headers.some(h => /^units$/i.test(h));
+      const hasPrice = headers.some(h => /mkt\.?\s*price|market\s*price|^price$/i.test(h));
+      if (hasSymbol && hasUnits && hasPrice) {
+        headerIdx = j;
         break;
       }
-      const sym = idxSymbol >= 0 ? String(data[idxSymbol] ?? '').trim() : '';
-      if (!sym || /equities|disclaimer|glossary|summary|report type/i.test(sym)) continue;
-      const units = idxUnits >= 0 ? Number(data[idxUnits]) || 0 : 0;
-      if (units <= 0) continue;
+    }
+    if (headerIdx >= 0) {
+      const headers = (rows[headerIdx] || []).map((h: any) => String(h ?? '').trim()).join(' ').toLowerCase();
+      const looksUsd = /us\$|usd|wall/.test(headers) || /wall|us/.test(nameLower);
+      results.push(...parseStakeDataRows(rows, headerIdx, looksUsd ? 'wall' : 'aus', statementDate));
+    }
+  }
 
-      let mktPrice = idxMktPrice >= 0 ? Number(data[idxMktPrice]) || 0 : 0;
-      if (!mktPrice && idxMktVal >= 0) {
-        const mv = Number(data[idxMktVal]) || 0;
-        if (mv > 0) mktPrice = mv / units;
-      }
+  return results;
+}
 
-      if (section === 'aus') {
-        if (!mktPrice) continue;
-        results.push({
-          broker: 'Stake',
-          holdingType: 'stock',
-          symbol: sym.toUpperCase(),
-          exchange: 'ASX',
-          quantity: units,
-          buyPrice: mktPrice,
-          currentPrice: mktPrice,
-          currency: 'AUD',
-          source: idxName >= 0 && data[idxName] ? String(data[idxName]).trim() : undefined,
-        });
-      } else {
-        let usdPrice = mktPrice;
-        if (idxMktValUsd >= 0) {
-          const mvUsd = Number(data[idxMktValUsd]) || 0;
-          if (mvUsd > 0) usdPrice = mvUsd / units;
+function extractStakeStatementDate(workbook: XLSX.WorkBook): string | undefined {
+  for (const sheetName of workbook.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: null }) as any[][];
+    for (const row of rows.slice(0, 30)) {
+      for (const cell of row || []) {
+        const s = String(cell ?? '');
+        // "Statement Date: 2026-08-10" or "Report Type: Portfolio Valuation as at 2026-08-10"
+        const m =
+          s.match(/Statement\s*Date\s*:\s*(\d{4}-\d{2}-\d{2})/i) ||
+          s.match(/as\s+at\s+(\d{4}-\d{2}-\d{2})/i) ||
+          s.match(/Statement\s*Date\s*:\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
+        if (m) {
+          const raw = m[1];
+          if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+          const parts = raw.split('/');
+          if (parts.length === 3) {
+            // Stake AU often DD/MM/YYYY
+            const [d, mo, y] = parts;
+            return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+          }
         }
-        if (!usdPrice) continue;
-        results.push({
-          broker: 'Stake',
-          holdingType: 'stock',
-          symbol: sym.toUpperCase(),
-          exchange: 'US',
-          quantity: units,
-          buyPrice: usdPrice,
-          currentPrice: usdPrice,
-          currency: 'USD',
-          source: idxName >= 0 && data[idxName] ? String(data[idxName]).trim() : undefined,
-        });
       }
     }
-    i = r;
   }
-  return results;
+  return undefined;
 }
 
 export async function parseBrokerFile(file: File, template: BrokerTemplate): Promise<ParsedHolding[]> {
@@ -189,13 +294,30 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
   }
 
   if (template === 'stake') {
+    const statementDate = extractStakeStatementDate(workbook);
     const results: ParsedHolding[] = [];
-    for (const sheetName of workbook.SheetNames) {
+    // Prefer named tabs from Stake's own download: "Aus Equities", "Wall St Equities"
+    const equitySheets = workbook.SheetNames.filter((n) =>
+      /aus\s*equit|wall\s*st|wall\s*street|us\s*equit/i.test(n)
+    );
+    const sheetsToScan = equitySheets.length > 0 ? equitySheets : workbook.SheetNames;
+    for (const sheetName of sheetsToScan) {
+      if (/disclaimer|glossary/i.test(sheetName)) continue;
       const sheetRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: null }) as any[][];
-      results.push(...parseStakeRows(sheetRows));
+      results.push(...parseStakeRows(sheetRows, sheetName, statementDate));
+    }
+    // Last resort: scan every remaining sheet
+    if (results.length === 0) {
+      for (const sheetName of workbook.SheetNames) {
+        if (/disclaimer/i.test(sheetName)) continue;
+        const sheetRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: null }) as any[][];
+        results.push(...parseStakeRows(sheetRows, sheetName, statementDate));
+      }
     }
     if (results.length === 0) {
-      throw new Error("Couldn't find Stake holdings — expect Aus Equities / Wall St Equities with Symbol, Units, Mkt. Price.");
+      throw new Error(
+        "Couldn't find Stake holdings. Upload Stake's Portfolio Valuation XLSX as downloaded (tabs: Aus Equities / Wall St Equities with Symbol, Units, Mkt. Price)."
+      );
     }
     return results;
   }
