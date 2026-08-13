@@ -615,6 +615,19 @@ export default function PortfolioV1View({
     }
   }, [portfolioFilter, portfoliosPresent, portfolios]);
 
+
+  // When a specific book is selected, align View currency with that book's currency
+  // so Movers $ amounts match the INR/AUD/USD book (not a leftover USD view chip).
+  React.useEffect(() => {
+    if (portfolioFilter === 'All' || portfolioFilter === '__pending__') return;
+    const book = (portfolios || []).find((p: any) => String(p.id) === String(portfolioFilter));
+    const ccy = String(book?.currency || '').toUpperCase();
+    if (ccy && ccy !== viewCurrency) {
+      setViewCurrency(ccy);
+      try { localStorage.setItem('portfolio_v1_view_ccy', ccy); } catch { /* ignore */ }
+    }
+  }, [portfolioFilter, portfolios]);
+
   const categoryOrder: CategoryId[] = [
     'india_mf',
     'india_stock',
@@ -803,19 +816,22 @@ export default function PortfolioV1View({
     const rows = filtered
       .map((h) => {
         const nativeCcy = String(h.currency || baseCurrency || 'USD').toUpperCase();
+        // Prefer selected book currency (e.g. INR portfolio → INR $ moves),
+        // not a stale View chip like USD. Matches Total portfolio tile.
+        const moversCcy = totalPortfolioTile.displayCcy || viewCurrency || nativeCcy;
         if (moversMode === 'day') {
           const d = dayChangePct(h);
           if (d == null || !Number.isFinite(d)) return null;
           const mv = marketValue(h);
           const nativeDollar = (d / 100) * mv;
-          const dollar = convertAmount(nativeDollar, nativeCcy, viewCurrency, workspaceCurrencyRates, baseCurrency);
-          return { h, p: d, dollar, displayCcy: viewCurrency };
+          const dollar = convertAmount(nativeDollar, nativeCcy, moversCcy, workspaceCurrencyRates, baseCurrency);
+          return { h, p: d, dollar, displayCcy: moversCcy };
         }
         const p = pnlPct(h);
         if (!Number.isFinite(p)) return null;
         const nativeDollar = pnl(h);
-        const dollar = convertAmount(nativeDollar, nativeCcy, viewCurrency, workspaceCurrencyRates, baseCurrency);
-        return { h, p, dollar, displayCcy: viewCurrency };
+        const dollar = convertAmount(nativeDollar, nativeCcy, moversCcy, workspaceCurrencyRates, baseCurrency);
+        return { h, p, dollar, displayCcy: moversCcy };
       })
       .filter(Boolean) as { h: any; p: number; dollar: number; displayCcy: string }[];
     // $ mode ranks by absolute P&L; % mode ranks by percentage
@@ -827,7 +843,7 @@ export default function PortfolioV1View({
       .sort((a, b) => (byDollar ? a.dollar - b.dollar : a.p - b.p))
       .slice(0, 5);
     return { gainers, losers };
-  }, [filtered, moversMode, moversUnit, viewCurrency, workspaceCurrencyRates, baseCurrency]);
+  }, [filtered, moversMode, moversUnit, viewCurrency, workspaceCurrencyRates, baseCurrency, totalPortfolioTile.displayCcy]);
 
   // Near-SL list is per *lot* (position), not per consolidated symbol —
   // Netflix with 5 different stops shows as 5 rows when each is within 8%.
