@@ -364,17 +364,17 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
 
   return (
     <div className="flex-1 flex flex-col overflow-y-auto px-3 sm:px-5 pt-3 sm:pt-4 pb-24 md:pb-4 space-y-4 text-left bg-slate-50 dark:bg-slate-950">
-      <div className="relative overflow-hidden rounded-2xl border border-indigo-200/60 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50 via-white to-violet-50/60 dark:from-indigo-950/40 dark:via-slate-900 dark:to-violet-950/30 p-3.5 sm:p-4">
-        <div className="absolute -right-6 -top-6 w-28 h-28 rounded-full bg-indigo-400/15 blur-2xl pointer-events-none" />
-        <div className="relative flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/30">
-            <ClipboardList className="w-4.5 h-4.5" />
+      <div className="rounded-2xl bg-indigo-600 text-white p-4 shadow-lg shadow-indigo-600/25">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center">
+            <ClipboardList className="w-5 h-5 text-white" />
           </div>
-          <div>
-            <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight leading-tight">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-100">Plan</p>
+            <h2 className="text-xl font-black tracking-tight truncate">
               {workspaceName ? `${workspaceName} Investment Plan` : 'Investment Plan'}
             </h2>
-            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Contributions · withdrawals · splits · recurring</p>
+            <p className="text-[11px] font-semibold text-indigo-100/90">Contributions · Withdrawals · Splits · Recurring</p>
           </div>
         </div>
       </div>
@@ -384,7 +384,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-violet-500/80 dark:text-violet-400/80 w-10">
             Book
           </span>
-          <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-violet-100/80 dark:bg-violet-950/50 border border-violet-200/60 dark:border-violet-900/60">
+          <div className="inline-flex items-center gap-0.5 p-1 rounded-2xl bg-violet-200 dark:bg-violet-950/70 border-2 border-violet-400 dark:border-violet-700">
             <button
               type="button"
               onClick={() => setSelectedPlanPortfolios(new Set())}
@@ -456,20 +456,17 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
         </div>
       )}
 
-      <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-        <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-indigo-500/90 dark:text-indigo-400/90 w-10">
-          View
-        </span>
-        <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-indigo-100/80 dark:bg-indigo-950/50 border border-indigo-200/60 dark:border-indigo-900/60">
+      <div className="sticky top-0 z-20 -mx-3 sm:-mx-5 px-3 sm:px-5 py-2 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur border-b border-indigo-200/60 dark:border-indigo-900/40">
+        <div className="flex gap-2 p-1 rounded-2xl bg-indigo-100 dark:bg-indigo-950/60 border-2 border-indigo-300 dark:border-indigo-700">
           {TABS.map(tab => (
             <button
               type="button"
               key={tab.key}
               onClick={() => setPlanTab(tab.key)}
-              className={`shrink-0 px-3.5 py-1.5 rounded-full text-[11px] font-bold transition-all cursor-pointer ${
+              className={`flex-1 py-2.5 rounded-xl text-[12px] font-black uppercase tracking-wide transition-all cursor-pointer ${
                 planTab === tab.key
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                  : 'text-indigo-700/70 dark:text-indigo-300/70 hover:text-indigo-900 dark:hover:text-indigo-100'
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/40'
+                  : 'text-indigo-800 dark:text-indigo-200 hover:bg-white/60 dark:hover:bg-indigo-900/40'
               }`}
             >
               {tab.label}
@@ -488,7 +485,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           let running = 0;
           const chartData = events.map(e => { running += e.delta; return { date: e.date, total: running }; });
           return (
-            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-2 shadow-sm">
+            <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-indigo-500 bg-white dark:bg-slate-900 p-4 space-y-2 shadow-md">
               <div className="flex items-center gap-2">
                 <span className="w-1.5 h-4 rounded-full bg-emerald-500" />
                 <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">Contribution Growth</span>
@@ -516,7 +513,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           });
           const colors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'];
           return (
-            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-2 shadow-sm">
+            <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-indigo-500 bg-white dark:bg-slate-900 p-4 space-y-2 shadow-md">
               <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-emerald-500 shrink-0" />Total Contribution by Person</span>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
@@ -540,7 +537,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
       {planTab === 'contributions' && (
         <>
         {portfolioRecurringPlans.some(p => p.active) && (
-          <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm">
+          <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-indigo-500 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-md">
             <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-indigo-500 shrink-0" />Fund Transfer Status</span>
             <p className="text-[9px] text-slate-400">Who's transferred their share for the current period, and who hasn't yet.</p>
             <div className="space-y-2">
@@ -575,7 +572,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           </div>
         )}
 
-        <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm">
+        <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-indigo-500 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-md">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 uppercase tracking-wider flex items-center gap-1.5"><span className="w-1.5 h-3.5 rounded-full bg-emerald-500 shrink-0" />Recurring Contribution Plan</span>
             {!isReadOnly && <button onClick={() => setIsAddingPlan(!isAddingPlan)} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Add Plan</button>}
@@ -652,7 +649,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm">
+        <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-indigo-500 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-md">
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Split Among Workspace Members</span>
           <p className="text-[9px] text-slate-400">Everyone here is a member of this workspace. To add someone new, invite them via Family Sharing first.</p>
           <div className="space-y-1.5">
@@ -700,7 +697,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           )}
         </div>
 
-        <div className="rounded-2xl border border-indigo-200/80 dark:border-indigo-900/50 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm shadow-indigo-500/5">
+        <div className="rounded-2xl border-2 border-indigo-300 dark:border-indigo-800 border-l-[6px] border-l-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/25 p-4 space-y-3 shadow-md shadow-indigo-500/10">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
               <span className="w-1.5 h-4 rounded-full bg-indigo-500" />
@@ -911,7 +908,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
           })()}
         </div>
 
-        <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm">
+        <div className="rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-l-[6px] border-l-indigo-500 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-md">
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Wallet className="w-3.5 h-3.5" /> Withdrawals</span>
           <p className="text-[9px] text-slate-400">Money taken out of the pool back to a person - separate from selling a stock, which stays in the pool as cash.</p>
           <div className="divide-y divide-slate-100 dark:divide-slate-900">
