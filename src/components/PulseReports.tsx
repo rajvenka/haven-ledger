@@ -112,43 +112,48 @@ export default function PulseReports(props: any) {
 
   return (
     <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-left w-full max-w-full">
-      <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 space-y-3">
-        <div className="rounded-2xl bg-violet-600 text-white p-4 shadow-lg shadow-violet-600/30">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-100">Pulse · Analytics</p>
-          <h1 className="text-xl font-black tracking-tight">Reports</h1>
-          <p className="text-[11px] font-semibold text-violet-100/95 mt-1">
+      <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 space-y-2.5">
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-slate-50 via-white to-violet-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-violet-950/20 p-3 sm:p-3.5">
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
+              Reports
+            </h1>
+            <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-violet-600/90 text-white">
+              Pulse
+            </span>
+          </div>
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">
             {active.length} holdings · {portfolioDividends?.length || 0} dividends · {portfolioFees?.length || 0} fees
           </p>
         </div>
 
-        <div className="flex gap-1 p-1 rounded-2xl bg-violet-100 dark:bg-violet-950/60 border-2 border-violet-300 dark:border-violet-700 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-          {(
-            [
-              ['overview', 'Overview'],
-              ['dividends', 'Dividends'],
-              ['fees', 'Fees'],
-              ['snapshots', 'Snapshots'],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              className={`shrink-0 flex-1 px-3 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wide transition-all ${
-                tab === id
-                  ? id === 'dividends'
-                    ? 'bg-emerald-600 text-white shadow-md'
-                    : id === 'fees'
-                      ? 'bg-rose-600 text-white shadow-md'
-                      : id === 'snapshots'
-                        ? 'bg-sky-600 text-white shadow-md'
-                        : 'bg-violet-600 text-white shadow-md'
-                  : 'text-violet-900 dark:text-violet-100'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-violet-500/80 dark:text-violet-400/80 w-10">
+            View
+          </span>
+          <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-violet-100/80 dark:bg-violet-950/50 border border-violet-200/60 dark:border-violet-900/60">
+            {(
+              [
+                ['overview', 'Overview'],
+                ['dividends', 'Dividends'],
+                ['fees', 'Fees'],
+                ['snapshots', 'Snapshots'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTab(id)}
+                className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                  tab === id
+                    ? 'bg-violet-600 text-white shadow-violet-600/25'
+                    : 'text-violet-700/70 dark:text-violet-300/70'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -160,7 +165,7 @@ export default function PulseReports(props: any) {
               return (
                 <div
                   key={ccy}
-                  className="rounded-2xl border-2 border-violet-200 dark:border-violet-800 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-3 shadow-md"
+                  className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-3"
                 >
                   <div className="flex items-center justify-between">
                     <p className="text-[11px] font-black text-slate-500">{ccy} · {v.count} holdings</p>
@@ -175,12 +180,12 @@ export default function PulseReports(props: any) {
               );
             })}
             <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-2xl border-2 border-emerald-400 dark:border-emerald-700 border-l-[6px] border-l-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 p-3 shadow-md">
+              <div className="rounded-2xl border border-emerald-200/70 dark:border-emerald-900/40 bg-emerald-50/40 dark:bg-emerald-950/15 p-3">
                 <Gift className="w-4 h-4 text-emerald-600 mb-1" />
                 <p className="text-[9px] font-black uppercase text-slate-400">Dividends</p>
                 <p className="text-[14px] font-black">{money(divTotal)}</p>
               </div>
-              <div className="rounded-2xl border-2 border-rose-400 dark:border-rose-700 border-l-[6px] border-l-rose-500 bg-rose-50 dark:bg-rose-950/30 p-3 shadow-md">
+              <div className="rounded-2xl border border-rose-200/70 dark:border-rose-900/40 bg-rose-50/40 dark:bg-rose-950/15 p-3">
                 <Receipt className="w-4 h-4 text-rose-600 mb-1" />
                 <p className="text-[9px] font-black uppercase text-slate-400">Fees</p>
                 <p className="text-[14px] font-black">{money(feeTotal)}</p>
