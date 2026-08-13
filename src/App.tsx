@@ -1644,7 +1644,7 @@ export default function App() {
 
           {/* Dynamic page content body */}
           <main className={`flex-1 min-w-0 max-w-full overflow-x-hidden flex flex-col min-h-0 ${
-            uiPulse && (activeTab === 'expenses' || activeTab === 'summary' || activeTab === 'configure' || activeTab === 'rewards' || activeTab === 'income' || activeTab === 'history' || activeTab === 'reports' || activeTab === 'investment_plan')
+            uiPulse && (activeTab === 'expenses' || activeTab === 'summary' || activeTab === 'configure' || activeTab === 'rewards' || activeTab === 'income' || activeTab === 'history')
               ? 'overflow-hidden'
               : 'overflow-y-auto'
           }`}>
@@ -1938,43 +1938,6 @@ export default function App() {
               />
               )
             ) : activeTab === 'investment_plan' ? (
-              uiPulse ? (
-                <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
-                  <PulseInvestment
-                workspaceName={activeWorkspace?.name}
-                workspaceMembers={contributorMembers}
-                isReadOnly={isReadOnly}
-                currentUserId={user?.id}
-                portfolios={portfolios}
-                portfolioMode={activeWorkspace?.portfolioMode}
-                workspaceCurrencyRates={workspaceCurrencyRates}
-                baseCurrency={activeWorkspace?.baseCurrency}
-                dismissedReminderKey={activeWorkspace?.dismissedReminderKey}
-                onDismissContributionReminder={dismissContributionReminder}
-                portfolioSplits={portfolioSplits}
-                addPortfolioSplit={addPortfolioSplit}
-                deletePortfolioSplit={deletePortfolioSplit}
-                portfolioContributions={portfolioContributions}
-                addPortfolioContribution={addPortfolioContribution}
-                updatePortfolioContribution={updatePortfolioContribution}
-                deletePortfolioContribution={deletePortfolioContribution}
-                portfolioWithdrawals={portfolioWithdrawals}
-                addPortfolioWithdrawal={addPortfolioWithdrawal}
-                deletePortfolioWithdrawal={deletePortfolioWithdrawal}
-                portfolioCashBalances={portfolioCashBalances}
-                setPortfolioCashBalance={setPortfolioCashBalance}
-                deletePortfolioCashBalance={deletePortfolioCashBalance}
-                portfolioBookedPlBaselines={portfolioBookedPlBaselines}
-                setBookedPlBaseline={setBookedPlBaseline}
-                portfolioProjectedBankBalances={portfolioProjectedBankBalances}
-                setProjectedBankBalance={setProjectedBankBalance}
-                portfolioRecurringPlans={portfolioRecurringPlans}
-                addPortfolioRecurringPlan={addPortfolioRecurringPlan}
-                updatePortfolioRecurringPlan={updatePortfolioRecurringPlan}
-                deletePortfolioRecurringPlan={deletePortfolioRecurringPlan}
-              />
-                </div>
-              ) : (
                 <InvestmentPlanView
                 workspaceName={activeWorkspace?.name}
                 workspaceMembers={contributorMembers}
@@ -2008,38 +1971,7 @@ export default function App() {
                 updatePortfolioRecurringPlan={updatePortfolioRecurringPlan}
                 deletePortfolioRecurringPlan={deletePortfolioRecurringPlan}
               />
-              )
-            ) : activeTab === 'reports' ? (
-              uiPulse ? (
-                <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
-                  <PulseReports
-                workspaceName={activeWorkspace?.name}
-                workspaceMembers={contributorMembers}
-                isReadOnly={isReadOnly}
-                portfolios={portfolios}
-                portfolioMode={activeWorkspace?.portfolioMode}
-                workspaceCurrencyRates={workspaceCurrencyRates}
-                baseCurrency={activeWorkspace?.baseCurrency}
-                portfolioHoldings={portfolioHoldings}
-                portfolioPriceHistory={portfolioPriceHistory}
-                portfolioContributions={portfolioContributions}
-                portfolioWithdrawals={portfolioWithdrawals}
-                portfolioDividends={portfolioDividends}
-                addPortfolioDividend={addPortfolioDividend}
-                deletePortfolioDividend={deletePortfolioDividend}
-                portfolioFees={portfolioFees}
-                addPortfolioFee={addPortfolioFee}
-                deletePortfolioFee={deletePortfolioFee}
-                portfolioSplits={portfolioSplits}
-                portfolioCashBalances={portfolioCashBalances}
-                portfolioSnapshots={portfolioSnapshots}
-                takePortfolioSnapshot={takePortfolioSnapshot}
-                deletePortfolioSnapshotBatch={deletePortfolioSnapshotBatch}
-                mfHoldingsCache={mfHoldingsCache}
-                loadMfHoldingsCache={loadMfHoldingsCache}
-              />
-                </div>
-              ) : (
+) : activeTab === 'reports' ? (
                 <ReportsView
                 workspaceName={activeWorkspace?.name}
                 workspaceMembers={contributorMembers}
@@ -2066,8 +1998,7 @@ export default function App() {
                 mfHoldingsCache={mfHoldingsCache}
                 loadMfHoldingsCache={loadMfHoldingsCache}
               />
-              )
-            ) : activeTab === 'income' ? (
+) : activeTab === 'income' ? (
               uiPulse ? (
                 <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
                   <PulseIncome
