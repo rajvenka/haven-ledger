@@ -1593,9 +1593,13 @@ export default function App() {
           <div className="md:hidden shrink-0" style={{ height: 'calc(env(safe-area-inset-top) + 3.75rem)' }} />
 
           {/* Dynamic page content body */}
-          <main className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col min-h-0">
+          <main className={`flex-1 overflow-x-hidden flex flex-col min-h-0 ${
+            uiPulse && (activeTab === 'expenses' || activeTab === 'summary')
+              ? 'overflow-hidden'
+              : 'overflow-y-auto'
+          }`}>
             {(activeTab === 'summary' || activeTab === 'expenses') && hasFeature('core') && (
-              <div className="px-4 sm:px-5 pt-2 flex items-center justify-end">
+              <div className="shrink-0 px-4 sm:px-5 pt-2 flex items-center justify-end">
                 <button
                   type="button"
                   onClick={togglePulse}
