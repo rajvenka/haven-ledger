@@ -251,12 +251,28 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'configure' | 'account' | 'history' | 'ai' | 'income' | 'rewards' | 'portfolio' | 'portfolio_v1' | 'investment_plan' | 'reports' | 'admin_users'>('summary');
   const [uiPulse, setUiPulse] = useState<boolean>(() => {
-    try { return localStorage.getItem('haven_ui_pulse') === '1'; } catch { return false; }
+    try {
+      // One-time migration: bills/membership Pulse rollout enables Pulse once
+      if (localStorage.getItem('haven_ui_pulse_bills_v1') !== '1') {
+        localStorage.setItem('haven_ui_pulse', '1');
+        localStorage.setItem('haven_ui_pulse_bills_v1', '1');
+        return true;
+      }
+      const v = localStorage.getItem('haven_ui_pulse');
+      // Prefer Pulse when unset
+      if (v === null || v === '') return true;
+      return v === '1';
+    } catch {
+      return true;
+    }
   });
   const togglePulse = () => {
     setUiPulse((v) => {
       const next = !v;
-      try { localStorage.setItem('haven_ui_pulse', next ? '1' : '0'); } catch { /* ignore */ }
+      try {
+        localStorage.setItem('haven_ui_pulse', next ? '1' : '0');
+        localStorage.setItem('haven_ui_pulse_bills_v1', '1');
+      } catch { /* ignore */ }
       return next;
     });
   };
