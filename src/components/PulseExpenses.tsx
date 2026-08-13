@@ -278,70 +278,72 @@ export default function PulseExpenses({
           </div>
         </div>
 
-        {/* Method tiles — horizontal scroll rows */}
-        {(
-          [
-            { key: 'dd', title: 'Direct debit', t: tilesDd, accent: 'sky' },
-            { key: 'manual', title: 'Manual monthly', t: tilesManual, accent: 'violet' },
-            { key: 'oneoff', title: 'One-off / non-monthly', t: tilesOneOff, accent: 'slate' },
-          ] as const
-        ).map((row) => {
-          if (row.t.paidCount + row.t.toPayCount + row.t.nextCount === 0) return null;
-          const chip =
-            row.accent === 'sky'
-              ? 'bg-sky-50 dark:bg-sky-950/40 border-sky-200/70 dark:border-sky-900/50'
-              : row.accent === 'violet'
-                ? 'bg-violet-50 dark:bg-violet-950/40 border-violet-200/70 dark:border-violet-900/50'
-                : 'bg-slate-50 dark:bg-slate-900/80 border-slate-200/80 dark:border-slate-800';
-          const head =
-            row.accent === 'sky'
-              ? 'text-sky-700 dark:text-sky-300'
-              : row.accent === 'violet'
-                ? 'text-violet-700 dark:text-violet-300'
-                : 'text-slate-600 dark:text-slate-300';
-          return (
-            <div key={row.key} className="mb-3">
-              <p className={`text-[10px] font-black uppercase tracking-wider mb-1.5 ${head}`}>{row.title}</p>
-              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-0.5">
-                {(
-                  [
-                    { bucket: 'paid' as const, label: 'This month paid', sum: row.t.paidSum, count: row.t.paidCount, tone: 'text-emerald-600 dark:text-emerald-400' },
-                    { bucket: 'to_pay' as const, label: 'This month to pay', sum: row.t.toPaySum, count: row.t.toPayCount, tone: 'text-rose-600 dark:text-rose-400' },
-                    { bucket: 'next' as const, label: 'Next month', sum: row.t.nextSum, count: row.t.nextCount, tone: 'text-amber-600 dark:text-amber-400' },
-                  ] as const
-                ).map((tile) => {
-                  const g =
-                    row.key === 'dd' ? 'dd' : row.key === 'manual' ? 'manual_monthly' : 'non_monthly';
-                  const active = tileFilter?.group === g && tileFilter?.bucket === tile.bucket;
-                  return (
-                    <button
-                      key={tile.bucket}
-                      type="button"
-                      onClick={() => {
-                        if (active) {
-                          setTileFilter(null);
-                          return;
-                        }
-                        setTileFilter({ group: g, bucket: tile.bucket });
-                        setPaidFilter('all');
-                        setStatusFilter('all');
-                      }}
-                      className={`shrink-0 min-w-[9.5rem] rounded-2xl border p-3 text-left transition-all ${chip} ${
-                        active ? 'ring-2 ring-indigo-500 shadow-md' : 'hover:shadow-sm'
-                      }`}
-                    >
-                      <p className={`text-[9px] font-black uppercase tracking-wider ${tile.tone}`}>{tile.label}</p>
-                      <p className="mt-1 text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
-                        {formatCurrencyValue(tile.sum, displayCcy as any, countries)}
-                      </p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">{tile.count} bills</p>
-                    </button>
-                  );
-                })}
+        {/* Method tiles — stacked on mobile, 3 columns on desktop */}
+        <div className="mb-3 flex flex-col gap-3 lg:grid lg:grid-cols-3 lg:gap-3">
+          {(
+            [
+              { key: 'dd', title: 'Direct debit', t: tilesDd, accent: 'sky' },
+              { key: 'manual', title: 'Manual monthly', t: tilesManual, accent: 'violet' },
+              { key: 'oneoff', title: 'One-off / non-monthly', t: tilesOneOff, accent: 'slate' },
+            ] as const
+          ).map((row) => {
+            if (row.t.paidCount + row.t.toPayCount + row.t.nextCount === 0) return null;
+            const chip =
+              row.accent === 'sky'
+                ? 'bg-sky-50 dark:bg-sky-950/40 border-sky-200/70 dark:border-sky-900/50'
+                : row.accent === 'violet'
+                  ? 'bg-violet-50 dark:bg-violet-950/40 border-violet-200/70 dark:border-violet-900/50'
+                  : 'bg-slate-50 dark:bg-slate-900/80 border-slate-200/80 dark:border-slate-800';
+            const head =
+              row.accent === 'sky'
+                ? 'text-sky-700 dark:text-sky-300'
+                : row.accent === 'violet'
+                  ? 'text-violet-700 dark:text-violet-300'
+                  : 'text-slate-600 dark:text-slate-300';
+            return (
+              <div key={row.key} className="min-w-0">
+                <p className={`text-[10px] font-black uppercase tracking-wider mb-1.5 ${head}`}>{row.title}</p>
+                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-0.5 lg:flex-col lg:overflow-visible lg:pb-0">
+                  {(
+                    [
+                      { bucket: 'paid' as const, label: 'This month paid', sum: row.t.paidSum, count: row.t.paidCount, tone: 'text-emerald-600 dark:text-emerald-400' },
+                      { bucket: 'to_pay' as const, label: 'This month to pay', sum: row.t.toPaySum, count: row.t.toPayCount, tone: 'text-rose-600 dark:text-rose-400' },
+                      { bucket: 'next' as const, label: 'Next month', sum: row.t.nextSum, count: row.t.nextCount, tone: 'text-amber-600 dark:text-amber-400' },
+                    ] as const
+                  ).map((tile) => {
+                    const g =
+                      row.key === 'dd' ? 'dd' : row.key === 'manual' ? 'manual_monthly' : 'non_monthly';
+                    const active = tileFilter?.group === g && tileFilter?.bucket === tile.bucket;
+                    return (
+                      <button
+                        key={tile.bucket}
+                        type="button"
+                        onClick={() => {
+                          if (active) {
+                            setTileFilter(null);
+                            return;
+                          }
+                          setTileFilter({ group: g, bucket: tile.bucket });
+                          setPaidFilter('all');
+                          setStatusFilter('all');
+                        }}
+                        className={`shrink-0 min-w-[9.5rem] lg:min-w-0 lg:w-full rounded-2xl border p-3 text-left transition-all ${chip} ${
+                          active ? 'ring-2 ring-indigo-500 shadow-md' : 'hover:shadow-sm'
+                        }`}
+                      >
+                        <p className={`text-[9px] font-black uppercase tracking-wider ${tile.tone}`}>{tile.label}</p>
+                        <p className="mt-1 text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
+                          {formatCurrencyValue(tile.sum, displayCcy as any, countries)}
+                        </p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">{tile.count} bills</p>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
 
         {/* FLOATING / STICKY filter bar — first sticky child of the scroller */}
         <div
