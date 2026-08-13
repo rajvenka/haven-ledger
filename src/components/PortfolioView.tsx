@@ -677,6 +677,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [editHoldDays, setEditHoldDays] = useState('');
   const [editHoldUntilDate, setEditHoldUntilDate] = useState('');
   const [editTicker, setEditTicker] = useState('');
+  const [editNotes, setEditNotes] = useState('');
   const [sellPrice, setSellPrice] = useState('');
   const [sellDate, setSellDate] = useState(todayStr());
 
@@ -1993,6 +1994,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setEditHoldDays(String(h.hold_days ?? ''));
     setEditHoldUntilDate(h.hold_until_date || '');
     setEditTicker(h.ticker || (h.broker === 'Zerodha' ? h.symbol : ''));
+    setEditNotes(h.notes || '');
   };
 
   const [sellQuantity, setSellQuantity] = useState('');
@@ -4720,10 +4722,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           <td className="p-2.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="relative max-w-[140px]">
-                                <span onClick={() => setExpandedNameId(prev => (prev === h.id ? null : h.id))} onMouseEnter={() => setExpandedNameId(h.id)} onMouseLeave={() => setExpandedNameId(prev => (prev === h.id ? null : prev))} className="font-bold text-slate-900 dark:text-white truncate block cursor-pointer">{h.symbol}</span>
+                                <span onClick={() => setExpandedNameId(prev => (prev === h.id ? null : h.id))} onMouseEnter={() => setExpandedNameId(h.id)} onMouseLeave={() => setExpandedNameId(prev => (prev === h.id ? null : prev))} className="font-bold text-slate-900 dark:text-white truncate cursor-pointer inline-flex items-center gap-1">
+                                  {h.symbol}
+                                  {h.notes && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Has a note" />}
+                                </span>
                                 {expandedNameId === h.id && (
-                                  <div className="absolute left-0 bottom-full mb-0.5 z-20 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-normal max-w-[220px]">
-                                    {h.symbol}
+                                  <div className="absolute left-0 bottom-full mb-0.5 z-20 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-normal max-w-[220px] space-y-1">
+                                    <div>{h.symbol}</div>
+                                    {h.notes && <div className="text-slate-300 dark:text-slate-300 font-normal border-t border-white/10 pt-1">{h.notes}</div>}
                                   </div>
                                 )}
                               </span>
@@ -4974,6 +4980,16 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                 ) : (
                                   <input type="date" value={editHoldUntilDate} onChange={(e) => setEditHoldUntilDate(e.target.value)} className="col-span-2 px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-xs" />
                                 )}
+                                <div className="col-span-2">
+                                  <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Notes - why you bought this, your thesis, anything worth remembering</label>
+                                  <textarea
+                                    value={editNotes}
+                                    onChange={(e) => setEditNotes(e.target.value)}
+                                    placeholder="e.g. Bought expecting $20 by mid-August on earnings"
+                                    rows={2}
+                                    className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-xs resize-none"
+                                  />
+                                </div>
                                 {!isReadOnly && (
                                   <button
                                     onClick={() => runAction(async () => {
@@ -4985,6 +5001,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                         holdDays: editHoldType === 'days' && editHoldDays ? parseInt(editHoldDays) : null,
                                         holdUntilDate: editHoldType === 'date' && editHoldUntilDate ? editHoldUntilDate : null,
                                         ticker: editTicker.trim() || null,
+                                        notes: editNotes.trim(),
                                       });
                                       setExpandedHoldingId(null);
                                     })}
@@ -5193,10 +5210,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           <td className="p-2.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="relative max-w-[140px]">
-                                <span onClick={() => setExpandedNameId(prev => (prev === h.id ? null : h.id))} onMouseEnter={() => setExpandedNameId(h.id)} onMouseLeave={() => setExpandedNameId(prev => (prev === h.id ? null : prev))} className="font-bold text-slate-900 dark:text-white truncate block cursor-pointer">{h.symbol}</span>
+                                <span onClick={() => setExpandedNameId(prev => (prev === h.id ? null : h.id))} onMouseEnter={() => setExpandedNameId(h.id)} onMouseLeave={() => setExpandedNameId(prev => (prev === h.id ? null : prev))} className="font-bold text-slate-900 dark:text-white truncate cursor-pointer inline-flex items-center gap-1">
+                                  {h.symbol}
+                                  {h.notes && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Has a note" />}
+                                </span>
                                 {expandedNameId === h.id && (
-                                  <div className="absolute left-0 bottom-full mb-0.5 z-20 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-normal max-w-[220px]">
-                                    {h.symbol}
+                                  <div className="absolute left-0 bottom-full mb-0.5 z-20 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-normal max-w-[220px] space-y-1">
+                                    <div>{h.symbol}</div>
+                                    {h.notes && <div className="text-slate-300 dark:text-slate-300 font-normal border-t border-white/10 pt-1">{h.notes}</div>}
                                   </div>
                                 )}
                               </span>

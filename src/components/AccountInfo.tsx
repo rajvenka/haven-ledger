@@ -247,7 +247,6 @@ export default function AccountInfo({
   const [newPortfolioName, setNewPortfolioName] = useState('');
   const [renamingPortfolioId, setRenamingPortfolioId] = useState<string | null>(null);
   const [renamePortfolioInput, setRenamePortfolioInput] = useState('');
-  const [editingCurrencyPortfolioId, setEditingCurrencyPortfolioId] = useState<string | null>(null);
   const [editCurrencyInput, setEditCurrencyInput] = useState('');
   const [newPortfolioCurrency, setNewPortfolioCurrency] = useState('INR');
   const [addingPortfolio, setAddingPortfolio] = useState(false);
@@ -708,7 +707,7 @@ export default function AccountInfo({
                 </>
               ) : (
                 <>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Multiple Portfolio - manage separate portfolios below (e.g. one per currency). Click a portfolio's currency to change it - this relabels the portfolio only, it doesn't convert or recalculate any existing holdings.</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Multiple Portfolio - manage separate portfolios below (e.g. one per currency). Tap the edit icon to change a portfolio's name or currency together - changing currency only relabels the portfolio, it doesn't convert or recalculate any existing holdings.</p>
                   <div className="space-y-1.5">
                     {portfolios.map(p => (
                       <div key={p.id} className="flex items-center justify-between px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 rounded-lg text-xs">
@@ -719,13 +718,20 @@ export default function AccountInfo({
                               value={renamePortfolioInput}
                               onChange={(e) => setRenamePortfolioInput(e.target.value)}
                               autoFocus
-                              className="flex-1 px-2 py-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                              className="flex-1 min-w-0 px-2 py-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
                             />
+                            <select
+                              value={editCurrencyInput}
+                              onChange={(e) => setEditCurrencyInput(e.target.value)}
+                              className="px-2 py-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-md text-xs font-semibold shrink-0"
+                            >
+                              {['INR', 'USD', 'AUD', 'EUR', 'GBP', 'SGD', 'AED', 'CAD'].map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
                             <button
                               onClick={async () => {
                                 if (!renamePortfolioInput.trim()) return;
                                 try {
-                                  await onUpdatePortfolio?.(p.id, { name: renamePortfolioInput.trim() });
+                                  await onUpdatePortfolio?.(p.id, { name: renamePortfolioInput.trim(), currency: editCurrencyInput });
                                   setRenamingPortfolioId(null);
                                 } catch (err: any) {
                                   setPortfolioError(err.message);
@@ -735,59 +741,28 @@ export default function AccountInfo({
                             ><Check className="w-3 h-3" /></button>
                             <button onClick={() => setRenamingPortfolioId(null)} className="p-1 text-slate-400 cursor-pointer shrink-0"><X className="w-3 h-3" /></button>
                           </div>
-                        ) : editingCurrencyPortfolioId === p.id ? (
-                          <div className="flex items-center gap-1.5 flex-1">
-                            <span className="font-semibold text-slate-700 dark:text-slate-300">{p.name}</span>
-                            <select
-                              value={editCurrencyInput}
-                              onChange={(e) => setEditCurrencyInput(e.target.value)}
-                              autoFocus
-                              className="px-2 py-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-md text-xs font-semibold"
-                            >
-                              {['INR', 'USD', 'AUD', 'EUR', 'GBP', 'SGD', 'AED', 'CAD'].map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                            <button
-                              onClick={async () => {
-                                try {
-                                  await onUpdatePortfolio?.(p.id, { currency: editCurrencyInput });
-                                  setEditingCurrencyPortfolioId(null);
-                                } catch (err: any) {
-                                  setPortfolioError(err.message);
-                                }
-                              }}
-                              className="p-1 bg-indigo-600 text-white rounded-md cursor-pointer shrink-0"
-                            ><Check className="w-3 h-3" /></button>
-                            <button onClick={() => setEditingCurrencyPortfolioId(null)} className="p-1 text-slate-400 cursor-pointer shrink-0"><X className="w-3 h-3" /></button>
-                          </div>
                         ) : (
                           <>
                             <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                               {p.name}{' '}
-                              {familyRole === 'host' ? (
-                                <button
-                                  onClick={() => { setEditingCurrencyPortfolioId(p.id); setEditCurrencyInput(p.currency); }}
-                                  className="text-[9px] text-slate-400 font-bold hover:text-indigo-500 cursor-pointer underline decoration-dotted"
-                                  title="Change this portfolio's currency"
-                                >
-                                  {p.currency}
-                                </button>
-                              ) : (
-                                <span className="text-[9px] text-slate-400 font-bold">{p.currency}</span>
-                              )}
+                              <span className="text-[9px] text-slate-400 font-bold">{p.currency}</span>
                               {p.is_default && <span className="text-[8px] px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-full font-black uppercase">Default</span>}
                             </span>
                             {familyRole === 'host' && (
                               <div className="flex items-center gap-2">
                                 <button
-                                  onClick={() => { setRenamingPortfolioId(p.id); setRenamePortfolioInput(p.name); }}
+                                  onClick={() => { setRenamingPortfolioId(p.id); setRenamePortfolioInput(p.name); setEditCurrencyInput(p.currency); }}
                                   className="text-slate-300 hover:text-indigo-500 cursor-pointer"
-                                  title="Rename portfolio"
+                                  title="Edit name and currency"
                                 >
                                   <Edit2 className="w-3.5 h-3.5" />
                                 </button>
                                 {!p.is_default && (
                                   <button
-                                    onClick={async () => { try { await onDeletePortfolio?.(p.id); } catch (err: any) { setPortfolioError(err.message); } }}
+                                    onClick={async () => {
+                                      if (!window.confirm(`Delete "${p.name}" and all of its holdings/data? This can't be undone.`)) return;
+                                      try { await onDeletePortfolio?.(p.id); } catch (err: any) { setPortfolioError(err.message); }
+                                    }}
                                     className="text-slate-300 hover:text-rose-500 cursor-pointer"
                                     title="Delete portfolio"
                                   >

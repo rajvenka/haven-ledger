@@ -736,7 +736,7 @@ export default function PortfolioV1View({
 
   /** Card / total performance line respects global Day|$ filters. */
   const perfLabel = moversMode === 'day' ? 'today' : 'all time';
-  const formatBucketPerf = (primary: { pnl: number; pnlPct: number; dayPnl: number; dayPct: number | null; currency: string } | null) => {
+  const formatBucketPerf = (primary: { pnl: number; pnlPct: number; dayPnl: number; dayPct: number | null; dayCount?: number; currency: string } | null) => {
     if (!primary) return { text: '—', positive: true };
     if (moversMode === 'day') {
       if (primary.dayPct == null && !(primary.dayPnl || primary.dayCount)) {
