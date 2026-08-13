@@ -112,21 +112,16 @@ export default function PulseReports(props: any) {
 
   return (
     <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-left w-full max-w-full">
-      <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-              Reports
-              <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-violet-600 text-white">
-                Pulse
-              </span>
-            </h1>
-            <p className="text-[10px] text-slate-400 font-bold">
-              {active.length} holdings · {portfolioDividends?.length || 0} dividends · {portfolioFees?.length || 0} fees
-            </p>
-          </div>
+      <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 space-y-3">
+        <div className="rounded-2xl bg-violet-600 text-white p-4 shadow-lg shadow-violet-600/30">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-100">Pulse · Analytics</p>
+          <h1 className="text-xl font-black tracking-tight">Reports</h1>
+          <p className="text-[11px] font-semibold text-violet-100/95 mt-1">
+            {active.length} holdings · {portfolioDividends?.length || 0} dividends · {portfolioFees?.length || 0} fees
+          </p>
         </div>
-        <div className="flex gap-1 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+
+        <div className="flex gap-1 p-1 rounded-2xl bg-violet-100 dark:bg-violet-950/60 border-2 border-violet-300 dark:border-violet-700 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {(
             [
               ['overview', 'Overview'],
@@ -139,8 +134,16 @@ export default function PulseReports(props: any) {
               key={id}
               type="button"
               onClick={() => setTab(id)}
-              className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                tab === id ? 'bg-violet-600 text-white' : 'bg-white dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-800'
+              className={`shrink-0 flex-1 px-3 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wide transition-all ${
+                tab === id
+                  ? id === 'dividends'
+                    ? 'bg-emerald-600 text-white shadow-md'
+                    : id === 'fees'
+                      ? 'bg-rose-600 text-white shadow-md'
+                      : id === 'snapshots'
+                        ? 'bg-sky-600 text-white shadow-md'
+                        : 'bg-violet-600 text-white shadow-md'
+                  : 'text-violet-900 dark:text-violet-100'
               }`}
             >
               {label}
@@ -157,7 +160,7 @@ export default function PulseReports(props: any) {
               return (
                 <div
                   key={ccy}
-                  className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3"
+                  className="rounded-2xl border-2 border-violet-200 dark:border-violet-800 border-l-[6px] border-l-violet-500 bg-white dark:bg-slate-900 p-3 shadow-md"
                 >
                   <div className="flex items-center justify-between">
                     <p className="text-[11px] font-black text-slate-500">{ccy} · {v.count} holdings</p>
@@ -172,12 +175,12 @@ export default function PulseReports(props: any) {
               );
             })}
             <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-2xl border border-emerald-200/60 dark:border-emerald-900/40 bg-emerald-50/50 dark:bg-emerald-950/20 p-3">
+              <div className="rounded-2xl border-2 border-emerald-400 dark:border-emerald-700 border-l-[6px] border-l-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 p-3 shadow-md">
                 <Gift className="w-4 h-4 text-emerald-600 mb-1" />
                 <p className="text-[9px] font-black uppercase text-slate-400">Dividends</p>
                 <p className="text-[14px] font-black">{money(divTotal)}</p>
               </div>
-              <div className="rounded-2xl border border-rose-200/60 dark:border-rose-900/40 bg-rose-50/50 dark:bg-rose-950/20 p-3">
+              <div className="rounded-2xl border-2 border-rose-400 dark:border-rose-700 border-l-[6px] border-l-rose-500 bg-rose-50 dark:bg-rose-950/30 p-3 shadow-md">
                 <Receipt className="w-4 h-4 text-rose-600 mb-1" />
                 <p className="text-[9px] font-black uppercase text-slate-400">Fees</p>
                 <p className="text-[14px] font-black">{money(feeTotal)}</p>
