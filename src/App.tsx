@@ -1577,7 +1577,7 @@ export default function App() {
           <div className="md:hidden shrink-0" style={{ height: 'calc(env(safe-area-inset-top) + 3.75rem)' }} />
 
           {/* Dynamic page content body */}
-          <main className={`flex-1 overflow-x-hidden flex flex-col min-h-0 ${
+          <main className={`flex-1 min-w-0 max-w-full overflow-x-hidden flex flex-col min-h-0 ${
             uiPulse && (activeTab === 'expenses' || activeTab === 'summary')
               ? 'overflow-hidden'
               : 'overflow-y-auto'
