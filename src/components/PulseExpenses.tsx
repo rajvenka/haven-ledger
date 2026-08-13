@@ -46,6 +46,10 @@ export default function PulseExpenses({
   currentUserUid,
 }: Props) {
   const [paidFilter, setPaidFilter] = useState<'all' | 'unpaid' | 'paid'>('unpaid');
+  const [tileFilter, setTileFilter] = useState<{
+    group: 'dd' | 'manual_monthly' | 'non_monthly';
+    bucket: 'paid' | 'to_pay' | 'next';
+  } | null>(null);
   const [searchQ, setSearchQ] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'overdue' | 'today' | 'soon' | 'unpaid' | 'paid'>('all');
   const isPaymentReadOnly = (payment: RecurringPayment) => {
@@ -78,6 +82,8 @@ export default function PulseExpenses({
 
   const now = new Date();
   const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const nextM = now.getMonth() === 11 ? 0 : now.getMonth() + 1;
+  const nextY = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear();
 
   const paidSoFar = history
     .filter((h) => h.paidDate.startsWith(currentMonthStr))
@@ -94,13 +100,37 @@ export default function PulseExpenses({
 
   const displayCcy = isAll ? defaultCurrency : activeCurrency;
 
+  const isMonthlyCycle = (cycle?: string) => {
+    const c = String(cycle || 'monthly').toLowerCase();
+    return c === 'monthly' || c === 'weekly';
+  };
+  const groupOf = (p: RecurringPayment): 'dd' | 'manual_monthly' | 'non_monthly' => {
+    const method = String(p.paymentMethod || 'manual').toLowerCase();
+    if (method === 'direct_debit' || method === 'dd') return 'dd';
+    if (!isMonthlyCycle(p.billingCycle)) return 'non_monthly';
+    return 'manual_monthly';
+  };
   const sortedAll = [...filteredPayments].sort((a, b) => getDaysUntilPayment(a) - getDaysUntilPayment(b));
   const q = searchQ.trim().toLowerCase();
   const sorted = sortedAll.filter((p) => {
     const paid = isPaymentPaidForCurrentPeriod(p, history);
     const days = getDaysUntilPayment(p);
-    if (paidFilter === 'unpaid' && paid) return false;
-    if (paidFilter === 'paid' && !paid) return false;
+    if (tileFilter) {
+      if (groupOf(p) !== tileFilter.group) return false;
+      if (tileFilter.bucket === 'paid' && !paid) return false;
+      if (tileFilter.bucket === 'to_pay' && paid) return false;
+      if (tileFilter.bucket === 'next') {
+        try {
+          const d = getNextPaymentDate(p, now, history);
+          if (!(d.getFullYear() === nextY && d.getMonth() === nextM)) return false;
+        } catch {
+          return false;
+        }
+      }
+    } else {
+      if (paidFilter === 'unpaid' && paid) return false;
+      if (paidFilter === 'paid' && !paid) return false;
+    }
     // Status badge filters
     if (statusFilter === 'overdue' && (paid || days >= 0)) return false;
     if (statusFilter === 'today' && (paid || days !== 0)) return false;
@@ -127,16 +157,6 @@ export default function PulseExpenses({
     paid: sortedAll.filter((p) => isPaymentPaidForCurrentPeriod(p, history)).length,
   };
 
-  const isMonthlyCycle = (cycle?: string) => {
-    const c = String(cycle || 'monthly').toLowerCase();
-    return c === 'monthly' || c === 'weekly';
-  };
-  const groupOf = (p: RecurringPayment): 'dd' | 'manual_monthly' | 'non_monthly' => {
-    const method = String(p.paymentMethod || 'manual').toLowerCase();
-    if (method === 'direct_debit' || method === 'dd') return 'dd';
-    if (!isMonthlyCycle(p.billingCycle)) return 'non_monthly';
-    return 'manual_monthly';
-  };
   const groups = {
     dd: sorted.filter((p) => groupOf(p) === 'dd'),
     manual_monthly: sorted.filter((p) => groupOf(p) === 'manual_monthly'),
@@ -145,9 +165,6 @@ export default function PulseExpenses({
 
   const amt = (payment: RecurringPayment) =>
     isAll ? convertCurrency(payment.amount, payment.currency, defaultCurrency) : Number(payment.amount) || 0;
-  const now = new Date();
-  const nextM = now.getMonth() === 11 ? 0 : now.getMonth() + 1;
-  const nextY = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear();
   const isNextMonthDue = (payment: RecurringPayment) => {
     try {
       const d = getNextPaymentDate(payment, now, history);
@@ -286,27 +303,41 @@ export default function PulseExpenses({
             <div key={row.key} className="mb-3">
               <p className={`text-[10px] font-black uppercase tracking-wider mb-1.5 ${head}`}>{row.title}</p>
               <div className="flex gap-2 overflow-x-auto no-scrollbar pb-0.5">
-                <div className={`shrink-0 min-w-[9.5rem] rounded-2xl border p-3 ${chip}`}>
-                  <p className="text-[9px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">This month paid</p>
-                  <p className="mt-1 text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
-                    {formatCurrencyValue(row.t.paidSum, displayCcy as any, countries)}
-                  </p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">{row.t.paidCount} bills</p>
-                </div>
-                <div className={`shrink-0 min-w-[9.5rem] rounded-2xl border p-3 ${chip}`}>
-                  <p className="text-[9px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">This month to pay</p>
-                  <p className="mt-1 text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
-                    {formatCurrencyValue(row.t.toPaySum, displayCcy as any, countries)}
-                  </p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">{row.t.toPayCount} bills</p>
-                </div>
-                <div className={`shrink-0 min-w-[9.5rem] rounded-2xl border p-3 ${chip}`}>
-                  <p className="text-[9px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">Next month</p>
-                  <p className="mt-1 text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
-                    {formatCurrencyValue(row.t.nextSum, displayCcy as any, countries)}
-                  </p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">{row.t.nextCount} bills</p>
-                </div>
+                {(
+                  [
+                    { bucket: 'paid' as const, label: 'This month paid', sum: row.t.paidSum, count: row.t.paidCount, tone: 'text-emerald-600 dark:text-emerald-400' },
+                    { bucket: 'to_pay' as const, label: 'This month to pay', sum: row.t.toPaySum, count: row.t.toPayCount, tone: 'text-rose-600 dark:text-rose-400' },
+                    { bucket: 'next' as const, label: 'Next month', sum: row.t.nextSum, count: row.t.nextCount, tone: 'text-amber-600 dark:text-amber-400' },
+                  ] as const
+                ).map((tile) => {
+                  const g =
+                    row.key === 'dd' ? 'dd' : row.key === 'manual' ? 'manual_monthly' : 'non_monthly';
+                  const active = tileFilter?.group === g && tileFilter?.bucket === tile.bucket;
+                  return (
+                    <button
+                      key={tile.bucket}
+                      type="button"
+                      onClick={() => {
+                        if (active) {
+                          setTileFilter(null);
+                          return;
+                        }
+                        setTileFilter({ group: g, bucket: tile.bucket });
+                        setPaidFilter('all');
+                        setStatusFilter('all');
+                      }}
+                      className={`shrink-0 min-w-[9.5rem] rounded-2xl border p-3 text-left transition-all ${chip} ${
+                        active ? 'ring-2 ring-indigo-500 shadow-md' : 'hover:shadow-sm'
+                      }`}
+                    >
+                      <p className={`text-[9px] font-black uppercase tracking-wider ${tile.tone}`}>{tile.label}</p>
+                      <p className="mt-1 text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
+                        {formatCurrencyValue(tile.sum, displayCcy as any, countries)}
+                      </p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">{tile.count} bills</p>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           );
@@ -376,6 +407,7 @@ export default function PulseExpenses({
                   type="button"
                   onClick={() => {
                     setPaidFilter(id);
+                    setTileFilter(null);
                     if (id === 'all') setStatusFilter('all');
                   }}
                   className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
@@ -394,6 +426,13 @@ export default function PulseExpenses({
             </div>
           </div>
         </div>
+
+        {tileFilter && (
+          <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/80 dark:bg-indigo-950/30 px-3 py-2">
+            <p className="text-[11px] font-bold text-indigo-800 dark:text-indigo-200">Filtered by tile</p>
+            <button type="button" onClick={() => setTileFilter(null)} className="text-[10px] font-black uppercase tracking-wider text-indigo-600">Clear</button>
+          </div>
+        )}
 
         {/* Grouped lists */}
         {(
