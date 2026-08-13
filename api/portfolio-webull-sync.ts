@@ -306,10 +306,9 @@ export default async function handler(req: any, res: any) {
             buyPrice: costPrice,
             currentPrice,
             currency,
-            // Distinct source per contract helps import matching when symbols still collide.
-            source: isOption
-              ? `Webull · Options${posId ? ` · ${posId}` : ""}`
-              : `Webull ${region || "us"}`,
+            // Clean tags for filters: all option contracts share "Options"; stocks "Webull".
+            // Uniqueness for import matching uses symbol (+ posId in symbol) and externalId.
+            source: isOption ? "Options" : "Webull",
             // Pass through for debug / future lot rows
             externalId: item.position_id ?? item.positionId ?? item.id ?? undefined,
           });
