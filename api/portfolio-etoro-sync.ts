@@ -121,7 +121,7 @@ export default async function handler(req: any, res: any) {
     }
     const portfolioData = await portfolioResp.json();
     const allPositions: any[] = portfolioData?.clientPortfolio?.positions ?? [];
-    const settlementLabels: Record<string, string> = { "0": "eToro CFD/Leveraged", "1": "eToro Real Asset", "2": "eToro Crypto Margin", "3": "eToro Futures" };
+    const settlementLabels: Record<string, string> = { "0": "CFD", "1": "Real Asset", "2": "Crypto", "3": "Futures" };
     const realAssetPositions = allPositions; // no longer filtered - kept the variable name to minimize the diff below
 
     // Breakdown by settlementTypeID - to actually see what the total count is made of (real
