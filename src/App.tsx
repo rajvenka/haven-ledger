@@ -94,7 +94,7 @@ export default function App() {
     updateWorkspaceLandingTab,
     updateWorkspaceColumnPrefs,
     dismissContributionReminder,
-    portfolios, workspaceCurrencyRates, switchToMultiPortfolio, createPortfolio, updatePortfolio, deletePortfolio, upsertCurrencyRate,
+    portfolios, workspaceCurrencyRates, switchToMultiPortfolio, createPortfolio, updatePortfolio, reorderPortfolio, deletePortfolio, upsertCurrencyRate,
     mfHoldingsCache, loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
     createWorkspace,
     setWorkspaceMode,
@@ -1756,6 +1756,7 @@ export default function App() {
                 onSwitchToMultiPortfolio={switchToMultiPortfolio}
                 onCreatePortfolio={createPortfolio}
                 onUpdatePortfolio={updatePortfolio}
+                onReorderPortfolio={reorderPortfolio}
                 onDeletePortfolio={deletePortfolio}
                 workspaceCurrencyRates={workspaceCurrencyRates}
                 onUpsertCurrencyRate={upsertCurrencyRate}

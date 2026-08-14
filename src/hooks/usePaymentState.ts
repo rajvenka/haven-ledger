@@ -387,9 +387,30 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
-  const updatePortfolio = async (id: string, updates: { name?: string; currency?: string; is_default?: boolean }) => {
+  const updatePortfolio = async (id: string, updates: { name?: string; currency?: string; is_default?: boolean; display_order?: number }) => {
     const { error } = await supabase.from('portfolios').update(updates).eq('id', id);
     if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
+  // Backlog #46: swaps two portfolios' display_order values (used by up/down move controls -
+  // simpler and more reliable across devices than drag-and-drop, especially on mobile where
+  // this app is used heavily). Both updates happen before the single loadPortfolioDetails()
+  // refresh, so the list re-renders once with the final order rather than flickering through
+  // an intermediate state.
+  const reorderPortfolio = async (portfolioId: string, direction: 'up' | 'down') => {
+    if (!activeWorkspaceId) return;
+    const { data } = await supabase.from('portfolios').select('id, display_order').eq('workspace_id', activeWorkspaceId).order('display_order', { ascending: true });
+    if (!data) return;
+    const idx = data.findIndex((p: any) => p.id === portfolioId);
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (idx === -1 || swapIdx < 0 || swapIdx >= data.length) return;
+    const a = data[idx];
+    const b = data[swapIdx];
+    await Promise.all([
+      supabase.from('portfolios').update({ display_order: b.display_order }).eq('id', a.id),
+      supabase.from('portfolios').update({ display_order: a.display_order }).eq('id', b.id),
+    ]);
     await loadPortfolioDetails();
   };
 
@@ -1232,7 +1253,7 @@ export function usePaymentState() {
       supabase.from('portfolio_fees').select('*').eq('workspace_id', wsId).order('fee_date', { ascending: false }),
       supabase.from('portfolio_recurring_plans').select('*').eq('workspace_id', wsId).order('created_at'),
       supabase.from('portfolio_cash_balances').select('*').eq('workspace_id', wsId).order('location'),
-      supabase.from('portfolios').select('*').eq('workspace_id', wsId).order('created_at'),
+      supabase.from('portfolios').select('*').eq('workspace_id', wsId).order('display_order', { ascending: true, nullsFirst: false }).order('created_at'),
       supabase.from('workspace_currency_rates').select('*').eq('workspace_id', wsId),
       supabase.from('portfolio_booked_pl_baselines').select('*').eq('workspace_id', wsId),
       supabase.from('portfolio_projected_bank_balances').select('*').eq('workspace_id', wsId),
@@ -2378,7 +2399,7 @@ export function usePaymentState() {
     signUp, signIn, signInWithGoogle, resetPassword, updatePassword, updateDisplayName, acceptPrivacyPolicy, logOut, markTourCompleted,
     // Workspace model
     workspaces, activeWorkspaceId, activeWorkspace, switchWorkspace, createWorkspace, setWorkspaceMode, updateWorkspaceLandingTab, updateWorkspaceColumnPrefs, dismissContributionReminder,
-    portfolios, workspaceCurrencyRates, switchToMultiPortfolio, createPortfolio, updatePortfolio, deletePortfolio, upsertCurrencyRate,
+    portfolios, workspaceCurrencyRates, switchToMultiPortfolio, createPortfolio, updatePortfolio, reorderPortfolio, deletePortfolio, upsertCurrencyRate,
     mfHoldingsCache, loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
     renameWorkspace, updateWorkspaceBaseCurrency, deleteWorkspace,
     incomeSources, addIncomeSource, deleteIncomeSource, incomeMode, updateIncomeMode, monthlyIncome, updateMonthlyIncome,

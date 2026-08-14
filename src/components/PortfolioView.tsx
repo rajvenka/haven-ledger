@@ -1986,6 +1986,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
         holdDays: showTargetPlan && hHoldType === 'days' && hHoldDays ? parseInt(hHoldDays) : undefined,
         holdUntilDate: showTargetPlan && hHoldType === 'date' && hHoldUntilDate ? hHoldUntilDate : undefined,
       });
+      await recalculateProjectedBankBalance?.(portfolioMode === 'multiple' ? (hPortfolioId || defaultPortfolioId || undefined) : undefined);
       setHSymbol(''); setHQty(''); setHPrice(''); setHSource(''); setHTargetValue(''); setHHoldDays(''); setHHoldUntilDate('');
       setShowTargetPlan(false); setIsAddingHolding(false);
     });
@@ -2019,6 +2020,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
     const qty = sellQuantity.trim() === '' ? fullQuantity : parseFloat(sellQuantity);
     await runAction(async () => {
       await sellPortfolioHolding(sellingId, { quantity: qty, soldPrice: parseFloat(sellPrice), soldDate: sellDate });
+      // Backlog #34: a sale directly changes realized P&L, same reasoning as the edit path above.
+      const soldHoldingPortfolioId = activeHoldings.find((h: any) => h.id === sellingId)?.portfolio_id;
+      await recalculateProjectedBankBalance?.(portfolioMode === 'multiple' ? (soldHoldingPortfolioId || undefined) : undefined);
       setSellingId(null); setSellPrice(''); setSellQuantity('');
     });
   };
@@ -2033,6 +2037,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
       holdingType: h.holding_type, source: h.source ?? '', portfolioId: h.portfolio_id ?? '',
       ticker: h.ticker ?? (h.broker === 'Zerodha' ? h.symbol : ''),
       originalSymbol: h.symbol, originalTicker: h.ticker ?? null,
+      // Backlog #27: sold holdings previously only supported editing ticker - a real gap if
+      // broker-import auto-reconciliation got a sold price/date/quantity wrong, with no way
+      // to correct it short of deleting and re-entering the whole record. Only meaningful
+      // when editing an already-sold holding; undefined for active ones.
+      status: h.status, soldPrice: h.status === 'sold' ? String(h.sold_price ?? '') : undefined,
+      soldDate: h.status === 'sold' ? (h.sold_date ?? '') : undefined,
     });
   };
 
@@ -2042,6 +2052,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
     if (!editForm.broker?.trim()) { setEditError('Broker is required.'); return; }
     if (!editForm.quantity || Number(editForm.quantity) <= 0) { setEditError('Quantity must be greater than 0.'); return; }
     if (!editForm.buyPrice || Number(editForm.buyPrice) < 0) { setEditError('Buy price is required.'); return; }
+    if (editForm.status === 'sold') {
+      if (!editForm.soldPrice || Number(editForm.soldPrice) < 0) { setEditError('Sold price is required.'); return; }
+      if (!editForm.soldDate) { setEditError('Sold date is required.'); return; }
+    }
     setEditSaving(true);
     setEditError(null);
     try {
@@ -2054,7 +2068,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
         portfolioId: portfolioMode === 'multiple' ? (editForm.portfolioId || null) : undefined,
         ticker: editForm.ticker?.trim() ? editForm.ticker.trim().toUpperCase() : null,
         ...(editForm.currentPrice !== '' ? { currentPrice: Number(editForm.currentPrice) } : {}),
+        ...(editForm.status === 'sold' ? { soldPrice: Number(editForm.soldPrice), soldDate: editForm.soldDate } : {}),
       });
+      // Backlog #34: this edit can change realized P&L (sold price/date/quantity all feed
+      // into it), which flows into Booked P/L, which flows into Projected Bank Balance -
+      // previously only a file import or a manually-saved baseline triggered this recalc,
+      // leaving it stale after any other holding-affecting edit.
+      await recalculateProjectedBankBalance?.(portfolioMode === 'multiple' ? (editForm.portfolioId || undefined) : undefined);
       setEditingHoldingId(null);
     } catch (err: any) {
       setEditError(err.message || 'Failed to save changes.');
@@ -2255,7 +2275,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
     }
     const baseline = portfolioBookedPlBaselines.find((b: any) => (b.portfolio_id ?? null) === (pid ?? null));
     const baselineAmount = baseline ? Number(baseline.baseline_amount) : 0;
-    const baselineCutoffDate = baseline ? String(baseline.updated_at).slice(0, 10) : '1900-01-01';
+    // Uses the user's own "as of" date (baseline_date), not updated_at (when they happened
+    // to click Save) - "my Booked P/L was X as of the 1st" naturally means everything up
+    // through the 1st is already reflected in that figure, so only sales strictly after it
+    // should be added on top. A sale dated exactly on the baseline date is treated as
+    // already included in the entered amount, not double-counted - same protection the
+    // earlier updated_at-based fix was providing, just anchored to a date the person
+    // actually chose instead of an incidental save timestamp.
+    const baselineCutoffDate = baseline ? String(baseline.baseline_date || baseline.updated_at).slice(0, 10) : '1900-01-01';
     const realizedSinceBaseline = portfolioHoldings
       .filter((h: any) => h.status === 'sold' && (h.portfolio_id ?? null) === (pid ?? null) && h.sold_date > baselineCutoffDate)
       .reduce((s: number, h: any) => s + convHeader(h, (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity)), 0);
@@ -3547,6 +3574,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       className="px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
                     />
                   </div>
+                  <p className="text-[9px] text-slate-400">This amount is treated as correct through the date above - only sales after that date get added on top going forward. Backdate this freely (e.g. "this was my exact figure as of the 1st") even if you're entering it today.</p>
                   <div className="flex gap-1.5">
                     <button
                       onClick={() => runAction(async () => {
@@ -4988,7 +5016,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                 <button onClick={() => openEditHolding(h)} className="p-1 text-slate-300 hover:text-indigo-500 cursor-pointer" title="Edit holding"><Edit2 className="w-3.5 h-3.5" /></button>
                               )}
                               {!isReadOnly && (
-                                <button onClick={() => runAction(() => deletePortfolioHolding(h.id))} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => runAction(async () => { await deletePortfolioHolding(h.id); await recalculateProjectedBankBalance?.(portfolioMode === 'multiple' ? (h.portfolio_id || undefined) : undefined); })} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                               )}
                               <button
                                 onClick={() => toggleExpandHolding(h)}
@@ -5280,6 +5308,15 @@ export default function PortfolioView(props: PortfolioViewProps) {
                               >
                                 <ChevronDown className={`w-3 h-3 transition-transform ${editingSoldTickerId === h.id ? 'rotate-180' : ''}`} />
                               </button>
+                              {!isReadOnly && (
+                                <button
+                                  onClick={() => openEditHolding(h)}
+                                  title="Edit this sold holding (symbol, quantity, sold price/date, and more)"
+                                  className="text-slate-300 hover:text-indigo-500 cursor-pointer"
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                </button>
+                              )}
                               <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{h.broker}</span>
                               {portfolioMode === 'multiple' && (
                                 <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-500 dark:text-indigo-400 rounded-full">
@@ -5325,7 +5362,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                             )}
                           </td>
                           <td className="p-2.5 text-right">
-                            {!isReadOnly && <button onClick={() => runAction(() => deletePortfolioHolding(h.id))} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>}
+                            {!isReadOnly && <button onClick={() => runAction(async () => { await deletePortfolioHolding(h.id); await recalculateProjectedBankBalance?.(portfolioMode === 'multiple' ? (h.portfolio_id || undefined) : undefined); })} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>}
                           </td>
                         </tr>
                         {editingSoldTickerId === h.id && (
@@ -5533,10 +5570,23 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Buy Date</label>
                   <input type="date" value={editForm.buyDate ?? ''} onChange={(e) => setEditForm({ ...editForm, buyDate: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
                 </div>
+                {editForm.status === 'sold' ? (
+                  <>
+                    <div>
+                      <label className="text-[9px] font-bold text-rose-400 uppercase block mb-1">Sold Price</label>
+                      <input type="number" value={editForm.soldPrice ?? ''} onChange={(e) => setEditForm({ ...editForm, soldPrice: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold text-rose-400 uppercase block mb-1">Sold Date</label>
+                      <input type="date" value={editForm.soldDate ?? ''} onChange={(e) => setEditForm({ ...editForm, soldDate: e.target.value })} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
+                    </div>
+                  </>
+                ) : (
                 <div>
                   <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Current Price (optional)</label>
                   <input type="number" value={editForm.currentPrice ?? ''} onChange={(e) => setEditForm({ ...editForm, currentPrice: e.target.value })} placeholder="Leave blank to keep as-is" className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs" />
                 </div>
+                )}
                 {portfolioMode === 'multiple' && (
                   <div className="col-span-2">
                     <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Portfolio</label>
