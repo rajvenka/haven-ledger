@@ -2599,7 +2599,6 @@ export default function App() {
         )}
 
       </div>
-      </div>
     </IPhoneFrame>
   );
 }

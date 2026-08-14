@@ -1665,12 +1665,13 @@ export default function PortfolioV1View({
               )}
             </div>
           )}
+          {/* Broker chips — full width, no action buttons in this row */}
           <div className="flex items-center gap-2 min-w-0 w-full max-w-full">
             <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-indigo-500/80 dark:text-indigo-400/80 w-10">
               Broker
             </span>
             <div className="w-0 flex-1 min-w-0 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
-              <div className="flex items-center gap-1 w-max pr-1">
+              <div className="flex items-center gap-1 w-max pr-2">
                 <button
                   type="button"
                   onClick={() => setBrokerFilter('All')}
@@ -1702,51 +1703,52 @@ export default function PortfolioV1View({
                 ))}
               </div>
             </div>
-            {/* Import + Sync together · Connect separate */}
-            <div className="shrink-0 flex items-center gap-1.5">
-              <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-teal-100/90 dark:bg-teal-950/50 border border-teal-200/70 dark:border-teal-800/60">
-                <button
-                  type="button"
-                  onClick={openImport}
-                  disabled={isReadOnly}
-                  className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold text-teal-900 dark:text-teal-100 hover:bg-teal-200/70 dark:hover:bg-teal-900/50 disabled:opacity-50 transition-all"
-                  title="Import CSV / broker export"
-                >
-                  <Upload className="w-3 h-3" />
-                  Import
-                </button>
-                <button
-                  type="button"
-                  onClick={openSync}
-                  disabled={isReadOnly}
-                  className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold bg-teal-600 text-white shadow-md shadow-teal-600/30 hover:bg-teal-700 disabled:opacity-50 transition-all"
-                  title="Sync existing broker connections"
-                >
-                  <RefreshCw className={`w-3 h-3 ${syncingId ? 'animate-spin' : ''}`} />
-                  Sync
-                </button>
-              </div>
+          </div>
+
+          {/* Actions row — own line so they never overlay Book / Broker chips */}
+          <div className="flex items-center justify-end gap-1.5 flex-wrap w-full min-w-0">
+            <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-teal-100/90 dark:bg-teal-950/50 border border-teal-200/70 dark:border-teal-800/60">
               <button
                 type="button"
-                onClick={openConnect}
+                onClick={openImport}
                 disabled={isReadOnly}
-                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold bg-indigo-600 text-white shadow-md shadow-indigo-600/25 hover:bg-indigo-700 disabled:opacity-50 transition-all"
-                title="Add a new broker connection"
+                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold text-teal-900 dark:text-teal-100 hover:bg-teal-200/70 dark:hover:bg-teal-900/50 disabled:opacity-50 transition-all"
+                title="Import CSV / broker export"
               >
-                <Plus className="w-3 h-3" />
-                Connect
+                <Upload className="w-3 h-3" />
+                Import
               </button>
               <button
                 type="button"
-                onClick={() => refreshAllPrices()}
-                disabled={refreshingPrices || isReadOnly}
-                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 shadow-md hover:opacity-90 disabled:opacity-50 transition-all"
-                title="Refresh live prices (Yahoo / MF NAV)"
+                onClick={openSync}
+                disabled={isReadOnly}
+                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold bg-teal-600 text-white shadow-md shadow-teal-600/30 hover:bg-teal-700 disabled:opacity-50 transition-all"
+                title="Sync existing broker connections"
               >
-                <RefreshCw className={`w-3 h-3 ${refreshingPrices ? 'animate-spin' : ''}`} />
-                Refresh
+                <RefreshCw className={`w-3 h-3 ${syncingId ? 'animate-spin' : ''}`} />
+                Sync
               </button>
             </div>
+            <button
+              type="button"
+              onClick={openConnect}
+              disabled={isReadOnly}
+              className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold bg-indigo-600 text-white shadow-md shadow-indigo-600/25 hover:bg-indigo-700 disabled:opacity-50 transition-all"
+              title="Add a new broker connection"
+            >
+              <Plus className="w-3 h-3" />
+              Connect
+            </button>
+            <button
+              type="button"
+              onClick={() => refreshAllPrices()}
+              disabled={refreshingPrices || isReadOnly}
+              className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 shadow-md hover:opacity-90 disabled:opacity-50 transition-all"
+              title="Refresh live prices (Yahoo / MF NAV)"
+            >
+              <RefreshCw className={`w-3 h-3 ${refreshingPrices ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
           </div>
           {(connectOk || connectError || priceRefreshSummary) && !connectOpen && (
             <p

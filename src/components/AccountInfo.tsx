@@ -30,7 +30,6 @@ import {
   ShieldCheck,
   X,
   ChevronDown,
-  ChevronUp,
   Home,
   Briefcase
 } from 'lucide-react';
@@ -44,8 +43,7 @@ interface AccountInfoProps {
   portfolios?: any[];
   onSwitchToMultiPortfolio?: (baseCurrency: string) => Promise<void>;
   onCreatePortfolio?: (name: string, currency: string) => Promise<void>;
-  onUpdatePortfolio?: (id: string, updates: { name?: string; currency?: string; is_default?: boolean; display_order?: number }) => Promise<void>;
-  onReorderPortfolio?: (portfolioId: string, direction: 'up' | 'down') => Promise<void>;
+  onUpdatePortfolio?: (id: string, updates: { name?: string; currency?: string; is_default?: boolean }) => Promise<void>;
   onDeletePortfolio?: (id: string) => Promise<void>;
   workspaceCurrencyRates?: any[];
   onUpsertCurrencyRate?: (currency: string, rateToBase: number) => Promise<void>;
@@ -116,7 +114,6 @@ export default function AccountInfo({
   onSwitchToMultiPortfolio,
   onCreatePortfolio,
   onUpdatePortfolio,
-  onReorderPortfolio,
   onDeletePortfolio,
   workspaceCurrencyRates = [],
   onUpsertCurrencyRate,
@@ -734,7 +731,7 @@ export default function AccountInfo({
                 <>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">Multiple Portfolio - manage separate portfolios below (e.g. one per currency). Tap the edit icon to change a portfolio's name or currency together - changing currency only relabels the portfolio, it doesn't convert or recalculate any existing holdings.</p>
                   <div className="space-y-1.5">
-                    {portfolios.map((p, pIndex) => (
+                    {portfolios.map(p => (
                       <div key={p.id} className="flex items-center justify-between px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 rounded-lg text-xs">
                         {renamingPortfolioId === p.id ? (
                           <div className="flex items-center gap-1.5 flex-1">
@@ -767,23 +764,7 @@ export default function AccountInfo({
                             <button onClick={() => setRenamingPortfolioId(null)} className="p-1 text-slate-400 cursor-pointer shrink-0"><X className="w-3 h-3" /></button>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                            {familyRole === 'host' && (
-                              <div className="flex flex-col shrink-0">
-                                <button
-                                  onClick={() => onReorderPortfolio?.(p.id, 'up')}
-                                  disabled={pIndex === 0}
-                                  className="text-slate-300 hover:text-indigo-500 disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer leading-none"
-                                  title="Move up"
-                                ><ChevronUp className="w-3 h-3" /></button>
-                                <button
-                                  onClick={() => onReorderPortfolio?.(p.id, 'down')}
-                                  disabled={pIndex === portfolios.length - 1}
-                                  className="text-slate-300 hover:text-indigo-500 disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer leading-none"
-                                  title="Move down"
-                                ><ChevronDown className="w-3 h-3" /></button>
-                              </div>
-                            )}
+                          <>
                             <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                               {p.name}{' '}
                               <span className="text-[9px] text-slate-400 font-bold">{p.currency}</span>
@@ -812,7 +793,7 @@ export default function AccountInfo({
                                 )}
                               </div>
                             )}
-                          </div>
+                          </>
                         )}
                       </div>
                     ))}
