@@ -403,17 +403,51 @@ function classifyHolding(h: any): CategoryId {
 function summarizeBucket(holdings: any[]) {
   const byCcy: Record<
     string,
-    { market: number; invested: number; pnl: number; dayPnl: number; dayBase: number; count: number; dayCount: number }
+    {
+      market: number;
+      invested: number;
+      pnl: number;
+      gainPnl: number;
+      lossPnl: number;
+      gainCount: number;
+      lossCount: number;
+      dayPnl: number;
+      dayBase: number;
+      count: number;
+      dayCount: number;
+    }
   > = {};
   holdings.forEach((h) => {
     const ccy = String(h.currency || 'USD').toUpperCase();
-    if (!byCcy[ccy]) byCcy[ccy] = { market: 0, invested: 0, pnl: 0, dayPnl: 0, dayBase: 0, count: 0, dayCount: 0 };
+    if (!byCcy[ccy]) {
+      byCcy[ccy] = {
+        market: 0,
+        invested: 0,
+        pnl: 0,
+        gainPnl: 0,
+        lossPnl: 0,
+        gainCount: 0,
+        lossCount: 0,
+        dayPnl: 0,
+        dayBase: 0,
+        count: 0,
+        dayCount: 0,
+      };
+    }
     const inv = invested(h);
     const mv = marketValue(h);
+    const posPnl = mv - inv;
     byCcy[ccy].market += mv;
     byCcy[ccy].invested += inv;
-    byCcy[ccy].pnl += mv - inv;
+    byCcy[ccy].pnl += posPnl;
     byCcy[ccy].count += 1;
+    if (posPnl > 0) {
+      byCcy[ccy].gainPnl += posPnl;
+      byCcy[ccy].gainCount += 1;
+    } else if (posPnl < 0) {
+      byCcy[ccy].lossPnl += posPnl;
+      byCcy[ccy].lossCount += 1;
+    }
     const dd = dayChangeDollar(h);
     if (dd != null) {
       byCcy[ccy].dayPnl += dd;
@@ -435,6 +469,10 @@ function summarizeBucket(holdings: any[]) {
     count: holdings.length,
     byCurrency: tiles,
     primary: tiles[0] || null,
+    gainPnl: tiles.reduce((s, x) => s + x.gainPnl, 0),
+    lossPnl: tiles.reduce((s, x) => s + x.lossPnl, 0),
+    gainCount: tiles.reduce((s, x) => s + x.gainCount, 0),
+    lossCount: tiles.reduce((s, x) => s + x.lossCount, 0),
   };
 }
 
@@ -812,10 +850,25 @@ export default function PortfolioV1View({
     let dayPnl = 0;
     let dayBase = 0;
     let dayCount = 0;
+    let gainPnl = 0;
+    let lossPnl = 0;
+    let gainCount = 0;
+    let lossCount = 0;
     for (const h of scoped) {
       const nativeCcy = String(h.currency || displayCcy).toUpperCase();
-      market += convertAmount(marketValue(h), nativeCcy, displayCcy, workspaceCurrencyRates, baseCurrency);
-      inv += convertAmount(invested(h), nativeCcy, displayCcy, workspaceCurrencyRates, baseCurrency);
+      const mvN = marketValue(h);
+      const invN = invested(h);
+      const posPnlN = mvN - invN;
+      market += convertAmount(mvN, nativeCcy, displayCcy, workspaceCurrencyRates, baseCurrency);
+      inv += convertAmount(invN, nativeCcy, displayCcy, workspaceCurrencyRates, baseCurrency);
+      const posFx = convertAmount(posPnlN, nativeCcy, displayCcy, workspaceCurrencyRates, baseCurrency);
+      if (posPnlN > 0) {
+        gainPnl += posFx;
+        gainCount += 1;
+      } else if (posPnlN < 0) {
+        lossPnl += posFx;
+        lossCount += 1;
+      }
       const dd = dayChangeDollar(h);
       if (dd != null) {
         dayPnl += convertAmount(dd, nativeCcy, displayCcy, workspaceCurrencyRates, baseCurrency);
@@ -840,6 +893,10 @@ export default function PortfolioV1View({
       dayPct: dayPctVal,
       dayCount,
       count: scoped.length,
+      gainPnl,
+      lossPnl,
+      gainCount,
+      lossCount,
     };
   }, [scoped, portfolioFilter, portfolios, viewCurrency, workspaceCurrencyRates, baseCurrency]);
 
@@ -1877,20 +1934,56 @@ export default function PortfolioV1View({
               <p className="text-[9px] text-slate-500 mt-0.5">
                 All categories · {totalPortfolioTile.displayCcy}
               </p>
-              <div className="mt-2 flex items-baseline justify-between gap-1">
-                <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
-                  {money(totalPortfolioTile.market, totalPortfolioTile.displayCcy)}
-                </p>
-                <p
-                  className={`text-[12px] sm:text-[13px] font-black tabular-nums leading-tight ${
-                    formatTotalPerf().positive ? 'text-emerald-600' : 'text-rose-600'
-                  }`}
-                >
-                  {formatTotalPerf().text}
-                  <span className="ml-1 text-[10px] font-bold text-slate-400 normal-case">{perfLabel}</span>
-                </p>
-              </div>
             </button>
+            <div
+              className="px-3 sm:px-3.5 pb-3"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <div
+                className="flex overflow-x-auto snap-x snap-mandatory scrollbar-none"
+                style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
+              >
+                <div className="min-w-full snap-center shrink-0">
+                  <div className="flex items-baseline justify-between gap-1">
+                    <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
+                      {money(totalPortfolioTile.market, totalPortfolioTile.displayCcy)}
+                    </p>
+                    <p
+                      className={`text-[12px] sm:text-[13px] font-black tabular-nums leading-tight ${
+                        formatTotalPerf().positive ? 'text-emerald-600' : 'text-rose-600'
+                      }`}
+                    >
+                      {formatTotalPerf().text}
+                      <span className="ml-1 text-[10px] font-bold text-slate-400 normal-case">{perfLabel}</span>
+                    </p>
+                  </div>
+                  <p className="text-[9px] font-bold text-slate-400 mt-0.5">Value</p>
+                </div>
+                <div className="min-w-full snap-center shrink-0">
+                  <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-emerald-600">
+                    {money(totalPortfolioTile.gainPnl || 0, totalPortfolioTile.displayCcy)}
+                  </p>
+                  <p className="text-[9px] font-bold text-emerald-600/80 mt-0.5">
+                    Profit · {totalPortfolioTile.gainCount || 0} up
+                  </p>
+                </div>
+                <div className="min-w-full snap-center shrink-0">
+                  <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-rose-600">
+                    {money(Math.abs(totalPortfolioTile.lossPnl || 0), totalPortfolioTile.displayCcy)}
+                  </p>
+                  <p className="text-[9px] font-bold text-rose-600/80 mt-0.5">
+                    Loss · {totalPortfolioTile.lossCount || 0} down
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-center gap-1 mt-1.5">
+                <span className="w-1 h-1 rounded-full bg-slate-400/80" />
+                <span className="w-1 h-1 rounded-full bg-slate-300/60 dark:bg-slate-600" />
+                <span className="w-1 h-1 rounded-full bg-slate-300/60 dark:bg-slate-600" />
+              </div>
+            </div>
+
           </div>
 
           {categoryCards.map(({ id, holdings, stats, meta }) => {
@@ -1915,21 +2008,6 @@ export default function PortfolioV1View({
                   </div>
                   <p className="mt-2 text-[12px] font-black text-slate-900 dark:text-white leading-tight">{meta.label}</p>
                   <p className="text-[9px] text-slate-500 mt-0.5">{meta.blurb}</p>
-                  {primary && (
-                    <div className="mt-2 flex items-baseline justify-between gap-1">
-                      <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
-                        {money(primary.market, primary.currency)}
-                      </p>
-                      <p
-                        className={`text-[12px] sm:text-[13px] font-black tabular-nums leading-tight ${
-                          formatBucketPerf(primary).positive ? 'text-emerald-600' : 'text-rose-600'
-                        }`}
-                      >
-                        {formatBucketPerf(primary).text}
-                        <span className="ml-1 text-[10px] font-bold text-slate-400">{perfLabel}</span>
-                      </p>
-                    </div>
-                  )}
                   {stats.byCurrency.length > 1 && (
                     <p className="text-[9px] text-slate-400 mt-1">
                       +{stats.byCurrency.length - 1} more ccy
@@ -1940,6 +2018,57 @@ export default function PortfolioV1View({
                     {expanded ? 'Hide' : 'Expand'}
                   </div>
                 </button>
+                {primary && (
+                  <div
+                    className="px-3 sm:px-3.5 pb-3"
+                    onClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <div
+                      className="flex overflow-x-auto snap-x snap-mandatory scrollbar-none"
+                      style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
+                    >
+                      <div className="min-w-full snap-center shrink-0">
+                        <div className="flex items-baseline justify-between gap-1">
+                          <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
+                            {money(primary.market, primary.currency)}
+                          </p>
+                          <p
+                            className={`text-[12px] sm:text-[13px] font-black tabular-nums leading-tight ${
+                              formatBucketPerf(primary).positive ? 'text-emerald-600' : 'text-rose-600'
+                            }`}
+                          >
+                            {formatBucketPerf(primary).text}
+                            <span className="ml-1 text-[10px] font-bold text-slate-400">{perfLabel}</span>
+                          </p>
+                        </div>
+                        <p className="text-[9px] font-bold text-slate-400 mt-0.5">Value</p>
+                      </div>
+                      <div className="min-w-full snap-center shrink-0">
+                        <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-emerald-600">
+                          {money(primary.gainPnl || 0, primary.currency)}
+                        </p>
+                        <p className="text-[9px] font-bold text-emerald-600/80 mt-0.5">
+                          Profit · {primary.gainCount || 0} up
+                        </p>
+                      </div>
+                      <div className="min-w-full snap-center shrink-0">
+                        <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-rose-600">
+                          {money(Math.abs(primary.lossPnl || 0), primary.currency)}
+                        </p>
+                        <p className="text-[9px] font-bold text-rose-600/80 mt-0.5">
+                          Loss · {primary.lossCount || 0} down
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex justify-center gap-1 mt-1.5">
+                      <span className="w-1 h-1 rounded-full bg-slate-400/80" />
+                      <span className="w-1 h-1 rounded-full bg-slate-300/60 dark:bg-slate-600" />
+                      <span className="w-1 h-1 rounded-full bg-slate-300/60 dark:bg-slate-600" />
+                    </div>
+                  </div>
+                )}
+
 
                 {expanded && (
                   <div className="border-t border-slate-200/60 dark:border-slate-800 px-3 pb-3 pt-2 space-y-2 bg-white/50 dark:bg-slate-950/40">
