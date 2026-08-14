@@ -1262,7 +1262,7 @@ export function usePaymentState() {
       supabase.from('portfolio_booked_pl_baseline').select('*').eq('workspace_id', wsId),
       supabase.from('portfolio_booked_pl_history').select('*').eq('workspace_id', wsId).order('changed_at', { ascending: false }),
       supabase.from('portfolio_bank_balance_history').select('*').eq('workspace_id', wsId).order('changed_at', { ascending: false }),
-      supabase.from('portfolio_projected_bank_balances').select('*').eq('workspace_id', wsId),
+      supabase.from('portfolio_projected_bank_balance').select('*').eq('workspace_id', wsId),
       supabase.from('portfolio_broker_connections').select('*').eq('workspace_id', wsId),
       supabase.from('portfolio_holding_lots').select('*').eq('workspace_id', wsId).order('open_date', { ascending: false }),
     ]);
