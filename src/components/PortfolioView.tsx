@@ -1774,8 +1774,25 @@ export default function PortfolioView(props: PortfolioViewProps) {
       // guessing, and it's the only source that supplies a real previous close for these
       // rows (Daily Change works for Zerodha without extra work). Falls back to Yahoo for
       // any Zerodha holding without a matching connection (CSV-only imports).
-      const zerodhaConnections = portfolioBrokerConnections.filter((c: any) => c.broker_type === 'zerodha' && c.credentials?.api_key && c.credentials?.access_token);
-      const growwConnections = portfolioBrokerConnections.filter((c: any) => c.broker_type === 'groww' && (c.credentials?.access_token || (c.credentials?.api_key && c.credentials?.api_secret)));
+      //
+      // Both Zerodha (Kite Connect) and Groww's access tokens expire daily by design, not a
+      // bug - re-authenticating each trading day is how these brokers' APIs work. Rather than
+      // making a call known to fail with yesterday's token (extra latency, a 500 in the
+      // console, and this same batch already falling back to Yahoo anyway), check the
+      // connection's own updated_at (set fresh every time the Connect flow saves credentials)
+      // against today's date first and skip straight to Yahoo if it's stale.
+      const isFromToday = (c: any) => {
+        if (!c?.updated_at) return false;
+        const d = new Date(c.updated_at);
+        const now = new Date();
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+      };
+      const allZerodhaConnections = portfolioBrokerConnections.filter((c: any) => c.broker_type === 'zerodha' && c.credentials?.api_key && c.credentials?.access_token);
+      const allGrowwConnections = portfolioBrokerConnections.filter((c: any) => c.broker_type === 'groww' && (c.credentials?.access_token || (c.credentials?.api_key && c.credentials?.api_secret)));
+      const zerodhaConnections = allZerodhaConnections.filter(isFromToday);
+      const growwConnections = allGrowwConnections.filter(isFromToday);
+      const staleZerodhaCount = allZerodhaConnections.length - zerodhaConnections.length;
+      const staleGrowwCount = allGrowwConnections.length - growwConnections.length;
       const zerodhaConnFor = (h: any) => zerodhaConnections.find((c: any) => (c.portfolio_id || null) === (h.portfolio_id || null)) ?? zerodhaConnections.find((c: any) => !c.portfolio_id);
       const growwConnFor = (h: any) => growwConnections.find((c: any) => (c.portfolio_id || null) === (h.portfolio_id || null)) ?? growwConnections.find((c: any) => !c.portfolio_id);
       const instrumentKey = (h: any) => `${h.exchange || 'NSE'}:${h.ticker ?? h.symbol}`;
@@ -1963,10 +1980,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
       const skipNote = skippedNoTicker > 0 ? ` · ${skippedNoTicker} skipped (no ticker set)` : '';
       const commodityNote = skippedCommodities > 0 ? ` · ${skippedCommodities} commodity/options kept (broker rate)` : '';
       const mfNote = mutualFunds.length > 0 ? ` · MF NAV: ${mfSucceeded} updated${mfFailed > 0 ? `, ${mfFailed} not matched` : ''}` : '';
+      const staleConnNote = (staleZerodhaCount > 0 || staleGrowwCount > 0)
+        ? ` · ${[staleZerodhaCount > 0 ? 'Zerodha' : null, staleGrowwCount > 0 ? 'Groww' : null].filter(Boolean).join('/')} token expired today, reconnect for live broker prices (used Yahoo instead)`
+        : '';
       setPriceRefreshSummary(
         failed === 0
-          ? `Live price updated for ${succeeded}${skipNote}${commodityNote}${mfNote}${rateLimitedNote} · delayed a few minutes, not real-time`
-          : `Live price updated for ${succeeded}, couldn't find ${failed}${skipNote}${commodityNote}${mfNote}${rateLimitedNote} · delayed a few minutes, not real-time`
+          ? `Live price updated for ${succeeded}${skipNote}${commodityNote}${mfNote}${rateLimitedNote}${staleConnNote} · delayed a few minutes, not real-time`
+          : `Live price updated for ${succeeded}, couldn't find ${failed}${skipNote}${commodityNote}${mfNote}${rateLimitedNote}${staleConnNote} · delayed a few minutes, not real-time`
       );
     });
     setRefreshingPrices(false);
