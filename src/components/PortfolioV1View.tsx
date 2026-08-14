@@ -2235,8 +2235,73 @@ export default function PortfolioV1View({
         )}
       </div>
 
-      
-      {showPnlCalendar && (
+
+      {/* Near SL */}
+      {hasLotsForSelectedBook && tightStops.length > 0 && (
+        <div className="rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/90 dark:bg-amber-950/25 px-3 py-2.5">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
+            <p className="text-[10px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
+              Near stop loss · {tightStops.length}
+            </p>
+          </div>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar">
+            {tightStops.slice(0, 12).map(({ h, dist, stop, qty, lotId }) => (
+              <div
+                key={`${h.id}-${lotId || stop}`}
+                className="shrink-0 rounded-xl bg-white dark:bg-slate-900 border border-amber-100 dark:border-amber-900/40 px-2.5 py-1.5 min-w-[8rem] max-w-[10rem]"
+              >
+                <p className="text-[11px] font-bold truncate">{h.ticker || h.symbol}</p>
+                <p className="text-[9px] text-indigo-600 dark:text-indigo-400 font-bold truncate">
+                  {portfolioNameOf(h, portfolios)}
+                </p>
+                <p className="text-[9px] text-slate-400">
+                  SL {stop}
+                  {qty > 0 ? ` · ${qty} qty` : ''}
+                </p>
+                <p className={`text-[11px] font-black ${dist < 0 ? 'text-rose-600' : 'text-amber-600'}`}>
+                  {dist < 0 ? 'Past SL' : `${dist.toFixed(1)}% away`}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Movers OR P&L Calendar — same slot, toggle */}
+      <div className="space-y-2 w-full">
+        <div className="flex items-center justify-between gap-2 px-0.5 flex-wrap">
+          <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700">
+            <button
+              type="button"
+              onClick={() => setShowPnlCalendar(false)}
+              className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
+                !showPnlCalendar
+                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              Movers
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowPnlCalendar(true)}
+              className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
+                showPnlCalendar
+                  ? 'bg-violet-600 text-white shadow-sm shadow-violet-600/25'
+                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              P&amp;L Calendar
+            </button>
+          </div>
+          {!showPnlCalendar && (
+            <p className="text-[9px] font-bold text-slate-400">
+              {perfLabel} · {moversUnit === 'dollar' ? '$' : '%'}
+            </p>
+          )}
+        </div>
+        {showPnlCalendar ? (
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 sm:p-4">
           <PortfolioPnLCalendar
             rows={pnlCalendarRows}
@@ -2271,60 +2336,7 @@ export default function PortfolioV1View({
             onReload={reloadPnlCalendar}
           />
         </div>
-      )}
-      {/* Near SL */}
-      {hasLotsForSelectedBook && tightStops.length > 0 && (
-        <div className="rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/90 dark:bg-amber-950/25 px-3 py-2.5">
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
-            <p className="text-[10px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
-              Near stop loss · {tightStops.length}
-            </p>
-          </div>
-          <div className="flex gap-2 overflow-x-auto no-scrollbar">
-            {tightStops.slice(0, 12).map(({ h, dist, stop, qty, lotId }) => (
-              <div
-                key={`${h.id}-${lotId || stop}`}
-                className="shrink-0 rounded-xl bg-white dark:bg-slate-900 border border-amber-100 dark:border-amber-900/40 px-2.5 py-1.5 min-w-[8rem] max-w-[10rem]"
-              >
-                <p className="text-[11px] font-bold truncate">{h.ticker || h.symbol}</p>
-                <p className="text-[9px] text-indigo-600 dark:text-indigo-400 font-bold truncate">
-                  {portfolioNameOf(h, portfolios)}
-                </p>
-                <p className="text-[9px] text-slate-400">
-                  SL {stop}
-                  {qty > 0 ? ` · ${qty} qty` : ''}
-                </p>
-                <p className={`text-[11px] font-black ${dist < 0 ? 'text-rose-600' : 'text-amber-600'}`}>
-                  {dist < 0 ? 'Past SL' : `${dist.toFixed(1)}% away`}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Gainers / losers */}
-      <div className="space-y-2 w-full">
-        <div className="flex items-center justify-between gap-2 px-0.5 flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-[11px] font-black uppercase tracking-wider text-slate-500">
-              Movers
-              <span className="ml-1.5 text-[9px] font-bold text-slate-400 normal-case tracking-normal">
-                {perfLabel} · {moversUnit === 'dollar' ? '$' : '%'}
-              </span>
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowPnlCalendar((v) => !v)}
-              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                showPnlCalendar ? 'bg-violet-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-              }`}
-            >
-              P&L Calendar
-            </button>
-          </div>
-        </div>
+        ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
         {[
           { title: 'Top gainers', icon: <TrendingUp className="w-4 h-4 text-emerald-500" />, rows: ranked.gainers, good: true },
@@ -2371,6 +2383,7 @@ export default function PortfolioV1View({
           </div>
         ))}
       </div>
+        )}
       </div>
 
       {/* Holdings — type filters above table; connectors at bottom */}
