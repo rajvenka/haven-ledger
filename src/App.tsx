@@ -242,6 +242,7 @@ export default function App() {
     addPortfolioFee,
     deletePortfolioFee,
     portfolioRecurringPlans,
+    portfolioRecurringPlanSkips, skipRecurringPeriod, unskipRecurringPeriod,
     addPortfolioRecurringPlan,
     updatePortfolioRecurringPlan,
     deletePortfolioRecurringPlan,
@@ -1963,6 +1964,9 @@ export default function App() {
                 portfolioProjectedBankBalances={portfolioProjectedBankBalances}
                 setProjectedBankBalance={setProjectedBankBalance}
                 portfolioRecurringPlans={portfolioRecurringPlans}
+                portfolioRecurringPlanSkips={portfolioRecurringPlanSkips}
+                skipRecurringPeriod={skipRecurringPeriod}
+                unskipRecurringPeriod={unskipRecurringPeriod}
                 addPortfolioRecurringPlan={addPortfolioRecurringPlan}
                 updatePortfolioRecurringPlan={updatePortfolioRecurringPlan}
                 deletePortfolioRecurringPlan={deletePortfolioRecurringPlan}

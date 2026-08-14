@@ -1194,6 +1194,7 @@ export function usePaymentState() {
   const [portfolioDividends, setPortfolioDividends] = useState<any[]>([]);
   const [portfolioFees, setPortfolioFees] = useState<any[]>([]);
   const [portfolioRecurringPlans, setPortfolioRecurringPlans] = useState<any[]>([]);
+  const [portfolioRecurringPlanSkips, setPortfolioRecurringPlanSkips] = useState<any[]>([]);
   const [portfolios, setPortfolios] = useState<any[]>([]);
   const [workspaceCurrencyRates, setWorkspaceCurrencyRates] = useState<any[]>([]);
   const [mfHoldingsCache, setMfHoldingsCache] = useState<any[]>([]);
@@ -1206,7 +1207,7 @@ export function usePaymentState() {
   const clearPortfolioState = useCallback(() => {
     setPortfolioHoldings([]); setPortfolioPriceHistory([]); setPortfolioSplits([]);
     setPortfolioContributions([]); setPortfolioWithdrawals([]);
-    setPortfolioDividends([]); setPortfolioFees([]); setPortfolioRecurringPlans([]);
+    setPortfolioDividends([]); setPortfolioFees([]); setPortfolioRecurringPlans([]); setPortfolioRecurringPlanSkips([]);
     setPortfolioCashBalances([]); setPortfolios([]); setWorkspaceCurrencyRates([]);
     setPortfolioBookedPlBaselines([]); setPortfolioBookedPlHistory([]); setPortfolioBankBalanceHistory([]); setPortfolioProjectedBankBalances([]);
     setPortfolioBrokerConnectionsState([]); setPortfolioHoldingLotsState([]);
@@ -1245,7 +1246,7 @@ export function usePaymentState() {
     const scope = <T extends { workspace_id?: string }>(rows: T[] | null | undefined): T[] =>
       (rows ?? []).filter(r => !r.workspace_id || r.workspace_id === wsId);
 
-    const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: cashBalances }, { data: portfoliosData }, { data: currencyRatesData }, { data: bookedPlBaselinesData }, { data: bookedPlHistoryData }, { data: bankBalanceHistoryData }, { data: projectedBankBalancesData }, { data: brokerConnectionsData }, { data: holdingLotsData }] = await Promise.all([
+    const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: planSkips }, { data: cashBalances }, { data: portfoliosData }, { data: currencyRatesData }, { data: bookedPlBaselinesData }, { data: bookedPlHistoryData }, { data: bankBalanceHistoryData }, { data: projectedBankBalancesData }, { data: brokerConnectionsData }, { data: holdingLotsData }] = await Promise.all([
       supabase.from('portfolio_holdings').select('*').eq('workspace_id', wsId).order('buy_date', { ascending: false }),
       supabase.from('portfolio_price_history').select('*').eq('workspace_id', wsId).order('recorded_date', { ascending: false }),
       supabase.from('portfolio_splits').select('*').eq('workspace_id', wsId).order('effective_from'),
@@ -1254,6 +1255,7 @@ export function usePaymentState() {
       supabase.from('portfolio_dividends').select('*').eq('workspace_id', wsId).order('dividend_date', { ascending: false }),
       supabase.from('portfolio_fees').select('*').eq('workspace_id', wsId).order('fee_date', { ascending: false }),
       supabase.from('portfolio_recurring_plans').select('*').eq('workspace_id', wsId).order('created_at'),
+      supabase.from('portfolio_recurring_plan_skips').select('*').eq('workspace_id', wsId),
       supabase.from('portfolio_cash_balances').select('*').eq('workspace_id', wsId).order('location'),
       supabase.from('portfolios').select('*').eq('workspace_id', wsId).order('display_order', { ascending: true, nullsFirst: false }).order('created_at'),
       supabase.from('workspace_currency_rates').select('*').eq('workspace_id', wsId),
@@ -1276,6 +1278,7 @@ export function usePaymentState() {
     setPortfolioDividends(scope(dividends));
     setPortfolioFees(scope(fees));
     setPortfolioRecurringPlans(scope(plans));
+    setPortfolioRecurringPlanSkips(scope(planSkips));
     setPortfolioCashBalances(scope(cashBalances));
     setPortfolios(scope(portfoliosData));
     setWorkspaceCurrencyRates(scope(currencyRatesData));
@@ -2265,6 +2268,25 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
+  // Investment Plan skip-month (Option A, confirmed with user): marks a specific period as
+  // explicitly excused - this period's expected amount is excluded from cumulativeExpected
+  // going forward, so the reminder clears and the next period starts fresh with no
+  // shortfall carried in, rather than just a label while the amount still silently piles up.
+  const skipRecurringPeriod = async (planId: string, periodLabel: string, notes?: string) => {
+    if (!user || !activeWorkspaceId) return;
+    const { error } = await supabase.from('portfolio_recurring_plan_skips').insert({
+      workspace_id: activeWorkspaceId, plan_id: planId, period_label: periodLabel, notes: notes?.trim() || null, skipped_by: user.id,
+    });
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
+  const unskipRecurringPeriod = async (planId: string, periodLabel: string) => {
+    const { error } = await supabase.from('portfolio_recurring_plan_skips').delete().eq('plan_id', planId).eq('period_label', periodLabel);
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
   const resolveUpgradeRequest = async (requestId: string, userId: string, planId: string, approve: boolean) => {
     if (approve) {
       await adminSetUserPlan(userId, planId);
@@ -2466,6 +2488,7 @@ export function usePaymentState() {
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
     portfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,
+    portfolioRecurringPlanSkips, skipRecurringPeriod, unskipRecurringPeriod,
     appNotificationsEnabled, mobileNotificationsEnabled, saveNotificationSettings,
   };
 }

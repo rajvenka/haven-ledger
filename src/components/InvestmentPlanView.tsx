@@ -39,6 +39,9 @@ interface InvestmentPlanViewProps {
   portfolioProjectedBankBalances?: any[];
   setProjectedBankBalance?: (amount: number, portfolioId?: string) => Promise<void>;
   portfolioRecurringPlans: any[];
+  portfolioRecurringPlanSkips?: any[];
+  skipRecurringPeriod?: (planId: string, periodLabel: string, notes?: string) => Promise<void>;
+  unskipRecurringPeriod?: (planId: string, periodLabel: string) => Promise<void>;
   addPortfolioRecurringPlan: (memberUserId: string, amount: number, frequency: 'monthly' | 'quarterly' | 'yearly', startDate: string, dayOfMonth?: number, notes?: string, portfolioId?: string) => Promise<void>;
   updatePortfolioRecurringPlan: (id: string, updates: { active?: boolean; expectedAmount?: number }) => Promise<void>;
   deletePortfolioRecurringPlan: (id: string) => Promise<void>;
@@ -63,6 +66,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
     portfolioBookedPlBaselines = [], setBookedPlBaseline,
     portfolioProjectedBankBalances = [], setProjectedBankBalance,
     portfolioRecurringPlans: allPortfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,
+    portfolioRecurringPlanSkips = [], skipRecurringPeriod, unskipRecurringPeriod,
   } = props;
 
   const [selectedPlanPortfolios, setSelectedPlanPortfolios] = useState<Set<string>>(new Set());
@@ -299,8 +303,11 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
       // a $1000/month plan leaves $500 credit, which reduces what's shown as due next month
       // automatically, since cumulative expected keeps growing but the extra $500 was
       // already paid. Underpaying compounds the same way in the other direction.
+      // Skipped periods (Option A) reduce this the same way an already-paid period would -
+      // they're excluded from what's counted as owed entirely, not just labeled.
       const periodsElapsed = periodsElapsedSince(new Date(plan.start_date), plan.frequency);
-      const cumulativeExpected = Number(plan.expected_amount) * periodsElapsed;
+      const skippedCount = portfolioRecurringPlanSkips.filter((s: any) => s.plan_id === plan.id).length;
+      const cumulativeExpected = Number(plan.expected_amount) * Math.max(0, periodsElapsed - skippedCount);
       const cumulativePaid = portfolioContributions
         .filter(c => c.member_user_id === currentUserId && c.contribution_type === 'recurring')
         .reduce((s, c) => s + Number(c.amount), 0);
@@ -332,7 +339,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const computeTransferInfo = (plan: any) => {
     const period = getPeriodBounds(plan.frequency);
     const periodsElapsed = periodsElapsedSince(new Date(plan.start_date), plan.frequency);
-    const cumulativeExpected = Number(plan.expected_amount) * periodsElapsed;
+    const skippedCount = portfolioRecurringPlanSkips.filter((s: any) => s.plan_id === plan.id).length;
+    const cumulativeExpected = Number(plan.expected_amount) * Math.max(0, periodsElapsed - skippedCount);
     const cumulativePaid = portfolioContributions
       .filter(c => c.member_user_id === plan.member_user_id && c.contribution_type === 'recurring')
       .reduce((s, c) => s + Number(c.amount), 0);
@@ -884,6 +892,35 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                       </table>
                     </div>
                   )}
+                  {portfolioRecurringPlanSkips.length > 0 && (
+                    <div>
+                      <span className="text-[9px] font-black text-amber-500 uppercase tracking-wider">Skipped ({portfolioRecurringPlanSkips.length})</span>
+                      <div className="mt-1 space-y-1">
+                        {portfolioRecurringPlanSkips.map((s: any) => {
+                          const plan = allPortfolioRecurringPlans.find((p: any) => p.id === s.plan_id);
+                          const m = workspaceMembers.find(mm => mm.uid === plan?.member_user_id);
+                          const skipper = workspaceMembers.find(mm => mm.uid === s.skipped_by);
+                          return (
+                            <div key={s.id} className="flex items-center justify-between px-3 py-2 bg-amber-50 dark:bg-amber-950/20 rounded-lg text-[11px]">
+                              <div className="min-w-0">
+                                <span className="font-semibold text-slate-700 dark:text-slate-300">{s.period_label}</span>
+                                <span className="text-slate-400"> · {m ? memberName(m) : 'Unknown'}'s plan · skipped by {skipper?.displayName || skipper?.email || 'Unknown'}</span>
+                                {s.notes && <span className="text-slate-400 italic"> · {s.notes}</span>}
+                              </div>
+                              {unskipRecurringPeriod && (
+                                <button
+                                  onClick={() => runAction(() => unskipRecurringPeriod(s.plan_id, s.period_label))}
+                                  className="text-amber-600 hover:text-amber-700 text-[9px] font-black uppercase shrink-0 ml-2 cursor-pointer"
+                                >
+                                  Undo
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -956,6 +993,15 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                         className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase rounded-xl cursor-pointer"
                       >
                         No - record a new {fmt(info.remaining)} transfer
+                      </button>
+                      <button
+                        onClick={() => runAction(async () => {
+                          await skipRecurringPeriod?.(plan.id, info.period.label);
+                          closeModal();
+                        })}
+                        className="w-full py-2.5 bg-white dark:bg-slate-950 border border-amber-300 dark:border-amber-800 text-amber-600 dark:text-amber-400 text-xs font-black uppercase rounded-xl cursor-pointer"
+                      >
+                        Skip this period - won't pay for {info.period.label}
                       </button>
                     </div>
                   </>
@@ -1030,6 +1076,15 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                       className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase rounded-xl cursor-pointer"
                     >
                       Confirm {fmt(info.remaining)} Transferred
+                    </button>
+                    <button
+                      onClick={() => runAction(async () => {
+                        await skipRecurringPeriod?.(plan.id, info.period.label);
+                        closeModal();
+                      })}
+                      className="w-full py-2 bg-white dark:bg-slate-950 border border-amber-300 dark:border-amber-800 text-amber-600 dark:text-amber-400 text-[11px] font-black uppercase rounded-xl cursor-pointer"
+                    >
+                      Skip this period - won't pay for {info.period.label}
                     </button>
                   </>
                 )}
