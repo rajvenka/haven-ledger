@@ -153,3 +153,13 @@
     transition: none;
   }
 }
+
+
+/* Hide scrollbar but keep scroll (mobile docks, chip rows) */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
