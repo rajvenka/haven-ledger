@@ -23,10 +23,11 @@ interface PortfolioViewProps {
   portfolioSplits: any[];
   portfolioCashBalances: any[];
   portfolioBookedPlBaselines?: any[];
+  portfolioBookedPlHistory?: any[];
   portfolioProjectedBankBalances?: any[];
   setPortfolioCashBalance?: (location: 'Zerodha' | 'Groww' | 'Bank' | 'Other', amount: number, asOfDate?: string, notes?: string, portfolioId?: string) => Promise<void>;
   deletePortfolioCashBalance?: (id: string) => Promise<void>;
-  setBookedPlBaseline?: (amount: number, date: string, portfolioId?: string) => Promise<void>;
+  setBookedPlBaseline?: (amount: number, date: string, portfolioId?: string, notes?: string) => Promise<void>;
   setProjectedBankBalance?: (amount: number, portfolioId?: string) => Promise<void>;
   recalculateProjectedBankBalance?: (portfolioId?: string) => Promise<void>;
   portfolioBrokerConnections?: any[];
@@ -297,7 +298,7 @@ const memberName = (m: WorkspaceMemberLite) => m.displayName || m.email.split('@
 export default function PortfolioView(props: PortfolioViewProps) {
   const {
     workspaceName, workspaceMembers, isReadOnly, isDataLoading, columnPrefs, onUpdateColumnPrefs,
-    portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances, portfolioBookedPlBaselines = [], portfolioProjectedBankBalances = [],
+    portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances, portfolioBookedPlBaselines = [], portfolioBookedPlHistory = [], portfolioProjectedBankBalances = [],
     setPortfolioCashBalance, deletePortfolioCashBalance, setBookedPlBaseline, setProjectedBankBalance, recalculateProjectedBankBalance,
     portfolioBrokerConnections = [], setPortfolioBrokerConnection, deletePortfolioBrokerConnection, markBrokerConnectionSynced,
     syncEtoroHoldingLots, syncEtoroLivePrices, loadPortfolioHoldingLots, portfolioHoldingLots = [],
@@ -574,6 +575,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [editingBookedPlBaseline, setEditingBookedPlBaseline] = useState(false);
   const [bookedPlBaselineAmountInput, setBookedPlBaselineAmountInput] = useState('');
   const [bookedPlBaselineDateInput, setBookedPlBaselineDateInput] = useState(new Date().toISOString().slice(0, 10));
+  const [bookedPlBaselineNotesInput, setBookedPlBaselineNotesInput] = useState('');
+  const [bookedPlHistoryExpanded, setBookedPlHistoryExpanded] = useState(false);
   const [bookedPlPortfolioId, setBookedPlPortfolioId] = useState<string>('');
   const [editingProjectedBankBalance, setEditingProjectedBankBalance] = useState(false);
   const [projectedBankBalanceAmountInput, setProjectedBankBalanceAmountInput] = useState('');
@@ -3574,12 +3577,20 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       className="px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
                     />
                   </div>
+                  <input
+                    type="text"
+                    value={bookedPlBaselineNotesInput}
+                    onChange={(e) => setBookedPlBaselineNotesInput(e.target.value)}
+                    placeholder="Why did this change? (optional, e.g. 'sold MU, reconciling')"
+                    className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md text-xs"
+                  />
                   <p className="text-[9px] text-slate-400">This amount is treated as correct through the date above - only sales after that date get added on top going forward. Backdate this freely (e.g. "this was my exact figure as of the 1st") even if you're entering it today.</p>
                   <div className="flex gap-1.5">
                     <button
                       onClick={() => runAction(async () => {
-                        await setBookedPlBaseline?.(parseFloat(bookedPlBaselineAmountInput) || 0, bookedPlBaselineDateInput, baselinePortfolioId);
+                        await setBookedPlBaseline?.(parseFloat(bookedPlBaselineAmountInput) || 0, bookedPlBaselineDateInput, baselinePortfolioId, bookedPlBaselineNotesInput);
                         setEditingBookedPlBaseline(false);
+                        setBookedPlBaselineNotesInput('');
                       })}
                       className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
                     >
@@ -3602,12 +3613,48 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         setEditingBookedPlBaseline(true);
                         setBookedPlBaselineAmountInput(String(existingBaseline?.baseline_amount ?? ''));
                         setBookedPlBaselineDateInput(existingBaseline?.baseline_date ?? todayStr());
+                        setBookedPlBaselineNotesInput('');
                       }}
                       className="text-slate-300 hover:text-indigo-500 cursor-pointer"
                     ><Edit2 className="w-3.5 h-3.5" /></button>
                   )}
                 </div>
               )}
+              {(() => {
+                const history = portfolioBookedPlHistory.filter((h: any) => (h.portfolio_id ?? null) === (baselinePortfolioId ?? null));
+                if (history.length === 0) return null;
+                return (
+                  <div className="pt-1.5 border-t border-slate-100 dark:border-slate-900">
+                    <button
+                      onClick={() => setBookedPlHistoryExpanded(p => !p)}
+                      className="w-full flex items-center justify-between text-[9px] font-black text-slate-400 uppercase tracking-wider cursor-pointer"
+                    >
+                      <span>History ({history.length})</span>
+                      <ChevronDown className={`w-3 h-3 transition-transform ${bookedPlHistoryExpanded ? 'rotate-180' : ''}`} />
+                    </button>
+                    {bookedPlHistoryExpanded && (
+                      <div className="mt-1.5 space-y-1 max-h-48 overflow-y-auto">
+                        {history.map((h: any) => (
+                          <div key={h.id} className="flex items-center justify-between text-[10px] py-1 border-b border-slate-50 dark:border-slate-900/50 last:border-0">
+                            <div className="min-w-0">
+                              <span className="text-slate-500">{h.baseline_date}</span>
+                              {h.notes && <span className="text-slate-400 italic"> · {h.notes}</span>}
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="font-semibold text-slate-700 dark:text-slate-300">{fmt(Number(h.new_amount))}</span>
+                              {h.previous_amount != null && (
+                                <span className={Number(h.changed_amount) >= 0 ? 'text-emerald-500' : 'text-rose-500'}>
+                                  ({Number(h.changed_amount) >= 0 ? '+' : ''}{fmt(Number(h.changed_amount))})
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           );
         })()}
