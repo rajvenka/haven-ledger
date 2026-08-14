@@ -412,6 +412,10 @@ function summarizeBucket(holdings: any[]) {
       lossPnl: number;
       gainCount: number;
       lossCount: number;
+      dayGainPnl: number;
+      dayLossPnl: number;
+      dayGainCount: number;
+      dayLossCount: number;
       dayPnl: number;
       dayBase: number;
       count: number;
@@ -429,6 +433,10 @@ function summarizeBucket(holdings: any[]) {
         lossPnl: 0,
         gainCount: 0,
         lossCount: 0,
+        dayGainPnl: 0,
+        dayLossPnl: 0,
+        dayGainCount: 0,
+        dayLossCount: 0,
         dayPnl: 0,
         dayBase: 0,
         count: 0,
@@ -452,6 +460,13 @@ function summarizeBucket(holdings: any[]) {
     const dd = dayChangeDollar(h);
     if (dd != null) {
       byCcy[ccy].dayPnl += dd;
+      if (dd > 0) {
+        byCcy[ccy].dayGainPnl += dd;
+        byCcy[ccy].dayGainCount += 1;
+      } else if (dd < 0) {
+        byCcy[ccy].dayLossPnl += dd;
+        byCcy[ccy].dayLossCount += 1;
+      }
       const prev = Number(h.previous_close);
       const qty = Number(h.quantity || 0);
       if (Number.isFinite(prev) && Number.isFinite(qty)) byCcy[ccy].dayBase += prev * qty;
@@ -518,10 +533,10 @@ function TileMetricScroller({
             go(idx - 1);
           }}
           disabled={idx <= 0}
-          className="shrink-0 p-0.5 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-25 disabled:pointer-events-none"
+          className="shrink-0 p-1 rounded-lg bg-indigo-100 text-indigo-700 border border-indigo-200 hover:bg-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800 disabled:opacity-30 disabled:pointer-events-none"
           aria-label="Previous metric"
         >
-          <ChevronLeft className="w-3.5 h-3.5" />
+          <ChevronLeft className="w-4 h-4 stroke-[2.5]" />
         </button>
         <div
           ref={scrollerRef}
@@ -541,10 +556,10 @@ function TileMetricScroller({
             go(idx + 1);
           }}
           disabled={idx >= slides.length - 1}
-          className="shrink-0 p-0.5 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-25 disabled:pointer-events-none"
+          className="shrink-0 p-1 rounded-lg bg-indigo-100 text-indigo-700 border border-indigo-200 hover:bg-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800 disabled:opacity-30 disabled:pointer-events-none"
           aria-label="Next metric"
         >
-          <ChevronRight className="w-3.5 h-3.5" />
+          <ChevronRight className="w-4 h-4 stroke-[2.5]" />
         </button>
       </div>
       <div className="flex justify-center gap-1.5 mt-1.5">
@@ -948,6 +963,10 @@ export default function PortfolioV1View({
     let lossPnl = 0;
     let gainCount = 0;
     let lossCount = 0;
+    let dayGainPnl = 0;
+    let dayLossPnl = 0;
+    let dayGainCount = 0;
+    let dayLossCount = 0;
     for (const h of scoped) {
       const nativeCcy = String(h.currency || displayCcy).toUpperCase();
       const mvN = marketValue(h);
@@ -965,7 +984,15 @@ export default function PortfolioV1View({
       }
       const dd = dayChangeDollar(h);
       if (dd != null) {
-        dayPnl += convertAmount(dd, nativeCcy, displayCcy, workspaceCurrencyRates, baseCurrency);
+        const ddFx = convertAmount(dd, nativeCcy, displayCcy, workspaceCurrencyRates, baseCurrency);
+        dayPnl += ddFx;
+        if (dd > 0) {
+          dayGainPnl += ddFx;
+          dayGainCount += 1;
+        } else if (dd < 0) {
+          dayLossPnl += ddFx;
+          dayLossCount += 1;
+        }
         const prev = Number(h.previous_close);
         const qty = Number(h.quantity || 0);
         if (Number.isFinite(prev) && Number.isFinite(qty)) {
@@ -991,6 +1018,10 @@ export default function PortfolioV1View({
       lossPnl,
       gainCount,
       lossCount,
+      dayGainPnl,
+      dayLossPnl,
+      dayGainCount,
+      dayLossCount,
     };
   }, [scoped, portfolioFilter, portfolios, viewCurrency, workspaceCurrencyRates, baseCurrency]);
 
@@ -1968,7 +1999,56 @@ export default function PortfolioV1View({
               %
             </button>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowPnlCalendar((v) => !v)}
+            className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all ${
+              showPnlCalendar
+                ? 'bg-violet-600 text-white border-violet-600 shadow-md shadow-violet-600/30'
+                : 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800'
+            }`}
+            title="Show or hide P&L calendar"
+          >
+            P&amp;L Calendar
+          </button>
         </div>
+
+        {showPnlCalendar && (
+          <div className="mt-3 rounded-2xl border border-violet-200/80 dark:border-violet-900/50 bg-white dark:bg-slate-900 p-3 sm:p-4">
+            <PortfolioPnLCalendar
+              rows={pnlCalendarRows}
+              loading={pnlCalendarLoading}
+              currencies={Array.from(new Set([
+                ...pnlCalendarRows.map((r: any) => String(r.currency || '').toUpperCase()).filter(Boolean),
+                String(baseCurrency || viewCurrency || 'INR').toUpperCase(),
+              ]))}
+              selectedCurrency={pnlCalendarCcy}
+              onCurrencyChange={setPnlCalendarCcy}
+              portfolios={(portfolios || []).map((p: any) => ({
+                id: p.id,
+                name: p.name,
+                currency: p.currency,
+              }))}
+              selectedPortfolioId={pnlCalendarPortfolioId}
+              onPortfolioChange={(id) => {
+                setPnlCalendarPortfolioId(id);
+                if (id !== 'all') {
+                  const book = (portfolios || []).find((p: any) => p.id === id);
+                  const ccy = String(book?.currency || '').toUpperCase();
+                  if (ccy) setPnlCalendarCcy(ccy);
+                }
+              }}
+              portfolioLabel={
+                pnlCalendarPortfolioId !== 'all'
+                  ? (portfolios || []).find((p: any) => p.id === pnlCalendarPortfolioId)?.name
+                  : undefined
+              }
+              canSnapshot={!isReadOnly}
+              onRefreshSnapshot={snapshotPortfolioDailyPositions}
+              onReload={reloadPnlCalendar}
+            />
+          </div>
+        )}
         </div>
       </div>
 
@@ -2062,10 +2142,10 @@ export default function PortfolioV1View({
                     node: (
                       <>
                         <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-emerald-600">
-                          {money(totalPortfolioTile.gainPnl || 0, totalPortfolioTile.displayCcy)}
+                          {money((moversMode === 'day' ? totalPortfolioTile.dayGainPnl : totalPortfolioTile.gainPnl) || 0, totalPortfolioTile.displayCcy)}
                         </p>
                         <p className="text-[9px] font-bold text-emerald-600/80 mt-0.5">
-                          Profit · {totalPortfolioTile.gainCount || 0} up
+                          Profit · {(moversMode === 'day' ? totalPortfolioTile.dayGainCount : totalPortfolioTile.gainCount) || 0} up{moversMode === 'day' ? ' · today' : ''}
                         </p>
                       </>
                     ),
@@ -2075,10 +2155,10 @@ export default function PortfolioV1View({
                     node: (
                       <>
                         <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-rose-600">
-                          {money(Math.abs(totalPortfolioTile.lossPnl || 0), totalPortfolioTile.displayCcy)}
+                          {money(Math.abs((moversMode === 'day' ? totalPortfolioTile.dayLossPnl : totalPortfolioTile.lossPnl) || 0), totalPortfolioTile.displayCcy)}
                         </p>
                         <p className="text-[9px] font-bold text-rose-600/80 mt-0.5">
-                          Loss · {totalPortfolioTile.lossCount || 0} down
+                          Loss · {(moversMode === 'day' ? totalPortfolioTile.dayLossCount : totalPortfolioTile.lossCount) || 0} down{moversMode === 'day' ? ' · today' : ''}
                         </p>
                       </>
                     ),
@@ -2155,10 +2235,10 @@ export default function PortfolioV1View({
                           node: (
                             <>
                               <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-emerald-600">
-                                {money(primary.gainPnl || 0, primary.currency)}
+                                {money((moversMode === 'day' ? primary.dayGainPnl : primary.gainPnl) || 0, primary.currency)}
                               </p>
                               <p className="text-[9px] font-bold text-emerald-600/80 mt-0.5">
-                                Profit · {primary.gainCount || 0} up
+                                Profit · {(moversMode === 'day' ? primary.dayGainCount : primary.gainCount) || 0} up{moversMode === 'day' ? ' · today' : ''}
                               </p>
                             </>
                           ),
@@ -2168,10 +2248,10 @@ export default function PortfolioV1View({
                           node: (
                             <>
                               <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-rose-600">
-                                {money(Math.abs(primary.lossPnl || 0), primary.currency)}
+                                {money(Math.abs((moversMode === 'day' ? primary.dayLossPnl : primary.lossPnl) || 0), primary.currency)}
                               </p>
                               <p className="text-[9px] font-bold text-rose-600/80 mt-0.5">
-                                Loss · {primary.lossCount || 0} down
+                                Loss · {(moversMode === 'day' ? primary.dayLossCount : primary.lossCount) || 0} down{moversMode === 'day' ? ' · today' : ''}
                               </p>
                             </>
                           ),
@@ -2268,75 +2348,16 @@ export default function PortfolioV1View({
         </div>
       )}
 
-      {/* Movers OR P&L Calendar — same slot, toggle */}
+      {/* Gainers / losers */}
       <div className="space-y-2 w-full">
         <div className="flex items-center justify-between gap-2 px-0.5 flex-wrap">
-          <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700">
-            <button
-              type="button"
-              onClick={() => setShowPnlCalendar(false)}
-              className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
-                !showPnlCalendar
-                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-              }`}
-            >
-              Movers
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowPnlCalendar(true)}
-              className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
-                showPnlCalendar
-                  ? 'bg-violet-600 text-white shadow-sm shadow-violet-600/25'
-                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-              }`}
-            >
-              P&amp;L Calendar
-            </button>
-          </div>
-          {!showPnlCalendar && (
-            <p className="text-[9px] font-bold text-slate-400">
+          <p className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+            Movers
+            <span className="ml-1.5 text-[9px] font-bold text-slate-400 normal-case tracking-normal">
               {perfLabel} · {moversUnit === 'dollar' ? '$' : '%'}
-            </p>
-          )}
+            </span>
+          </p>
         </div>
-        {showPnlCalendar ? (
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 sm:p-4">
-          <PortfolioPnLCalendar
-            rows={pnlCalendarRows}
-            loading={pnlCalendarLoading}
-            currencies={Array.from(new Set([
-              ...pnlCalendarRows.map((r: any) => String(r.currency || '').toUpperCase()).filter(Boolean),
-              String(baseCurrency || viewCurrency || 'INR').toUpperCase(),
-            ]))}
-            selectedCurrency={pnlCalendarCcy}
-            onCurrencyChange={setPnlCalendarCcy}
-            portfolios={(portfolios || []).map((p: any) => ({
-              id: p.id,
-              name: p.name,
-              currency: p.currency,
-            }))}
-            selectedPortfolioId={pnlCalendarPortfolioId}
-            onPortfolioChange={(id) => {
-              setPnlCalendarPortfolioId(id);
-              if (id !== 'all') {
-                const book = (portfolios || []).find((p: any) => p.id === id);
-                const ccy = String(book?.currency || '').toUpperCase();
-                if (ccy) setPnlCalendarCcy(ccy);
-              }
-            }}
-            portfolioLabel={
-              pnlCalendarPortfolioId !== 'all'
-                ? (portfolios || []).find((p: any) => p.id === pnlCalendarPortfolioId)?.name
-                : undefined
-            }
-            canSnapshot={!isReadOnly}
-            onRefreshSnapshot={snapshotPortfolioDailyPositions}
-            onReload={reloadPnlCalendar}
-          />
-        </div>
-        ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
         {[
           { title: 'Top gainers', icon: <TrendingUp className="w-4 h-4 text-emerald-500" />, rows: ranked.gainers, good: true },
@@ -2383,7 +2404,6 @@ export default function PortfolioV1View({
           </div>
         ))}
       </div>
-        )}
       </div>
 
       {/* Holdings — type filters above table; connectors at bottom */}
