@@ -619,10 +619,9 @@ export default function PortfolioV1View({
   const [pnlCalendarCcy, setPnlCalendarCcy] = useState<string>(String(baseCurrency || 'INR').toUpperCase());
   const [pnlCalendarPortfolioId, setPnlCalendarPortfolioId] = useState<string>('all');
 
-  const viewCurrencyStorageKey = `portfolio_v1_view_ccy:${workspaceName || 'default'}`;
   const [viewCurrency, setViewCurrency] = useState<string>(() => {
     try {
-      const last = localStorage.getItem(viewCurrencyStorageKey);
+      const last = localStorage.getItem('portfolio_v1_view_ccy');
       if (last) return last.toUpperCase();
     } catch { /* ignore */ }
     return String(baseCurrency || 'INR').toUpperCase();
@@ -726,7 +725,7 @@ export default function PortfolioV1View({
     const next = String(ccy || baseCurrency || 'INR').toUpperCase();
     setViewCurrency(next);
     try {
-      localStorage.setItem(viewCurrencyStorageKey, next);
+      localStorage.setItem('portfolio_v1_view_ccy', next);
     } catch { /* ignore */ }
   };
 
@@ -911,24 +910,9 @@ export default function PortfolioV1View({
     const ccy = String(book?.currency || '').toUpperCase();
     if (ccy && ccy !== viewCurrency) {
       setViewCurrency(ccy);
-      try { localStorage.setItem(viewCurrencyStorageKey, ccy); } catch { /* ignore */ }
+      try { localStorage.setItem('portfolio_v1_view_ccy', ccy); } catch { /* ignore */ }
     }
   }, [portfolioFilter, portfolios]);
-
-  // Re-sync View currency when the workspace itself changes - the effect above only fires
-  // on portfolioFilter changes, so switching workspaces while staying on the "All" filter
-  // (e.g. from a USD-heavy workspace to an INR-only one like KUMAR-RAJ) would otherwise
-  // leave viewCurrency stuck on whatever was last selected, showing USD in a purely-INR
-  // workspace with no actual USD holdings anywhere in it.
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(viewCurrencyStorageKey);
-      setViewCurrency(stored ? stored.toUpperCase() : String(baseCurrency || 'INR').toUpperCase());
-    } catch {
-      setViewCurrency(String(baseCurrency || 'INR').toUpperCase());
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceName]);
 
   const categoryOrder: CategoryId[] = [
     'india_mf',
@@ -1028,6 +1012,7 @@ export default function PortfolioV1View({
       pnlPct: pnlPctVal,
       dayPnl,
       dayPct: dayPctVal,
+      dayBase,
       dayCount,
       count: scoped.length,
       gainPnl,
@@ -1079,6 +1064,39 @@ export default function PortfolioV1View({
     }
     return { text: pct(totalPortfolioTile.pnlPct), positive: totalPortfolioTile.pnlPct >= 0 };
   };
+  /** Profit / Loss tile slides follow Day|Overall and $|% filters. */
+  const formatTileSide = (
+    gainAmt: number,
+    lossAmt: number,
+    gainCount: number,
+    lossCount: number,
+    investedBase: number,
+    dayBase: number,
+    currency: string,
+  ) => {
+    const useDay = moversMode === 'day';
+    const base = useDay ? dayBase : investedBase;
+    const g = Number(gainAmt) || 0;
+    const l = Number(lossAmt) || 0;
+    const gainPct = base > 0 ? (g / base) * 100 : null;
+    const lossPct = base > 0 ? (l / base) * 100 : null;
+    const suffix = useDay ? ' · today' : '';
+    if (moversUnit === 'pct') {
+      return {
+        gainText: gainPct == null ? '—' : pct(gainPct),
+        lossText: lossPct == null ? '—' : pct(Math.abs(lossPct)),
+        gainLabel: `Profit · ${gainCount || 0} up${suffix}`,
+        lossLabel: `Loss · ${lossCount || 0} down${suffix}`,
+      };
+    }
+    return {
+      gainText: money(g, currency),
+      lossText: money(Math.abs(l), currency),
+      gainLabel: `Profit · ${gainCount || 0} up${suffix}`,
+      lossLabel: `Loss · ${lossCount || 0} down${suffix}`,
+    };
+  };
+
   const formatHoldingPerf = (h: any) => {
     if (moversMode === 'day') {
       if (moversUnit === 'dollar') {
@@ -2155,29 +2173,47 @@ export default function PortfolioV1View({
                   },
                   {
                     key: 'profit',
-                    node: (
-                      <>
-                        <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-emerald-600">
-                          {money((moversMode === 'day' ? totalPortfolioTile.dayGainPnl : totalPortfolioTile.gainPnl) || 0, totalPortfolioTile.displayCcy)}
-                        </p>
-                        <p className="text-[9px] font-bold text-emerald-600/80 mt-0.5">
-                          Profit · {(moversMode === 'day' ? totalPortfolioTile.dayGainCount : totalPortfolioTile.gainCount) || 0} up{moversMode === 'day' ? ' · today' : ''}
-                        </p>
-                      </>
-                    ),
+                    node: (() => {
+                      const side = formatTileSide(
+                        moversMode === 'day' ? totalPortfolioTile.dayGainPnl : totalPortfolioTile.gainPnl,
+                        moversMode === 'day' ? totalPortfolioTile.dayLossPnl : totalPortfolioTile.lossPnl,
+                        moversMode === 'day' ? totalPortfolioTile.dayGainCount : totalPortfolioTile.gainCount,
+                        moversMode === 'day' ? totalPortfolioTile.dayLossCount : totalPortfolioTile.lossCount,
+                        totalPortfolioTile.invested,
+                        totalPortfolioTile.dayBase || 0,
+                        totalPortfolioTile.displayCcy,
+                      );
+                      return (
+                        <>
+                          <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-emerald-600">
+                            {side.gainText}
+                          </p>
+                          <p className="text-[9px] font-bold text-emerald-600/80 mt-0.5">{side.gainLabel}</p>
+                        </>
+                      );
+                    })(),
                   },
                   {
                     key: 'loss',
-                    node: (
-                      <>
-                        <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-rose-600">
-                          {money(Math.abs((moversMode === 'day' ? totalPortfolioTile.dayLossPnl : totalPortfolioTile.lossPnl) || 0), totalPortfolioTile.displayCcy)}
-                        </p>
-                        <p className="text-[9px] font-bold text-rose-600/80 mt-0.5">
-                          Loss · {(moversMode === 'day' ? totalPortfolioTile.dayLossCount : totalPortfolioTile.lossCount) || 0} down{moversMode === 'day' ? ' · today' : ''}
-                        </p>
-                      </>
-                    ),
+                    node: (() => {
+                      const side = formatTileSide(
+                        moversMode === 'day' ? totalPortfolioTile.dayGainPnl : totalPortfolioTile.gainPnl,
+                        moversMode === 'day' ? totalPortfolioTile.dayLossPnl : totalPortfolioTile.lossPnl,
+                        moversMode === 'day' ? totalPortfolioTile.dayGainCount : totalPortfolioTile.gainCount,
+                        moversMode === 'day' ? totalPortfolioTile.dayLossCount : totalPortfolioTile.lossCount,
+                        totalPortfolioTile.invested,
+                        totalPortfolioTile.dayBase || 0,
+                        totalPortfolioTile.displayCcy,
+                      );
+                      return (
+                        <>
+                          <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-rose-600">
+                            {side.lossText}
+                          </p>
+                          <p className="text-[9px] font-bold text-rose-600/80 mt-0.5">{side.lossLabel}</p>
+                        </>
+                      );
+                    })(),
                   },
                 ]}
               />
@@ -2248,29 +2284,47 @@ export default function PortfolioV1View({
                         },
                         {
                           key: 'profit',
-                          node: (
-                            <>
-                              <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-emerald-600">
-                                {money((moversMode === 'day' ? primary.dayGainPnl : primary.gainPnl) || 0, primary.currency)}
-                              </p>
-                              <p className="text-[9px] font-bold text-emerald-600/80 mt-0.5">
-                                Profit · {(moversMode === 'day' ? primary.dayGainCount : primary.gainCount) || 0} up{moversMode === 'day' ? ' · today' : ''}
-                              </p>
-                            </>
-                          ),
+                          node: (() => {
+                            const side = formatTileSide(
+                              moversMode === 'day' ? primary.dayGainPnl : primary.gainPnl,
+                              moversMode === 'day' ? primary.dayLossPnl : primary.lossPnl,
+                              moversMode === 'day' ? primary.dayGainCount : primary.gainCount,
+                              moversMode === 'day' ? primary.dayLossCount : primary.lossCount,
+                              primary.invested,
+                              primary.dayBase || 0,
+                              primary.currency,
+                            );
+                            return (
+                              <>
+                                <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-emerald-600">
+                                  {side.gainText}
+                                </p>
+                                <p className="text-[9px] font-bold text-emerald-600/80 mt-0.5">{side.gainLabel}</p>
+                              </>
+                            );
+                          })(),
                         },
                         {
                           key: 'loss',
-                          node: (
-                            <>
-                              <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-rose-600">
-                                {money(Math.abs((moversMode === 'day' ? primary.dayLossPnl : primary.lossPnl) || 0), primary.currency)}
-                              </p>
-                              <p className="text-[9px] font-bold text-rose-600/80 mt-0.5">
-                                Loss · {(moversMode === 'day' ? primary.dayLossCount : primary.lossCount) || 0} down{moversMode === 'day' ? ' · today' : ''}
-                              </p>
-                            </>
-                          ),
+                          node: (() => {
+                            const side = formatTileSide(
+                              moversMode === 'day' ? primary.dayGainPnl : primary.gainPnl,
+                              moversMode === 'day' ? primary.dayLossPnl : primary.lossPnl,
+                              moversMode === 'day' ? primary.dayGainCount : primary.gainCount,
+                              moversMode === 'day' ? primary.dayLossCount : primary.lossCount,
+                              primary.invested,
+                              primary.dayBase || 0,
+                              primary.currency,
+                            );
+                            return (
+                              <>
+                                <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-rose-600">
+                                  {side.lossText}
+                                </p>
+                                <p className="text-[9px] font-bold text-rose-600/80 mt-0.5">{side.lossLabel}</p>
+                              </>
+                            );
+                          })(),
                         },
                       ]}
                     />
