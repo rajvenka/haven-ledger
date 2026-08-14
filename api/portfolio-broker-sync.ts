@@ -16,8 +16,24 @@ import { webullHandler } from "./_lib/webull-sync";
 import { zerodhaHandler } from "./_lib/zerodha-sync";
 import { growwHandler } from "./_lib/groww-sync";
 
+function parseBody(req: any): any {
+  let body = req.body;
+  if (body == null) return {};
+  if (typeof body === "string") {
+    try {
+      return JSON.parse(body || "{}");
+    } catch {
+      return {};
+    }
+  }
+  return body;
+}
+
 export default async function handler(req: any, res: any) {
-  const broker = req.body?.broker;
+  // Ensure JSON body is an object (Vercel sometimes leaves it as a string)
+  const body = parseBody(req);
+  req.body = body;
+  const broker = body?.broker;
   switch (broker) {
     case "etoro":
       return etoroHandler(req, res);

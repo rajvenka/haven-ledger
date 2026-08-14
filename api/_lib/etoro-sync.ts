@@ -58,7 +58,10 @@ async function webullSnapshotFetch(host: string, appKey: string, appSecret: stri
   const uri = "/openapi/market-data/stock/snapshot";
   const queryParams = { symbols: symbols.join(","), category: "US_STOCK" };
   const ts = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-  const nonceVal = crypto.randomUUID();
+  const nonceVal =
+    typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : crypto.randomBytes(16).toString("hex");
   const signHeaders: Record<string, string> = {
     "x-app-key": appKey, "x-timestamp": ts, "x-signature-version": "1.0",
     "x-signature-algorithm": "HMAC-SHA256", "x-signature-nonce": nonceVal, host,
@@ -101,9 +104,19 @@ export async function etoroHandler(req: any, res: any) {
   }
 
   try {
-    const { apiKey, userKey, webullAppKey, webullAppSecret, webullToken, webullRegion } = req.body || {};
+    const body = req.body || {};
+    // Accept both camelCase (API body) and snake_case (stored credential shapes)
+    const apiKey = body.apiKey || body.api_key;
+    const userKey = body.userKey || body.user_key;
+    const webullAppKey = body.webullAppKey || body.webull_app_key;
+    const webullAppSecret = body.webullAppSecret || body.webull_app_secret;
+    const webullToken = body.webullToken || body.webull_token;
+    const webullRegion = body.webullRegion || body.webull_region;
     if (!apiKey || !userKey) {
-      res.status(400).json({ error: "Missing eToro API credentials. Connect your eToro account first under Settings." });
+      res.status(400).json({
+        error:
+          "Missing eToro API credentials (api key / user key). Re-connect eToro under Connect, or check the stored keys.",
+      });
       return;
     }
 
@@ -115,8 +128,21 @@ export async function etoroHandler(req: any, res: any) {
     // indistinguishably from genuine stock ownership, so the distinction isn't lost.
     const portfolioResp = await etoroFetch("/trading/info/portfolio", apiKey, userKey);
     if (!portfolioResp.ok) {
-      const body = await portfolioResp.text().catch(() => "");
-      res.status(portfolioResp.status).json({ error: `eToro API returned ${portfolioResp.status} fetching your portfolio. ${body.slice(0, 300)}` });
+      const errBody = await portfolioResp.text().catch(() => "");
+      const status = portfolioResp.status;
+      let hint = errBody.slice(0, 300);
+      if (status === 401 || status === 403) {
+        hint = (hint || "Unauthorized") + " — check that your eToro API key and user key are still valid.";
+      } else if (status === 429) {
+        hint = (hint || "Rate limited") + " — wait a minute and try again.";
+      } else if (status >= 500) {
+        hint = (hint || "eToro server error") + " — often temporary; retry shortly.";
+      }
+      // Surface upstream status but keep a clear message for the UI
+      res.status(status >= 400 && status < 600 ? status : 502).json({
+        error: `eToro API returned ${status} fetching portfolio. ${hint}`,
+        etoroStatus: status,
+      });
       return;
     }
     const portfolioData = await portfolioResp.json();
@@ -387,6 +413,10 @@ export async function etoroHandler(req: any, res: any) {
     });
   } catch (error: any) {
     console.error("eToro sync error:", error);
-    res.status(500).json({ error: error?.message || "Unexpected error syncing from eToro." });
+    const msg = error?.message || String(error) || "Unexpected error syncing from eToro.";
+    res.status(500).json({
+      error: msg,
+      stack: process.env.NODE_ENV === "development" ? error?.stack : undefined,
+    });
   }
 }
