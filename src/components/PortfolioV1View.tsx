@@ -163,11 +163,13 @@ const COMMODITY_SYMBOLS = new Set([
 
 const CATEGORY_META: Record<
   CategoryId,
-  { label: string; blurb: string; icon: React.ReactNode; accent: string; chip: string; ring: string }
+  { label: string; blurb: string; flag: string; shortLabel: string; icon: React.ReactNode; accent: string; chip: string; ring: string }
 > = {
   india_mf: {
     label: 'India · MF',
     blurb: 'Mutual funds',
+    flag: '🇮🇳',
+    shortLabel: 'MF',
     icon: <Landmark className="w-4 h-4" />,
     accent: 'from-amber-500/15 to-orange-500/5',
     chip: 'bg-amber-500 text-white',
@@ -176,6 +178,8 @@ const CATEGORY_META: Record<
   india_stock: {
     label: 'India · Stocks',
     blurb: 'NSE / BSE equity',
+    flag: '🇮🇳',
+    shortLabel: 'Stocks',
     icon: <ChartLine className="w-4 h-4" />,
     accent: 'from-blue-500/15 to-indigo-500/5',
     chip: 'bg-blue-600 text-white',
@@ -184,6 +188,8 @@ const CATEGORY_META: Record<
   us_stock: {
     label: 'US · Stocks',
     blurb: 'USD equities',
+    flag: '🇺🇸',
+    shortLabel: 'Stocks',
     icon: <Globe className="w-4 h-4" />,
     accent: 'from-violet-500/15 to-fuchsia-500/5',
     chip: 'bg-violet-600 text-white',
@@ -192,6 +198,8 @@ const CATEGORY_META: Record<
   au_stock: {
     label: 'AU · Stocks',
     blurb: 'ASX / AUD',
+    flag: '🇦🇺',
+    shortLabel: 'Stocks',
     icon: <Globe className="w-4 h-4" />,
     accent: 'from-sky-500/15 to-cyan-500/5',
     chip: 'bg-sky-600 text-white',
@@ -200,6 +208,8 @@ const CATEGORY_META: Record<
   cfd: {
     label: 'CFDs',
     blurb: 'Leveraged eToro',
+    flag: '',
+    shortLabel: 'CFDs',
     icon: <ChartCandlestick className="w-4 h-4" />,
     accent: 'from-teal-500/15 to-emerald-500/5',
     chip: 'bg-teal-600 text-white',
@@ -208,6 +218,8 @@ const CATEGORY_META: Record<
   commodities: {
     label: 'Commodities',
     blurb: 'Gold, oil, metals',
+    flag: '',
+    shortLabel: 'Commodities',
     icon: <Fuel className="w-4 h-4" />,
     accent: 'from-yellow-500/20 to-amber-600/5',
     chip: 'bg-yellow-600 text-white',
@@ -216,6 +228,8 @@ const CATEGORY_META: Record<
   options: {
     label: 'Options',
     blurb: 'Contracts ×100',
+    flag: '',
+    shortLabel: 'Options',
     icon: <Sparkles className="w-4 h-4" />,
     accent: 'from-rose-500/15 to-pink-500/5',
     chip: 'bg-rose-600 text-white',
@@ -224,6 +238,8 @@ const CATEGORY_META: Record<
   other: {
     label: 'Other',
     blurb: 'Unclassified',
+    flag: '',
+    shortLabel: 'Other',
     icon: <Layers className="w-4 h-4" />,
     accent: 'from-slate-500/10 to-slate-500/5',
     chip: 'bg-slate-600 text-white',
@@ -2178,9 +2194,6 @@ export default function PortfolioV1View({
                 <span className="text-[10px] font-bold text-slate-400 tabular-nums">{totalPortfolioTile.count}</span>
               </div>
               <p className="mt-2 text-[12px] font-black text-slate-900 dark:text-white leading-tight">Total portfolio</p>
-              <p className="text-[9px] text-slate-500 mt-0.5">
-                All categories · {totalPortfolioTile.displayCcy}
-              </p>
             </button>
             <div
               className="px-3 sm:px-3.5 pb-3"
@@ -2278,19 +2291,19 @@ export default function PortfolioV1View({
                     <div className={`p-1.5 rounded-xl ${selected ? meta.chip : 'bg-white/70 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
                       {meta.icon}
                     </div>
-                    <span className="text-[10px] font-bold text-slate-400 tabular-nums">{stats.count}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[10px] font-bold text-slate-400 tabular-nums">{stats.count}</span>
+                      {expanded ? <ChevronDown className="w-3.5 h-3.5 text-slate-400" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400" />}
+                    </div>
                   </div>
-                  <p className="mt-2 text-[12px] font-black text-slate-900 dark:text-white leading-tight">{meta.label}</p>
-                  <p className="text-[9px] text-slate-500 mt-0.5">{meta.blurb}</p>
+                  <p className="mt-2 text-[12px] font-black text-slate-900 dark:text-white leading-tight">
+                    {meta.flag && <span className="mr-1">{meta.flag}</span>}{meta.shortLabel}
+                  </p>
                   {stats.byCurrency.length > 1 && (
-                    <p className="text-[9px] text-slate-400 mt-1">
+                    <p className="text-[9px] text-slate-400 mt-0.5">
                       +{stats.byCurrency.length - 1} more ccy
                     </p>
                   )}
-                  <div className="mt-2 flex items-center gap-1 text-[9px] font-bold text-slate-400">
-                    {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                    {expanded ? 'Hide' : 'Expand'}
-                  </div>
                 </button>
                 {primary && (
                   <div
