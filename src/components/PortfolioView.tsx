@@ -67,6 +67,7 @@ interface PortfolioViewProps {
   sellPortfolioHolding: (id: string, params: { quantity: number; soldPrice: number; soldDate: string }) => Promise<void>;
   updatePortfolioHoldingLivePrice: (id: string, price: number, previousClose?: number | null, priceSource?: string | null) => Promise<void>;
   markPriceLookupFailed: (id: string) => Promise<void>;
+  loadPortfolioDetails?: () => Promise<void>;
   deletePortfolioHolding: (id: string) => Promise<void>;
   bulkTagPortfolioHoldings: (holdingIds: string[], source: string) => Promise<void>;
   bulkDeletePortfolioHoldings: (holdingIds: string[]) => Promise<void>;
@@ -303,7 +304,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setPortfolioCashBalance, deletePortfolioCashBalance, setBookedPlBaseline, setProjectedBankBalance, recalculateProjectedBankBalance,
     portfolioBrokerConnections = [], setPortfolioBrokerConnection, deletePortfolioBrokerConnection, markBrokerConnectionSynced,
     syncEtoroHoldingLots, syncEtoroLivePrices, loadPortfolioHoldingLots, portfolioHoldingLots = [],
-    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, snapshotPortfolioDailyPositions, loadPortfolioDailyPositions, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
+    portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, loadPortfolioDetails, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, snapshotPortfolioDailyPositions, loadPortfolioDailyPositions, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     mfHoldingsCache = [], loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     portfolioContributions, addPortfolioContribution, updatePortfolioContribution, deletePortfolioContribution,
@@ -1949,6 +1950,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
       }
 
       await Promise.all(updatePromises);
+      // Single reload for the whole batch, now that updatePortfolioHoldingLivePrice and
+      // markPriceLookupFailed no longer reload individually per holding (see their comments -
+      // that per-call reload was the actual root cause of the network stack getting
+      // overwhelmed during a refresh with many holdings).
+      await loadPortfolioDetails?.();
 
       if (refreshable.length === 0 && mutualFunds.length === 0) {
         setPriceRefreshSummary(skippedNoTicker > 0 ? `${skippedNoTicker} stock${skippedNoTicker !== 1 ? 's' : ''} need a ticker set before they can be refreshed.` : 'No holdings to refresh.');

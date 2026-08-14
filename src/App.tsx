@@ -201,6 +201,7 @@ export default function App() {
     sellPortfolioHolding,
     updatePortfolioHoldingLivePrice,
     markPriceLookupFailed,
+    loadPortfolioDetails,
     deletePortfolioHolding,
     bulkTagPortfolioHoldings,
     bulkDeletePortfolioHoldings,
@@ -1857,6 +1858,7 @@ export default function App() {
                 markBrokerConnectionSynced={markBrokerConnectionSynced}
                 updatePortfolioHoldingLivePrice={updatePortfolioHoldingLivePrice}
                 markPriceLookupFailed={markPriceLookupFailed}
+                loadPortfolioDetails={loadPortfolioDetails}
                 snapshotPortfolioDailyPositions={snapshotPortfolioDailyPositions}
                 loadPortfolioDailyPositions={loadPortfolioDailyPositions}
               />
@@ -1890,6 +1892,7 @@ export default function App() {
                 sellPortfolioHolding={sellPortfolioHolding}
                 updatePortfolioHoldingLivePrice={updatePortfolioHoldingLivePrice}
                 markPriceLookupFailed={markPriceLookupFailed}
+                loadPortfolioDetails={loadPortfolioDetails}
                 deletePortfolioHolding={deletePortfolioHolding}
                 bulkTagPortfolioHoldings={bulkTagPortfolioHoldings}
                 bulkDeletePortfolioHoldings={bulkDeletePortfolioHoldings}

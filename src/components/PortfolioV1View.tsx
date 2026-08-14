@@ -72,6 +72,7 @@ interface Props {
   bulkAddPortfolioHoldings?: (holdings: any[], portfolioId?: string) => Promise<any>;
   loadPortfolioDailyPositions?: (fromDate: string, toDate: string, portfolioId?: string | null) => Promise<any[]>;
   markPriceLookupFailed?: (id: string) => Promise<void>;
+  loadPortfolioDetails?: () => Promise<void>;
 }
 
 const BROKER_META: Record<
@@ -601,6 +602,7 @@ export default function PortfolioV1View({
   markBrokerConnectionSynced,
   updatePortfolioHoldingLivePrice,
   markPriceLookupFailed,
+  loadPortfolioDetails,
   snapshotPortfolioDailyPositions,
   loadPortfolioDailyPositions,
   bulkAddPortfolioHoldings,
@@ -1379,6 +1381,9 @@ export default function PortfolioV1View({
       }
 
       await Promise.all(updatePromises);
+      // Single reload for the whole batch - see the comment in usePaymentState.ts on
+      // updatePortfolioHoldingLivePrice for why this moved here from being called per-holding.
+      await loadPortfolioDetails?.();
       if (refreshable.length === 0 && mutualFunds.length === 0) {
         setPriceRefreshSummary('No holdings to refresh in this view.');
         return;
@@ -1728,6 +1733,7 @@ export default function PortfolioV1View({
           updated++;
         }
       }
+      await loadPortfolioDetails?.();
       await markBrokerConnectionSynced?.(connection.id);
       setConnectOk(
         updated > 0

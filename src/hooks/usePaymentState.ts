@@ -1727,13 +1727,19 @@ export function usePaymentState() {
       { onConflict: 'holding_id,recorded_date' }
     );
     if (histErr) console.error('Failed to record price history:', histErr);
-    await loadPortfolioDetails();
+    // Deliberately no loadPortfolioDetails() call here - this function is called once per
+    // holding during a batch refresh (potentially 50-100+ concurrently via Promise.all), and
+    // each call triggering its own full ~18-table reload was the actual root cause of the
+    // network stack getting overwhelmed during price refresh ("network connection was lost",
+    // ERR_INSUFFICIENT_RESOURCES). Callers now reload once after their whole batch completes.
   };
 
   const markPriceLookupFailed = async (id: string) => {
     const { error } = await supabase.from('portfolio_holdings').update({ price_lookup_failed: true }).eq('id', id);
     if (error) throw error;
-    await loadPortfolioDetails();
+    // Deliberately no loadPortfolioDetails() here - same reasoning as
+    // updatePortfolioHoldingLivePrice above, this is called once per failed holding in the
+    // same batch refresh. Callers reload once after their whole batch completes.
   };
 
   const deletePortfolioHolding = async (id: string) => {
@@ -2205,6 +2211,7 @@ export function usePaymentState() {
       const price = upperSymbolToPrice.get(row.symbol.toUpperCase());
       if (price != null) { await updatePortfolioHoldingLivePrice(row.id, price, null, 'eToro'); updated++; }
     }
+    if (updated > 0) await loadPortfolioDetails();
     // Thrown (not just logged) so it surfaces via confirmImport's stepErrors to the person,
     // rather than silently doing nothing the way this step did before with no visibility at
     // all into whether it ran, found rows, or matched anything.
@@ -2472,7 +2479,7 @@ export function usePaymentState() {
     accessPlans, createAccessPlan, updateAccessPlan, deleteAccessPlan,
     myUpgradeRequest, requestUpgrade, fetchPendingUpgradeRequests, resolveUpgradeRequest, adminSetUserPlan, setSuperAdminStatus,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
-    portfolioHoldings, portfolioDataLoading, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
+    portfolioHoldings, portfolioDataLoading, loadPortfolioDetails, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
     snapshotPortfolioDailyPositions, loadPortfolioDailyPositions,
     portfolioPriceHistory,
