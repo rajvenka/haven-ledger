@@ -18,6 +18,7 @@ import {
   ChevronRight,
   ChevronLeft,
   ChevronDown,
+  ChevronUp,
   Link2,
   ShieldAlert,
   Landmark,
@@ -534,7 +535,7 @@ function TileMetricScroller({
             go(idx - 1);
           }}
           disabled={idx <= 0}
-          className="shrink-0 p-1 rounded-lg bg-indigo-100 text-indigo-700 border border-indigo-200 hover:bg-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800 disabled:opacity-30 disabled:pointer-events-none"
+          className="hidden sm:inline-flex shrink-0 p-1 rounded-lg bg-indigo-100 text-indigo-700 border border-indigo-200 hover:bg-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800 disabled:opacity-30 disabled:pointer-events-none"
           aria-label="Previous metric"
         >
           <ChevronLeft className="w-4 h-4 stroke-[2.5]" />
@@ -557,7 +558,7 @@ function TileMetricScroller({
             go(idx + 1);
           }}
           disabled={idx >= slides.length - 1}
-          className="shrink-0 p-1 rounded-lg bg-indigo-100 text-indigo-700 border border-indigo-200 hover:bg-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800 disabled:opacity-30 disabled:pointer-events-none"
+          className="hidden sm:inline-flex shrink-0 p-1 rounded-lg bg-indigo-100 text-indigo-700 border border-indigo-200 hover:bg-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800 disabled:opacity-30 disabled:pointer-events-none"
           aria-label="Next metric"
         >
           <ChevronRight className="w-4 h-4 stroke-[2.5]" />
