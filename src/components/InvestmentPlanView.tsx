@@ -549,13 +549,19 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                   const info = computeTransferInfo(plan);
                   return { period: info.period, remaining: info.remaining, transferredThisPeriod: Math.max(0, info.periodExpected - info.remaining), fulfilled: info.remaining === 0 };
                 })();
+                // "remaining === 0" alone doesn't distinguish "actually paid" from "excused
+                // via skip" - both zero out the same way, but they're genuinely different
+                // states and showing "Transferred" for a skipped period is actively wrong.
+                const isSkipped = portfolioRecurringPlanSkips.some((s: any) => s.plan_id === plan.id && s.period_label === period.label);
                 return (
                   <div key={plan.id} className="flex items-center justify-between gap-3 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg">
                     <div className="min-w-0">
                       <p className="text-xs font-bold text-slate-900 dark:text-white">{m ? memberName(m) : 'Former member'}</p>
                       <p className="text-[10px] text-slate-400">{period.label} · expected {fmt(Number(plan.expected_amount))}{transferredThisPeriod > 0 && !fulfilled ? ` · ${fmt(transferredThisPeriod)} already covered by an advance` : ''}</p>
                     </div>
-                    {fulfilled ? (
+                    {isSkipped ? (
+                      <span className="px-2.5 py-1 bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase rounded-full shrink-0">Skipped</span>
+                    ) : fulfilled ? (
                       <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase rounded-full shrink-0">Transferred</span>
                     ) : !isReadOnly ? (
                       <button
