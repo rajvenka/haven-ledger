@@ -1861,8 +1861,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
           if (!qResp.ok) throw new Error(qData?.error || 'Zerodha quote failed');
           holdings.forEach((h) => {
             const q = qData.quotes?.[instrumentKey(h)];
-            if (q?.lastPrice != null) {
-              updatePromises.push(updatePortfolioHoldingLivePrice(h.id, q.lastPrice, q.previousClose ?? null, 'Zerodha'));
+            const lastPrice = Number(q?.lastPrice);
+            if (Number.isFinite(lastPrice) && lastPrice > 0) {
+              updatePromises.push(updatePortfolioHoldingLivePrice(h.id, lastPrice, q.previousClose ?? null, 'Zerodha'));
               succeeded++;
             } else {
               updatePromises.push(markPriceLookupFailed(h.id));
@@ -1896,8 +1897,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
           const holding = yahooHoldings[i];
           if (!holding) return;
           if (r.price != null) {
-            updatePromises.push(updatePortfolioHoldingLivePrice(holding.id, r.price, r.previousClose ?? null, 'Yahoo'));
-            succeeded++;
+            const price = Number(r.price);
+            if (Number.isFinite(price) && price > 0) {
+              updatePromises.push(updatePortfolioHoldingLivePrice(holding.id, price, r.previousClose ?? null, 'Yahoo'));
+              succeeded++;
+            } else {
+              updatePromises.push(markPriceLookupFailed(holding.id));
+              failed++;
+            }
           } else if (r.rateLimited || r.error === 'rate_limited') {
             // Soft fail — do not stamp "Symbol Not Found" for Yahoo throttling
             rateLimited++;
@@ -1927,8 +1934,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
           mfResults.forEach((r: any) => {
             const holding = mutualFunds.find(h => h.id === r.id);
             if (!holding) return;
-            if (r.nav != null) {
-              updatePromises.push(updatePortfolioHoldingLivePrice(holding.id, r.nav, null, 'MF'));
+            const nav = Number(r.nav);
+            if (Number.isFinite(nav) && nav > 0) {
+              updatePromises.push(updatePortfolioHoldingLivePrice(holding.id, nav, null, 'MF'));
               mfSucceeded++;
             } else {
               updatePromises.push(markPriceLookupFailed(holding.id));
