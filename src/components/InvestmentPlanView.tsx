@@ -932,11 +932,40 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
             }
 
             return (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto space-y-4">
                 <table className="w-full text-xs min-w-[480px]">
                   <thead>{headerRow}</thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-900">{filteredSortedContributions.map(renderRow)}</tbody>
                 </table>
+                {portfolioRecurringPlanSkips.length > 0 && (
+                  <div>
+                    <span className="text-[9px] font-black text-amber-500 uppercase tracking-wider">Skipped ({portfolioRecurringPlanSkips.length})</span>
+                    <div className="mt-1 space-y-1">
+                      {portfolioRecurringPlanSkips.map((s: any) => {
+                        const plan = allPortfolioRecurringPlans.find((p: any) => p.id === s.plan_id);
+                        const m = workspaceMembers.find(mm => mm.uid === plan?.member_user_id);
+                        const skipper = workspaceMembers.find(mm => mm.uid === s.skipped_by);
+                        return (
+                          <div key={s.id} className="flex items-center justify-between px-3 py-2 bg-amber-50 dark:bg-amber-950/20 rounded-lg text-[11px]">
+                            <div className="min-w-0">
+                              <span className="font-semibold text-slate-700 dark:text-slate-300">{s.period_label}</span>
+                              <span className="text-slate-400"> · {m ? memberName(m) : 'Unknown'}'s plan · skipped by {skipper?.displayName || skipper?.email || 'Unknown'}</span>
+                              {s.notes && <span className="text-slate-400 italic"> · {s.notes}</span>}
+                            </div>
+                            {unskipRecurringPeriod && (
+                              <button
+                                onClick={() => runAction(() => unskipRecurringPeriod(s.plan_id, s.period_label))}
+                                className="text-amber-600 hover:text-amber-700 text-[9px] font-black uppercase shrink-0 ml-2 cursor-pointer"
+                              >
+                                Undo
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()}
