@@ -123,3 +123,33 @@
   }
 }
 
+
+
+/* Haven micro-interactions (UI only) — Batch A/B */
+.hv-press {
+  transition: transform 150ms ease-out, box-shadow 150ms ease-out, background-color 150ms ease-out, opacity 150ms ease-out;
+  -webkit-tap-highlight-color: transparent;
+}
+.hv-press:active {
+  transform: scale(0.97);
+}
+.hv-chip-on {
+  transition: box-shadow 180ms ease-out, transform 150ms ease-out, background-color 150ms ease-out;
+}
+.hv-row {
+  transition: background-color 200ms ease-out, border-color 200ms ease-out, opacity 200ms ease-out;
+}
+.hv-success-flash {
+  animation: hv-success-flash 550ms ease-out;
+}
+@keyframes hv-success-flash {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.45); }
+  100% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hv-press:active { transform: none; }
+  .hv-success-flash { animation: none; }
+  .hv-press, .hv-chip-on, .hv-row {
+    transition: none;
+  }
+}
