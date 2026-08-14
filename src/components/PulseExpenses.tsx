@@ -72,6 +72,7 @@ export default function PulseExpenses({
   );
 
   const metricTouchX = useRef<number | null>(null);
+  const metricTouchY = useRef<number | null>(null);
   const METRIC_SLIDES = [
     { bucket: 'paid' as const, label: 'This month paid', tone: 'text-emerald-600 dark:text-emerald-400' },
     { bucket: 'to_pay' as const, label: 'This month to pay', tone: 'text-rose-600 dark:text-rose-400' },
@@ -232,9 +233,12 @@ export default function PulseExpenses({
   };
 
   return (
-    <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-left">
-      {/* Single scroll surface: sticky filters live INSIDE it */}
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-5 pt-3 pb-24 md:pb-6">
+    <div className="flex-1 min-h-0 h-full flex flex-col bg-slate-50 dark:bg-slate-950 text-left overflow-hidden">
+      {/* Primary scroll surface — touch-pan-y so mobile can always scroll the bill list */}
+      <div
+        className="flex-1 min-h-0 overflow-y-auto overscroll-y-auto px-4 sm:px-5 pt-3 pb-32 md:pb-6 touch-pan-y"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
         {/* Title */}
         <div className="flex items-start justify-between gap-3 mb-2">
           <div>
@@ -352,12 +356,18 @@ export default function PulseExpenses({
                 className="lg:hidden"
                 onTouchStart={(e) => {
                   metricTouchX.current = e.changedTouches[0]?.clientX ?? null;
+                  metricTouchY.current = e.changedTouches[0]?.clientY ?? null;
                 }}
                 onTouchEnd={(e) => {
                   const startX = metricTouchX.current;
+                  const startY = metricTouchY.current;
                   metricTouchX.current = null;
-                  if (startX == null) return;
+                  metricTouchY.current = null;
+                  if (startX == null || startY == null) return;
                   const dx = (e.changedTouches[0]?.clientX ?? startX) - startX;
+                  const dy = (e.changedTouches[0]?.clientY ?? startY) - startY;
+                  // Vertical scroll intent — ignore metric swipe
+                  if (Math.abs(dy) > Math.abs(dx)) return;
                   if (Math.abs(dx) < 40) return;
                   goMetric(dx < 0 ? 1 : -1);
                 }}
@@ -457,10 +467,10 @@ export default function PulseExpenses({
 
         {/* FLOATING / STICKY filter bar — first sticky child of the scroller */}
         <div
-          className="sticky top-0 z-30 -mx-4 sm:-mx-5 px-4 sm:px-5 py-2.5 space-y-2 mb-3
-            bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-xl
+          className="relative md:sticky md:top-0 z-20 -mx-4 sm:-mx-5 px-4 sm:px-5 py-2.5 space-y-2 mb-3
+            bg-slate-50/95 dark:bg-slate-950/95 md:backdrop-blur-xl
             border-b border-slate-200 dark:border-slate-800
-            shadow-[0_8px_24px_-8px_rgba(0,0,0,0.35)]"
+            md:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.35)]"
         >
           {/* Search */}
           <div className="relative">
