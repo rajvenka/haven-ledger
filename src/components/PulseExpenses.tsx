@@ -2,7 +2,7 @@
  * Pulse Spend — next-gen Expenses (currency tiles + clean bill list).
  * Classic ExpensesView remains available.
  */
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, useCallback } from 'react';
 import {
   Plus,
   Globe,
@@ -52,6 +52,25 @@ export default function PulseExpenses({
   } | null>(null);
   /** Mobile: shared metric slide (0=paid, 1=to_pay, 2=next) — all 3 method tiles move together */
   const [metricIdx, setMetricIdx] = useState(0);
+  const [justPaidIds, setJustPaidIds] = useState<Record<string, true>>({});
+  const flashPaid = useCallback((id: string) => {
+    setJustPaidIds((prev) => ({ ...prev, [id]: true }));
+    window.setTimeout(() => {
+      setJustPaidIds((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }, 600);
+  }, []);
+  const recordPaymentUi = useCallback(
+    async (payment: RecurringPayment) => {
+      await onRecordPayment(payment);
+      flashPaid(payment.id);
+    },
+    [onRecordPayment, flashPaid]
+  );
+
   const metricTouchX = useRef<number | null>(null);
   const METRIC_SLIDES = [
     { bucket: 'paid' as const, label: 'This month paid', tone: 'text-emerald-600 dark:text-emerald-400' },
@@ -208,7 +227,7 @@ export default function PulseExpenses({
     for (const p of groups.dd) {
       if (isPaymentPaidForCurrentPeriod(p, history)) continue;
       if (isPaymentReadOnly(p)) continue;
-      await onRecordPayment(p);
+      await recordPaymentUi(p);
     }
   };
 
@@ -377,7 +396,7 @@ export default function PulseExpenses({
                           setPaidFilter('all');
                           setStatusFilter('all');
                         }}
-                        className={`rounded-2xl border p-2.5 text-left transition-all ${chipOf(row.accent)} ${
+                        className={`hv-press hv-chip-on rounded-2xl border p-2.5 text-left ${chipOf(row.accent)} ${
                           active ? 'ring-2 ring-indigo-500 shadow-md' : ''
                         }`}
                       >
@@ -416,7 +435,7 @@ export default function PulseExpenses({
                               setPaidFilter('all');
                               setStatusFilter('all');
                             }}
-                            className={`w-full rounded-2xl border p-3 text-left transition-all ${chipOf(row.accent)} ${
+                            className={`hv-press hv-chip-on w-full rounded-2xl border p-3 text-left ${chipOf(row.accent)} ${
                               active ? 'ring-2 ring-indigo-500 shadow-md' : 'hover:shadow-sm'
                             }`}
                           >
@@ -503,7 +522,7 @@ export default function PulseExpenses({
                     setTileFilter(null);
                     if (id === 'all') setStatusFilter('all');
                   }}
-                  className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                  className={`hv-press px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
                     paidFilter === id
                       ? id === 'unpaid'
                         ? 'bg-rose-600 text-white shadow-md shadow-rose-600/25'
@@ -555,7 +574,7 @@ export default function PulseExpenses({
                     <button
                       type="button"
                       onClick={() => markAllDdDone()}
-                      className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wide bg-sky-600 text-white hover:bg-sky-700"
+                      className="hv-press px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wide bg-sky-600 text-white hover:bg-sky-700"
                     >
                       All DD done
                     </button>
@@ -587,7 +606,7 @@ export default function PulseExpenses({
                             ? { label: 'Due soon', badge: 'bg-orange-500/15 text-orange-700 ring-1 ring-orange-500/25', row: 'border-l-[3px] border-l-orange-400', dot: 'bg-orange-500' }
                             : { label: 'Upcoming', badge: 'bg-slate-100 dark:bg-slate-800 text-slate-500', row: 'border-l-[3px] border-l-slate-300 dark:border-l-slate-600', dot: 'bg-slate-400' };
                   return (
-                    <li key={p.id} className={`px-3.5 py-2.5 flex items-center gap-3 ${statusStyle.row}`}>
+                    <li key={p.id} className={`hv-row px-3.5 py-2.5 flex items-center gap-3 ${statusStyle.row} ${justPaidIds[p.id] ? 'hv-success-flash' : ''}`}>
                       <div className="relative shrink-0">
                         <div
                           className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-[10px] font-black"
@@ -622,8 +641,8 @@ export default function PulseExpenses({
                         {!paid && !isPaymentReadOnly(p) && (
                           <button
                             type="button"
-                            onClick={() => onRecordPayment(p)}
-                            className={`inline-flex items-center gap-0.5 text-[9px] font-bold mt-0.5 ${
+                            onClick={() => recordPaymentUi(p)}
+                            className={`hv-press inline-flex items-center gap-0.5 text-[9px] font-bold mt-0.5 ${
                               group.key === 'dd' ? 'text-sky-600' : 'text-emerald-600'
                             }`}
                           >
