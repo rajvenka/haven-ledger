@@ -711,6 +711,19 @@ export default function PortfolioV1View({
   const [connectError, setConnectError] = useState<string | null>(null);
   const [connectOk, setConnectOk] = useState<string | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  // Zerodha (Kite Connect) and Groww both use daily-expiring access tokens by design - not a
+  // bug, this is how their APIs work. Rather than let Sync attempt a call known to fail with
+  // yesterday's token, check the connection's own updated_at (set fresh every time Connect
+  // saves credentials) against today's date. Used both to gate syncConnection itself and to
+  // visually mark the Sync button as needing re-authorization before the click even happens.
+  const needsReauth = (c: any) => {
+    const type = String(c?.broker_type || '').toLowerCase();
+    if (type !== 'zerodha' && type !== 'groww') return false;
+    if (!c?.updated_at) return true;
+    const d = new Date(c.updated_at);
+    const now = new Date();
+    return !(d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate());
+  };
   const [refreshingPrices, setRefreshingPrices] = useState(false);
   const [priceRefreshSummary, setPriceRefreshSummary] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -1590,6 +1603,9 @@ export default function PortfolioV1View({
     setConnectError(null);
     setConnectOk(null);
     try {
+      if (needsReauth(connection)) {
+        throw new Error(`${connection.broker_type === 'zerodha' ? 'Zerodha' : 'Groww'} token expires daily - please reconnect and authorize again before syncing.`);
+      }
       const type = String(connection.broker_type || connection.brokerType || '').toLowerCase().trim();
       // credentials may arrive as object or JSON string depending on load path
       let cred: any = connection.credentials ?? connection.creds ?? {};
@@ -2844,15 +2860,18 @@ export default function PortfolioV1View({
                           {book ? ` · ${book}` : ''}
                           {' · '}Last: {last}
                         </p>
+                        {needsReauth(c) && (
+                          <p className="text-[9px] font-bold text-amber-600 dark:text-amber-400 truncate">Token expired today - re-authorize to sync</p>
+                        )}
                       </div>
                       <button
                         type="button"
                         disabled={isReadOnly || busy}
-                        onClick={() => syncConnection(c)}
-                        className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold bg-teal-600 text-white disabled:opacity-50"
+                        onClick={() => needsReauth(c) ? openConnect() : syncConnection(c)}
+                        className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold text-white disabled:opacity-50 ${needsReauth(c) ? 'bg-amber-600' : 'bg-teal-600'}`}
                       >
                         <RefreshCw className={`w-3 h-3 ${busy ? 'animate-spin' : ''}`} />
-                        {busy ? '…' : 'Sync'}
+                        {busy ? '…' : needsReauth(c) ? 'Re-auth' : 'Sync'}
                       </button>
                       {deletePortfolioBrokerConnection && (
                         <button
@@ -2994,16 +3013,19 @@ export default function PortfolioV1View({
                               <div className="min-w-0">
                                 <p className="text-[12px] font-black truncate">{c.connection_label || c.broker_type}</p>
                                 <p className="text-[9px] text-slate-400">{pName || 'Workspace'}</p>
+                                {needsReauth(c) && (
+                                  <p className="text-[9px] font-bold text-amber-600 dark:text-amber-400">Token expired today - re-authorize to sync</p>
+                                )}
                               </div>
                             </div>
                             <div className="flex gap-2">
                               <button
                                 type="button"
                                 disabled={isReadOnly || busy}
-                                onClick={() => syncConnection(c)}
-                                className="flex-1 min-h-[42px] rounded-xl bg-indigo-600 text-white text-[11px] font-bold disabled:opacity-50"
+                                onClick={() => needsReauth(c) ? openConnect() : syncConnection(c)}
+                                className={`flex-1 min-h-[42px] rounded-xl text-white text-[11px] font-bold disabled:opacity-50 ${needsReauth(c) ? 'bg-amber-600' : 'bg-indigo-600'}`}
                               >
-                                {busy ? 'Syncing…' : 'Sync now'}
+                                {busy ? 'Syncing…' : needsReauth(c) ? 'Re-authorize' : 'Sync now'}
                               </button>
                               <button
                                 type="button"
