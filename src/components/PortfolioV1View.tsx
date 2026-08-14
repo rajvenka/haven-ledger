@@ -619,9 +619,10 @@ export default function PortfolioV1View({
   const [pnlCalendarCcy, setPnlCalendarCcy] = useState<string>(String(baseCurrency || 'INR').toUpperCase());
   const [pnlCalendarPortfolioId, setPnlCalendarPortfolioId] = useState<string>('all');
 
+  const viewCurrencyStorageKey = `portfolio_v1_view_ccy:${workspaceName || 'default'}`;
   const [viewCurrency, setViewCurrency] = useState<string>(() => {
     try {
-      const last = localStorage.getItem('portfolio_v1_view_ccy');
+      const last = localStorage.getItem(viewCurrencyStorageKey);
       if (last) return last.toUpperCase();
     } catch { /* ignore */ }
     return String(baseCurrency || 'INR').toUpperCase();
@@ -725,7 +726,7 @@ export default function PortfolioV1View({
     const next = String(ccy || baseCurrency || 'INR').toUpperCase();
     setViewCurrency(next);
     try {
-      localStorage.setItem('portfolio_v1_view_ccy', next);
+      localStorage.setItem(viewCurrencyStorageKey, next);
     } catch { /* ignore */ }
   };
 
@@ -910,9 +911,24 @@ export default function PortfolioV1View({
     const ccy = String(book?.currency || '').toUpperCase();
     if (ccy && ccy !== viewCurrency) {
       setViewCurrency(ccy);
-      try { localStorage.setItem('portfolio_v1_view_ccy', ccy); } catch { /* ignore */ }
+      try { localStorage.setItem(viewCurrencyStorageKey, ccy); } catch { /* ignore */ }
     }
   }, [portfolioFilter, portfolios]);
+
+  // Re-sync View currency when the workspace itself changes - the effect above only fires
+  // on portfolioFilter changes, so switching workspaces while staying on the "All" filter
+  // (e.g. from a USD-heavy workspace to an INR-only one like KUMAR-RAJ) would otherwise
+  // leave viewCurrency stuck on whatever was last selected, showing USD in a purely-INR
+  // workspace with no actual USD holdings anywhere in it.
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(viewCurrencyStorageKey);
+      setViewCurrency(stored ? stored.toUpperCase() : String(baseCurrency || 'INR').toUpperCase());
+    } catch {
+      setViewCurrency(String(baseCurrency || 'INR').toUpperCase());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceName]);
 
   const categoryOrder: CategoryId[] = [
     'india_mf',
