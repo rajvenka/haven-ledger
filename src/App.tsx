@@ -222,6 +222,7 @@ export default function App() {
     deletePortfolioCashBalance,
     portfolioBookedPlBaselines,
     portfolioBookedPlHistory,
+    portfolioBankBalanceHistory,
     setBookedPlBaseline,
     portfolioProjectedBankBalances,
     setProjectedBankBalance,
@@ -1897,6 +1898,7 @@ export default function App() {
                 deletePortfolioCashBalance={deletePortfolioCashBalance}
                 portfolioBookedPlBaselines={portfolioBookedPlBaselines}
                 portfolioBookedPlHistory={portfolioBookedPlHistory}
+                portfolioBankBalanceHistory={portfolioBankBalanceHistory}
                 setBookedPlBaseline={setBookedPlBaseline}
                 portfolioProjectedBankBalances={portfolioProjectedBankBalances}
                 setProjectedBankBalance={setProjectedBankBalance}

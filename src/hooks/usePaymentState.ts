@@ -1187,6 +1187,7 @@ export function usePaymentState() {
   const [portfolioCashBalances, setPortfolioCashBalances] = useState<any[]>([]);
   const [portfolioBookedPlBaselines, setPortfolioBookedPlBaselines] = useState<any[]>([]);
   const [portfolioBookedPlHistory, setPortfolioBookedPlHistory] = useState<any[]>([]);
+  const [portfolioBankBalanceHistory, setPortfolioBankBalanceHistory] = useState<any[]>([]);
   const [portfolioProjectedBankBalances, setPortfolioProjectedBankBalances] = useState<any[]>([]);
   const [portfolioBrokerConnections, setPortfolioBrokerConnectionsState] = useState<any[]>([]);
   const [portfolioHoldingLots, setPortfolioHoldingLotsState] = useState<any[]>([]);
@@ -1207,7 +1208,7 @@ export function usePaymentState() {
     setPortfolioContributions([]); setPortfolioWithdrawals([]);
     setPortfolioDividends([]); setPortfolioFees([]); setPortfolioRecurringPlans([]);
     setPortfolioCashBalances([]); setPortfolios([]); setWorkspaceCurrencyRates([]);
-    setPortfolioBookedPlBaselines([]); setPortfolioBookedPlHistory([]); setPortfolioProjectedBankBalances([]);
+    setPortfolioBookedPlBaselines([]); setPortfolioBookedPlHistory([]); setPortfolioBankBalanceHistory([]); setPortfolioProjectedBankBalances([]);
     setPortfolioBrokerConnectionsState([]); setPortfolioHoldingLotsState([]);
   }, []);
 
@@ -1244,7 +1245,7 @@ export function usePaymentState() {
     const scope = <T extends { workspace_id?: string }>(rows: T[] | null | undefined): T[] =>
       (rows ?? []).filter(r => !r.workspace_id || r.workspace_id === wsId);
 
-    const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: cashBalances }, { data: portfoliosData }, { data: currencyRatesData }, { data: bookedPlBaselinesData }, { data: bookedPlHistoryData }, { data: projectedBankBalancesData }, { data: brokerConnectionsData }, { data: holdingLotsData }] = await Promise.all([
+    const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: cashBalances }, { data: portfoliosData }, { data: currencyRatesData }, { data: bookedPlBaselinesData }, { data: bookedPlHistoryData }, { data: bankBalanceHistoryData }, { data: projectedBankBalancesData }, { data: brokerConnectionsData }, { data: holdingLotsData }] = await Promise.all([
       supabase.from('portfolio_holdings').select('*').eq('workspace_id', wsId).order('buy_date', { ascending: false }),
       supabase.from('portfolio_price_history').select('*').eq('workspace_id', wsId).order('recorded_date', { ascending: false }),
       supabase.from('portfolio_splits').select('*').eq('workspace_id', wsId).order('effective_from'),
@@ -1258,6 +1259,7 @@ export function usePaymentState() {
       supabase.from('workspace_currency_rates').select('*').eq('workspace_id', wsId),
       supabase.from('portfolio_booked_pl_baseline').select('*').eq('workspace_id', wsId),
       supabase.from('portfolio_booked_pl_history').select('*').eq('workspace_id', wsId).order('changed_at', { ascending: false }),
+      supabase.from('portfolio_bank_balance_history').select('*').eq('workspace_id', wsId).order('changed_at', { ascending: false }),
       supabase.from('portfolio_projected_bank_balances').select('*').eq('workspace_id', wsId),
       supabase.from('portfolio_broker_connections').select('*').eq('workspace_id', wsId),
       supabase.from('portfolio_holding_lots').select('*').eq('workspace_id', wsId).order('open_date', { ascending: false }),
@@ -1279,6 +1281,7 @@ export function usePaymentState() {
     setWorkspaceCurrencyRates(scope(currencyRatesData));
     setPortfolioBookedPlBaselines(scope(bookedPlBaselinesData));
     setPortfolioBookedPlHistory(scope(bookedPlHistoryData));
+    setPortfolioBankBalanceHistory(scope(bankBalanceHistoryData));
     setPortfolioProjectedBankBalances(scope(projectedBankBalancesData));
     setPortfolioBrokerConnectionsState(scope(brokerConnectionsData));
     setPortfolioHoldingLotsState(scope(holdingLotsData));
@@ -1963,18 +1966,30 @@ export function usePaymentState() {
   // A manually-set fallback figure for when actual Cash Balance entries haven't been kept
   // current - the header displays whichever of the two (actual cash balance total, or this
   // projected figure) was updated more recently, rather than always trusting one or the other.
-  const setProjectedBankBalance = async (amount: number, portfolioId?: string) => {
+  const setProjectedBankBalance = async (amount: number, portfolioId?: string, notes?: string, recordHistory: boolean = true) => {
     if (!user || !activeWorkspaceId) return;
     const row: any = {
       workspace_id: activeWorkspaceId, portfolio_id: portfolioId ?? null, projected_amount: amount, updated_by: user.id, updated_at: new Date().toISOString(),
     };
-    let existingQuery = supabase.from('portfolio_projected_bank_balance').select('id').eq('workspace_id', activeWorkspaceId);
+    let existingQuery = supabase.from('portfolio_projected_bank_balance').select('id, projected_amount').eq('workspace_id', activeWorkspaceId);
     existingQuery = portfolioId ? existingQuery.eq('portfolio_id', portfolioId) : existingQuery.is('portfolio_id', null);
     const { data: existing } = await existingQuery.maybeSingle();
     const { error } = existing
       ? await supabase.from('portfolio_projected_bank_balance').update(row).eq('id', existing.id)
       : await supabase.from('portfolio_projected_bank_balance').insert(row);
     if (error) throw error;
+    // History tracker - deliberately gated by recordHistory, which the automatic
+    // recalculateProjectedBankBalance call below passes as false. Without this flag, every
+    // single buy/sell/edit/delete (which all now trigger a recalc, per #34) would silently
+    // flood this with a row, drowning out the meaningful, intentional manual overrides this
+    // is actually meant to track.
+    if (recordHistory) {
+      await supabase.from('portfolio_bank_balance_history').insert({
+        workspace_id: activeWorkspaceId, portfolio_id: portfolioId ?? null,
+        previous_amount: existing?.projected_amount ?? null, new_amount: amount,
+        notes: notes?.trim() || null, changed_by: user.id,
+      });
+    }
     await loadPortfolioDetails();
   };
 
@@ -1990,7 +2005,7 @@ export function usePaymentState() {
     const withdrawQuery = supabase.from('portfolio_withdrawals').select('amount').eq('workspace_id', activeWorkspaceId);
     const activeQuery = supabase.from('portfolio_holdings').select('buy_price,quantity,leverage').eq('workspace_id', activeWorkspaceId).eq('status', 'active');
     const soldQuery = supabase.from('portfolio_holdings').select('buy_price,quantity,sold_price,sold_date').eq('workspace_id', activeWorkspaceId).eq('status', 'sold');
-    const baselineQuery = supabase.from('portfolio_booked_pl_baseline').select('baseline_amount,updated_at').eq('workspace_id', activeWorkspaceId);
+    const baselineQuery = supabase.from('portfolio_booked_pl_baseline').select('baseline_amount,baseline_date,updated_at').eq('workspace_id', activeWorkspaceId);
     const [contribRes, withdrawRes, activeRes, soldRes, baselineRes] = await Promise.all([
       portfolioId ? contribQuery.eq('portfolio_id', portfolioId) : contribQuery.is('portfolio_id', null),
       portfolioId ? withdrawQuery.eq('portfolio_id', portfolioId) : withdrawQuery.is('portfolio_id', null),
@@ -2011,17 +2026,18 @@ export function usePaymentState() {
     }, 0);
     const baseline = baselineRes.data?.[0];
     const baselineAmount = baseline ? Number(baseline.baseline_amount) : 0;
-    // Same fix as the header's getPortfolioBookedPL - uses the baseline's actual save
-    // timestamp (updated_at), not the user-entered "as of" date, since a person setting
-    // "today's correct value" has already accounted for anything sold up to the moment
-    // they actually saved it, regardless of what date they typed into the field.
-    const baselineCutoffDate = baseline ? String(baseline.updated_at).slice(0, 10) : '1900-01-01';
+    // Fixed to match the #33 fix already applied to the header's getPortfolioBookedPL -
+    // this was a separate, duplicate copy of the same cutoff logic that still used
+    // updated_at (the save timestamp) instead of baseline_date (the user's own chosen "as
+    // of" date), which broke genuine backdating the same way the header version did before
+    // being fixed - inconsistent with the header until now.
+    const baselineCutoffDate = baseline ? String(baseline.baseline_date || baseline.updated_at).slice(0, 10) : '1900-01-01';
     const realizedSinceBaseline = (soldRes.data ?? [])
       .filter((h: any) => h.sold_date > baselineCutoffDate)
       .reduce((s, h: any) => s + (Number(h.sold_price) - Number(h.buy_price)) * Number(h.quantity), 0);
     const bookedPL = baselineAmount + realizedSinceBaseline;
     const calculated = netContributed - activeCostBasis + bookedPL;
-    await setProjectedBankBalance(calculated, portfolioId);
+    await setProjectedBankBalance(calculated, portfolioId, undefined, false);
   };
 
   // Broker API connections (eToro/IG/Webull) for a specific portfolio - multiple accounts
@@ -2442,6 +2458,7 @@ export function usePaymentState() {
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
     portfolioCashBalances, setPortfolioCashBalance, deletePortfolioCashBalance,
     portfolioBookedPlBaselines, portfolioBookedPlHistory, setBookedPlBaseline,
+    portfolioBankBalanceHistory,
     portfolioProjectedBankBalances, setProjectedBankBalance, recalculateProjectedBankBalance,
     portfolioBrokerConnections, setPortfolioBrokerConnection, deletePortfolioBrokerConnection, markBrokerConnectionSynced,
     portfolioHoldingLots,
