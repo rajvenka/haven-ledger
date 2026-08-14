@@ -7,7 +7,7 @@ import { parseBrokerFile, BrokerTemplate, downloadUniversalTemplate } from '../u
  * Category tiles: India MF · India Stocks · US Stocks · CFD · Commodities · Options
  * Each tile expands for sub-totals + top holdings. Portfolio chips keep Sasi/Raj separate.
  */
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -16,6 +16,7 @@ import {
   X,
   RefreshCw,
   ChevronRight,
+  ChevronLeft,
   ChevronDown,
   Link2,
   ShieldAlert,
@@ -474,6 +475,99 @@ function summarizeBucket(holdings: any[]) {
     gainCount: tiles.reduce((s, x) => s + x.gainCount, 0),
     lossCount: tiles.reduce((s, x) => s + x.lossCount, 0),
   };
+}
+
+
+/** Desktop-friendly metric carousel: click dots or arrows; swipe still works. */
+function TileMetricScroller({
+  slides,
+}: {
+  slides: { key: string; node: React.ReactNode }[];
+}) {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [idx, setIdx] = useState(0);
+
+  const go = (i: number) => {
+    const next = Math.max(0, Math.min(slides.length - 1, i));
+    const el = scrollerRef.current;
+    if (el) {
+      const w = el.clientWidth || 1;
+      el.scrollTo({ left: next * w, behavior: 'smooth' });
+    }
+    setIdx(next);
+  };
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const w = el.clientWidth || 1;
+      setIdx(Math.round(el.scrollLeft / w));
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
+
+  return (
+    <div className="relative">
+      <div className="flex items-center gap-0.5">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            go(idx - 1);
+          }}
+          disabled={idx <= 0}
+          className="shrink-0 p-0.5 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-25 disabled:pointer-events-none"
+          aria-label="Previous metric"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+        </button>
+        <div
+          ref={scrollerRef}
+          className="flex-1 min-w-0 flex overflow-x-auto snap-x snap-mandatory scrollbar-none"
+          style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
+        >
+          {slides.map((s) => (
+            <div key={s.key} className="min-w-full snap-center shrink-0">
+              {s.node}
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            go(idx + 1);
+          }}
+          disabled={idx >= slides.length - 1}
+          className="shrink-0 p-0.5 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-25 disabled:pointer-events-none"
+          aria-label="Next metric"
+        >
+          <ChevronRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <div className="flex justify-center gap-1.5 mt-1.5">
+        {slides.map((s, i) => (
+          <button
+            key={s.key}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              go(i);
+            }}
+            aria-label={s.key}
+            aria-current={i === idx ? 'true' : undefined}
+            className={`h-1.5 rounded-full transition-all ${
+              i === idx
+                ? 'w-3 bg-slate-500 dark:bg-slate-300'
+                : 'w-1.5 bg-slate-300/80 dark:bg-slate-600 hover:bg-slate-400'
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function PortfolioV1View({
@@ -1940,48 +2034,57 @@ export default function PortfolioV1View({
               onClick={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
             >
-              <div
-                className="flex overflow-x-auto snap-x snap-mandatory scrollbar-none"
-                style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
-              >
-                <div className="min-w-full snap-center shrink-0">
-                  <div className="flex items-baseline justify-between gap-1">
-                    <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
-                      {money(totalPortfolioTile.market, totalPortfolioTile.displayCcy)}
-                    </p>
-                    <p
-                      className={`text-[12px] sm:text-[13px] font-black tabular-nums leading-tight ${
-                        formatTotalPerf().positive ? 'text-emerald-600' : 'text-rose-600'
-                      }`}
-                    >
-                      {formatTotalPerf().text}
-                      <span className="ml-1 text-[10px] font-bold text-slate-400 normal-case">{perfLabel}</span>
-                    </p>
-                  </div>
-                  <p className="text-[9px] font-bold text-slate-400 mt-0.5">Value</p>
-                </div>
-                <div className="min-w-full snap-center shrink-0">
-                  <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-emerald-600">
-                    {money(totalPortfolioTile.gainPnl || 0, totalPortfolioTile.displayCcy)}
-                  </p>
-                  <p className="text-[9px] font-bold text-emerald-600/80 mt-0.5">
-                    Profit · {totalPortfolioTile.gainCount || 0} up
-                  </p>
-                </div>
-                <div className="min-w-full snap-center shrink-0">
-                  <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-rose-600">
-                    {money(Math.abs(totalPortfolioTile.lossPnl || 0), totalPortfolioTile.displayCcy)}
-                  </p>
-                  <p className="text-[9px] font-bold text-rose-600/80 mt-0.5">
-                    Loss · {totalPortfolioTile.lossCount || 0} down
-                  </p>
-                </div>
-              </div>
-              <div className="flex justify-center gap-1 mt-1.5">
-                <span className="w-1 h-1 rounded-full bg-slate-400/80" />
-                <span className="w-1 h-1 rounded-full bg-slate-300/60 dark:bg-slate-600" />
-                <span className="w-1 h-1 rounded-full bg-slate-300/60 dark:bg-slate-600" />
-              </div>
+              <TileMetricScroller
+                slides={[
+                  {
+                    key: 'value',
+                    node: (
+                      <>
+                        <div className="flex items-baseline justify-between gap-1">
+                          <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
+                            {money(totalPortfolioTile.market, totalPortfolioTile.displayCcy)}
+                          </p>
+                          <p
+                            className={`text-[12px] sm:text-[13px] font-black tabular-nums leading-tight ${
+                              formatTotalPerf().positive ? 'text-emerald-600' : 'text-rose-600'
+                            }`}
+                          >
+                            {formatTotalPerf().text}
+                            <span className="ml-1 text-[10px] font-bold text-slate-400 normal-case">{perfLabel}</span>
+                          </p>
+                        </div>
+                        <p className="text-[9px] font-bold text-slate-400 mt-0.5">Value</p>
+                      </>
+                    ),
+                  },
+                  {
+                    key: 'profit',
+                    node: (
+                      <>
+                        <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-emerald-600">
+                          {money(totalPortfolioTile.gainPnl || 0, totalPortfolioTile.displayCcy)}
+                        </p>
+                        <p className="text-[9px] font-bold text-emerald-600/80 mt-0.5">
+                          Profit · {totalPortfolioTile.gainCount || 0} up
+                        </p>
+                      </>
+                    ),
+                  },
+                  {
+                    key: 'loss',
+                    node: (
+                      <>
+                        <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-rose-600">
+                          {money(Math.abs(totalPortfolioTile.lossPnl || 0), totalPortfolioTile.displayCcy)}
+                        </p>
+                        <p className="text-[9px] font-bold text-rose-600/80 mt-0.5">
+                          Loss · {totalPortfolioTile.lossCount || 0} down
+                        </p>
+                      </>
+                    ),
+                  },
+                ]}
+              />
             </div>
 
           </div>
@@ -2024,48 +2127,57 @@ export default function PortfolioV1View({
                     onClick={(e) => e.stopPropagation()}
                     onPointerDown={(e) => e.stopPropagation()}
                   >
-                    <div
-                      className="flex overflow-x-auto snap-x snap-mandatory scrollbar-none"
-                      style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
-                    >
-                      <div className="min-w-full snap-center shrink-0">
-                        <div className="flex items-baseline justify-between gap-1">
-                          <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
-                            {money(primary.market, primary.currency)}
-                          </p>
-                          <p
-                            className={`text-[12px] sm:text-[13px] font-black tabular-nums leading-tight ${
-                              formatBucketPerf(primary).positive ? 'text-emerald-600' : 'text-rose-600'
-                            }`}
-                          >
-                            {formatBucketPerf(primary).text}
-                            <span className="ml-1 text-[10px] font-bold text-slate-400">{perfLabel}</span>
-                          </p>
-                        </div>
-                        <p className="text-[9px] font-bold text-slate-400 mt-0.5">Value</p>
-                      </div>
-                      <div className="min-w-full snap-center shrink-0">
-                        <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-emerald-600">
-                          {money(primary.gainPnl || 0, primary.currency)}
-                        </p>
-                        <p className="text-[9px] font-bold text-emerald-600/80 mt-0.5">
-                          Profit · {primary.gainCount || 0} up
-                        </p>
-                      </div>
-                      <div className="min-w-full snap-center shrink-0">
-                        <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-rose-600">
-                          {money(Math.abs(primary.lossPnl || 0), primary.currency)}
-                        </p>
-                        <p className="text-[9px] font-bold text-rose-600/80 mt-0.5">
-                          Loss · {primary.lossCount || 0} down
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex justify-center gap-1 mt-1.5">
-                      <span className="w-1 h-1 rounded-full bg-slate-400/80" />
-                      <span className="w-1 h-1 rounded-full bg-slate-300/60 dark:bg-slate-600" />
-                      <span className="w-1 h-1 rounded-full bg-slate-300/60 dark:bg-slate-600" />
-                    </div>
+                    <TileMetricScroller
+                      slides={[
+                        {
+                          key: 'value',
+                          node: (
+                            <>
+                              <div className="flex items-baseline justify-between gap-1">
+                                <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
+                                  {money(primary.market, primary.currency)}
+                                </p>
+                                <p
+                                  className={`text-[12px] sm:text-[13px] font-black tabular-nums leading-tight ${
+                                    formatBucketPerf(primary).positive ? 'text-emerald-600' : 'text-rose-600'
+                                  }`}
+                                >
+                                  {formatBucketPerf(primary).text}
+                                  <span className="ml-1 text-[10px] font-bold text-slate-400">{perfLabel}</span>
+                                </p>
+                              </div>
+                              <p className="text-[9px] font-bold text-slate-400 mt-0.5">Value</p>
+                            </>
+                          ),
+                        },
+                        {
+                          key: 'profit',
+                          node: (
+                            <>
+                              <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-emerald-600">
+                                {money(primary.gainPnl || 0, primary.currency)}
+                              </p>
+                              <p className="text-[9px] font-bold text-emerald-600/80 mt-0.5">
+                                Profit · {primary.gainCount || 0} up
+                              </p>
+                            </>
+                          ),
+                        },
+                        {
+                          key: 'loss',
+                          node: (
+                            <>
+                              <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-rose-600">
+                                {money(Math.abs(primary.lossPnl || 0), primary.currency)}
+                              </p>
+                              <p className="text-[9px] font-bold text-rose-600/80 mt-0.5">
+                                Loss · {primary.lossCount || 0} down
+                              </p>
+                            </>
+                          ),
+                        },
+                      ]}
+                    />
                   </div>
                 )}
 
