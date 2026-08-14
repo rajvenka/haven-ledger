@@ -2042,139 +2042,122 @@ export default function App() {
             )}
           </main>
 
-          {/* Mobile Glassmorphism Floating Bottom Navigation */}
+          {/* Mobile floating dock — horizontal scroll for more destinations */}
           <div
-            className="md:hidden fixed bottom-0 left-0 right-0 px-4 z-20 pointer-events-none select-none"
-            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}
+            className="md:hidden fixed bottom-0 left-0 right-0 z-30 pointer-events-none select-none"
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }}
           >
-            <nav className="pointer-events-auto bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border border-slate-200/50 dark:border-slate-800/40 py-2 px-3 flex justify-between items-center gap-1 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.08)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.4)] max-w-sm mx-auto">
-              {/* Summary Tab button */}
-              {hasFeature('core') && (
-              <button
-                id="tour-tab-summary-mobile"
-                onClick={() => setActiveTab('summary')}
-                className={`flex flex-col items-center gap-0.5 py-1 px-1 flex-1 rounded-xl transition-all ${
-                  activeTab === 'summary' 
-                    ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/40 font-black scale-105 shadow-sm border border-indigo-100/30' 
-                    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
-                }`}
+            <div className="pointer-events-auto mx-3">
+              <nav
+                className="bg-white/90 dark:bg-slate-950/90 backdrop-blur-xl border border-slate-200/60 dark:border-slate-800/50 py-1.5 pl-2 pr-2 flex items-stretch gap-0.5 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.12)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.45)] overflow-x-auto no-scrollbar"
+                style={{ WebkitOverflowScrolling: 'touch' }}
               >
-                <LayoutDashboard className="w-4.5 h-4.5" />
-                <span className="text-[8px] uppercase tracking-wider font-extrabold">Summary</span>
-              </button>
-              )}
-
-              {/* Expenses Tab button */}
-              {hasFeature('core') && (
-              <button
-                id="tour-tab-expenses-mobile"
-                onClick={() => setActiveTab('expenses')}
-                className={`flex flex-col items-center gap-0.5 py-1 px-1 flex-1 rounded-xl transition-all ${
-                  activeTab === 'expenses' 
-                    ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/40 font-black scale-105 shadow-sm border border-indigo-100/30' 
-                    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
-                }`}
-              >
-                <Globe className="w-4.5 h-4.5" />
-                <span className="text-[8px] uppercase tracking-wider font-extrabold">Expenses</span>
-              </button>
-              )}
-
-              {/* Configure Tab button */}
-              {hasFeature('core') && (
-              <button
-                onClick={() => setActiveTab('configure')}
-                className={`flex flex-col items-center gap-0.5 py-1 px-1 flex-1 rounded-xl transition-all ${
-                  activeTab === 'configure' 
-                    ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/40 font-black scale-105 shadow-sm border border-indigo-100/30' 
-                    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
-                }`}
-              >
-                <Settings className="w-4.5 h-4.5" />
-                <span className="text-[8px] uppercase tracking-wider font-extrabold">Subs</span>
-              </button>
-              )}
-
-              {/* AI Insights Tab button */}
-              {hasFeature('ai') && (
-              <button
-                id="tour-tab-ai-mobile"
-                onClick={() => setActiveTab('ai')}
-                className={`flex flex-col items-center gap-0.5 py-1 px-1 flex-1 rounded-xl transition-all ${
-                  activeTab === 'ai' 
-                    ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/40 font-black scale-105 shadow-sm border border-indigo-100/30' 
-                    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
-                }`}
-              >
-                <BrainCircuit className="w-4.5 h-4.5" />
-                <span className="text-[8px] uppercase tracking-wider font-extrabold">AI</span>
-              </button>
-              )}
-
-              {/* Portfolio Tab button */}
-              {hasFeature('portfolio') && (
-              <button
-                onClick={() => setActiveTab('portfolio')}
-                className={`flex flex-col items-center gap-0.5 py-1 px-1 flex-1 rounded-xl transition-all ${
-                  activeTab === 'portfolio' 
-                    ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/40 font-black scale-105 shadow-sm border border-indigo-100/30' 
-                    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
-                }`}
-              >
-                <Briefcase className="w-4.5 h-4.5" />
-                <span className="text-[8px] uppercase tracking-wider font-extrabold">Portfolio</span>
-              </button>
-              )}
-
-              {/* Investment Plan and Reports fill the footer when Portfolio would otherwise be
-                  the only item there (e.g. Lite-Finance, which has no 'core' access) - keeps
-                  the bar from looking sparse with a single icon. Full plans still use the
-                  drawer for these, since the footer is already fairly full there. */}
-              {hasFeature('portfolio') && !hasFeature('core') && (
-              <>
-              <button
-                onClick={() => setActiveTab('investment_plan')}
-                className={`flex flex-col items-center gap-0.5 py-1 px-1 flex-1 rounded-xl transition-all ${
-                  activeTab === 'investment_plan' 
-                    ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/40 font-black scale-105 shadow-sm border border-indigo-100/30' 
-                    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
-                }`}
-              >
-                <ClipboardList className="w-4.5 h-4.5" />
-                <span className="text-[8px] uppercase tracking-wider font-extrabold">Plan</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('reports')}
-                className={`flex flex-col items-center gap-0.5 py-1 px-1 flex-1 rounded-xl transition-all ${
-                  activeTab === 'reports' 
-                    ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/40 font-black scale-105 shadow-sm border border-indigo-100/30' 
-                    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
-                }`}
-              >
-                <FileBarChart className="w-4.5 h-4.5" />
-                <span className="text-[8px] uppercase tracking-wider font-extrabold">Reports</span>
-              </button>
-              </>
-              )}
-
-              {/* History Tab button */}
-              {hasFeature('core') && (
-              <button
-                onClick={() => setActiveTab('history')}
-                className={`flex flex-col items-center gap-0.5 py-1 px-1 flex-1 rounded-xl transition-all ${
-                  activeTab === 'history' 
-                    ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/40 font-black scale-105 shadow-sm border border-indigo-100/30' 
-                    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
-                }`}
-              >
-                <History className="w-4.5 h-4.5" />
-                <span className="text-[8px] uppercase tracking-wider font-extrabold">History</span>
-              </button>
-              )}
-            </nav>
+                {(
+                  [
+                    hasFeature('core') && {
+                      id: 'summary',
+                      label: 'Home',
+                      icon: LayoutDashboard,
+                      onClick: () => setActiveTab('summary'),
+                      active: activeTab === 'summary',
+                    },
+                    hasFeature('core') && {
+                      id: 'expenses',
+                      label: 'Spend',
+                      icon: Globe,
+                      onClick: () => setActiveTab('expenses'),
+                      active: activeTab === 'expenses',
+                    },
+                    hasFeature('core') && {
+                      id: 'configure',
+                      label: 'Bills',
+                      icon: ClipboardList,
+                      onClick: () => setActiveTab('configure'),
+                      active: activeTab === 'configure',
+                    },
+                    hasFeature('portfolio') && {
+                      id: 'portfolio',
+                      label: 'Portfolio',
+                      icon: Briefcase,
+                      onClick: () => setActiveTab('portfolio'),
+                      active: activeTab === 'portfolio',
+                    },
+                    hasFeature('portfolio') && {
+                      id: 'investment_plan',
+                      label: 'Invest',
+                      icon: Layers,
+                      onClick: () => setActiveTab('investment_plan'),
+                      active: activeTab === 'investment_plan',
+                    },
+                    hasFeature('portfolio') && {
+                      id: 'reports',
+                      label: 'Reports',
+                      icon: FileBarChart,
+                      onClick: () => setActiveTab('reports'),
+                      active: activeTab === 'reports',
+                    },
+                    hasFeature('income') && {
+                      id: 'income',
+                      label: 'Income',
+                      icon: Wallet,
+                      onClick: () => setActiveTab('income'),
+                      active: activeTab === 'income',
+                    },
+                    hasFeature('rewards') && {
+                      id: 'rewards',
+                      label: 'Perks',
+                      icon: Award,
+                      onClick: () => setActiveTab('rewards'),
+                      active: activeTab === 'rewards',
+                    },
+                    hasFeature('team') && {
+                      id: 'team',
+                      label: 'Team',
+                      icon: Users,
+                      onClick: () => {
+                        setActiveTab('account');
+                        setSettingsSubTab('members');
+                      },
+                      active: activeTab === 'account' && settingsSubTab === 'members',
+                    },
+                    hasFeature('core') && {
+                      id: 'history',
+                      label: 'History',
+                      icon: History,
+                      onClick: () => setActiveTab('history'),
+                      active: activeTab === 'history',
+                    },
+                    hasFeature('ai') && {
+                      id: 'ai',
+                      label: 'AI',
+                      icon: BrainCircuit,
+                      onClick: () => setActiveTab('ai'),
+                      active: activeTab === 'ai',
+                    },
+                  ] as const
+                )
+                  .filter(Boolean)
+                  .map((item: any) => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={item.onClick}
+                        className={`shrink-0 flex flex-col items-center justify-center gap-0.5 py-1.5 px-2.5 min-w-[3.25rem] rounded-xl transition-all ${
+                          item.active
+                            ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/80 dark:bg-indigo-950/50 font-black shadow-sm'
+                            : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span className="text-[8px] uppercase tracking-wide font-extrabold leading-none">{item.label}</span>
+                      </button>
+                    );
+                  })}
+              </nav>
+            </div>
           </div>
-
-        </div>
 
         {/* iOS Notification Center Sliding Drawer */}
         <AnimatePresence>
