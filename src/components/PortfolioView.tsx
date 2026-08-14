@@ -1969,6 +1969,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
   // Auto-refresh once when the page loads, if prices look stale - saves a manual click most of
   // the time, since holdings composition rarely changes day to day. Throttled so it doesn't
   // fire on every re-render or hammer the free price API.
+  //
+  // Also gated by a per-workspace localStorage cooldown, not just the in-memory ref above -
+  // the ref alone only prevents re-firing within one mount, but a genuine sync failure (broker
+  // API down, RLS issue, etc.) leaves prices just as stale as before, so every fresh page load
+  // was re-triggering the exact same failing batch of requests. The cooldown makes a failure
+  // (or success) "stick" for a while regardless of reloads. The manual Refresh Prices button
+  // is untouched by this - it always fires immediately on an explicit click.
   const autoRefreshTriggeredRef = React.useRef(false);
   useEffect(() => {
     if (autoRefreshTriggeredRef.current) return;
@@ -1977,10 +1984,16 @@ export default function PortfolioView(props: PortfolioViewProps) {
     if (refreshableStocks.length === 0) return;
     const staleThresholdMs = 6 * 60 * 60 * 1000; // 6 hours
     const isStale = refreshableStocks.some(h => !h.current_price_updated_at || (Date.now() - new Date(h.current_price_updated_at).getTime()) > staleThresholdMs);
-    if (isStale) {
-      autoRefreshTriggeredRef.current = true;
-      refreshAllPrices('active');
-    }
+    if (!isStale) return;
+    const cooldownKey = `auto_price_refresh_last_attempt:${workspaceName || 'default'}`;
+    const cooldownMs = 30 * 60 * 1000; // 30 minutes
+    try {
+      const last = Number(localStorage.getItem(cooldownKey) || 0);
+      if (last && Date.now() - last < cooldownMs) return;
+      localStorage.setItem(cooldownKey, String(Date.now()));
+    } catch { /* ignore storage errors, fall through to refresh */ }
+    autoRefreshTriggeredRef.current = true;
+    refreshAllPrices('active');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeHoldings.length]);
 
