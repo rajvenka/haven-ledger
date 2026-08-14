@@ -453,6 +453,7 @@ export default function PortfolioV1View({
   deletePortfolioBrokerConnection,
   markBrokerConnectionSynced,
   updatePortfolioHoldingLivePrice,
+  markPriceLookupFailed,
   snapshotPortfolioDailyPositions,
   loadPortfolioDailyPositions,
   bulkAddPortfolioHoldings,
@@ -560,6 +561,8 @@ export default function PortfolioV1View({
   const [connectError, setConnectError] = useState<string | null>(null);
   const [connectOk, setConnectOk] = useState<string | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [refreshingPrices, setRefreshingPrices] = useState(false);
+  const [priceRefreshSummary, setPriceRefreshSummary] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
   const [importTemplate, setImportTemplate] = useState<BrokerTemplate>('universal');
@@ -1067,6 +1070,102 @@ export default function PortfolioV1View({
     }
     return rows.sort((a, b) => a.dist - b.dist);
   }, [filtered, lotsByHoldingId]);
+
+  /** Live prices via Yahoo (+ MF NAV) for currently visible active holdings — same idea as Classic Refresh. */
+  const refreshAllPrices = async () => {
+    if (!updatePortfolioHoldingLivePrice) {
+      setPriceRefreshSummary('Price update not available.');
+      return;
+    }
+    setRefreshingPrices(true);
+    setPriceRefreshSummary(null);
+    try {
+      const scoped = (filtered || []).filter((h: any) => String(h.status || 'active') === 'active');
+      const refreshable = scoped.filter(
+        (h: any) => h.holding_type !== 'mutual_fund' && (h.ticker || h.symbol)
+      );
+      const mutualFunds = scoped.filter((h: any) => h.holding_type === 'mutual_fund');
+      let succeeded = 0;
+      let failed = 0;
+      const updatePromises: Promise<void>[] = [];
+
+      if (refreshable.length > 0) {
+        const symbols = refreshable.map((h: any) => ({
+          symbol: h.ticker ?? h.symbol,
+          exchange: h.exchange,
+          currency: h.currency,
+        }));
+        const resp = await fetch('/api/portfolio-prices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbols }),
+        });
+        if (!resp.ok) throw new Error('Price service did not respond. Try again shortly.');
+        const { results } = await resp.json();
+        (results || []).forEach((r: any, i: number) => {
+          const holding = refreshable[i];
+          if (!holding) return;
+          if (r.price != null) {
+            updatePromises.push(
+              updatePortfolioHoldingLivePrice(holding.id, r.price, r.previousClose ?? null, 'Yahoo')
+            );
+            succeeded++;
+          } else if (r.rateLimited || r.error === 'rate_limited') {
+            /* soft skip */
+          } else {
+            if (markPriceLookupFailed) updatePromises.push(markPriceLookupFailed(holding.id));
+            failed++;
+          }
+        });
+      }
+
+      let mfSucceeded = 0;
+      let mfFailed = 0;
+      if (mutualFunds.length > 0) {
+        const funds = mutualFunds.map((h: any) => ({ id: h.id, isin: h.isin, name: h.symbol }));
+        const mfResp = await fetch('/api/portfolio-mf?action=nav', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ funds }),
+        });
+        if (mfResp.ok) {
+          const { results: mfResults } = await mfResp.json();
+          (mfResults || []).forEach((r: any) => {
+            const holding = mutualFunds.find((h: any) => h.id === r.id);
+            if (!holding) return;
+            if (r.nav != null) {
+              updatePromises.push(updatePortfolioHoldingLivePrice(holding.id, r.nav, null, 'MF'));
+              mfSucceeded++;
+            } else {
+              if (markPriceLookupFailed) updatePromises.push(markPriceLookupFailed(holding.id));
+              mfFailed++;
+            }
+          });
+        } else {
+          mfFailed += mutualFunds.length;
+        }
+      }
+
+      await Promise.all(updatePromises);
+      if (refreshable.length === 0 && mutualFunds.length === 0) {
+        setPriceRefreshSummary('No holdings to refresh in this view.');
+        return;
+      }
+      const mfNote =
+        mutualFunds.length > 0
+          ? ` · MF: ${mfSucceeded} updated${mfFailed ? `, ${mfFailed} missed` : ''}`
+          : '';
+      setPriceRefreshSummary(
+        failed === 0
+          ? `Updated ${succeeded}${mfNote}`
+          : `Updated ${succeeded}, missed ${failed}${mfNote}`
+      );
+    } catch (e: any) {
+      setPriceRefreshSummary(e?.message || 'Refresh failed');
+    } finally {
+      setRefreshingPrices(false);
+    }
+  };
 
   const openImport = () => {
     setImportOpen(true);
@@ -1637,11 +1736,29 @@ export default function PortfolioV1View({
                 <Plus className="w-3 h-3" />
                 Connect
               </button>
+              <button
+                type="button"
+                onClick={() => refreshAllPrices()}
+                disabled={refreshingPrices || isReadOnly}
+                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 shadow-md hover:opacity-90 disabled:opacity-50 transition-all"
+                title="Refresh live prices (Yahoo / MF NAV)"
+              >
+                <RefreshCw className={`w-3 h-3 ${refreshingPrices ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
             </div>
           </div>
-          {(connectOk || connectError) && !connectOpen && (
-            <p className={`text-[10px] font-bold text-right ${connectOk ? 'text-emerald-600' : 'text-rose-500'}`}>
-              {connectOk || connectError}
+          {(connectOk || connectError || priceRefreshSummary) && !connectOpen && (
+            <p
+              className={`text-[10px] font-bold text-right ${
+                connectError
+                  ? 'text-rose-500'
+                  : connectOk || (priceRefreshSummary && !priceRefreshSummary.toLowerCase().includes('fail'))
+                    ? 'text-emerald-600'
+                    : 'text-slate-500'
+              }`}
+            >
+              {connectOk || connectError || priceRefreshSummary}
             </p>
           )}
 
