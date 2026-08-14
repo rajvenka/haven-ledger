@@ -256,6 +256,7 @@ const HOLDING_COLUMNS: { key: string; label: string; defaultOn: boolean; desktop
   { key: 'buy', label: 'Buy', defaultOn: false, desktopOnly: true },
   { key: 'live', label: 'Live', defaultOn: true },
   { key: 'day', label: 'Day %', defaultOn: true, desktopOnly: true },
+  { key: 'day_amt', label: 'Day $', defaultOn: true, desktopOnly: true },
   { key: 'value', label: 'Value', defaultOn: true },
   { key: 'pnl', label: 'P&L %', defaultOn: true },
   { key: 'pnl_amt', label: 'P&L $', defaultOn: true },
@@ -274,6 +275,7 @@ const COL_LAYOUT: Record<string, { label: string; align: 'left' | 'right'; fr: s
   buy: { label: 'Buy', align: 'right', fr: 'minmax(3rem, 0.8fr)' },
   live: { label: 'Live', align: 'right', fr: 'minmax(3rem, 0.8fr)' },
   day: { label: 'Day', align: 'right', fr: 'minmax(2.5rem, 0.7fr)' },
+  day_amt: { label: 'Day $', align: 'right', fr: 'minmax(3rem, 0.8fr)' },
   value: { label: 'Value', align: 'right', fr: 'minmax(3.5rem, 1fr)' },
   pnl: { label: 'P&L%', align: 'right', fr: 'minmax(2.5rem, 0.7fr)' },
   pnl_amt: { label: 'P&L$', align: 'right', fr: 'minmax(3rem, 0.8fr)' },
@@ -2187,13 +2189,15 @@ export default function PortfolioV1View({
               }}
               className="w-full text-left p-3 sm:p-3.5"
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="p-1.5 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900">
-                  <Briefcase className="w-3.5 h-3.5" />
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <div className="shrink-0 p-1.5 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900">
+                    <Briefcase className="w-3.5 h-3.5" />
+                  </div>
+                  <p className="text-[12px] font-black text-slate-900 dark:text-white leading-tight truncate">Total portfolio</p>
                 </div>
-                <span className="text-[10px] font-bold text-slate-400 tabular-nums">{totalPortfolioTile.count}</span>
+                <span className="text-[10px] font-bold text-slate-400 tabular-nums shrink-0">{totalPortfolioTile.count}</span>
               </div>
-              <p className="mt-2 text-[12px] font-black text-slate-900 dark:text-white leading-tight">Total portfolio</p>
             </button>
             <div
               className="px-3 sm:px-3.5 pb-3"
@@ -2206,20 +2210,17 @@ export default function PortfolioV1View({
                     key: 'value',
                     node: (
                       <>
-                        <div className="flex items-baseline justify-between gap-1">
-                          <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
-                            {money(totalPortfolioTile.market, totalPortfolioTile.displayCcy)}
-                          </p>
-                          <p
-                            className={`text-[12px] sm:text-[13px] font-black tabular-nums leading-tight ${
-                              formatTotalPerf().positive ? 'text-emerald-600' : 'text-rose-600'
-                            }`}
-                          >
-                            {formatTotalPerf().text}
-                            <span className="ml-1 text-[10px] font-bold text-slate-400 normal-case">{perfLabel}</span>
-                          </p>
-                        </div>
-                        <p className="text-[9px] font-bold text-slate-400 mt-0.5">Value</p>
+                        <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
+                          {money(totalPortfolioTile.market, totalPortfolioTile.displayCcy)}
+                        </p>
+                        <p
+                          className={`text-[11px] sm:text-[12px] font-black tabular-nums leading-tight mt-0.5 ${
+                            formatTotalPerf().positive ? 'text-emerald-600' : 'text-rose-600'
+                          }`}
+                        >
+                          {formatTotalPerf().text}
+                          <span className="ml-1 text-[9px] font-bold text-slate-400 normal-case">{perfLabel}</span>
+                        </p>
                       </>
                     ),
                   },
@@ -2287,18 +2288,20 @@ export default function PortfolioV1View({
                 } bg-white dark:bg-slate-900 overflow-hidden transition-shadow`}
               >
                 <button type="button" onClick={() => toggleCategory(id)} className="w-full text-left p-3 sm:p-3.5">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className={`p-1.5 rounded-xl ${selected ? meta.chip : 'bg-white/70 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
-                      {meta.icon}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <div className={`shrink-0 p-1.5 rounded-xl ${selected ? meta.chip : 'bg-white/70 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
+                        {meta.icon}
+                      </div>
+                      <p className="text-[12px] font-black text-slate-900 dark:text-white leading-tight truncate">
+                        {meta.flag && <span className="mr-1">{meta.flag}</span>}{meta.shortLabel}
+                      </p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <span className="text-[10px] font-bold text-slate-400 tabular-nums">{stats.count}</span>
                       {expanded ? <ChevronDown className="w-3.5 h-3.5 text-slate-400" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400" />}
                     </div>
                   </div>
-                  <p className="mt-2 text-[12px] font-black text-slate-900 dark:text-white leading-tight">
-                    {meta.flag && <span className="mr-1">{meta.flag}</span>}{meta.shortLabel}
-                  </p>
                   {stats.byCurrency.length > 1 && (
                     <p className="text-[9px] text-slate-400 mt-0.5">
                       +{stats.byCurrency.length - 1} more ccy
@@ -2317,20 +2320,17 @@ export default function PortfolioV1View({
                           key: 'value',
                           node: (
                             <>
-                              <div className="flex items-baseline justify-between gap-1">
-                                <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
-                                  {money(primary.market, primary.currency)}
-                                </p>
-                                <p
-                                  className={`text-[12px] sm:text-[13px] font-black tabular-nums leading-tight ${
-                                    formatBucketPerf(primary).positive ? 'text-emerald-600' : 'text-rose-600'
-                                  }`}
-                                >
-                                  {formatBucketPerf(primary).text}
-                                  <span className="ml-1 text-[10px] font-bold text-slate-400">{perfLabel}</span>
-                                </p>
-                              </div>
-                              <p className="text-[9px] font-bold text-slate-400 mt-0.5">Value</p>
+                              <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
+                                {money(primary.market, primary.currency)}
+                              </p>
+                              <p
+                                className={`text-[11px] sm:text-[12px] font-black tabular-nums leading-tight mt-0.5 ${
+                                  formatBucketPerf(primary).positive ? 'text-emerald-600' : 'text-rose-600'
+                                }`}
+                              >
+                                {formatBucketPerf(primary).text}
+                                <span className="ml-1 text-[9px] font-bold text-slate-400">{perfLabel}</span>
+                              </p>
                             </>
                           ),
                         },
@@ -2692,6 +2692,8 @@ export default function PortfolioV1View({
                   const pAmt = mv - inv;
                   const pPct = inv > 0 ? (pAmt / inv) * 100 : 0;
                   const d = dayChangePct(h);
+                  const prevClose = Number(h.previous_close);
+                  const dAmt = d != null && Number.isFinite(prevClose) && prevClose > 0 ? (live - prevClose) * qty : null;
                   const lev = Number(lot?.leverage ?? h.leverage) || null;
                   const ccy = h.currency || baseCurrency;
                   const cat = classifyHolding(h);
@@ -2728,6 +2730,11 @@ export default function PortfolioV1View({
                     day: (
                       <span className={`tabular-nums font-bold ${d == null ? 'text-slate-300' : d >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {d == null ? '—' : pct(d)}
+                      </span>
+                    ),
+                    day_amt: (
+                      <span className={`tabular-nums font-bold ${dAmt == null ? 'text-slate-300' : dAmt >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {dAmt == null ? '—' : moneyPrecise(dAmt, ccy)}
                       </span>
                     ),
                     value: <span className="tabular-nums font-bold text-slate-900 dark:text-white">{moneyPrecise(mv, ccy)}</span>,
