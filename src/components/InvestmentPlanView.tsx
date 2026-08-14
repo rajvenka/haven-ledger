@@ -562,7 +562,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                         onClick={() => openTransferModal(plan)}
                         className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer shrink-0"
                       >
-                        Mark {fmt(remaining)} Transferred
+                        Confirm {fmt(remaining)} Paid
                       </button>
                     ) : (
                       <span className="px-2.5 py-1 bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase rounded-full shrink-0">Pending</span>
