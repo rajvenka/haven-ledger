@@ -256,7 +256,7 @@ const HOLDING_COLUMNS: { key: string; label: string; defaultOn: boolean; desktop
   { key: 'buy', label: 'Buy', defaultOn: false, desktopOnly: true },
   { key: 'live', label: 'Live', defaultOn: true },
   { key: 'day', label: 'Day %', defaultOn: true, desktopOnly: true },
-  { key: 'day_amt', label: 'Day $', defaultOn: true, desktopOnly: true },
+  { key: 'day_amt', label: 'Day $', defaultOn: true },
   { key: 'value', label: 'Value', defaultOn: true },
   { key: 'pnl', label: 'P&L %', defaultOn: true },
   { key: 'pnl_amt', label: 'P&L $', defaultOn: true },
@@ -1238,6 +1238,10 @@ export default function PortfolioV1View({
         case 'buy': return buy;
         case 'live': return live;
         case 'day': return dayChangePct(h) ?? -999;
+        case 'day_amt': {
+          const prevClose = Number(h.previous_close);
+          return Number.isFinite(prevClose) && prevClose > 0 ? (live - prevClose) * qty : -999999;
+        }
         case 'value': return live * qty;
         case 'pnl': {
           const inv = buy * qty;
@@ -2791,6 +2795,10 @@ export default function PortfolioV1View({
                   .map((h) => {
                     const p = pnlPct(h);
                     const d = dayChangePct(h);
+                    const liveP = Number(h.live_price ?? h.buy_price) || 0;
+                    const prevCloseP = Number(h.previous_close);
+                    const qtyP = Number(h.quantity) || 0;
+                    const dAmt = d != null && Number.isFinite(prevCloseP) && prevCloseP > 0 ? (liveP - prevCloseP) * qtyP : null;
                     const stop = h.stop_loss_rate != null ? Number(h.stop_loss_rate) : null;
                     const dist = stopLossDistancePct(h);
                     const ccy = h.currency || baseCurrency;
@@ -2819,7 +2827,7 @@ export default function PortfolioV1View({
                             </p>
                             {d != null && (
                               <p className={`text-[12px] font-bold tabular-nums ${d >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                Day {pct(d)}
+                                Day {pct(d)}{dAmt != null ? ` (${dAmt >= 0 ? '+' : ''}${moneyPrecise(dAmt, ccy)})` : ''}
                               </p>
                             )}
                           </div>

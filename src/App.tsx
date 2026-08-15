@@ -276,6 +276,11 @@ export default function App() {
       return true;
     }
   });
+  // "New" badge on the Pulse/Classic toggle buttons - requested to show for 2 months from
+  // today (2026-08-15), so it self-expires around 2026-10-15 without needing a manual
+  // removal later. A prior badge here appears to have been lost to one of this session's
+  // known cross-channel overwrites; this is a fresh, explicit implementation.
+  const showPulseNewBadge = Date.now() < new Date('2026-10-15T00:00:00Z').getTime();
   const togglePulse = () => {
     setUiPulse((v) => {
       const next = !v;
@@ -661,13 +666,16 @@ export default function App() {
                 type="button"
                 onClick={togglePulse}
                 title={uiPulse ? 'Switch to Classic layout' : 'Switch to Pulse layout'}
-                className={`p-2 rounded-full transition-colors cursor-pointer ${
+                className={`relative p-2 rounded-full transition-colors cursor-pointer ${
                   uiPulse
                     ? 'bg-violet-100 dark:bg-violet-950/50 text-violet-600 dark:text-violet-300'
                     : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 hover:text-violet-600'
                 }`}
               >
                 <Sparkles className="w-4 h-4" />
+                {showPulseNewBadge && (
+                  <span className="absolute -top-0.5 -right-0.5 px-1 py-px rounded-full bg-rose-500 text-white text-[7px] font-black leading-none">NEW</span>
+                )}
               </button>
               <button
                 onClick={() => {
@@ -1055,13 +1063,16 @@ export default function App() {
                 type="button"
                 onClick={togglePulse}
                 title={uiPulse ? 'Switch to Classic layout' : 'Switch to Pulse layout'}
-                className={`flex-1 py-2 flex items-center justify-center rounded-xl border cursor-pointer transition-all duration-200 ${
+                className={`relative flex-1 py-2 flex items-center justify-center rounded-xl border cursor-pointer transition-all duration-200 ${
                   uiPulse
                     ? 'bg-violet-100 dark:bg-violet-950/50 text-violet-600 dark:text-violet-300 border-violet-200 dark:border-violet-800'
                     : 'bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-100 dark:border-slate-800/60 text-slate-500 dark:text-slate-400'
                 }`}
               >
                 <Sparkles className="w-4 h-4" />
+                {showPulseNewBadge && (
+                  <span className="absolute -top-1 -right-1 px-1 py-px rounded-full bg-rose-500 text-white text-[7px] font-black leading-none">NEW</span>
+                )}
               </button>
               <button
                 onClick={() => {
@@ -1555,6 +1566,9 @@ export default function App() {
                   }`}
                 >
                   <Sparkles className="w-4.5 h-4.5" />
+                  {showPulseNewBadge && (
+                    <span className="absolute -top-0.5 -right-0.5 px-1 py-px rounded-full bg-rose-500 text-white text-[7px] font-black leading-none">NEW</span>
+                  )}
                 </button>
 
               {/* Quick Access Theme Toggle Button */}
