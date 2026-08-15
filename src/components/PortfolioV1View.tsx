@@ -2065,7 +2065,7 @@ export default function PortfolioV1View({
               </div>
             </div>
 
-            {multiPortfolio && portfoliosPresent.length > 0 && currenciesPresent.length > 1 && (
+            {multiPortfolio && portfolioFilter === 'All' && portfoliosPresent.length > 0 && currenciesPresent.length > 1 && (
               <div className="flex items-center gap-2 min-w-0 shrink-0 basis-full lg:basis-auto lg:max-w-[45%]">
                 <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-emerald-500/80 dark:text-emerald-400/80 w-10">
                   View

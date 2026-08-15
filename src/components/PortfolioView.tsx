@@ -236,24 +236,32 @@ const computeMarginAmount = (h: any): number | null => {
   if (h.leverage == null || Number(h.leverage) <= 1) return null;
   return (Number(h.buy_price) * Number(h.quantity)) / Number(h.leverage);
 };
-// Per detailed clarification: for a leveraged holding, "Total Stock Investment" uses the
-// full eToro Net Value (reserved cash + P/L - h.etoro_net_value_amount, falling back to the
-// verified derivation formula if that field isn't populated), while "Current Holding Value"
-// uses the reserved-cash component alone, backed out by subtracting P/L from that same
-// stored figure. Their difference is then exactly the P/L (verified: Total Stock Investment
-// 16940.23 - Current Holding Value 59079.87 = -42139.64, matching the raw P/L sum exactly) -
-// this is a deliberate relabeling for leveraged portfolios, not the same "investment/current
-// value" meaning as a plain cash holding. Non-leveraged holdings are untouched either way.
+// For a leveraged holding, "Current Holding Value" uses the full eToro Net Value directly
+// (reserved cash + P/L - h.etoro_net_value_amount, falling back to the verified derivation
+// formula if that field isn't populated) - the live, current-moment figure. "Total Stock
+// Investment" is then defined as Current Holding Value minus the actual dollar P/L, which
+// guarantees actualCurrentValue - actualInvestment always equals exactly the same
+// leverage-independent dollar P/L as a plain non-leveraged holding (mv - inv), for every
+// holding regardless of leverage. This is a deliberate relabeling for leveraged holdings, not
+// the same "investment/current value" meaning as a plain cash holding - but critically, one
+// that stays mathematically consistent when leveraged and non-leveraged holdings are summed
+// together in the same portfolio selection, unlike an earlier version of this formula.
+// Verified against real eToro RAJ data (mixed leveraged + non-leveraged): the earlier formula
+// (Net Value used directly for "investment", Net Value minus P/L for "current value") only
+// produced the correct sign for leveraged holdings in isolation - summed together with
+// non-leveraged holdings, whose contribution had the opposite sign under that formula, the
+// combined Net Gain came out wrong (-$16.1k) against the real -$29.3k loss. This version
+// gives the correct combined total in all cases. Non-leveraged holdings are untouched either
+// way (identical to invested()/marketValue()).
 const dollarPnl = (h: any): number => (Number(h.live_price ?? h.current_price ?? h.buy_price) - Number(h.buy_price)) * Number(h.quantity);
-const actualInvestment = (h: any): number => {
-  if (computeMarginAmount(h) == null) return Number(h.buy_price) * Number(h.quantity);
-  const netValue = h.etoro_net_value_amount != null ? Number(h.etoro_net_value_amount) : (computeEtoroNetValue(h) ?? 0);
-  return netValue; // "Total Stock Investment" contribution for a leveraged holding
-};
 const actualCurrentValue = (h: any): number => {
   if (computeMarginAmount(h) == null) return Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity);
   const netValue = h.etoro_net_value_amount != null ? Number(h.etoro_net_value_amount) : (computeEtoroNetValue(h) ?? 0);
-  return netValue - dollarPnl(h); // "Current Holding Value" contribution - reserved cash alone
+  return netValue; // "Current Holding Value" contribution for a leveraged holding
+};
+const actualInvestment = (h: any): number => {
+  if (computeMarginAmount(h) == null) return Number(h.buy_price) * Number(h.quantity);
+  return actualCurrentValue(h) - dollarPnl(h); // "Total Stock Investment" contribution - backs out P/L from Current Holding Value
 };
 const fmtQty = (n: number) => Number.isInteger(n) ? String(n) : n.toFixed(2);
 
@@ -2543,12 +2551,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
     const val = Number(h.buy_price) * Number(h.quantity);
     return s + (ccy === headerDisplayCurrency ? val : convertToBase(val, ccy, headerDisplayCurrency, workspaceCurrencyRates, baseCurrency));
   }, 0);
-  // Net Gain for a leveraged view = Total Stock Investment - Current Holding Value, which
-  // (per the verified relationship above) equals exactly the raw dollar P/L - a cleaner,
-  // more direct figure than the cash-portfolio formula, which depends on Balance Cash (now
-  // zero for leveraged portfolios and would otherwise distort this).
+  // Net Gain for a leveraged view = Current Holding Value - Total Stock Investment, which
+  // (per the fixed relationship above) equals exactly the raw dollar P/L for every holding
+  // consistently, leveraged or not - a cleaner, more direct figure than the cash-portfolio
+  // formula, which depends on Balance Cash (now zero for leveraged portfolios and would
+  // otherwise distort this).
   const anyLeveragedInSelection = filteredActiveHoldings.some((h: any) => h.leverage != null && Number(h.leverage) > 1);
-  const netGain = anyLeveragedInSelection ? (totalInvestedActive - currentValueActive) : ((balanceCash + currentValueActive) - netContributed);
+  const netGain = anyLeveragedInSelection ? (currentValueActive - totalInvestedActive) : ((balanceCash + currentValueActive) - netContributed);
 
   // Daily Change compares Live Price against Yahoo's own previous-close reference - only
   // counts holdings that actually have both values (i.e. have been live-refreshed at least
