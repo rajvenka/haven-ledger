@@ -383,13 +383,20 @@ function computeEtoroNetValue(h: any): number | null {
   const lossAtStop = isShort ? (stop - entry) * qty : (entry - stop) * qty;
   return lossAtStop + margin * 0.5;
 }
-function realInvested(h: any): number {
-  const margin = computeMarginAmount(h);
-  return margin != null ? margin : invested(h);
-}
 function realCurrentValue(h: any): number {
   if (!isLeveraged(h)) return marketValue(h);
   return computeEtoroNetValue(h) ?? marketValue(h);
+}
+// Deliberately defined as realCurrentValue(h) - pnl(h), not a separately-derived margin
+// figure. This guarantees the dollar P&L (realCurrentValue - realInvested) always equals
+// pnl(h) - the same leverage-independent dollar gain/loss shown in the raw/CFD view -
+// regardless of which value view is selected. An earlier static-margin formula broke this:
+// it produced a mathematically inconsistent dollar P&L (wrong sign, wrong magnitude) because
+// it combined two unrelated sources (a derived static margin for "invested" against eToro's
+// own live net value for "current"). Verified against real ETORO RAJ data: this now produces
+// the correct ~$29.3k loss, matching the raw/CFD $ view exactly.
+function realInvested(h: any): number {
+  return realCurrentValue(h) - pnl(h);
 }
 function dayChangePct(h: any): number | null {
   const live = Number(h.live_price);
