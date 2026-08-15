@@ -82,29 +82,66 @@ async function buildDigestForUser(sb: any, userId: string) {
     .filter((p: any) => p.next_due_date && String(p.next_due_date).slice(0, 10) > today)
     .slice(0, 5);
 
+  const { data: portfoliosData } = await sb
+    .from("portfolios")
+    .select("id, name, workspace_id")
+    .in("workspace_id", wids);
+  const portfolioName = new Map<string, string>((portfoliosData || []).map((p: any) => [p.id, p.name]));
+
   const { data: holdings } = await sb
     .from("portfolio_holdings")
-    .select("symbol, quantity, buy_price, live_price, currency, status")
+    .select("portfolio_id, symbol, ticker, quantity, buy_price, live_price, previous_close, currency, status")
     .in("workspace_id", wids)
     .eq("status", "active")
-    .limit(200);
+    .limit(500);
 
-  let dayNote = "Portfolio: open Haven for live marks.";
+  // Day change per holding - same (live - previous_close) * qty logic used throughout the
+  // app, kept self-contained here since this runs in a separate serverless function with no
+  // access to the frontend's shared helpers.
+  const dayChangeFor = (h: any) => {
+    const live = Number(h.live_price);
+    const prev = Number(h.previous_close);
+    const qty = Number(h.quantity) || 0;
+    if (!Number.isFinite(live) || !Number.isFinite(prev) || prev <= 0) return null;
+    const dollar = (live - prev) * qty;
+    const pct = ((live - prev) / prev) * 100;
+    return { dollar, pct };
+  };
+
+  const portfolioLines: string[] = [];
+  const bigMovers: { label: string; pct: number; dollar: number; currency: string }[] = [];
   if (holdings?.length) {
-    let invested = 0;
-    let market = 0;
+    const byPortfolio = new Map<string, any[]>();
     for (const h of holdings) {
-      const q = Number(h.quantity) || 0;
-      const b = Number(h.buy_price) || 0;
-      const l = Number(h.live_price ?? h.buy_price) || 0;
-      invested += b * q;
-      market += l * q;
+      const key = h.portfolio_id || "default";
+      byPortfolio.set(key, [...(byPortfolio.get(key) || []), h]);
     }
-    if (invested > 0) {
-      const pct = ((market - invested) / invested) * 100;
-      dayNote = `Portfolio mark vs cost: ${pct >= 0 ? "+" : ""}${pct.toFixed(2)}% (indicative, mixed FX).`;
+    for (const [pid, hs] of Array.from(byPortfolio.entries())) {
+      const name = portfolioName.get(pid) || "Portfolio";
+      let value = 0;
+      let dayDollar = 0;
+      let ccy = "";
+      for (const h of hs) {
+        const q = Number(h.quantity) || 0;
+        const live = Number(h.live_price ?? h.buy_price) || 0;
+        value += live * q;
+        ccy = h.currency || ccy;
+        const day = dayChangeFor(h);
+        if (day) {
+          dayDollar += day.dollar;
+          if (Math.abs(day.pct) >= 3) {
+            bigMovers.push({ label: h.ticker || h.symbol || "?", pct: day.pct, dollar: day.dollar, currency: h.currency });
+          }
+        }
+      }
+      if (value > 0) {
+        const sign = dayDollar >= 0 ? "+" : "";
+        portfolioLines.push(`  • ${name}: ${value.toFixed(0)} ${ccy} · today ${sign}${dayDollar.toFixed(0)} ${ccy}`);
+      }
     }
   }
+  bigMovers.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+  const topMovers = bigMovers.slice(0, 3);
 
   const lines: string[] = [];
   lines.push(`Haven Ledger · ${today}`);
@@ -122,8 +159,23 @@ async function buildDigestForUser(sb: any, userId: string) {
       lines.push(`  • ${p.name || "Bill"} · ${String(p.next_due_date).slice(0, 10)}`);
     }
   }
-  lines.push("");
-  lines.push(dayNote);
+  if (portfolioLines.length) {
+    lines.push("");
+    lines.push("Portfolios:");
+    lines.push(...portfolioLines);
+  }
+  if (topMovers.length) {
+    lines.push("");
+    lines.push("Big movers today:");
+    for (const m of topMovers) {
+      const sign = m.pct >= 0 ? "+" : "";
+      lines.push(`  • ${m.label}: ${sign}${m.pct.toFixed(1)}% (${sign}${m.dollar.toFixed(0)} ${m.currency || ""})`);
+    }
+  }
+  if (!portfolioLines.length) {
+    lines.push("");
+    lines.push("Portfolio: open Haven for live marks.");
+  }
   lines.push("");
   lines.push("Manage: Haven → Account → Daily digests");
 
@@ -137,6 +189,27 @@ export default async function handler(req: any, res: any) {
       return;
     }
     const auth = req.headers.authorization || "";
+
+    // Preview action - lets a logged-in user see their own digest content on demand, using
+    // their own Supabase session token rather than the cron secret. Never sends anything;
+    // just builds and returns the same text the scheduled job would send.
+    if (req.query?.action === "preview") {
+      const token = auth.replace(/^Bearer\s+/i, "");
+      if (!token) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      const sb = admin();
+      const { data: userData, error: userErr } = await sb.auth.getUser(token);
+      if (userErr || !userData?.user) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      const digest = await buildDigestForUser(sb, userData.user.id);
+      res.status(200).json({ ok: true, subject: digest.subject, text: digest.text });
+      return;
+    }
+
     const secret = process.env.CRON_SECRET || "";
     if (!secret || auth !== `Bearer ${secret}`) {
       res.status(401).json({ error: "Unauthorized" });

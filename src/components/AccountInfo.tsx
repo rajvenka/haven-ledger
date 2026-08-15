@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import { 
   Download, 
   Upload, 
@@ -178,6 +179,7 @@ export default function AccountInfo({
   pulseMode = false,
 }: AccountInfoProps) {
   const [localActiveSubTab, setLocalActiveSubTab] = useState<'preferences' | 'security' | 'members' | 'groups' | 'chat' | 'invite'>('preferences');
+  const [digestPreview, setDigestPreview] = useState<{ loading: boolean; text: string | null; error: string | null }>({ loading: false, text: null, error: null });
   const currentSubTab = activeSubTab !== undefined ? activeSubTab : localActiveSubTab;
   const setSubTab = onActiveSubTabChange || setLocalActiveSubTab;
   const [importText, setImportText] = useState('');
@@ -1951,6 +1953,37 @@ export default function AccountInfo({
             </label>
             {!userProfile?.whatsappPhone && (
               <p className="text-[9px] text-slate-400">Link WhatsApp first.</p>
+            )}
+            <button
+              type="button"
+              onClick={async () => {
+                setDigestPreview({ loading: true, text: null, error: null });
+                try {
+                  const { data: sessionData } = await supabase.auth.getSession();
+                  const token = sessionData?.session?.access_token;
+                  if (!token) throw new Error('Not signed in');
+                  const resp = await fetch('/api/daily-digest?action=preview', {
+                    headers: { Authorization: `Bearer ${token}` },
+                  });
+                  const json = await resp.json().catch(() => ({}));
+                  if (!resp.ok) throw new Error(json?.error || 'Preview failed');
+                  setDigestPreview({ loading: false, text: json.text, error: null });
+                } catch (err: any) {
+                  setDigestPreview({ loading: false, text: null, error: err?.message || 'Preview failed' });
+                }
+              }}
+              disabled={digestPreview.loading}
+              className="w-full text-center text-[10px] font-black text-indigo-500 hover:text-indigo-600 uppercase tracking-wider py-1.5 cursor-pointer disabled:opacity-50"
+            >
+              {digestPreview.loading ? 'Loading preview…' : 'Preview today\u2019s digest'}
+            </button>
+            {digestPreview.error && (
+              <p className="text-[9px] text-rose-500">{digestPreview.error}</p>
+            )}
+            {digestPreview.text && (
+              <pre className="text-[10px] text-slate-600 dark:text-slate-300 whitespace-pre-wrap bg-slate-50 dark:bg-slate-900 rounded-lg p-3 border border-slate-100 dark:border-slate-800 leading-relaxed">
+                {digestPreview.text}
+              </pre>
             )}
           </div>
 

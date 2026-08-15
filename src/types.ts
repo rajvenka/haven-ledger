@@ -171,6 +171,8 @@ export interface UserProfile {
   isPortfolioContributor?: boolean; // Silent viewers (false) are excluded from Investment Plan (Split, Contribution Log, Recurring Plan, Per-Person Share)
   Connected_To_Host_UUID?: string;
   inviteCode?: string;
+  digestEmail?: boolean;
+  digestWhatsapp?: boolean;
 }
 
 export interface BillAccess {
