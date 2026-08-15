@@ -688,7 +688,17 @@ export default function PortfolioV1View({
   bulkAddPortfolioHoldings,
 }: Props) {
   const [portfolioFilter, setPortfolioFilter] = useState<string>('__pending__');
-  const [brokerFilter, setBrokerFilter] = useState<string>('All');
+  // Multi-select broker filter, matching Classic's holdingFilters pattern (Set<string>).
+  // Empty set = no filter applied ("All"), same default behavior as the old single-string
+  // 'All' value. toggleBrokerFilter below adds/removes one broker at a time.
+  const [brokerFilter, setBrokerFilter] = useState<Set<string>>(new Set());
+  const toggleBrokerFilter = (b: string) => {
+    setBrokerFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(b)) next.delete(b); else next.add(b);
+      return next;
+    });
+  };
   const [categoryFilter, setCategoryFilter] = useState<CategoryId | 'All'>('All');
   // Desktop-only "balanced rows" for the Markets & Products tile grid - plain CSS
   // auto-fit packs greedily left-to-right (e.g. 9 tiles -> 8 in row 1, 1 orphaned alone in
@@ -920,8 +930,8 @@ export default function PortfolioV1View({
   }, [active, portfolioFilter]);
 
   const scoped = useMemo(() => {
-    if (brokerFilter === 'All') return bookScoped;
-    return bookScoped.filter((h: any) => String(h.broker) === brokerFilter);
+    if (brokerFilter.size === 0) return bookScoped;
+    return bookScoped.filter((h: any) => brokerFilter.has(String(h.broker)));
   }, [bookScoped, brokerFilter]);
 
   // Type / market tiles: driven by book (and broker if selected)
@@ -944,7 +954,7 @@ export default function PortfolioV1View({
 
   const selectPortfolioBook = (id: string) => {
     setPortfolioFilter(id);
-    setBrokerFilter('All');
+    setBrokerFilter(new Set());
     setCategoryFilter('All');
     setExpandedCategory(null);
     // Lots only makes sense on a single book — clear when returning to All books
@@ -1009,7 +1019,7 @@ export default function PortfolioV1View({
         portfoliosPresent[0]?.id ||
         null;
       setPortfolioFilter(defaultId ? String(defaultId) : 'All');
-      setBrokerFilter('All');
+      setBrokerFilter(new Set());
       setCategoryFilter('All');
       setExpandedCategory(null);
     }
@@ -2047,9 +2057,9 @@ export default function PortfolioV1View({
                 <div className="flex items-center gap-1 w-max pr-2">
                   <button
                     type="button"
-                    onClick={() => setBrokerFilter('All')}
-                    className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
-                      brokerFilter === 'All'
+                    onClick={() => setBrokerFilter(new Set())}
+                    className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
+                      brokerFilter.size === 0
                         ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
                         : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300'
                     }`}
@@ -2061,12 +2071,12 @@ export default function PortfolioV1View({
                       key={b}
                       type="button"
                       onClick={() => {
-                        setBrokerFilter(b);
+                        toggleBrokerFilter(b);
                         setCategoryFilter('All');
                         setExpandedCategory(null);
                       }}
-                      className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
-                        brokerFilter === b
+                      className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
+                        brokerFilter.has(b)
                           ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
                           : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300'
                       }`}
