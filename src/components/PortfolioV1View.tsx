@@ -693,12 +693,13 @@ export default function PortfolioV1View({
   const [holdingsExpanded, setHoldingsExpanded] = useState(true);
   const [showLotsOnly, setShowLotsOnly] = useState(false);
   const [moversMode, setMoversMode] = useState<'overall' | 'day'>('day');
-  const [moversUnit, setMoversUnit] = useState<'pct' | 'dollar'>('dollar');
-  // Independent of moversUnit above (which drives the separate Top Movers widget) - only
-  // affects the tiles (Total Portfolio + category tiles). When true, tiles containing
-  // leveraged/CFD holdings show the raw, full exposure value instead of the real cash
-  // committed. Combines with moversUnit ($/%) to give the requested 4-way $/%/CFD $/CFD %.
-  const [cfdView, setCfdView] = useState(false);
+  // Single source of truth for the P&L value display - one atomic selection, not two
+  // separately-settable states that could combine inconsistently. moversUnit/cfdView below
+  // are derived read-only values from this, kept so the many existing read-sites throughout
+  // this file don't need to change.
+  const [valueMode, setValueMode] = useState<'dollar' | 'pct' | 'cfdDollar' | 'cfdPct'>('dollar');
+  const moversUnit: 'pct' | 'dollar' = valueMode === 'pct' || valueMode === 'cfdPct' ? 'pct' : 'dollar';
+  const cfdView = valueMode === 'cfdDollar' || valueMode === 'cfdPct';
   const [showPnlCalendar, setShowPnlCalendar] = useState(false);
   const [pnlCalendarRows, setPnlCalendarRows] = useState<any[]>([]);
   const [pnlCalendarLoading, setPnlCalendarLoading] = useState(false);
@@ -1061,9 +1062,15 @@ export default function PortfolioV1View({
       portfolioFilter !== 'All' && portfolioFilter !== '__pending__'
         ? (portfolios || []).find((p: any) => String(p.id) === String(portfolioFilter))
         : (portfolios || []).find((p: any) => p.is_default) || (portfolios || [])[0];
+    // For a specific portfolio, prefer the actual scoped holdings' own currency field first -
+    // same reliable source every category tile already uses (they never look up `portfolios`
+    // at all, which is exactly why only this tile lagged behind on a portfolio switch while
+    // every other tile updated immediately). Falls back to the book lookup only when scoped
+    // is empty (e.g. a portfolio with no holdings yet).
+    const scopedCcy = portfolioFilter !== 'All' && portfolioFilter !== '__pending__' ? scoped[0]?.currency : null;
     const displayCcy = String(
       (portfolioFilter !== 'All' && portfolioFilter !== '__pending__'
-        ? book?.currency
+        ? scopedCcy || book?.currency
         : viewCurrency || book?.currency || baseCurrency) ||
         baseCurrency ||
         'USD'
@@ -2113,12 +2120,12 @@ export default function PortfolioV1View({
                   Overall
                 </button>
               </div>
-              <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5 overflow-x-auto max-w-[60vw] sm:max-w-none" style={{ scrollbarWidth: 'none' }}>
+              <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5 overflow-x-auto max-w-[70vw] sm:max-w-none">
                 <button
                   type="button"
-                  onClick={() => { setMoversUnit('dollar'); setCfdView(false); }}
+                  onClick={() => setValueMode('dollar')}
                   className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold cursor-pointer ${
-                    moversUnit === 'dollar' && !cfdView
+                    valueMode === 'dollar'
                       ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
                       : 'text-slate-500'
                   }`}
@@ -2127,9 +2134,9 @@ export default function PortfolioV1View({
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setMoversUnit('pct'); setCfdView(false); }}
+                  onClick={() => setValueMode('pct')}
                   className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold cursor-pointer ${
-                    moversUnit === 'pct' && !cfdView
+                    valueMode === 'pct'
                       ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
                       : 'text-slate-500'
                   }`}
@@ -2140,10 +2147,10 @@ export default function PortfolioV1View({
                   <>
                     <button
                       type="button"
-                      onClick={() => { setMoversUnit('dollar'); setCfdView(true); }}
+                      onClick={() => setValueMode('cfdDollar')}
                       title="Full CFD exposure (raw market value), not real cash committed"
                       className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold cursor-pointer ${
-                        moversUnit === 'dollar' && cfdView
+                        valueMode === 'cfdDollar'
                           ? 'bg-amber-500 text-white shadow-sm'
                           : 'text-amber-600 dark:text-amber-400'
                       }`}
@@ -2152,10 +2159,10 @@ export default function PortfolioV1View({
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setMoversUnit('pct'); setCfdView(true); }}
+                      onClick={() => setValueMode('cfdPct')}
                       title="Full CFD exposure (raw market value), not real cash committed"
                       className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold cursor-pointer ${
-                        moversUnit === 'pct' && cfdView
+                        valueMode === 'cfdPct'
                           ? 'bg-amber-500 text-white shadow-sm'
                           : 'text-amber-600 dark:text-amber-400'
                       }`}
