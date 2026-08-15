@@ -38,6 +38,34 @@ function findHeaderRowIndex(rows: any[][], mustContainHeader: string): number {
   return -1;
 }
 
+// Proper quoted-CSV line splitter, shared by any CSV-based template below. A naive
+// split(',') breaks on real broker exports the moment a numeric field is quoted with an
+// embedded thousands-separator comma (e.g. "1,152.75"), silently shifting every column
+// after it - confirmed against a real Moomoo Positions export where this caused Currency
+// to read "96.85%" instead of "USD" on rows with a 4-digit market value.
+function splitCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; } else inQuotes = false;
+      } else cur += c;
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ',') {
+      out.push(cur);
+      cur = '';
+    } else {
+      cur += c;
+    }
+  }
+  out.push(cur);
+  return out.map((s) => s.trim());
+}
+
 function rowsToObjects(rows: any[][], headerIdx: number): Record<string, any>[] {
   const headers = rows[headerIdx].map((h: any) => String(h ?? '').trim());
   const out: Record<string, any>[] = [];
@@ -372,11 +400,14 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
 
   if (template === 'moomoo' || template === 'tiger') {
     const brokerName = template === 'moomoo' ? 'Moomoo' : 'Tiger';
-    // Flexible CSV: Symbol, Quantity, Buy Price / Avg Cost, Current / Market Price, Currency
+    // Flexible CSV: Symbol, Quantity, Buy Price / Avg Cost, Current / Market Price, Currency.
+    // Uses the quoted-CSV-aware splitCsvLine (not a naive comma-split) since real exports
+    // quote numeric fields with thousands-separator commas (e.g. "1,152.75"), which a plain
+    // split(',') mis-parses and silently shifts every later column.
     const text = await file.text();
     const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     if (lines.length < 2) throw new Error(`Empty ${brokerName} file`);
-    const split = (line: string) => line.split(/,|\t/).map((s) => s.trim().replace(/^"|"$/g, ''));
+    const split = (line: string) => splitCsvLine(line).map((s) => s.replace(/^"|"$/g, ''));
     const headers = split(lines[0]).map((h) => h.toLowerCase());
     const find = (...keys: string[]) => headers.findIndex((h) => keys.some((k) => h.includes(k)));
     const iSym = find('symbol', 'ticker', 'code', 'stock');
@@ -421,29 +452,6 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
     // matching whatever the section's own header row lists at col4+ (e.g. Symbol, Quantity,
     // Cost Price, Close Price, Currency for Holdings). Field lookups below are by header
     // name, not fixed position, since that's the part Tiger could plausibly reorder.
-    const splitCsvLine = (line: string): string[] => {
-      const out: string[] = [];
-      let cur = '';
-      let inQuotes = false;
-      for (let i = 0; i < line.length; i++) {
-        const c = line[i];
-        if (inQuotes) {
-          if (c === '"') {
-            if (line[i + 1] === '"') { cur += '"'; i++; } else inQuotes = false;
-          } else cur += c;
-        } else if (c === '"') {
-          inQuotes = true;
-        } else if (c === ',') {
-          out.push(cur);
-          cur = '';
-        } else {
-          cur += c;
-        }
-      }
-      out.push(cur);
-      return out.map((s) => s.trim());
-    };
-
     const text = (await file.text()).replace(/^\uFEFF/, '');
     const lines = text.split(/\r?\n/);
     let headerCols: string[] | null = null;
