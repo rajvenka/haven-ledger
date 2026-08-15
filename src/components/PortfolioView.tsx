@@ -5229,6 +5229,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   case 'invested': return (a.invested - b.invested) * dir;
                   case 'current_value': return (a.currentValue - b.currentValue) * dir;
                   case 'gain': return (a.gain - b.gain) * dir;
+                  case 'open_date': return String(a.lot.open_date ?? '').localeCompare(String(b.lot.open_date ?? '')) * dir;
                   default: return ((a.distancePct ?? Infinity) - (b.distancePct ?? Infinity)) * dir;
                 }
               });
@@ -5243,6 +5244,12 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 {label} {lotsSortCol === col ? (lotsSortDir === 'asc' ? arrowUp : arrowDown) : ''}
               </th>
             );
+            const lotsTotalInvested = rows.reduce((s, r) => s + r.invested, 0);
+            const lotsTotalCurrentValue = rows.reduce((s, r) => s + r.currentValue, 0);
+            const lotsTotalGain = lotsTotalCurrentValue - lotsTotalInvested;
+            const lotsTotalGainPct = lotsTotalInvested > 0 ? (lotsTotalGain / lotsTotalInvested) * 100 : 0;
+            const lotsTotalQty = rows.reduce((s, r) => s + Number(r.lot.quantity), 0);
+            const lotsCurrency = rows[0]?.parent?.currency;
             return (
               <div>
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Lots ({rows.length}) - click a column to sort</span>
@@ -5251,6 +5258,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                     <thead>
                       <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-bold text-slate-400 uppercase">
                         {sortHeader('symbol', 'Symbol', 'left')}
+                        {sortHeader('open_date', 'Purchase Date')}
                         {sortHeader('quantity', 'Qty')}
                         {sortHeader('buy_price', 'Buy Price')}
                         {sortHeader('current_price', 'LTP')}
@@ -5267,6 +5275,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       {rows.map(r => (
                         <tr key={r.lot.id} className="border-b border-slate-50 dark:border-slate-900">
                           <td className="p-2 font-bold text-slate-700 dark:text-slate-300">{r.parent.symbol}</td>
+                          <td className="p-2 text-right text-slate-500">{r.lot.open_date ? String(r.lot.open_date).slice(0, 10) : dash}</td>
                           <td className="p-2 text-right">{fmtQty(Number(r.lot.quantity))}</td>
                           <td className="p-2 text-right">{fmtCur(Number(r.lot.buy_price), r.parent.currency)}</td>
                           <td className="p-2 text-right">{fmtCur(r.current, r.parent.currency)}</td>
@@ -5282,6 +5291,20 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         </tr>
                       ))}
                     </tbody>
+                    {rows.length > 0 && (
+                      <tfoot>
+                        <tr className="border-t-2 border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40">
+                          <td className="p-2 font-black text-slate-700 dark:text-slate-200" colSpan={2}>Total</td>
+                          <td className="p-2 text-right font-black text-slate-700 dark:text-slate-200">{fmtQty(lotsTotalQty)}</td>
+                          <td className="p-2"></td>
+                          <td className="p-2"></td>
+                          <td className="p-2 text-right font-black text-slate-700 dark:text-slate-200">{fmtCur(lotsTotalInvested, lotsCurrency)}</td>
+                          <td className="p-2 text-right font-black text-slate-700 dark:text-slate-200">{fmtCur(lotsTotalCurrentValue, lotsCurrency)}</td>
+                          <td className={`p-2 text-right font-black ${lotsTotalGain >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{lotsTotalGain >= 0 ? '+' : ''}{fmtCur(lotsTotalGain, lotsCurrency)} ({lotsTotalGain >= 0 ? '+' : ''}{lotsTotalGainPct.toFixed(1)}%)</td>
+                          <td className="p-2" colSpan={4}></td>
+                        </tr>
+                      </tfoot>
+                    )}
                   </table>
                 </div>
               </div>
