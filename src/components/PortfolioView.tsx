@@ -1019,6 +1019,40 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
   const [refreshingPrices, setRefreshingPrices] = useState(false);
   const [priceRefreshSummary, setPriceRefreshSummary] = useState<string | null>(null);
+  const [syncingConnectionId, setSyncingConnectionId] = useState<string | null>(null);
+
+  // Auto price refresh toggle - user-controlled, per-workspace, persisted via localStorage.
+  // Defaults to OFF given the earlier Supabase egress incident - the person explicitly asked
+  // to control this themselves under Portfolio settings rather than have it always-on or
+  // permanently hardcoded off. Read once on mount / workspace change; the effect below re-reads
+  // this key every time it runs, so toggling it takes effect on the very next stale-price check.
+  const autoRefreshStorageKey = `auto_price_refresh_enabled:${workspaceName || 'default'}`;
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState<boolean>(() => {
+    try { return localStorage.getItem(autoRefreshStorageKey) === 'true'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { setAutoRefreshEnabled(localStorage.getItem(autoRefreshStorageKey) === 'true'); } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceName]);
+  const toggleAutoRefresh = (next: boolean) => {
+    setAutoRefreshEnabled(next);
+    try { localStorage.setItem(autoRefreshStorageKey, String(next)); } catch { /* ignore */ }
+  };
+
+  // Zerodha (Kite Connect) and Groww both use daily-expiring access tokens by design, not a
+  // bug - re-authenticating each trading day is how these brokers' APIs work. Shared here
+  // (previously only existed inline inside refreshAllPrices) so the new broker overview table
+  // can show the same "needs re-auth" status without duplicating the date-comparison logic.
+  const connIsFromToday = (c: any) => {
+    if (!c?.updated_at) return false;
+    const d = new Date(c.updated_at);
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  };
+  const connNeedsReauth = (c: any) => {
+    const type = String(c?.broker_type || '').toLowerCase();
+    return (type === 'zerodha' || type === 'groww') && !connIsFromToday(c);
+  };
 
   // ---- Broker file import ----
   const [isImporting, setIsImporting] = useState(false);
@@ -1992,15 +2026,15 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setRefreshingPrices(false);
   };
 
-  // Auto-refresh disabled per user's request (2026-08-15) - Supabase free-tier egress
-  // concerns, wants full manual control over when price refresh actually runs regardless of
-  // the staleness-based/cooldown logic below. Left the original logic intact (commented out
-  // via the early return) rather than deleting it, so it's a one-line change to restore later
-  // if wanted. The manual Refresh Prices button is completely unaffected - it always works.
+  // Auto-refresh gated by the autoRefreshEnabled toggle above (user-controlled, under
+  // Portfolio Settings) rather than being permanently hardcoded off - the earlier egress
+  // incident's actual root cause (a full-dataset reload firing per-holding during every
+  // refresh) is already fixed separately, so this is now a genuine, safe user preference
+  // rather than a safety measure. Defaults to off. The manual Refresh Prices button is
+  // completely unaffected either way - it always works regardless of this toggle.
   const autoRefreshTriggeredRef = React.useRef(false);
   useEffect(() => {
-    return; // eslint-disable-line no-unreachable
-    // eslint-disable-next-line no-unreachable
+    if (!autoRefreshEnabled) return;
     if (autoRefreshTriggeredRef.current) return;
     if (isReadOnly) return;
     const refreshableStocks = activeHoldings.filter(h => h.holding_type !== 'mutual_fund');
@@ -2018,7 +2052,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     autoRefreshTriggeredRef.current = true;
     refreshAllPrices('active');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeHoldings.length]);
+  }, [activeHoldings.length, autoRefreshEnabled]);
 
   const handleAddHolding = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2887,6 +2921,133 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
       {holdingsTab === 'settings' && (
         <div className="space-y-3">
+        {/* Broker Connections overview - quick status/action table across every portfolio and
+            its connected brokers, plus the auto-refresh toggle. Reuses the existing
+            handleEtoroSync/handleWebullSync/handleZerodhaSync/handleGrowwSync handlers and
+            handleZerodhaReconnect/setIndiaBrokerEditing/setGrowwEditing form-opening logic
+            below rather than duplicating any connection or sync logic - this is purely a
+            clearer, table-based entry point into what already exists and works. */}
+        <div className="apple-card p-4">
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <RefreshCw className="w-3.5 h-3.5" /> Broker Connections
+            </span>
+            <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
+              <span className="text-[9px] font-bold text-slate-400 uppercase">Auto-refresh</span>
+              <button
+                type="button"
+                onClick={() => toggleAutoRefresh(!autoRefreshEnabled)}
+                className={`relative w-8 h-[18px] rounded-full transition-colors cursor-pointer ${autoRefreshEnabled ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}
+                aria-label="Toggle automatic price refresh"
+              >
+                <span className={`absolute top-0.5 left-0.5 w-[14px] h-[14px] rounded-full bg-white transition-transform ${autoRefreshEnabled ? 'translate-x-[14px]' : ''}`} />
+              </button>
+            </label>
+          </div>
+          <p className="text-[9px] text-slate-400 mb-3">
+            {autoRefreshEnabled
+              ? 'Prices refresh automatically when stale (checked on page load, at most once per 30 min).'
+              : 'Automatic refresh is off - use the Sync buttons below, or Refresh Prices, whenever you want fresh prices.'}
+          </p>
+          {(() => {
+            const tablePortfolios = portfolioMode === 'multiple'
+              ? portfolios
+              : [{ id: '', name: workspaceName || 'Workspace', currency: baseCurrency }];
+            const brokerLabel: Record<string, string> = { etoro: 'eToro', webull: 'Webull', ig: 'IG', zerodha: 'Zerodha', groww: 'Groww' };
+            const syncFor: Record<string, ((c: any) => Promise<void>) | undefined> = {
+              etoro: handleEtoroSync, webull: handleWebullSync, zerodha: handleZerodhaSync, groww: handleGrowwSync,
+            };
+            const openReauthForm = (c: any) => {
+              const type = String(c.broker_type || '').toLowerCase();
+              if (type === 'zerodha') { handleZerodhaReconnect(c); return; }
+              if (type === 'groww') { setZerodhaConnectPortfolioId(c.portfolio_id || ''); setGrowwEditing(true); return; }
+            };
+            const rows: React.ReactNode[] = [];
+            for (const p of tablePortfolios) {
+              const conns = portfolioBrokerConnections.filter((c: any) => String(c.portfolio_id || '') === String(p.id || ''));
+              if (conns.length === 0) {
+                rows.push(
+                  <tr key={`${p.id || 'ws'}-none`}>
+                    <td className="py-2 pl-1 font-bold text-slate-700 dark:text-slate-300 align-top">{p.name}</td>
+                    <td className="py-2 text-slate-400 italic" colSpan={2}>No broker connected</td>
+                  </tr>
+                );
+                continue;
+              }
+              conns.forEach((c: any, idx: number) => {
+                const type = String(c.broker_type || '').toLowerCase();
+                const label = brokerLabel[type] || c.broker_type;
+                const reauth = connNeedsReauth(c);
+                const syncFn = syncFor[type];
+                const isSyncing = syncingConnectionId === c.id;
+                rows.push(
+                  <tr key={c.id}>
+                    {idx === 0 && (
+                      <td rowSpan={conns.length} className="py-2 pl-1 font-bold text-slate-700 dark:text-slate-300 align-top border-r border-slate-50 dark:border-slate-900">
+                        {p.name}
+                      </td>
+                    )}
+                    <td className="py-2 pl-2">
+                      <span className="font-bold text-slate-700 dark:text-slate-300">{label}</span>
+                      {c.connection_label && <span className="text-slate-400"> · {c.connection_label}</span>}
+                    </td>
+                    <td className="py-2 pr-1 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {reauth ? (
+                          <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400">Token expired today</span>
+                        ) : c.last_synced_at ? (
+                          <span className="text-[9px] text-slate-400 tabular-nums">
+                            {new Date(c.last_synced_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+                          </span>
+                        ) : null}
+                        {reauth ? (
+                          <button
+                            type="button"
+                            disabled={isReadOnly}
+                            onClick={() => openReauthForm(c)}
+                            className="shrink-0 px-2.5 py-1 bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 rounded-full text-[9px] font-black uppercase cursor-pointer disabled:opacity-50"
+                          >
+                            Re-auth
+                          </button>
+                        ) : syncFn ? (
+                          <button
+                            type="button"
+                            disabled={isReadOnly || isSyncing}
+                            onClick={() => runAction(async () => {
+                              setSyncingConnectionId(c.id);
+                              try { await syncFn(c); } finally { setSyncingConnectionId(null); }
+                            })}
+                            className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full text-[9px] font-black uppercase cursor-pointer disabled:opacity-50"
+                          >
+                            <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
+                            {isSyncing ? 'Syncing' : 'Sync'}
+                          </button>
+                        ) : (
+                          <span className="text-[9px] text-slate-300">—</span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              });
+            }
+            if (rows.length === 0) return null;
+            return (
+              <div className="overflow-x-auto -mx-1">
+                <table className="w-full text-xs min-w-[420px]">
+                  <thead>
+                    <tr className="text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                      <th className="text-left pb-2 pl-1">Portfolio</th>
+                      <th className="text-left pb-2 pl-2">Broker</th>
+                      <th className="text-right pb-2 pr-1">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-900">{rows}</tbody>
+                </table>
+              </div>
+            );
+          })()}
+        </div>
         {(() => {
           // Option A: US/AU section — only USD + AUD portfolios (eToro, Webull).
           // Connected brokers for the selected book are greyed out; labels must be unique.
