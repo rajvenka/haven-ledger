@@ -578,13 +578,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [bookedPlBaselineAmountInput, setBookedPlBaselineAmountInput] = useState('');
   const [bookedPlBaselineDateInput, setBookedPlBaselineDateInput] = useState(new Date().toISOString().slice(0, 10));
   const [bookedPlBaselineNotesInput, setBookedPlBaselineNotesInput] = useState('');
-  const [bookedPlHistoryExpanded, setBookedPlHistoryExpanded] = useState(false);
   const [bookedPlHistoryShowAll, setBookedPlHistoryShowAll] = useState(false);
   const [bookedPlPortfolioId, setBookedPlPortfolioId] = useState<string>('');
   const [editingProjectedBankBalance, setEditingProjectedBankBalance] = useState(false);
   const [projectedBankBalanceAmountInput, setProjectedBankBalanceAmountInput] = useState('');
   const [projectedBankBalanceNotesInput, setProjectedBankBalanceNotesInput] = useState('');
-  const [bankBalanceHistoryExpanded, setBankBalanceHistoryExpanded] = useState(false);
   const [bankBalanceHistoryShowAll, setBankBalanceHistoryShowAll] = useState(false);
   const [projectedBalancePortfolioId, setProjectedBalancePortfolioId] = useState<string>('');
   const [brokerConnectPortfolioId, setBrokerConnectPortfolioId] = useState<string>('');
@@ -3899,14 +3897,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 if (history.length === 0) return null;
                 return (
                   <div className="pt-1.5 border-t border-slate-100 dark:border-slate-900">
-                    <button
-                      onClick={() => setBookedPlHistoryExpanded(p => !p)}
-                      className="w-full flex items-center justify-between text-[9px] font-black text-slate-400 uppercase tracking-wider cursor-pointer"
-                    >
-                      <span>History ({history.length})</span>
-                      <ChevronDown className={`w-3 h-3 transition-transform ${bookedPlHistoryExpanded ? 'rotate-180' : ''}`} />
-                    </button>
-                    {bookedPlHistoryExpanded && (
+                    <span className="block text-[9px] font-black text-slate-400 uppercase tracking-wider">History ({history.length})</span>
+                    {(
                       <div className="mt-1.5 overflow-x-auto -mx-1">
                         <table className="w-full text-[10px] min-w-[360px]">
                           <thead>
@@ -4041,14 +4033,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 if (bbHistory.length === 0) return null;
                 return (
                   <div className="pt-1.5 border-t border-slate-100 dark:border-slate-900">
-                    <button
-                      onClick={() => setBankBalanceHistoryExpanded(p => !p)}
-                      className="w-full flex items-center justify-between text-[9px] font-black text-slate-400 uppercase tracking-wider cursor-pointer"
-                    >
-                      <span>History ({bbHistory.length})</span>
-                      <ChevronDown className={`w-3 h-3 transition-transform ${bankBalanceHistoryExpanded ? 'rotate-180' : ''}`} />
-                    </button>
-                    {bankBalanceHistoryExpanded && (
+                    <span className="block text-[9px] font-black text-slate-400 uppercase tracking-wider">History ({bbHistory.length})</span>
+                    {(
                       <div className="mt-1.5 overflow-x-auto -mx-1">
                         <table className="w-full text-[10px] min-w-[360px]">
                           <thead>
