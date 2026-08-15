@@ -5297,19 +5297,20 @@ export default function PortfolioView(props: PortfolioViewProps) {
               .slice()
               .sort((a: any, b: any) => (b.vintage_year ?? 0) - (a.vintage_year ?? 0));
             const grantsCurrency = rows[0]?.currency || 'EUR';
+            const totalQty = rows.reduce((s: number, g: any) => s + Number(g.quantity ?? 0), 0);
             const totalValue = rows.reduce((s: number, g: any) => s + Number(g.value_amount ?? 0), 0);
             return (
               <div>
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider">SAR grants ({rows.length}) — not equity, excluded from portfolio value</span>
-                  <span className="text-[10px] font-bold text-slate-500">Total: {fmtCur(totalValue, grantsCurrency)}</span>
                 </div>
                 <div className="apple-card mt-1.5 overflow-x-auto border border-amber-200 dark:border-amber-900">
                   <table className="w-full text-[11px]">
                     <thead>
                       <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-bold text-slate-400 uppercase">
                         <th className="p-2 text-left">Plan</th>
-                        <th className="p-2 text-right">Vintage</th>
+                        <th className="p-2 text-right">Year</th>
+                        <th className="p-2 text-right">Purchase Date</th>
                         <th className="p-2 text-right">Availability</th>
                         <th className="p-2 text-right">Qty</th>
                         <th className="p-2 text-right">Value / unit</th>
@@ -5321,6 +5322,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         <tr key={g.id} className="border-b border-slate-50 dark:border-slate-900">
                           <td className="p-2 font-bold text-slate-700 dark:text-slate-300">{g.plan_label}</td>
                           <td className="p-2 text-right">{g.vintage_year}</td>
+                          <td className="p-2 text-right text-slate-500" title="Amundi's statement doesn't give an exact grant date — approximated as Jan 1 of the vintage year">{g.vintage_year}-01-01</td>
                           <td className="p-2 text-right text-slate-500">{g.availability_date || '—'}</td>
                           <td className="p-2 text-right">{fmtQty(Number(g.quantity))}</td>
                           <td className="p-2 text-right">{fmtCur(Number(g.value_per_unit), g.currency)}</td>
@@ -5328,9 +5330,19 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         </tr>
                       ))}
                       {rows.length === 0 && (
-                        <tr><td colSpan={6} className="p-4 text-center text-slate-400">No SAR grants for this selection.</td></tr>
+                        <tr><td colSpan={7} className="p-4 text-center text-slate-400">No SAR grants for this selection.</td></tr>
                       )}
                     </tbody>
+                    {rows.length > 0 && (
+                      <tfoot>
+                        <tr className="border-t-2 border-amber-200 dark:border-amber-900 bg-amber-50/60 dark:bg-amber-950/20">
+                          <td className="p-2 font-black text-slate-700 dark:text-slate-200" colSpan={4}>Total</td>
+                          <td className="p-2 text-right font-black text-slate-700 dark:text-slate-200">{fmtQty(totalQty)}</td>
+                          <td className="p-2"></td>
+                          <td className="p-2 text-right font-black text-amber-700 dark:text-amber-400">{fmtCur(totalValue, grantsCurrency)}</td>
+                        </tr>
+                      </tfoot>
+                    )}
                   </table>
                 </div>
               </div>
