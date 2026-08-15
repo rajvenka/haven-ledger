@@ -1026,17 +1026,14 @@ export default function PortfolioV1View({
   }, [portfolioFilter, portfoliosPresent, portfolios]);
 
 
-  // When a specific book is selected, align View currency with that book's currency
-  // so Movers $ amounts match the INR/AUD/USD book (not a leftover USD view chip).
-  useEffect(() => {
-    if (portfolioFilter === 'All' || portfolioFilter === '__pending__') return;
-    const book = (portfolios || []).find((p: any) => String(p.id) === String(portfolioFilter));
-    const ccy = String(book?.currency || '').toUpperCase();
-    if (ccy && ccy !== viewCurrency) {
-      setViewCurrency(ccy);
-      try { localStorage.setItem(viewCurrencyStorageKey, ccy); } catch { /* ignore */ }
-    }
-  }, [portfolioFilter, portfolios]);
+  // Note: an earlier effect here used to mutate the shared viewCurrency state to match
+  // whichever specific book was selected, intended to keep the Top Movers widget's $ amounts
+  // aligned with the book's own currency. Removed - effectiveDisplayCurrency above already
+  // handles this correctly and synchronously (no effect needed), and totalPortfolioTile
+  // .displayCcy (built from it) is already checked first in the Movers currency fallback
+  // chain below. The old effect's side effect of overwriting the user's own explicit
+  // view-currency choice for the "All" view, just by visiting a single-currency portfolio,
+  // is gone along with it.
 
   // Re-sync View currency when the workspace itself changes - the effect above only fires
   // on portfolioFilter changes, so switching workspaces while staying on the "All" filter
@@ -1064,13 +1061,32 @@ export default function PortfolioV1View({
     'other',
   ];
 
+  // Single, centralized currency decision - every tile (Total Portfolio, every category
+  // tile) consumes this exact same value, rather than each computing its own independently.
+  // This eliminates any possibility of the tiles disagreeing with each other: for a specific
+  // portfolio, always that portfolio's own holdings' currency (scoped[0], the same reliable
+  // source every tile already trusted individually) regardless of what view-currency was
+  // last selected while 'All' was active; view-currency is only ever consulted when 'All'
+  // portfolios are actually selected right now.
+  const effectiveDisplayCurrency = useMemo(() => {
+    if (portfolioFilter !== 'All' && portfolioFilter !== '__pending__') {
+      const scopedCcy = scoped[0]?.currency;
+      if (scopedCcy) return String(scopedCcy).toUpperCase();
+      const book = (portfolios || []).find((p: any) => String(p.id) === String(portfolioFilter));
+      if (book?.currency) return String(book.currency).toUpperCase();
+    } else if (portfolioFilter === 'All' && viewCurrency) {
+      return String(viewCurrency).toUpperCase();
+    }
+    return String(baseCurrency || 'USD').toUpperCase();
+  }, [portfolioFilter, scoped, portfolios, viewCurrency, baseCurrency]);
+
   const categoryCards = useMemo(() => {
     // Only convert into one target currency when 'All' portfolios are selected - same
     // condition that shows the view-currency selector in the first place. For a specific
     // portfolio, category tiles keep grouping by each holding's own native currency (a single
     // portfolio only ever has one currency anyway, so this never actually differs there).
     const convertTo = portfolioFilter === 'All'
-      ? { currency: String(viewCurrency || baseCurrency || 'USD').toUpperCase(), rates: workspaceCurrencyRates, baseCurrency }
+      ? { currency: effectiveDisplayCurrency, rates: workspaceCurrencyRates, baseCurrency }
       : undefined;
     return categoryOrder
       .map((id) => {
@@ -1084,27 +1100,15 @@ export default function PortfolioV1View({
       stats: ReturnType<typeof summarizeBucket>;
       meta: (typeof CATEGORY_META)[CategoryId];
     }[];
-  }, [classified, portfolioFilter, viewCurrency, workspaceCurrencyRates, baseCurrency]);
+  }, [classified, portfolioFilter, effectiveDisplayCurrency, workspaceCurrencyRates, baseCurrency]);
 
   /** Total portfolio value in default book currency (or View currency when All books). */
   const totalPortfolioTile = useMemo(() => {
-    const book =
-      portfolioFilter !== 'All' && portfolioFilter !== '__pending__'
-        ? (portfolios || []).find((p: any) => String(p.id) === String(portfolioFilter))
-        : (portfolios || []).find((p: any) => p.is_default) || (portfolios || [])[0];
-    // For a specific portfolio, prefer the actual scoped holdings' own currency field first -
-    // same reliable source every category tile already uses (they never look up `portfolios`
-    // at all, which is exactly why only this tile lagged behind on a portfolio switch while
-    // every other tile updated immediately). Falls back to the book lookup only when scoped
-    // is empty (e.g. a portfolio with no holdings yet).
-    const scopedCcy = portfolioFilter !== 'All' && portfolioFilter !== '__pending__' ? scoped[0]?.currency : null;
-    const displayCcy = String(
-      (portfolioFilter !== 'All' && portfolioFilter !== '__pending__'
-        ? scopedCcy || book?.currency
-        : viewCurrency || book?.currency || baseCurrency) ||
-        baseCurrency ||
-        'USD'
-    ).toUpperCase();
+    // Single centralized currency decision, shared with categoryCards above - see
+    // effectiveDisplayCurrency for the full explanation. Both this tile and every category
+    // tile now always agree, by construction, rather than relying on two separate formulas
+    // staying in sync with each other.
+    const displayCcy = effectiveDisplayCurrency;
 
     let market = 0;
     let inv = 0;
@@ -1190,7 +1194,7 @@ export default function PortfolioV1View({
       dayGainCount,
       dayLossCount,
     };
-  }, [scoped, portfolioFilter, portfolios, viewCurrency, workspaceCurrencyRates, baseCurrency]);
+  }, [scoped, portfolioFilter, effectiveDisplayCurrency, workspaceCurrencyRates, baseCurrency]);
 
   /** Card / total performance line respects global Day|$ filters. */
   const perfLabel = moversMode === 'day' ? 'today' : 'all time';
