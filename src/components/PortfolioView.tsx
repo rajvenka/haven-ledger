@@ -2532,10 +2532,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <button
               type="button"
               onClick={() => setHoldingsTab('active')}
-              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
+              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer border ${
                 holdingsTab === 'active'
-                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                  ? 'bg-emerald-600 text-white border-transparent shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900'
               }`}
             >
               Active ({activeHoldings.length})
@@ -2543,10 +2543,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <button
               type="button"
               onClick={() => setHoldingsTab('sold')}
-              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
+              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer border ${
                 holdingsTab === 'sold'
-                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                  ? 'bg-violet-600 text-white border-transparent shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-900'
               }`}
             >
               Sold ({soldHoldings.length})
@@ -2554,10 +2554,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <button
               type="button"
               onClick={() => setHoldingsTab('search')}
-              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${
+              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 border ${
                 holdingsTab === 'search'
-                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                  ? 'bg-blue-600 text-white border-transparent shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900'
               }`}
             >
               <Search className="w-3 h-3" /> Quote Search
@@ -2565,10 +2565,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <button
               type="button"
               onClick={() => setHoldingsTab('settings')}
-              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${
+              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 border ${
                 holdingsTab === 'settings'
-                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                  ? 'bg-teal-600 text-white border-transparent shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-teal-600 dark:text-teal-400 border-teal-200 dark:border-teal-900'
               }`}
             >
               <Settings className="w-3 h-3" /> Settings
@@ -2576,10 +2576,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <button
               type="button"
               onClick={() => setHoldingsTab('pnl_calendar')}
-              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
+              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer border ${
                 holdingsTab === 'pnl_calendar'
-                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                  ? 'bg-amber-600 text-white border-transparent shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900'
               }`}
             >
               P&L Calendar
@@ -2591,10 +2591,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   setHoldingsTab('mf-holdings');
                   loadMfHoldingsCache?.();
                 }}
-                className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 ${
+                className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 border ${
                   holdingsTab === 'mf-holdings'
-                    ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                    ? 'bg-fuchsia-600 text-white border-transparent shadow-sm'
+                    : 'bg-white dark:bg-slate-900 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-200 dark:border-fuchsia-900'
                 }`}
               >
                 <PieChart className="w-3 h-3" /> MF Holdings
