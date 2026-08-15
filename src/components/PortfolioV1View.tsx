@@ -366,21 +366,30 @@ function computeMarginAmount(h: any): number | null {
 function isLeveraged(h: any): boolean {
   return computeMarginAmount(h) != null;
 }
-// Real cash committed - what "invested"/"marketValue" should mean for the overall
-// portfolio total and every aggregate tile. For a non-leveraged holding, identical to
-// invested()/marketValue() (leverage 1 = no difference). For a leveraged CFD position,
-// uses the static margin at entry plus the actual (leverage-independent) dollar P&L -
-// deliberately NOT a direct port of Classic's header figures, which invert the normal
-// current-minus-invested relationship for its own "Total Stock Investment / Current Holding
-// Value" labels specifically. This keeps the standard P&L = current - invested convention
-// intact, appropriate for a plain Value/P&L tile.
+// eToro "Net Value" - total cash committed to a leveraged position, as eToro's own API
+// reports it directly per position (already reflects stop-loss/maintenance-margin
+// adjustments a simple margin+P&L derivation can't capture). Verified against real data:
+// summing this field for a portfolio's leveraged holdings is the actual "real cash" figure
+// wanted here, not a derived approximation. Fallback formula only for rows synced before
+// this field was captured.
+function computeEtoroNetValue(h: any): number | null {
+  if (h.etoro_net_value_amount != null) return Number(h.etoro_net_value_amount);
+  if (h.stop_loss_rate == null || h.leverage == null || Number(h.leverage) <= 0) return null;
+  const entry = Number(h.buy_price);
+  const stop = Number(h.stop_loss_rate);
+  const qty = Number(h.quantity);
+  const margin = (entry * qty) / Number(h.leverage);
+  const isShort = h.source?.toLowerCase?.().includes('short');
+  const lossAtStop = isShort ? (stop - entry) * qty : (entry - stop) * qty;
+  return lossAtStop + margin * 0.5;
+}
 function realInvested(h: any): number {
   const margin = computeMarginAmount(h);
   return margin != null ? margin : invested(h);
 }
 function realCurrentValue(h: any): number {
-  const margin = computeMarginAmount(h);
-  return margin != null ? margin + pnl(h) : marketValue(h);
+  if (!isLeveraged(h)) return marketValue(h);
+  return computeEtoroNetValue(h) ?? marketValue(h);
 }
 function dayChangePct(h: any): number | null {
   const live = Number(h.live_price);
