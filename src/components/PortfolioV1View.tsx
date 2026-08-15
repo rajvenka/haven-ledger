@@ -694,6 +694,7 @@ export default function PortfolioV1View({
   // the button below is tapped. Lets the person view/copy this directly from the screen on
   // mobile, without needing DevTools access at all. Remove once diagnosed.
   const ccyDebugLogRef = useRef<any[]>([]);
+  const totalTileRef = useRef<HTMLDivElement>(null);
   const [ccyDebugDisplay, setCcyDebugDisplay] = useState<string | null>(null);
   // Multi-select broker filter, matching Classic's holdingFilters pattern (Set<string>).
   // Empty set = no filter applied ("All"), same default behavior as the old single-string
@@ -2400,7 +2401,15 @@ export default function PortfolioV1View({
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => setCcyDebugDisplay(JSON.stringify(ccyDebugLogRef.current, null, 2))}
+                onClick={() => {
+                  const tileText = totalTileRef.current?.textContent || '(tile ref not found)';
+                  const tileHtml = totalTileRef.current?.innerHTML || '(tile ref not found)';
+                  setCcyDebugDisplay(
+                    `=== TILE LIVE TEXT (what's actually on screen right now) ===\n${tileText}\n\n` +
+                    `=== TILE LIVE HTML ===\n${tileHtml}\n\n` +
+                    `=== COMPUTED DEBUG LOG (last 20) ===\n${JSON.stringify(ccyDebugLogRef.current, null, 2)}`
+                  );
+                }}
                 className="px-2 py-1 rounded-full bg-rose-600 text-white text-[9px] font-black uppercase cursor-pointer"
               >
                 Show latest
@@ -2443,6 +2452,7 @@ export default function PortfolioV1View({
         >
           {/* Total portfolio — first tile, in default/book currency */}
           <div
+            ref={totalTileRef}
             className={`rounded-2xl border bg-gradient-to-br from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-900 ${
               categoryFilter === 'All'
                 ? 'border-transparent ring-2 ring-slate-400/60 shadow-md'
