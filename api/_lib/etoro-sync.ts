@@ -23,15 +23,35 @@ function uuid() {
 }
 
 async function etoroFetch(path: string, apiKey: string, userKey: string) {
-  const resp = await fetch(`${ETORO_BASE}${path}`, {
-    headers: {
-      "x-api-key": apiKey,
-      "x-user-key": userKey,
-      "x-request-id": uuid(),
-      "Accept": "application/json",
-    },
-  });
-  return resp;
+  // Explicit per-call timeout, well under Vercel's Hobby-plan 10s hard limit. This function
+  // makes up to 3 sequential calls (portfolio, instruments, rates), so each call's timeout
+  // has to be short enough that even 3 in a row can't exceed the platform's own limit - 3s x
+  // 3 = 9s, leaving a buffer for the rest of the function's own processing. Without this, a
+  // slow eToro response risks the platform itself killing the function before our own
+  // try/catch below ever gets a chance to return a clean JSON error - which produces exactly
+  // the raw, unparseable "A server error has occurred" response reported, instead of a real,
+  // actionable message.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3000);
+  try {
+    const resp = await fetch(`${ETORO_BASE}${path}`, {
+      headers: {
+        "x-api-key": apiKey,
+        "x-user-key": userKey,
+        "x-request-id": uuid(),
+        "Accept": "application/json",
+      },
+      signal: controller.signal,
+    });
+    return resp;
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      throw new Error(`eToro API timed out after 3s (${path}) - their servers may be slow or unresponsive right now, try again shortly.`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 // Webull priority-source signing, duplicated from the verified implementation in
