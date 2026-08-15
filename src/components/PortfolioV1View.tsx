@@ -688,6 +688,13 @@ export default function PortfolioV1View({
   bulkAddPortfolioHoldings,
 }: Props) {
   const [portfolioFilter, setPortfolioFilter] = useState<string>('__pending__');
+  // TEMPORARY debug aid for the currency-lag investigation - ref accumulates entries safely
+  // during the memo's own computation (mutating a ref doesn't trigger a re-render, unlike
+  // calling setState from inside a memo would), display state is only set explicitly when
+  // the button below is tapped. Lets the person view/copy this directly from the screen on
+  // mobile, without needing DevTools access at all. Remove once diagnosed.
+  const ccyDebugLogRef = useRef<any[]>([]);
+  const [ccyDebugDisplay, setCcyDebugDisplay] = useState<string | null>(null);
   // Multi-select broker filter, matching Classic's holdingFilters pattern (Set<string>).
   // Empty set = no filter applied ("All"), same default behavior as the old single-string
   // 'All' value. toggleBrokerFilter below adds/removes one broker at a time.
@@ -1071,37 +1078,42 @@ export default function PortfolioV1View({
   // last selected while 'All' was active; view-currency is only ever consulted when 'All'
   // portfolios are actually selected right now.
   const effectiveDisplayCurrency = useMemo(() => {
-    // eslint-disable-next-line no-console
-    console.log('[CCY-DEBUG] effectiveDisplayCurrency RUNNING', {
+    const entry = {
+      at: new Date().toISOString(),
       portfolioFilter,
       scopedLength: scoped.length,
       scopedFirstCurrency: scoped[0]?.currency,
       scopedFirstPortfolioId: scoped[0]?.portfolio_id,
       viewCurrency,
       baseCurrency,
-    });
+    };
     let result: string;
+    let branch: string;
     if (portfolioFilter !== 'All' && portfolioFilter !== '__pending__') {
       const scopedCcy = scoped[0]?.currency;
       if (scopedCcy) {
         result = String(scopedCcy).toUpperCase();
-        console.log('[CCY-DEBUG] -> using scopedCcy:', result);
-        return result;
+        branch = `using scopedCcy: ${result}`;
+      } else {
+        const book = (portfolios || []).find((p: any) => String(p.id) === String(portfolioFilter));
+        if (book?.currency) {
+          result = String(book.currency).toUpperCase();
+          branch = `using book.currency (scoped was empty): ${result}, book.id=${book?.id}`;
+        } else {
+          result = String(baseCurrency || 'USD').toUpperCase();
+          branch = `FALLBACK - scoped AND book both empty/missing currency! portfolioFilter=${portfolioFilter}`;
+        }
       }
-      const book = (portfolios || []).find((p: any) => String(p.id) === String(portfolioFilter));
-      if (book?.currency) {
-        result = String(book.currency).toUpperCase();
-        console.log('[CCY-DEBUG] -> using book.currency (scoped was empty):', result, 'book:', book);
-        return result;
-      }
-      console.log('[CCY-DEBUG] -> scoped AND book both empty/missing currency for portfolioFilter:', portfolioFilter);
     } else if (portfolioFilter === 'All' && viewCurrency) {
       result = String(viewCurrency).toUpperCase();
-      console.log('[CCY-DEBUG] -> using viewCurrency (All selected):', result);
-      return result;
+      branch = `using viewCurrency (All selected): ${result}`;
+    } else {
+      result = String(baseCurrency || 'USD').toUpperCase();
+      branch = `falling back to baseCurrency/USD: ${result}`;
     }
-    result = String(baseCurrency || 'USD').toUpperCase();
-    console.log('[CCY-DEBUG] -> falling back to baseCurrency/USD:', result);
+    ccyDebugLogRef.current = [...ccyDebugLogRef.current.slice(-19), { ...entry, branch, result }];
+    // eslint-disable-next-line no-console
+    console.log('[CCY-DEBUG]', branch, entry);
     return result;
   }, [portfolioFilter, scoped, portfolios, viewCurrency, baseCurrency]);
 
@@ -2362,6 +2374,35 @@ export default function PortfolioV1View({
             >
               Clear category
             </button>
+          )}
+        </div>
+        {/* TEMPORARY debug panel for the currency-lag investigation - remove once diagnosed */}
+        <div className="rounded-xl border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/30 p-2 space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[9px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-wider">CCY Debug Log</span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setCcyDebugDisplay(JSON.stringify(ccyDebugLogRef.current, null, 2))}
+                className="px-2 py-1 rounded-full bg-rose-600 text-white text-[9px] font-black uppercase cursor-pointer"
+              >
+                Show latest
+              </button>
+              {ccyDebugDisplay && (
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard?.writeText(ccyDebugDisplay)}
+                  className="px-2 py-1 rounded-full bg-rose-100 dark:bg-rose-900 text-rose-700 dark:text-rose-300 text-[9px] font-black uppercase cursor-pointer"
+                >
+                  Copy
+                </button>
+              )}
+            </div>
+          </div>
+          {ccyDebugDisplay && (
+            <pre className="text-[8px] text-rose-700 dark:text-rose-300 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
+              {ccyDebugDisplay}
+            </pre>
           )}
         </div>
         <div
