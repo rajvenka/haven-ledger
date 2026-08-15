@@ -4590,10 +4590,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   { id: 'groww_mf', label: 'Groww MF', hint: 'Mutual fund holdings XLSX' },
                   { id: 'stake', label: 'Stake (AU)', hint: 'Portfolio Valuation XLSX as downloaded' },
                   { id: 'tiger_statement', label: 'Tiger (AU)', hint: 'Activity Statement CSV export' },
+                  { id: 'tiger_portfolio', label: 'Tiger Portfolio', hint: 'Desktop app → Position → Export' },
                   { id: 'moomoo', label: 'Moomoo', hint: 'Positions CSV export' },
                   { id: 'universal', label: 'Universal', hint: 'Blank template — any broker' },
                 ];
-                const csvTemplates: BrokerTemplate[] = ['tiger_statement', 'moomoo', 'tiger'];
+                const csvTemplates: BrokerTemplate[] = ['tiger_statement', 'tiger_portfolio', 'moomoo', 'tiger'];
                 const isCsvTemplate = csvTemplates.includes(importTemplate);
                 const fileOpen = importPath === 'file';
 
@@ -4714,6 +4715,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                             {importTemplate === 'stake' && 'Stake → Portfolio Valuation XLSX as-is (Aus Equities + Wall St Equities). ASX→AUD / Stake AU · Wall St→USD / Stake US.'}
                             {importTemplate === 'tiger_statement' && 'Tiger Trade app → Statements → Activity Statement → Export → CSV. Reads the Holdings section; symbol is taken from the ticker in parentheses (e.g. "Micron Technology (MU)" → MU).'}
                             {importTemplate === 'moomoo' && 'Moomoo app → Positions → Export → CSV. Uses Average Cost as buy price and Current Price as market price, straight from the file.'}
+                            {importTemplate === 'tiger_portfolio' && 'Tiger Trade desktop app → Position tab → Export. Simpler than the Activity Statement — one flat table with real FIFO cost basis (Cost (FIFO) → buy price, Current → market price). Options/futures rows are skipped, only Stock/ETF rows import.'}
                             {importTemplate === 'universal' && 'Any broker — use blank template. Already-imported holdings are skipped.'}
                           </p>
                           {importTemplate === 'universal' && (

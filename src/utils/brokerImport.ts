@@ -22,7 +22,7 @@ export interface ParsedHolding {
   matchKey?: string;
 }
 
-export type BrokerTemplate = 'zerodha' | 'groww_stocks' | 'groww_mf' | 'stake' | 'universal' | 'moomoo' | 'tiger' | 'tiger_statement';
+export type BrokerTemplate = 'zerodha' | 'groww_stocks' | 'groww_mf' | 'stake' | 'universal' | 'moomoo' | 'tiger' | 'tiger_statement' | 'tiger_portfolio';
 export const UNIVERSAL_TEMPLATE_HEADERS = ['Broker', 'Holding Type', 'Symbol', 'ISIN', 'Exchange', 'Quantity', 'Buy Price', 'Current Price', 'Currency', 'Source', 'Folio Number'];
 export const UNIVERSAL_TEMPLATE_EXAMPLE_ROW = ['eToro', 'Stock', 'AAPL', '', 'NASDAQ', 10, 150.25, 175.50, 'USD', '', ''];
 
@@ -64,6 +64,18 @@ function splitCsvLine(line: string): string[] {
   }
   out.push(cur);
   return out.map((s) => s.trim());
+}
+
+// Currency -> exchange guess, shared by any Tiger template below (Tiger doesn't print an
+// exchange code directly, only currency, so this is the same inference used for both the
+// Activity Statement and the desktop Portfolio Details export).
+function exchangeForCcy(ccy: string): string {
+  switch (ccy.toUpperCase()) {
+    case 'AUD': return 'ASX';
+    case 'HKD': return 'HKEX';
+    case 'SGD': return 'SGX';
+    default: return 'US';
+  }
 }
 
 function rowsToObjects(rows: any[][], headerIdx: number): Record<string, any>[] {
@@ -479,14 +491,6 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
     if (iSymbol < 0 || iQty < 0) {
       throw new Error('Tiger statement: could not find Symbol/Quantity columns in the Holdings section.');
     }
-    const exchangeForCcy = (ccy: string): string => {
-      switch (ccy.toUpperCase()) {
-        case 'AUD': return 'ASX';
-        case 'HKD': return 'HKEX';
-        case 'SGD': return 'SGX';
-        default: return 'US';
-      }
-    };
     const out: ParsedHolding[] = [];
     for (const cols of dataRows) {
       // "Symbol" here is actually "Full Name (TICKER)" (e.g. "Micron Technology (MU)") -
@@ -515,6 +519,67 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
       });
     }
     if (!out.length) throw new Error("No DATA rows found in the Holdings section - check this is a Tiger Brokers Activity Statement.");
+    return out;
+  }
+
+  if (template === 'tiger_portfolio') {
+    // Tiger Trade desktop app's own "Portfolio Details" export (Position tab -> Export),
+    // not the mobile-app Activity Statement handled above - a single flat table with real
+    // FIFO cost basis, no multi-section parsing needed. Saved as UTF-16LE with a BOM,
+    // tab-separated despite the .csv extension - reading it as UTF-8 (the default for
+    // every other CSV template here) produces mojibake with a stray null-byte gap between
+    // every character, so the encoding is sniffed from the byte-order-mark on the raw
+    // ArrayBuffer already fetched above, same buffer XLSX.read used.
+    const bytes = new Uint8Array(buf);
+    let text: string;
+    if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) {
+      text = new TextDecoder('utf-16le').decode(bytes.subarray(2));
+    } else if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) {
+      text = new TextDecoder('utf-16be').decode(bytes.subarray(2));
+    } else {
+      text = new TextDecoder('utf-8').decode(bytes).replace(/^\uFEFF/, '');
+    }
+    const lines = text.split(/\r?\n/).filter((l) => l.trim());
+    if (lines.length < 2) throw new Error('Empty Tiger Portfolio Details file');
+    const headers = lines[0].split('\t').map((h) => h.trim());
+    const idx = (name: string) => headers.findIndex((h) => h.toLowerCase() === name.toLowerCase());
+    const iSymbol = idx('Symbol');
+    const iInstrument = idx('Instrument');
+    const iCurrent = idx('Current');
+    const iCost = idx('Cost (FIFO)');
+    const iHoldings = idx('Holdings');
+    const iCcy = idx('Currency');
+    if (iSymbol < 0 || iHoldings < 0) {
+      throw new Error("Couldn't find Symbol/Holdings columns - is this a Tiger Trade desktop 'Portfolio Details' export?");
+    }
+    const out: ParsedHolding[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split('\t').map((c) => c.trim());
+      // Options/futures/warrants rows share the same columns but aren't something this app
+      // can represent as a plain equity holding (they'd need expiry/strike tracked
+      // separately) - only plain Stock/ETF rows are imported, everything else is skipped.
+      const instrument = String(cols[iInstrument] ?? '').trim().toLowerCase();
+      if (instrument && instrument !== 'stock' && instrument !== 'etf') continue;
+      const symbol = String(cols[iSymbol] ?? '').trim();
+      if (!symbol) continue;
+      const qty = Number(String(cols[iHoldings] ?? '').replace(/,/g, ''));
+      if (!Number.isFinite(qty) || qty === 0) continue;
+      const buy = iCost >= 0 ? Number(String(cols[iCost] ?? '').replace(/,/g, '')) || 0 : 0;
+      const cur = iCurrent >= 0 ? (Number(String(cols[iCurrent] ?? '').replace(/,/g, '')) || buy) : buy;
+      const ccy = ((iCcy >= 0 ? cols[iCcy] : '') || 'USD').toUpperCase();
+      out.push({
+        broker: 'Tiger',
+        holdingType: 'stock',
+        symbol: symbol.toUpperCase(),
+        exchange: exchangeForCcy(ccy),
+        quantity: Math.abs(qty),
+        buyPrice: buy,
+        currentPrice: cur,
+        currency: ccy as ParsedHolding['currency'],
+        source: 'Tiger',
+      });
+    }
+    if (!out.length) throw new Error('No Stock/ETF rows found - check this is a Tiger Trade desktop Portfolio Details export.');
     return out;
   }
 
@@ -567,6 +632,14 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
 // processed as a historical timeline. Zerodha embeds it in the sheet ("...as on
 // YYYY-MM-DD"); Groww embeds it in the filename (DD-MM-YYYY).
 export function extractFileDate(fileName: string, workbook: XLSX.WorkBook, template: BrokerTemplate): string | null {
+  if (template === 'tiger_portfolio') {
+    // Tiger Trade desktop exports name the file "DD:MM:YYYY HH:MM:SS <account> Portfolio
+    // Details.csv" - colons in a date prefix, not a time-of-day marker on their own, so
+    // anchored to the start of the filename to avoid matching anything later in the name.
+    const m = fileName.match(/^(\d{2}):(\d{2}):(\d{4})/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
+  }
   if (template === 'tiger_statement') {
     // Statement_<account>_<startYYYYMMDD>_<endYYYYMMDD>.csv - anchored to end-of-filename
     // (not just "8 digits, underscore, 8 digits" anywhere) because the account number
