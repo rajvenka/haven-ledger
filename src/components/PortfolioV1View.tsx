@@ -953,6 +953,8 @@ export default function PortfolioV1View({
   }, [scoped]);
 
   const selectPortfolioBook = (id: string) => {
+    // eslint-disable-next-line no-console
+    console.log('[CCY-DEBUG] selectPortfolioBook called, switching portfolioFilter to:', id, 'previous value was:', portfolioFilter);
     setPortfolioFilter(id);
     setBrokerFilter(new Set());
     setCategoryFilter('All');
@@ -1069,15 +1071,38 @@ export default function PortfolioV1View({
   // last selected while 'All' was active; view-currency is only ever consulted when 'All'
   // portfolios are actually selected right now.
   const effectiveDisplayCurrency = useMemo(() => {
+    // eslint-disable-next-line no-console
+    console.log('[CCY-DEBUG] effectiveDisplayCurrency RUNNING', {
+      portfolioFilter,
+      scopedLength: scoped.length,
+      scopedFirstCurrency: scoped[0]?.currency,
+      scopedFirstPortfolioId: scoped[0]?.portfolio_id,
+      viewCurrency,
+      baseCurrency,
+    });
+    let result: string;
     if (portfolioFilter !== 'All' && portfolioFilter !== '__pending__') {
       const scopedCcy = scoped[0]?.currency;
-      if (scopedCcy) return String(scopedCcy).toUpperCase();
+      if (scopedCcy) {
+        result = String(scopedCcy).toUpperCase();
+        console.log('[CCY-DEBUG] -> using scopedCcy:', result);
+        return result;
+      }
       const book = (portfolios || []).find((p: any) => String(p.id) === String(portfolioFilter));
-      if (book?.currency) return String(book.currency).toUpperCase();
+      if (book?.currency) {
+        result = String(book.currency).toUpperCase();
+        console.log('[CCY-DEBUG] -> using book.currency (scoped was empty):', result, 'book:', book);
+        return result;
+      }
+      console.log('[CCY-DEBUG] -> scoped AND book both empty/missing currency for portfolioFilter:', portfolioFilter);
     } else if (portfolioFilter === 'All' && viewCurrency) {
-      return String(viewCurrency).toUpperCase();
+      result = String(viewCurrency).toUpperCase();
+      console.log('[CCY-DEBUG] -> using viewCurrency (All selected):', result);
+      return result;
     }
-    return String(baseCurrency || 'USD').toUpperCase();
+    result = String(baseCurrency || 'USD').toUpperCase();
+    console.log('[CCY-DEBUG] -> falling back to baseCurrency/USD:', result);
+    return result;
   }, [portfolioFilter, scoped, portfolios, viewCurrency, baseCurrency]);
 
   const categoryCards = useMemo(() => {
