@@ -629,6 +629,18 @@ export default function PortfolioV1View({
   const [portfolioFilter, setPortfolioFilter] = useState<string>('__pending__');
   const [brokerFilter, setBrokerFilter] = useState<string>('All');
   const [categoryFilter, setCategoryFilter] = useState<CategoryId | 'All'>('All');
+  // Desktop-only "balanced rows" for the Markets & Products tile grid - plain CSS
+  // auto-fit packs greedily left-to-right (e.g. 9 tiles -> 8 in row 1, 1 orphaned alone in
+  // row 2), which looks broken. Tracking viewport width lets the grid switch to an explicit
+  // column count on wide screens, computed to keep rows as even as possible (9 tiles -> 5+4)
+  // instead of relying on however many happen to fit at 140px each. Mobile/narrow screens
+  // keep the original auto-fit behavior untouched.
+  const [isWideDesktop, setIsWideDesktop] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
+  useEffect(() => {
+    const onResize = () => setIsWideDesktop(window.innerWidth >= 1024);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   const [expandedCategory, setExpandedCategory] = useState<CategoryId | null>(null);
   const [holdingsExpanded, setHoldingsExpanded] = useState(true);
   const [showLotsOnly, setShowLotsOnly] = useState(false);
@@ -1910,123 +1922,198 @@ export default function PortfolioV1View({
                   </div>
                 </div>
               </div>
-
-              {/* View currency — separate row so it never steals Book space */}
-              {currenciesPresent.length > 1 && (
-                <div className="flex items-center gap-2 min-w-0 w-full">
-                  <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-emerald-500/80 dark:text-emerald-400/80 w-10">
-                    View
-                  </span>
-                  <div
-                    className="w-0 flex-1 min-w-0 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x"
-                    style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
-                  >
-                    <div className="flex items-center gap-1 w-max pr-2">
-                      {currenciesPresent.map((ccy) => (
-                        <button
-                          key={ccy}
-                          type="button"
-                          onClick={() => pickViewCurrency(ccy)}
-                          className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
-                            viewCurrency === ccy
-                              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
-                              : 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
-                          }`}
-                        >
-                          {ccy}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
-          {/* Broker chips — full width, no action buttons in this row */}
-          <div className="flex items-center gap-2 min-w-0 w-full max-w-full">
-            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-indigo-500/80 dark:text-indigo-400/80 w-10">
-              Broker
-            </span>
-            <div className="w-0 flex-1 min-w-0 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
-              <div className="flex items-center gap-1 w-max pr-2">
-                <button
-                  type="button"
-                  onClick={() => setBrokerFilter('All')}
-                  className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
-                    brokerFilter === 'All'
-                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                      : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300'
-                  }`}
-                >
-                  All
-                </button>
-                {brokersPresent.map((b) => (
+
+          {/* Broker (left) + View currency (right) — same row on desktop; each side keeps
+              its own independent horizontal scroller, so neither steals the other's space
+              when both are long lists. */}
+          <div className="flex items-center gap-2 min-w-0 w-full max-w-full flex-wrap lg:flex-nowrap">
+            <div className="flex items-center gap-2 min-w-0 flex-1 basis-full lg:basis-auto">
+              <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-indigo-500/80 dark:text-indigo-400/80 w-10">
+                Broker
+              </span>
+              <div className="w-0 flex-1 min-w-0 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
+                <div className="flex items-center gap-1 w-max pr-2">
                   <button
-                    key={b}
                     type="button"
-                    onClick={() => {
-                      setBrokerFilter(b);
-                      setCategoryFilter('All');
-                      setExpandedCategory(null);
-                    }}
+                    onClick={() => setBrokerFilter('All')}
                     className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
-                      brokerFilter === b
+                      brokerFilter === 'All'
                         ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
                         : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300'
                     }`}
                   >
-                    {b}
+                    All
                   </button>
-                ))}
+                  {brokersPresent.map((b) => (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => {
+                        setBrokerFilter(b);
+                        setCategoryFilter('All');
+                        setExpandedCategory(null);
+                      }}
+                      className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                        brokerFilter === b
+                          ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                          : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300'
+                      }`}
+                    >
+                      {b}
+                    </button>
+                  ))}
+                </div>
               </div>
+            </div>
+
+            {multiPortfolio && portfoliosPresent.length > 0 && currenciesPresent.length > 1 && (
+              <div className="flex items-center gap-2 min-w-0 shrink-0 basis-full lg:basis-auto lg:max-w-[45%]">
+                <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-emerald-500/80 dark:text-emerald-400/80 w-10">
+                  View
+                </span>
+                <div
+                  className="w-0 flex-1 min-w-0 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x lg:flex-initial"
+                  style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
+                >
+                  <div className="flex items-center gap-1 w-max pr-2">
+                    {currenciesPresent.map((ccy) => (
+                      <button
+                        key={ccy}
+                        type="button"
+                        onClick={() => pickViewCurrency(ccy)}
+                        className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                          viewCurrency === ccy
+                            ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
+                            : 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
+                        }`}
+                      >
+                        {ccy}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* P&L filters (left) + Import/Sync/Connect/Refresh actions (right) — same row on
+              desktop, stacked on narrow screens so the action buttons don't crowd out the
+              P&L toggles. */}
+          <div className="flex items-center justify-between gap-2 flex-wrap w-full min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-400 w-10">
+                P&amp;L
+              </span>
+              <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setMoversMode('day')}
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                    moversMode === 'day'
+                      ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
+                      : 'text-slate-500'
+                  }`}
+                >
+                  Day
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMoversMode('overall')}
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                    moversMode === 'overall'
+                      ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
+                      : 'text-slate-500'
+                  }`}
+                >
+                  Overall
+                </button>
+              </div>
+              <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setMoversUnit('dollar')}
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                    moversUnit === 'dollar'
+                      ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
+                      : 'text-slate-500'
+                  }`}
+                >
+                  $
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMoversUnit('pct')}
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                    moversUnit === 'pct'
+                      ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
+                      : 'text-slate-500'
+                  }`}
+                >
+                  %
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPnlCalendar((v) => !v)}
+                className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all ${
+                  showPnlCalendar
+                    ? 'bg-violet-600 text-white border-violet-600 shadow-md shadow-violet-600/30'
+                    : 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800'
+                }`}
+                title="Show or hide P&L calendar"
+              >
+                P&amp;L Calendar
+              </button>
+            </div>
+
+            <div className="flex items-center justify-end gap-1.5 flex-wrap min-w-0">
+              <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-teal-100/90 dark:bg-teal-950/50 border border-teal-200/70 dark:border-teal-800/60">
+                <button
+                  type="button"
+                  onClick={openImport}
+                  disabled={isReadOnly}
+                  className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold text-teal-900 dark:text-teal-100 hover:bg-teal-200/70 dark:hover:bg-teal-900/50 disabled:opacity-50 transition-all"
+                  title="Import CSV / broker export"
+                >
+                  <Upload className="w-3 h-3" />
+                  Import
+                </button>
+                <button
+                  type="button"
+                  onClick={openSync}
+                  disabled={isReadOnly}
+                  className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold bg-teal-600 text-white shadow-md shadow-teal-600/30 hover:bg-teal-700 disabled:opacity-50 transition-all"
+                  title="Sync existing broker connections"
+                >
+                  <RefreshCw className={`w-3 h-3 ${syncingId ? 'animate-spin' : ''}`} />
+                  Sync
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={openConnect}
+                disabled={isReadOnly}
+                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold bg-indigo-600 text-white shadow-md shadow-indigo-600/25 hover:bg-indigo-700 disabled:opacity-50 transition-all"
+                title="Add a new broker connection"
+              >
+                <Plus className="w-3 h-3" />
+                Connect
+              </button>
+              <button
+                type="button"
+                onClick={() => refreshAllPrices()}
+                disabled={refreshingPrices || isReadOnly}
+                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 shadow-md hover:opacity-90 disabled:opacity-50 transition-all"
+                title="Refresh live prices (Yahoo / MF NAV)"
+              >
+                <RefreshCw className={`w-3 h-3 ${refreshingPrices ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
             </div>
           </div>
 
-          {/* Actions row — own line so they never overlay Book / Broker chips */}
-          <div className="flex items-center justify-end gap-1.5 flex-wrap w-full min-w-0">
-            <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-teal-100/90 dark:bg-teal-950/50 border border-teal-200/70 dark:border-teal-800/60">
-              <button
-                type="button"
-                onClick={openImport}
-                disabled={isReadOnly}
-                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold text-teal-900 dark:text-teal-100 hover:bg-teal-200/70 dark:hover:bg-teal-900/50 disabled:opacity-50 transition-all"
-                title="Import CSV / broker export"
-              >
-                <Upload className="w-3 h-3" />
-                Import
-              </button>
-              <button
-                type="button"
-                onClick={openSync}
-                disabled={isReadOnly}
-                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold bg-teal-600 text-white shadow-md shadow-teal-600/30 hover:bg-teal-700 disabled:opacity-50 transition-all"
-                title="Sync existing broker connections"
-              >
-                <RefreshCw className={`w-3 h-3 ${syncingId ? 'animate-spin' : ''}`} />
-                Sync
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={openConnect}
-              disabled={isReadOnly}
-              className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold bg-indigo-600 text-white shadow-md shadow-indigo-600/25 hover:bg-indigo-700 disabled:opacity-50 transition-all"
-              title="Add a new broker connection"
-            >
-              <Plus className="w-3 h-3" />
-              Connect
-            </button>
-            <button
-              type="button"
-              onClick={() => refreshAllPrices()}
-              disabled={refreshingPrices || isReadOnly}
-              className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 shadow-md hover:opacity-90 disabled:opacity-50 transition-all"
-              title="Refresh live prices (Yahoo / MF NAV)"
-            >
-              <RefreshCw className={`w-3 h-3 ${refreshingPrices ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
-          </div>
           {(connectOk || connectError || priceRefreshSummary) && !connectOpen && (
             <p
               className={`text-[10px] font-bold text-right ${
@@ -2040,73 +2127,6 @@ export default function PortfolioV1View({
               {connectOk || connectError || priceRefreshSummary}
             </p>
           )}
-
-        {/* Global performance filters — apply to cards + movers */}
-        <div className="flex items-center gap-2 flex-wrap pt-0.5">
-          <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-400 w-10">
-            P&amp;L
-          </span>
-          <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5">
-            <button
-              type="button"
-              onClick={() => setMoversMode('day')}
-              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                moversMode === 'day'
-                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
-                  : 'text-slate-500'
-              }`}
-            >
-              Day
-            </button>
-            <button
-              type="button"
-              onClick={() => setMoversMode('overall')}
-              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                moversMode === 'overall'
-                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
-                  : 'text-slate-500'
-              }`}
-            >
-              Overall
-            </button>
-          </div>
-          <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5">
-            <button
-              type="button"
-              onClick={() => setMoversUnit('dollar')}
-              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                moversUnit === 'dollar'
-                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
-                  : 'text-slate-500'
-              }`}
-            >
-              $
-            </button>
-            <button
-              type="button"
-              onClick={() => setMoversUnit('pct')}
-              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                moversUnit === 'pct'
-                  ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
-                  : 'text-slate-500'
-              }`}
-            >
-              %
-            </button>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowPnlCalendar((v) => !v)}
-            className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all ${
-              showPnlCalendar
-                ? 'bg-violet-600 text-white border-violet-600 shadow-md shadow-violet-600/30'
-                : 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800'
-            }`}
-            title="Show or hide P&L calendar"
-          >
-            P&amp;L Calendar
-          </button>
-        </div>
 
         {showPnlCalendar && (
           <div className="mt-3 rounded-2xl border border-violet-200/80 dark:border-violet-900/50 bg-white dark:bg-slate-900 p-3 sm:p-4">
@@ -2167,14 +2187,20 @@ export default function PortfolioV1View({
         <div
           className="grid gap-2.5"
           style={{
-            gridTemplateColumns:
-              (categoryCards.length + 1) <= 1
-                ? '1fr'
-                : (categoryCards.length + 1) === 2
-                  ? 'repeat(2, minmax(0, 1fr))'
-                  : (categoryCards.length + 1) === 3
-                    ? 'repeat(3, minmax(0, 1fr))'
-                    : 'repeat(auto-fit, minmax(140px, 1fr))',
+            gridTemplateColumns: (() => {
+              const total = categoryCards.length + 1;
+              if (total <= 1) return '1fr';
+              if (total === 2) return 'repeat(2, minmax(0, 1fr))';
+              if (total === 3) return 'repeat(3, minmax(0, 1fr))';
+              if (!isWideDesktop) return 'repeat(auto-fit, minmax(140px, 1fr))';
+              // Balanced rows: cap at 5 tiles per row, then spread the total evenly across
+              // however many rows that needs (9 -> 2 rows -> ceil(9/2)=5 cols -> 5+4, not
+              // "as many as fit at 140px" which produced an orphaned 8-then-1 split).
+              const maxPerRow = 5;
+              const rows = Math.ceil(total / maxPerRow);
+              const cols = Math.ceil(total / rows);
+              return `repeat(${cols}, minmax(0, 1fr))`;
+            })(),
           }}
         >
           {/* Total portfolio — first tile, in default/book currency */}
