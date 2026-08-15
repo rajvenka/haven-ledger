@@ -18,7 +18,7 @@
 // to this same figure per lot, which means computed gain/loss will show ~0 until the real
 // subscription price (if known) is edited in per lot.
 
-import { PDFParse } from "pdf-parse";
+import { extractText, getDocumentProxy } from "unpdf";
 
 interface ParsedRow {
   name: string;
@@ -106,13 +106,20 @@ export async function amundiCapgeminiHandler(req: any, res: any) {
       return;
     }
 
-    const parser = new PDFParse({ data: buffer });
+    // unpdf ships its own serverless-optimized PDF.js build with no canvas/DOMMatrix
+    // dependency - pdf-parse's Node build pulls in pdfjs-dist's "legacy" bundle, which
+    // unconditionally tries to polyfill DOMMatrix/ImageData/Path2D via the optional
+    // @napi-rs/canvas package for rendering support this handler never uses, and crashes
+    // the whole function at module load time on Vercel when that optional dep isn't
+    // present. unpdf avoids that class of problem entirely.
     let fullText: string;
     try {
-      const result = await parser.getText();
-      fullText = (result.pages || []).map((p: any) => p.text).join("\n");
-    } finally {
-      await parser.destroy();
+      const pdf = await getDocumentProxy(new Uint8Array(buffer));
+      const result = await extractText(pdf, { mergePages: true });
+      fullText = result.text;
+    } catch (err: any) {
+      res.status(422).json({ error: `Could not read this PDF: ${err?.message || "unknown error"}` });
+      return;
     }
 
     const esopStart = fullText.search(/Employee Share Ownership Plan \(ESOP\)/i);
