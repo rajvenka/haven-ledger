@@ -2147,6 +2147,43 @@ export function usePaymentState() {
     return data ?? [];
   };
 
+  // Upserts employee-compensation grant rows (currently just Amundi's SAR statements) into
+  // their own table, deliberately separate from portfolio_holdings/portfolio_holding_lots -
+  // a SAR is a cash-settled bonus instrument, not equity, and keeping it out of the holdings
+  // tables means it can never be picked up by portfolio valuation/P&L logic. Matched on
+  // externalGrantId (unique per workspace+broker via a partial unique index), so re-uploading
+  // the same statement each year updates existing rows instead of duplicating them.
+  const upsertAmundiSarGrants = async (grants: {
+    externalGrantId: string; broker: string; grantType: string; underlyingSymbol: string; planLabel: string;
+    vintageYear: number; availabilityDate?: string; quantity: number; valuePerUnit: number; valueAmount: number;
+    currency?: string; portfolioId?: string; source?: string;
+  }[]) => {
+    if (!user || !activeWorkspaceId) throw new Error('Select a workspace first.');
+    for (const g of grants) {
+      const row: any = {
+        workspace_id: activeWorkspaceId, portfolio_id: g.portfolioId ?? null, broker: g.broker, grant_type: g.grantType,
+        underlying_symbol: g.underlyingSymbol, plan_label: g.planLabel, vintage_year: g.vintageYear,
+        availability_date: g.availabilityDate ?? null, quantity: g.quantity, value_per_unit: g.valuePerUnit,
+        value_amount: g.valueAmount, currency: g.currency ?? 'EUR', external_grant_id: g.externalGrantId,
+        source: g.source ?? null, created_by: user.id, updated_at: new Date().toISOString(),
+      };
+      const { data: existing } = await supabase.from('portfolio_employee_grants').select('id').eq('workspace_id', activeWorkspaceId).eq('broker', g.broker).eq('external_grant_id', g.externalGrantId).maybeSingle();
+      const { error } = existing
+        ? await supabase.from('portfolio_employee_grants').update(row).eq('id', existing.id)
+        : await supabase.from('portfolio_employee_grants').insert(row);
+      if (error) throw error;
+    }
+  };
+
+  const loadEmployeeGrants = async (portfolioId?: string) => {
+    if (!activeWorkspaceId) return [];
+    let query = supabase.from('portfolio_employee_grants').select('*').eq('workspace_id', activeWorkspaceId).order('vintage_year', { ascending: false });
+    if (portfolioId) query = query.eq('portfolio_id', portfolioId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return data ?? [];
+  };
+
   // Called right after an eToro import saves its master (consolidated) holdings - queries
   // Supabase directly for the just-saved rows rather than trusting component state, since
   // the write calls just before this won't have re-rendered into props yet within the same
@@ -2492,6 +2529,7 @@ export function usePaymentState() {
     portfolioBrokerConnections, setPortfolioBrokerConnection, deletePortfolioBrokerConnection, markBrokerConnectionSynced,
     portfolioHoldingLots,
     upsertPortfolioHoldingLots, loadPortfolioHoldingLots, syncEtoroHoldingLots, syncEtoroLivePrices,
+    upsertAmundiSarGrants, loadEmployeeGrants,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
     portfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,

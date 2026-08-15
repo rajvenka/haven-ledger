@@ -8,13 +8,14 @@
 // file is a thin dispatcher: it counts as exactly one function, and just forwards to whichever
 // broker's handler matches req.body.broker.
 //
-// Frontend call sites now POST { broker: 'etoro' | 'webull' | 'zerodha' | 'groww', ...restOfBody }
+// Frontend call sites now POST { broker: 'etoro' | 'webull' | 'zerodha' | 'groww' | 'amundi_capgemini', ...restOfBody }
 // to /api/portfolio-broker-sync instead of the old per-broker URLs.
 
 import { etoroHandler } from "./_lib/etoro-sync.js";
 import { webullHandler } from "./_lib/webull-sync.js";
 import { zerodhaHandler } from "./_lib/zerodha-sync.js";
 import { growwHandler } from "./_lib/groww-sync.js";
+import { amundiCapgeminiHandler } from "./_lib/amundi-capgemini-sync.js";
 
 function parseBody(req: any): any {
   let body = req.body;
@@ -43,7 +44,9 @@ export default async function handler(req: any, res: any) {
       return zerodhaHandler(req, res);
     case "groww":
       return growwHandler(req, res);
+    case "amundi_capgemini":
+      return amundiCapgeminiHandler(req, res);
     default:
-      res.status(400).json({ error: `Unknown or missing broker: '${broker}'. Expected one of: etoro, webull, zerodha, groww.` });
+      res.status(400).json({ error: `Unknown or missing broker: '${broker}'. Expected one of: etoro, webull, zerodha, groww, amundi_capgemini.` });
   }
 }

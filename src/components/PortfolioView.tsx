@@ -37,6 +37,7 @@ interface PortfolioViewProps {
   markBrokerConnectionSynced?: (id: string) => Promise<void>;
   syncEtoroHoldingLots?: (symbols: string[], rawLotsBySymbol: Map<string, any[]>, portfolioId?: string) => Promise<void>;
   syncEtoroLivePrices?: (symbolToPrice: Map<string, number>, portfolioId?: string) => Promise<void>;
+  upsertAmundiSarGrants?: (grants: any[]) => Promise<void>;
   portfolioHoldingLots?: any[];
   loadPortfolioHoldingLots?: (holdingId: string) => Promise<any[]>;
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
@@ -303,7 +304,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances, portfolioBookedPlBaselines = [], portfolioBookedPlHistory = [], portfolioBankBalanceHistory = [], portfolioProjectedBankBalances = [],
     setPortfolioCashBalance, deletePortfolioCashBalance, setBookedPlBaseline, setProjectedBankBalance, recalculateProjectedBankBalance,
     portfolioBrokerConnections = [], setPortfolioBrokerConnection, deletePortfolioBrokerConnection, markBrokerConnectionSynced,
-    syncEtoroHoldingLots, syncEtoroLivePrices, loadPortfolioHoldingLots, portfolioHoldingLots = [],
+    syncEtoroHoldingLots, syncEtoroLivePrices, upsertAmundiSarGrants, loadPortfolioHoldingLots, portfolioHoldingLots = [],
     portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, loadPortfolioDetails, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, snapshotPortfolioDailyPositions, loadPortfolioDailyPositions, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     mfHoldingsCache = [], loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
@@ -604,6 +605,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [etoroSyncError, setEtoroSyncError] = useState<string | null>(null);
   const [etoroSyncDebug, setEtoroSyncDebug] = useState<any>(null);
   const [etoroRawLots, setEtoroRawLots] = useState<any[]>([]);
+  // Amundi/Capgemini ESOP statement upload (PDF) - a once-a-year employee savings
+  // statement, not a live broker API, so this is upload-driven rather than credential-driven
+  // like the eToro/Webull/Zerodha/Groww connections above.
+  const [amundiUploading, setAmundiUploading] = useState(false);
+  const [amundiUploadError, setAmundiUploadError] = useState<string | null>(null);
+  const [amundiSarGrants, setAmundiSarGrants] = useState<any[]>([]);
+  const [amundiSarSaved, setAmundiSarSaved] = useState(false);
+  const [amundiPortfolioId, setAmundiPortfolioId] = useState('');
   // Zerodha Kite Connect (India) — parallel to eToro connect; does not replace CSV import
   const [zerodhaApiKeyInput, setZerodhaApiKeyInput] = useState('');
   const [zerodhaApiSecretInput, setZerodhaApiSecretInput] = useState('');
@@ -1589,6 +1598,50 @@ export default function PortfolioView(props: PortfolioViewProps) {
     }
   };
 
+  // Amundi ESR statement upload - reads the PDF as base64, sends it to the same dispatcher
+  // eToro/Webull/Zerodha/Groww share (api/portfolio-broker-sync), and feeds the response
+  // through the exact same sync/import pipeline handleEtoroSync uses above: one consolidated
+  // ParsedHolding for the Capgemini position (symbol CAP) plus rawLots for each vintage-year
+  // tranche, matched by matchKey the same way eToro's multi-lot positions already are. SAR
+  // grants are held separately in amundiSarGrants and written to their own table after the
+  // import is confirmed (see the amundiSarGrants block inside confirmImport), never through
+  // bulkAddPortfolioHoldings - they aren't equity and must never land in portfolio_holdings.
+  const handleAmundiUpload = async (file: File, portfolioId?: string) => {
+    setAmundiUploading(true);
+    setAmundiUploadError(null);
+    setImportPreview(null);
+    try {
+      const fileBase64: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(reader.error || new Error('Could not read file'));
+        reader.readAsDataURL(file);
+      });
+      const resp = await fetch('/api/portfolio-broker-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ broker: 'amundi_capgemini', fileBase64, filename: file.name }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.error || `Amundi statement parsing failed (${resp.status})`);
+      setEtoroRawLots(data?.rawLots ?? []);
+      setAmundiSarGrants(data?.sarGrants ?? []);
+      setAmundiSarSaved(false);
+      setImportTemplate('universal');
+      if (portfolioId) {
+        setImportPortfolioId(portfolioId);
+        setImportPortfolioConfirmed(true);
+      }
+      setImportPath('sync');
+      setImportRawParsed(data.holdings ?? []);
+      setIsImporting(true);
+    } catch (err: any) {
+      setAmundiUploadError(err?.message || 'Could not parse the Amundi statement.');
+    } finally {
+      setAmundiUploading(false);
+    }
+  };
+
   // Recompute the preview whenever the raw parse changes, or the target portfolio changes -
   // switching portfolios should re-check what's already there for that specific one.
   useEffect(() => {
@@ -1750,6 +1803,17 @@ export default function PortfolioView(props: PortfolioViewProps) {
           await syncEtoroHoldingLots?.(Array.from(rawLotsBySymbol.keys()), rawLotsBySymbol, portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined);
         } catch (err: any) { stepErrors.push(`Individual lots: ${err?.message || 'failed'}`); }
         setEtoroRawLots([]);
+      }
+      // Amundi SAR grants (if this import came from an Amundi statement upload) - written to
+      // their own table, never portfolio_holdings, after the real share lots above are
+      // safely saved. Tagged with the same target portfolio as the shares for grouping.
+      if (amundiSarGrants.length > 0 && !amundiSarSaved) {
+        try {
+          const targetPid = portfolioMode === 'multiple' ? (importPortfolioId || defaultPortfolioId || undefined) : undefined;
+          await upsertAmundiSarGrants?.(amundiSarGrants.map(g => ({ ...g, portfolioId: targetPid })));
+          setAmundiSarSaved(true);
+        } catch (err: any) { stepErrors.push(`SAR grants: ${err?.message || 'failed'}`); }
+        setAmundiSarGrants([]);
       }
       // Daily Change and Since Previous Load both require live_price to compute anything
       // at all - eToro holdings never had this field populated at all before (confirmed
@@ -3396,6 +3460,55 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   </details>
                 </div>
               )}
+            </div>
+          );
+        })()}
+
+        {/* Amundi / Capgemini ESOP — EUR portfolios only. Upload-driven (annual statement,
+            not a live broker API), so this has no credential form, just a file picker. */}
+        {(() => {
+          const eurPortfolios = portfolioMode === 'multiple'
+            ? portfolios.filter((p: any) => String(p.currency || '').toUpperCase() === 'EUR')
+            : portfolios.filter((p: any) => String(p.currency || baseCurrency || '').toUpperCase() === 'EUR');
+          const showAmundi = portfolioMode === 'multiple'
+            ? eurPortfolios.length > 0
+            : (eurPortfolios.length > 0 || String(baseCurrency || '').toUpperCase() === 'EUR');
+          if (!showAmundi) return null;
+          const eurList = eurPortfolios.length > 0
+            ? eurPortfolios
+            : [{ id: '', name: 'Workspace', currency: 'EUR' }];
+          const targetPortfolioId = portfolioMode === 'multiple' ? (amundiPortfolioId || eurList[0]?.id || '') : undefined;
+          return (
+            <div className="apple-card p-4 space-y-3">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Upload className="w-3.5 h-3.5" /> Amundi / Capgemini ESOP</span>
+              <p className="text-[9px] text-slate-400">
+                Upload your Amundi ESR account statement (PDF) each year. Each vintage-year tranche is saved as its own lot under one consolidated Capgemini (CAP) holding — re-uploading updates existing lots instead of duplicating them. SAR values on the same statement are tracked separately and never affect this portfolio's valuation.
+              </p>
+              {portfolioMode === 'multiple' && (
+                <select
+                  value={targetPortfolioId}
+                  onChange={(e) => setAmundiPortfolioId(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-semibold appearance-none shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                >
+                  {eurList.map((p: any) => <option key={p.id || 'ws'} value={p.id}>{p.name}{p.currency ? ` (${p.currency})` : ''}</option>)}
+                </select>
+              )}
+              <label className={`flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wide cursor-pointer ${amundiUploading ? 'bg-slate-100 dark:bg-slate-800 text-slate-400' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}>
+                <Upload className={`w-3.5 h-3.5 ${amundiUploading ? 'animate-pulse' : ''}`} />
+                {amundiUploading ? 'Parsing statement…' : 'Upload Amundi statement (PDF)'}
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  disabled={amundiUploading}
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (file) handleAmundiUpload(file, targetPortfolioId);
+                  }}
+                />
+              </label>
+              {amundiUploadError && <p className="text-[10px] text-rose-500">{amundiUploadError}</p>}
             </div>
           );
         })()}

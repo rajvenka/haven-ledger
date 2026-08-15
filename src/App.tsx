@@ -234,6 +234,7 @@ export default function App() {
     markBrokerConnectionSynced,
     syncEtoroHoldingLots,
     syncEtoroLivePrices,
+    upsertAmundiSarGrants,
     loadPortfolioHoldingLots,
     portfolioHoldingLots,
     portfolioDividends,
@@ -1926,6 +1927,7 @@ export default function App() {
                 deletePortfolioBrokerConnection={deletePortfolioBrokerConnection}
                 markBrokerConnectionSynced={markBrokerConnectionSynced}
                 syncEtoroHoldingLots={syncEtoroHoldingLots}
+                upsertAmundiSarGrants={upsertAmundiSarGrants}
                 syncEtoroLivePrices={syncEtoroLivePrices}
                 loadPortfolioHoldingLots={loadPortfolioHoldingLots}
                 portfolioHoldingLots={portfolioHoldingLots}
