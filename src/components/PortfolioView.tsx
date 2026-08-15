@@ -38,6 +38,7 @@ interface PortfolioViewProps {
   syncEtoroHoldingLots?: (symbols: string[], rawLotsBySymbol: Map<string, any[]>, portfolioId?: string) => Promise<void>;
   syncEtoroLivePrices?: (symbolToPrice: Map<string, number>, portfolioId?: string) => Promise<void>;
   upsertAmundiSarGrants?: (grants: any[]) => Promise<void>;
+  portfolioEmployeeGrants?: any[];
   portfolioHoldingLots?: any[];
   loadPortfolioHoldingLots?: (holdingId: string) => Promise<any[]>;
   addPortfolioSplit: (memberUserId: string, percent: number, from: string, to?: string) => Promise<void>;
@@ -304,7 +305,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances, portfolioBookedPlBaselines = [], portfolioBookedPlHistory = [], portfolioBankBalanceHistory = [], portfolioProjectedBankBalances = [],
     setPortfolioCashBalance, deletePortfolioCashBalance, setBookedPlBaseline, setProjectedBankBalance, recalculateProjectedBankBalance,
     portfolioBrokerConnections = [], setPortfolioBrokerConnection, deletePortfolioBrokerConnection, markBrokerConnectionSynced,
-    syncEtoroHoldingLots, syncEtoroLivePrices, upsertAmundiSarGrants, loadPortfolioHoldingLots, portfolioHoldingLots = [],
+    syncEtoroHoldingLots, syncEtoroLivePrices, upsertAmundiSarGrants, portfolioEmployeeGrants = [], loadPortfolioHoldingLots, portfolioHoldingLots = [],
     portfolioHoldings, portfolioPriceHistory, addPortfolioHolding, bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, markPortfolioHoldingSoldFromImport, bulkHistoricalImport, updatePortfolioHolding, sellPortfolioHolding, updatePortfolioHoldingLivePrice, markPriceLookupFailed, loadPortfolioDetails, deletePortfolioHolding, bulkTagPortfolioHoldings, bulkDeletePortfolioHoldings, deleteAllPortfolioData, snapshotPortfolioDailyPositions, loadPortfolioDailyPositions, portfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     mfHoldingsCache = [], loadMfHoldingsCache, fetchAndCacheMfHoldings, saveManualMfHoldings,
     portfolioSnapshots, takePortfolioSnapshot, deletePortfolioSnapshotBatch,
@@ -636,6 +637,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [expandedLotHoldingId, setExpandedLotHoldingId] = useState<string | null>(null);
   const [stopLossAlertExpanded, setStopLossAlertExpanded] = useState(false);
   const [lotsViewActive, setLotsViewActive] = useState(false);
+  const [sarViewActive, setSarViewActive] = useState(false);
   const [lotsSortCol, setLotsSortCol] = useState<'symbol' | 'quantity' | 'buy_price' | 'current_price' | 'leverage' | 'stop_loss_rate' | 'distance' | 'net_value' | 'invested' | 'current_value' | 'gain'>('distance');
   const [lotsSortDir, setLotsSortDir] = useState<'asc' | 'desc'>('asc');
   const [manualEntryHoldingId, setManualEntryHoldingId] = useState<string | null>(null);
@@ -851,7 +853,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
       if (next.has(value)) next.delete(value); else next.add(value);
       return next;
     });
-    if (!filterOptions.portfolioNames.includes(value)) setLotsViewActive(false);
+    if (!filterOptions.portfolioNames.includes(value)) { setLotsViewActive(false); setSarViewActive(false); }
   };
 
   const filteredActiveHoldings = useMemo(() => {
@@ -2355,6 +2357,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
     const parentHolding = activeHoldings.find((h: any) => h.id === l.holding_id);
     return parentHolding && selectedPortfolioIdsForLots.includes(parentHolding.portfolio_id);
   });
+  // Same idea as Lots, but for Amundi's SAR grants - a completely separate, non-equity
+  // table (portfolio_employee_grants), so this only lights up when the selected book
+  // actually has grant rows, same "specific portfolio selected" requirement as Lots above.
+  const sarAvailableForSelection = selectedPortfolioIdsForLots.length > 0 && portfolioEmployeeGrants.some((g: any) => selectedPortfolioIdsForLots.includes(g.portfolio_id));
   const selectedHeaderPortfolioIds = selectedHeaderPortfolioNames.length > 0
     ? portfolios.filter((p: any) => selectedHeaderPortfolioNames.includes(p.name)).map((p: any) => p.id)
     : null;
@@ -5061,18 +5067,33 @@ export default function PortfolioView(props: PortfolioViewProps) {
                 onClick={() => {
                   setHoldingFilters(prev => new Set(Array.from(prev).filter(f => portfolios.some((p: any) => p.name === f))));
                   setLotsViewActive(false);
+                  setSarViewActive(false);
                 }}
-                className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${Array.from(holdingFilters).every(f => portfolios.some((p: any) => p.name === f)) && !lotsViewActive ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+                className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${Array.from(holdingFilters).every(f => portfolios.some((p: any) => p.name === f)) && !lotsViewActive && !sarViewActive ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
               >All</button>
               {lotsAvailableForSelection && (
                 <button
                   onClick={() => {
                     setHoldingFilters(prev => new Set(Array.from(prev).filter(f => filterOptions.portfolioNames.includes(f))));
                     setLotsViewActive(true);
+                    setSarViewActive(false);
                   }}
                   className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${lotsViewActive ? 'bg-indigo-600 text-white' : 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400'}`}
                 >
                   Lots
+                </button>
+              )}
+              {sarAvailableForSelection && (
+                <button
+                  onClick={() => {
+                    setHoldingFilters(prev => new Set(Array.from(prev).filter(f => filterOptions.portfolioNames.includes(f))));
+                    setLotsViewActive(false);
+                    setSarViewActive(true);
+                  }}
+                  title="Amundi SAR grants — not equity, tracked separately from your holdings"
+                  className={`px-2.5 py-1 rounded-full text-[9px] font-bold cursor-pointer ${sarViewActive ? 'bg-amber-600 text-white' : 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400'}`}
+                >
+                  SAR
                 </button>
               )}
               {activeHoldings.some(h => h.price_lookup_failed) && (
@@ -5260,6 +5281,55 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           <td className="p-2 text-right font-bold text-indigo-600 dark:text-indigo-400">{r.lot.etoro_net_value_amount != null ? fmtCur(Number(r.lot.etoro_net_value_amount), r.parent.currency) : dash}</td>
                         </tr>
                       ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })() : sarViewActive ? (() => {
+            // SAR grants are deliberately NOT rendered through the same Lots table above -
+            // that table computes gain/loss against current market price, which is
+            // meaningless (and actively misleading) for a cash-settled bonus instrument
+            // that was never bought or sold. This is a plain, read-only view of exactly
+            // what's in portfolio_employee_grants - no P&L, no portfolio valuation math.
+            const rows = portfolioEmployeeGrants
+              .filter((g: any) => selectedPortfolioIdsForLots.length === 0 || selectedPortfolioIdsForLots.includes(g.portfolio_id))
+              .slice()
+              .sort((a: any, b: any) => (b.vintage_year ?? 0) - (a.vintage_year ?? 0));
+            const grantsCurrency = rows[0]?.currency || 'EUR';
+            const totalValue = rows.reduce((s: number, g: any) => s + Number(g.value_amount ?? 0), 0);
+            return (
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider">SAR grants ({rows.length}) — not equity, excluded from portfolio value</span>
+                  <span className="text-[10px] font-bold text-slate-500">Total: {fmtCur(totalValue, grantsCurrency)}</span>
+                </div>
+                <div className="apple-card mt-1.5 overflow-x-auto border border-amber-200 dark:border-amber-900">
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-bold text-slate-400 uppercase">
+                        <th className="p-2 text-left">Plan</th>
+                        <th className="p-2 text-right">Vintage</th>
+                        <th className="p-2 text-right">Availability</th>
+                        <th className="p-2 text-right">Qty</th>
+                        <th className="p-2 text-right">Value / unit</th>
+                        <th className="p-2 text-right">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((g: any) => (
+                        <tr key={g.id} className="border-b border-slate-50 dark:border-slate-900">
+                          <td className="p-2 font-bold text-slate-700 dark:text-slate-300">{g.plan_label}</td>
+                          <td className="p-2 text-right">{g.vintage_year}</td>
+                          <td className="p-2 text-right text-slate-500">{g.availability_date || '—'}</td>
+                          <td className="p-2 text-right">{fmtQty(Number(g.quantity))}</td>
+                          <td className="p-2 text-right">{fmtCur(Number(g.value_per_unit), g.currency)}</td>
+                          <td className="p-2 text-right font-bold text-amber-600 dark:text-amber-400">{fmtCur(Number(g.value_amount), g.currency)}</td>
+                        </tr>
+                      ))}
+                      {rows.length === 0 && (
+                        <tr><td colSpan={6} className="p-4 text-center text-slate-400">No SAR grants for this selection.</td></tr>
+                      )}
                     </tbody>
                   </table>
                 </div>

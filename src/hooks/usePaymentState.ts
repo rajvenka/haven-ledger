@@ -1191,6 +1191,7 @@ export function usePaymentState() {
   const [portfolioProjectedBankBalances, setPortfolioProjectedBankBalances] = useState<any[]>([]);
   const [portfolioBrokerConnections, setPortfolioBrokerConnectionsState] = useState<any[]>([]);
   const [portfolioHoldingLots, setPortfolioHoldingLotsState] = useState<any[]>([]);
+  const [portfolioEmployeeGrants, setPortfolioEmployeeGrantsState] = useState<any[]>([]);
   const [portfolioDividends, setPortfolioDividends] = useState<any[]>([]);
   const [portfolioFees, setPortfolioFees] = useState<any[]>([]);
   const [portfolioRecurringPlans, setPortfolioRecurringPlans] = useState<any[]>([]);
@@ -1246,7 +1247,7 @@ export function usePaymentState() {
     const scope = <T extends { workspace_id?: string }>(rows: T[] | null | undefined): T[] =>
       (rows ?? []).filter(r => !r.workspace_id || r.workspace_id === wsId);
 
-    const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: planSkips }, { data: cashBalances }, { data: portfoliosData }, { data: currencyRatesData }, { data: bookedPlBaselinesData }, { data: bookedPlHistoryData }, { data: bankBalanceHistoryData }, { data: projectedBankBalancesData }, { data: brokerConnectionsData }, { data: holdingLotsData }] = await Promise.all([
+    const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: planSkips }, { data: cashBalances }, { data: portfoliosData }, { data: currencyRatesData }, { data: bookedPlBaselinesData }, { data: bookedPlHistoryData }, { data: bankBalanceHistoryData }, { data: projectedBankBalancesData }, { data: brokerConnectionsData }, { data: holdingLotsData }, { data: employeeGrantsData }] = await Promise.all([
       supabase.from('portfolio_holdings').select('*').eq('workspace_id', wsId).order('buy_date', { ascending: false }),
       supabase.from('portfolio_price_history').select('*').eq('workspace_id', wsId).order('recorded_date', { ascending: false }),
       supabase.from('portfolio_splits').select('*').eq('workspace_id', wsId).order('effective_from'),
@@ -1265,6 +1266,7 @@ export function usePaymentState() {
       supabase.from('portfolio_projected_bank_balance').select('*').eq('workspace_id', wsId),
       supabase.from('portfolio_broker_connections').select('*').eq('workspace_id', wsId),
       supabase.from('portfolio_holding_lots').select('*').eq('workspace_id', wsId).order('open_date', { ascending: false }),
+      supabase.from('portfolio_employee_grants').select('*').eq('workspace_id', wsId).order('vintage_year', { ascending: false }),
     ]);
 
     // Stale response from a previous workspace — discard.
@@ -1288,6 +1290,7 @@ export function usePaymentState() {
     setPortfolioProjectedBankBalances(scope(projectedBankBalancesData));
     setPortfolioBrokerConnectionsState(scope(brokerConnectionsData));
     setPortfolioHoldingLotsState(scope(holdingLotsData));
+    setPortfolioEmployeeGrantsState(scope(employeeGrantsData));
     loadedPortfolioWorkspaces.current.add(wsId);
     portfolioStateWsRef.current = wsId;
     setPortfolioDataLoading(false);
@@ -2539,7 +2542,7 @@ export function usePaymentState() {
     portfolioBrokerConnections, setPortfolioBrokerConnection, deletePortfolioBrokerConnection, markBrokerConnectionSynced,
     portfolioHoldingLots,
     upsertPortfolioHoldingLots, loadPortfolioHoldingLots, syncEtoroHoldingLots, syncEtoroLivePrices,
-    upsertAmundiSarGrants, loadEmployeeGrants,
+    portfolioEmployeeGrants, upsertAmundiSarGrants, loadEmployeeGrants,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
     portfolioRecurringPlans, addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,
