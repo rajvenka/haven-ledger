@@ -1207,6 +1207,23 @@ export default function PortfolioV1View({
     const pnlPctVal = inv > 0 ? (pnlAmt / inv) * 100 : 0;
     const pnlPctCfdVal = investedCfd > 0 ? ((marketCfd - investedCfd) / investedCfd) * 100 : 0;
     const dayPctVal = dayBase > 0 ? (dayPnl / dayBase) * 100 : null;
+    // TEMPORARY: log the actual computed market/invested value alongside the currency, in
+    // the same debug log as effectiveDisplayCurrency - lets a direct comparison against
+    // what's actually shown on screen at the same moment, to see whether the VALUE itself is
+    // also wrong, or only ever the currency label. Remove once diagnosed.
+    ccyDebugLogRef.current = [
+      ...ccyDebugLogRef.current.slice(-19),
+      {
+        at: new Date().toISOString(),
+        tag: 'totalPortfolioTile RESULT',
+        portfolioFilter,
+        displayCcy,
+        market: Math.round(market),
+        invested: Math.round(inv),
+        pnlAmt: Math.round(pnlAmt),
+        scopedLength: scoped.length,
+      },
+    ];
     return {
       displayCcy,
       market,
@@ -2463,6 +2480,9 @@ export default function PortfolioV1View({
                       <>
                         <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
                           {money(cfdView ? totalPortfolioTile.marketCfd : totalPortfolioTile.market, totalPortfolioTile.displayCcy)}
+                        </p>
+                        <p className="text-[7px] text-rose-500 font-mono">
+                          rendered {new Date().toISOString().slice(11, 19)} · {totalPortfolioTile.displayCcy} · pf={portfolioFilter === 'All' ? 'All' : portfolioFilter.slice(0, 6)}
                         </p>
                         <p
                           className={`text-[11px] sm:text-[12px] font-black tabular-nums leading-tight mt-0.5 ${
