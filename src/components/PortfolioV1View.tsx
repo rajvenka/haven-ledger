@@ -462,7 +462,7 @@ function classifyHolding(h: any): CategoryId {
   return 'other';
 }
 
-function summarizeBucket(holdings: any[]) {
+function summarizeBucket(holdings: any[], convertTo?: { currency: string; rates: any; baseCurrency: string }) {
   const byCcy: Record<
     string,
     {
@@ -487,7 +487,12 @@ function summarizeBucket(holdings: any[]) {
     }
   > = {};
   holdings.forEach((h) => {
-    const ccy = String(h.currency || 'USD').toUpperCase();
+    const nativeCcy = String(h.currency || 'USD').toUpperCase();
+    // When converting to a single target currency (view-currency selector active), every
+    // holding collapses into one bucket keyed by that target, instead of grouping by each
+    // holding's own native currency - matches Total Portfolio tile's behavior.
+    const ccy = convertTo ? convertTo.currency : nativeCcy;
+    const fx = (amt: number) => (convertTo ? convertAmount(amt, nativeCcy, convertTo.currency, convertTo.rates, convertTo.baseCurrency) : amt);
     if (!byCcy[ccy]) {
       byCcy[ccy] = {
         market: 0,
@@ -513,13 +518,13 @@ function summarizeBucket(holdings: any[]) {
     // Real cash committed by default (fixes leveraged/CFD positions contributing their full
     // exposure instead of actual cash at risk); raw exposure tracked separately as *Cfd for
     // the CFD $/% toggle. For non-leveraged holdings these are identical either way.
-    const inv = realInvested(h);
-    const mv = realCurrentValue(h);
+    const inv = fx(realInvested(h));
+    const mv = fx(realCurrentValue(h));
     const posPnl = mv - inv;
     byCcy[ccy].market += mv;
     byCcy[ccy].invested += inv;
-    byCcy[ccy].marketCfd += marketValue(h);
-    byCcy[ccy].investedCfd += invested(h);
+    byCcy[ccy].marketCfd += fx(marketValue(h));
+    byCcy[ccy].investedCfd += fx(invested(h));
     if (isLeveraged(h)) byCcy[ccy].hasLeveraged = true;
     byCcy[ccy].pnl += posPnl;
     byCcy[ccy].count += 1;
@@ -530,8 +535,9 @@ function summarizeBucket(holdings: any[]) {
       byCcy[ccy].lossPnl += posPnl;
       byCcy[ccy].lossCount += 1;
     }
-    const dd = dayChangeDollar(h);
-    if (dd != null) {
+    const ddRaw = dayChangeDollar(h);
+    if (ddRaw != null) {
+      const dd = fx(ddRaw);
       byCcy[ccy].dayPnl += dd;
       if (dd > 0) {
         byCcy[ccy].dayGainPnl += dd;
@@ -542,7 +548,7 @@ function summarizeBucket(holdings: any[]) {
       }
       const prev = Number(h.previous_close);
       const qty = Number(h.quantity || 0);
-      if (Number.isFinite(prev) && Number.isFinite(qty)) byCcy[ccy].dayBase += prev * qty;
+      if (Number.isFinite(prev) && Number.isFinite(qty)) byCcy[ccy].dayBase += fx(prev * qty);
       byCcy[ccy].dayCount += 1;
     }
   });
@@ -1049,11 +1055,18 @@ export default function PortfolioV1View({
   ];
 
   const categoryCards = useMemo(() => {
+    // Only convert into one target currency when 'All' portfolios are selected - same
+    // condition that shows the view-currency selector in the first place. For a specific
+    // portfolio, category tiles keep grouping by each holding's own native currency (a single
+    // portfolio only ever has one currency anyway, so this never actually differs there).
+    const convertTo = portfolioFilter === 'All'
+      ? { currency: String(viewCurrency || baseCurrency || 'USD').toUpperCase(), rates: workspaceCurrencyRates, baseCurrency }
+      : undefined;
     return categoryOrder
       .map((id) => {
         const holdings = classified[id];
         if (!holdings.length) return null;
-        return { id, holdings, stats: summarizeBucket(holdings), meta: CATEGORY_META[id] };
+        return { id, holdings, stats: summarizeBucket(holdings, convertTo), meta: CATEGORY_META[id] };
       })
       .filter(Boolean) as {
       id: CategoryId;
@@ -1061,7 +1074,7 @@ export default function PortfolioV1View({
       stats: ReturnType<typeof summarizeBucket>;
       meta: (typeof CATEGORY_META)[CategoryId];
     }[];
-  }, [classified]);
+  }, [classified, portfolioFilter, viewCurrency, workspaceCurrencyRates, baseCurrency]);
 
   /** Total portfolio value in default book currency (or View currency when All books). */
   const totalPortfolioTile = useMemo(() => {
