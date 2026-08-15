@@ -1022,6 +1022,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [refreshingPrices, setRefreshingPrices] = useState(false);
   const [priceRefreshSummary, setPriceRefreshSummary] = useState<string | null>(null);
   const [syncingConnectionId, setSyncingConnectionId] = useState<string | null>(null);
+  const [settingsFilter, setSettingsFilter] = useState<'broker' | 'cash' | 'pl' | 'bank'>('broker');
 
   // Auto price refresh - user-controlled, PER-PORTFOLIO, persisted via localStorage.
   // Defaults to all off given the earlier Supabase egress incident - the person explicitly
@@ -2940,6 +2941,33 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
       {holdingsTab === 'settings' && (
         <div className="space-y-3">
+        {/* Settings filter - one section visible at a time instead of all 4 stacked, much
+            shorter scroll on mobile. Each pill color-coded for quick visual identification. */}
+        <div className="flex items-center gap-1.5 overflow-x-auto -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+          {(
+            [
+              ['broker', 'Broker Connections', RefreshCw, 'bg-indigo-600', 'text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-900'],
+              ['cash', 'Cash Balance', Banknote, 'bg-emerald-600', 'text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900'],
+              ['pl', 'Booked P/L', TrendingUp, 'bg-amber-600', 'text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900'],
+              ['bank', 'Projected Bank Balance', Banknote, 'bg-sky-600', 'text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-900'],
+            ] as const
+          ).map(([id, label, Icon, activeBg, inactiveClasses]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setSettingsFilter(id)}
+              className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black whitespace-nowrap transition-all cursor-pointer border ${
+                settingsFilter === id
+                  ? `${activeBg} text-white border-transparent shadow-sm`
+                  : `bg-white dark:bg-slate-900 ${inactiveClasses}`
+              }`}
+            >
+              <Icon className="w-3 h-3" />
+              {label}
+            </button>
+          ))}
+        </div>
+        {settingsFilter === 'broker' && (<>
         {/* Broker Connections overview - quick status/action table across every portfolio and
             its connected brokers, plus the auto-refresh toggle. Reuses the existing
             handleEtoroSync/handleWebullSync/handleZerodhaSync/handleGrowwSync handlers and
@@ -3716,7 +3744,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
             </div>
           );
         })()}
+        </>)}
 
+        {settingsFilter === 'cash' && (
         <div className="apple-card p-4 space-y-3">
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Banknote className="w-3.5 h-3.5" /> Cash Balance</span>
           <p className="text-[9px] text-slate-400">
@@ -3782,8 +3812,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <span className="font-black text-slate-900 dark:text-white">{fmt(portfolioCashBalances.reduce((s: number, c: any) => s + Number(c.amount), 0))}</span>
           </div>
         </div>
+        )}
 
-        {(() => {
+        {settingsFilter === 'pl' && (() => {
           const baselinePortfolioId = portfolioMode === 'multiple' ? (bookedPlPortfolioId || portfolios[0]?.id) : undefined;
           const canEditBaseline = portfolioMode !== 'multiple' || !!baselinePortfolioId;
           const existingBaseline = portfolioBookedPlBaselines.find((b: any) => (b.portfolio_id ?? null) === (baselinePortfolioId ?? null));
@@ -3929,7 +3960,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
           );
         })()}
 
-        {(() => {
+        {settingsFilter === 'bank' && (() => {
           const projPortfolioId = portfolioMode === 'multiple' ? (projectedBalancePortfolioId || portfolios[0]?.id) : undefined;
           const canEditProj = portfolioMode !== 'multiple' || !!projPortfolioId;
           const existingProjected = portfolioProjectedBankBalances.find((p: any) => (p.portfolio_id ?? null) === (projPortfolioId ?? null));
