@@ -1992,18 +1992,15 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setRefreshingPrices(false);
   };
 
-  // Auto-refresh once when the page loads, if prices look stale - saves a manual click most of
-  // the time, since holdings composition rarely changes day to day. Throttled so it doesn't
-  // fire on every re-render or hammer the free price API.
-  //
-  // Also gated by a per-workspace localStorage cooldown, not just the in-memory ref above -
-  // the ref alone only prevents re-firing within one mount, but a genuine sync failure (broker
-  // API down, RLS issue, etc.) leaves prices just as stale as before, so every fresh page load
-  // was re-triggering the exact same failing batch of requests. The cooldown makes a failure
-  // (or success) "stick" for a while regardless of reloads. The manual Refresh Prices button
-  // is untouched by this - it always fires immediately on an explicit click.
+  // Auto-refresh disabled per user's request (2026-08-15) - Supabase free-tier egress
+  // concerns, wants full manual control over when price refresh actually runs regardless of
+  // the staleness-based/cooldown logic below. Left the original logic intact (commented out
+  // via the early return) rather than deleting it, so it's a one-line change to restore later
+  // if wanted. The manual Refresh Prices button is completely unaffected - it always works.
   const autoRefreshTriggeredRef = React.useRef(false);
   useEffect(() => {
+    return; // eslint-disable-line no-unreachable
+    // eslint-disable-next-line no-unreachable
     if (autoRefreshTriggeredRef.current) return;
     if (isReadOnly) return;
     const refreshableStocks = activeHoldings.filter(h => h.holding_type !== 'mutual_fund');
