@@ -357,6 +357,31 @@ function pnlPct(h: any): number {
   const inv = invested(h);
   return inv > 0 ? (pnl(h) / inv) * 100 : 0;
 }
+// Ported from Classic (PortfolioView.tsx) verbatim - static cash margin put up at entry,
+// stable, not moving with stop-loss changes. Only meaningful for leveraged holdings.
+function computeMarginAmount(h: any): number | null {
+  if (h.leverage == null || Number(h.leverage) <= 1) return null;
+  return (Number(h.buy_price) * Number(h.quantity)) / Number(h.leverage);
+}
+function isLeveraged(h: any): boolean {
+  return computeMarginAmount(h) != null;
+}
+// Real cash committed - what "invested"/"marketValue" should mean for the overall
+// portfolio total and every aggregate tile. For a non-leveraged holding, identical to
+// invested()/marketValue() (leverage 1 = no difference). For a leveraged CFD position,
+// uses the static margin at entry plus the actual (leverage-independent) dollar P&L -
+// deliberately NOT a direct port of Classic's header figures, which invert the normal
+// current-minus-invested relationship for its own "Total Stock Investment / Current Holding
+// Value" labels specifically. This keeps the standard P&L = current - invested convention
+// intact, appropriate for a plain Value/P&L tile.
+function realInvested(h: any): number {
+  const margin = computeMarginAmount(h);
+  return margin != null ? margin : invested(h);
+}
+function realCurrentValue(h: any): number {
+  const margin = computeMarginAmount(h);
+  return margin != null ? margin + pnl(h) : marketValue(h);
+}
 function dayChangePct(h: any): number | null {
   const live = Number(h.live_price);
   const prev = Number(h.previous_close);
@@ -427,6 +452,9 @@ function summarizeBucket(holdings: any[]) {
     {
       market: number;
       invested: number;
+      marketCfd: number;
+      investedCfd: number;
+      hasLeveraged: boolean;
       pnl: number;
       gainPnl: number;
       lossPnl: number;
@@ -448,6 +476,9 @@ function summarizeBucket(holdings: any[]) {
       byCcy[ccy] = {
         market: 0,
         invested: 0,
+        marketCfd: 0,
+        investedCfd: 0,
+        hasLeveraged: false,
         pnl: 0,
         gainPnl: 0,
         lossPnl: 0,
@@ -463,11 +494,17 @@ function summarizeBucket(holdings: any[]) {
         dayCount: 0,
       };
     }
-    const inv = invested(h);
-    const mv = marketValue(h);
+    // Real cash committed by default (fixes leveraged/CFD positions contributing their full
+    // exposure instead of actual cash at risk); raw exposure tracked separately as *Cfd for
+    // the CFD $/% toggle. For non-leveraged holdings these are identical either way.
+    const inv = realInvested(h);
+    const mv = realCurrentValue(h);
     const posPnl = mv - inv;
     byCcy[ccy].market += mv;
     byCcy[ccy].invested += inv;
+    byCcy[ccy].marketCfd += marketValue(h);
+    byCcy[ccy].investedCfd += invested(h);
+    if (isLeveraged(h)) byCcy[ccy].hasLeveraged = true;
     byCcy[ccy].pnl += posPnl;
     byCcy[ccy].count += 1;
     if (posPnl > 0) {
@@ -498,6 +535,7 @@ function summarizeBucket(holdings: any[]) {
       currency,
       ...v,
       pnlPct: v.invested > 0 ? (v.pnl / v.invested) * 100 : 0,
+      pnlPctCfd: v.investedCfd > 0 ? ((v.marketCfd - v.investedCfd) / v.investedCfd) * 100 : 0,
       dayPct: v.dayBase > 0 ? (v.dayPnl / v.dayBase) * 100 : null,
     }))
     .sort((a, b) => b.market - a.market);
@@ -509,6 +547,7 @@ function summarizeBucket(holdings: any[]) {
     lossPnl: tiles.reduce((s, x) => s + x.lossPnl, 0),
     gainCount: tiles.reduce((s, x) => s + x.gainCount, 0),
     lossCount: tiles.reduce((s, x) => s + x.lossCount, 0),
+    hasLeveraged: tiles.some((x) => x.hasLeveraged),
   };
 }
 
@@ -646,6 +685,11 @@ export default function PortfolioV1View({
   const [showLotsOnly, setShowLotsOnly] = useState(false);
   const [moversMode, setMoversMode] = useState<'overall' | 'day'>('day');
   const [moversUnit, setMoversUnit] = useState<'pct' | 'dollar'>('dollar');
+  // Independent of moversUnit above (which drives the separate Top Movers widget) - only
+  // affects the tiles (Total Portfolio + category tiles). When true, tiles containing
+  // leveraged/CFD holdings show the raw, full exposure value instead of the real cash
+  // committed. Combines with moversUnit ($/%) to give the requested 4-way $/%/CFD $/CFD %.
+  const [cfdView, setCfdView] = useState(false);
   const [showPnlCalendar, setShowPnlCalendar] = useState(false);
   const [pnlCalendarRows, setPnlCalendarRows] = useState<any[]>([]);
   const [pnlCalendarLoading, setPnlCalendarLoading] = useState(false);
@@ -1018,6 +1062,9 @@ export default function PortfolioV1View({
 
     let market = 0;
     let inv = 0;
+    let marketCfd = 0;
+    let investedCfd = 0;
+    let hasLeveraged = false;
     let dayPnl = 0;
     let dayBase = 0;
     let dayCount = 0;
@@ -1031,11 +1078,17 @@ export default function PortfolioV1View({
     let dayLossCount = 0;
     for (const h of scoped) {
       const nativeCcy = String(h.currency || displayCcy).toUpperCase();
-      const mvN = marketValue(h);
-      const invN = invested(h);
+      // Real cash committed by default - fixes leveraged/CFD positions contributing their
+      // full exposure to the portfolio total instead of actual cash at risk. Raw exposure
+      // tracked separately (*Cfd) for the CFD $/% toggle. Identical for non-leveraged holdings.
+      const mvN = realCurrentValue(h);
+      const invN = realInvested(h);
       const posPnlN = mvN - invN;
       market += convertAmount(mvN, nativeCcy, displayCcy, workspaceCurrencyRates, baseCurrency);
       inv += convertAmount(invN, nativeCcy, displayCcy, workspaceCurrencyRates, baseCurrency);
+      marketCfd += convertAmount(marketValue(h), nativeCcy, displayCcy, workspaceCurrencyRates, baseCurrency);
+      investedCfd += convertAmount(invested(h), nativeCcy, displayCcy, workspaceCurrencyRates, baseCurrency);
+      if (isLeveraged(h)) hasLeveraged = true;
       const posFx = convertAmount(posPnlN, nativeCcy, displayCcy, workspaceCurrencyRates, baseCurrency);
       if (posPnlN > 0) {
         gainPnl += posFx;
@@ -1065,11 +1118,16 @@ export default function PortfolioV1View({
     }
     const pnlAmt = market - inv;
     const pnlPctVal = inv > 0 ? (pnlAmt / inv) * 100 : 0;
+    const pnlPctCfdVal = investedCfd > 0 ? ((marketCfd - investedCfd) / investedCfd) * 100 : 0;
     const dayPctVal = dayBase > 0 ? (dayPnl / dayBase) * 100 : null;
     return {
       displayCcy,
       market,
       invested: inv,
+      marketCfd,
+      investedCfd,
+      pnlPctCfd: pnlPctCfdVal,
+      hasLeveraged,
       pnlAmt,
       pnlPct: pnlPctVal,
       dayPnl,
@@ -1090,7 +1148,7 @@ export default function PortfolioV1View({
 
   /** Card / total performance line respects global Day|$ filters. */
   const perfLabel = moversMode === 'day' ? 'today' : 'all time';
-  const formatBucketPerf = (primary: { pnl: number; pnlPct: number; dayPnl: number; dayPct: number | null; currency: string } | null) => {
+  const formatBucketPerf = (primary: { pnl: number; pnlPct: number; dayPnl: number; dayPct: number | null; currency: string; marketCfd?: number; investedCfd?: number; pnlPctCfd?: number } | null) => {
     if (!primary) return { text: '—', positive: true };
     if (moversMode === 'day') {
       if (primary.dayPct == null && !(primary.dayPnl || primary.dayCount)) {
@@ -1103,6 +1161,15 @@ export default function PortfolioV1View({
       const v = primary.dayPct;
       if (v == null) return { text: '—', positive: true };
       return { text: pct(v), positive: v >= 0 };
+    }
+    // CFD exposure view - only meaningful here, not for day P&L above, which is already
+    // leverage-independent (raw price movement regardless of margin).
+    if (cfdView && primary.marketCfd != null && primary.investedCfd != null) {
+      const pnlCfd = primary.marketCfd - primary.investedCfd;
+      if (moversUnit === 'dollar') {
+        return { text: moneyPrecise(pnlCfd, primary.currency), positive: pnlCfd >= 0 };
+      }
+      return { text: pct(primary.pnlPctCfd ?? 0), positive: (primary.pnlPctCfd ?? 0) >= 0 };
     }
     if (moversUnit === 'dollar') {
       return { text: moneyPrecise(primary.pnl, primary.currency), positive: primary.pnl >= 0 };
@@ -1119,6 +1186,13 @@ export default function PortfolioV1View({
       const v = totalPortfolioTile.dayPct;
       if (v == null) return { text: '—', positive: true };
       return { text: pct(v), positive: v >= 0 };
+    }
+    if (cfdView) {
+      const pnlCfd = totalPortfolioTile.marketCfd - totalPortfolioTile.investedCfd;
+      if (moversUnit === 'dollar') {
+        return { text: moneyPrecise(pnlCfd, totalPortfolioTile.displayCcy), positive: pnlCfd >= 0 };
+      }
+      return { text: pct(totalPortfolioTile.pnlPctCfd), positive: totalPortfolioTile.pnlPctCfd >= 0 };
     }
     if (moversUnit === 'dollar') {
       const v = totalPortfolioTile.pnlAmt;
@@ -2054,6 +2128,22 @@ export default function PortfolioV1View({
                   %
                 </button>
               </div>
+              {totalPortfolioTile.hasLeveraged && (
+                <div className="inline-flex rounded-full bg-amber-50 dark:bg-amber-950/30 p-0.5 border border-amber-200 dark:border-amber-900">
+                  <button
+                    type="button"
+                    onClick={() => setCfdView((v) => !v)}
+                    title={cfdView ? 'Showing full CFD exposure - tap for real cash value' : 'Showing real cash value - tap for full CFD exposure'}
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold cursor-pointer ${
+                      cfdView
+                        ? 'bg-amber-500 text-white shadow-sm'
+                        : 'text-amber-600 dark:text-amber-400'
+                    }`}
+                  >
+                    {moversUnit === 'dollar' ? 'CFD $' : 'CFD %'}
+                  </button>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => setShowPnlCalendar((v) => !v)}
@@ -2241,7 +2331,7 @@ export default function PortfolioV1View({
                     node: (
                       <>
                         <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
-                          {money(totalPortfolioTile.market, totalPortfolioTile.displayCcy)}
+                          {money(cfdView ? totalPortfolioTile.marketCfd : totalPortfolioTile.market, totalPortfolioTile.displayCcy)}
                         </p>
                         <p
                           className={`text-[11px] sm:text-[12px] font-black tabular-nums leading-tight mt-0.5 ${
@@ -2351,7 +2441,7 @@ export default function PortfolioV1View({
                           node: (
                             <>
                               <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
-                                {money(primary.market, primary.currency)}
+                                {money(cfdView ? (primary.marketCfd ?? primary.market) : primary.market, primary.currency)}
                               </p>
                               <p
                                 className={`text-[11px] sm:text-[12px] font-black tabular-nums leading-tight mt-0.5 ${
