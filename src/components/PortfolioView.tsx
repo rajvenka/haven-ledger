@@ -579,11 +579,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [bookedPlBaselineDateInput, setBookedPlBaselineDateInput] = useState(new Date().toISOString().slice(0, 10));
   const [bookedPlBaselineNotesInput, setBookedPlBaselineNotesInput] = useState('');
   const [bookedPlHistoryExpanded, setBookedPlHistoryExpanded] = useState(false);
+  const [bookedPlHistoryShowAll, setBookedPlHistoryShowAll] = useState(false);
   const [bookedPlPortfolioId, setBookedPlPortfolioId] = useState<string>('');
   const [editingProjectedBankBalance, setEditingProjectedBankBalance] = useState(false);
   const [projectedBankBalanceAmountInput, setProjectedBankBalanceAmountInput] = useState('');
   const [projectedBankBalanceNotesInput, setProjectedBankBalanceNotesInput] = useState('');
   const [bankBalanceHistoryExpanded, setBankBalanceHistoryExpanded] = useState(false);
+  const [bankBalanceHistoryShowAll, setBankBalanceHistoryShowAll] = useState(false);
   const [projectedBalancePortfolioId, setProjectedBalancePortfolioId] = useState<string>('');
   const [brokerConnectPortfolioId, setBrokerConnectPortfolioId] = useState<string>('');
   const [usAuLinksOpen, setUsAuLinksOpen] = useState(false);
@@ -3852,8 +3854,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       <ChevronDown className={`w-3 h-3 transition-transform ${bookedPlHistoryExpanded ? 'rotate-180' : ''}`} />
                     </button>
                     {bookedPlHistoryExpanded && (
-                      <div className="mt-1.5 space-y-1.5 max-h-56 overflow-y-auto">
-                        {history.map((h: any) => {
+                      <div className="mt-1.5 space-y-1.5">
+                        {(bookedPlHistoryShowAll ? history : history.slice(0, 5)).map((h: any) => {
                           const changer = workspaceMembers.find((m: any) => m.uid === h.changed_by);
                           const changerLabel = changer?.displayName || changer?.email || (h.changed_by ? 'Unknown' : 'System');
                           const changedAtDisplay = h.changed_at ? new Date(h.changed_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '';
@@ -3877,6 +3879,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
                             </div>
                           );
                         })}
+                        {!bookedPlHistoryShowAll && history.length > 5 && (
+                          <button
+                            onClick={() => setBookedPlHistoryShowAll(true)}
+                            className="w-full text-center text-[9px] font-black text-indigo-500 hover:text-indigo-600 uppercase tracking-wider py-1 cursor-pointer"
+                          >
+                            View {history.length - 5} more
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -3975,8 +3985,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       <ChevronDown className={`w-3 h-3 transition-transform ${bankBalanceHistoryExpanded ? 'rotate-180' : ''}`} />
                     </button>
                     {bankBalanceHistoryExpanded && (
-                      <div className="mt-1.5 space-y-1.5 max-h-56 overflow-y-auto">
-                        {bbHistory.map((h: any) => {
+                      <div className="mt-1.5 space-y-1.5">
+                        {(bankBalanceHistoryShowAll ? bbHistory : bbHistory.slice(0, 5)).map((h: any) => {
                           const changer = workspaceMembers.find((m: any) => m.uid === h.changed_by);
                           const changerLabel = changer?.displayName || changer?.email || (h.changed_by ? 'Unknown' : 'System');
                           const changedAtDisplay = h.changed_at ? new Date(h.changed_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '';
@@ -3997,6 +4007,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
                             </div>
                           );
                         })}
+                        {!bankBalanceHistoryShowAll && bbHistory.length > 5 && (
+                          <button
+                            onClick={() => setBankBalanceHistoryShowAll(true)}
+                            className="w-full text-center text-[9px] font-black text-indigo-500 hover:text-indigo-600 uppercase tracking-wider py-1 cursor-pointer"
+                          >
+                            View {bbHistory.length - 5} more
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
