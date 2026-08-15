@@ -9,9 +9,9 @@
 // Frontend call sites: /api/portfolio-mf?action=search&q=... (GET), /api/portfolio-mf?action=nav
 // (POST, same body as before), /api/portfolio-mf?action=holdings (POST, same body as before).
 
-import { mfSearchHandler } from "./_lib/mf-search";
-import { mfNavHandler } from "./_lib/mf-nav";
-import { mfHoldingsHandler } from "./_lib/mf-holdings";
+import { mfSearchHandler } from "./_lib/mf-search.js";
+import { mfNavHandler } from "./_lib/mf-nav.js";
+import { mfHoldingsHandler } from "./_lib/mf-holdings.js";
 
 export default async function handler(req: any, res: any) {
   const action = req.query?.action;

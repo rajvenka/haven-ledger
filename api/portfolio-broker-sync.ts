@@ -11,10 +11,10 @@
 // Frontend call sites now POST { broker: 'etoro' | 'webull' | 'zerodha' | 'groww', ...restOfBody }
 // to /api/portfolio-broker-sync instead of the old per-broker URLs.
 
-import { etoroHandler } from "./_lib/etoro-sync";
-import { webullHandler } from "./_lib/webull-sync";
-import { zerodhaHandler } from "./_lib/zerodha-sync";
-import { growwHandler } from "./_lib/groww-sync";
+import { etoroHandler } from "./_lib/etoro-sync.js";
+import { webullHandler } from "./_lib/webull-sync.js";
+import { zerodhaHandler } from "./_lib/zerodha-sync.js";
+import { growwHandler } from "./_lib/groww-sync.js";
 
 function parseBody(req: any): any {
   let body = req.body;
