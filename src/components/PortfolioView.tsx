@@ -1023,22 +1023,32 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [priceRefreshSummary, setPriceRefreshSummary] = useState<string | null>(null);
   const [syncingConnectionId, setSyncingConnectionId] = useState<string | null>(null);
 
-  // Auto price refresh toggle - user-controlled, per-workspace, persisted via localStorage.
-  // Defaults to OFF given the earlier Supabase egress incident - the person explicitly asked
-  // to control this themselves under Portfolio settings rather than have it always-on or
-  // permanently hardcoded off. Read once on mount / workspace change; the effect below re-reads
-  // this key every time it runs, so toggling it takes effect on the very next stale-price check.
-  const autoRefreshStorageKey = `auto_price_refresh_enabled:${workspaceName || 'default'}`;
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState<boolean>(() => {
-    try { return localStorage.getItem(autoRefreshStorageKey) === 'true'; } catch { return false; }
+  // Auto price refresh - user-controlled, PER-PORTFOLIO, persisted via localStorage.
+  // Defaults to all off given the earlier Supabase egress incident - the person explicitly
+  // asked to control this themselves, per portfolio, under Portfolio settings, rather than
+  // one workspace-wide switch. Stored as a JSON array of enabled portfolio IDs; '' represents
+  // the single-portfolio-mode synthetic "Workspace" entry, matching the broker table below.
+  const autoRefreshStorageKey = `auto_price_refresh_portfolios:${workspaceName || 'default'}`;
+  const [autoRefreshPortfolioIds, setAutoRefreshPortfolioIds] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(autoRefreshStorageKey);
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch { return new Set(); }
   });
   useEffect(() => {
-    try { setAutoRefreshEnabled(localStorage.getItem(autoRefreshStorageKey) === 'true'); } catch { /* ignore */ }
+    try {
+      const raw = localStorage.getItem(autoRefreshStorageKey);
+      setAutoRefreshPortfolioIds(raw ? new Set(JSON.parse(raw)) : new Set());
+    } catch { setAutoRefreshPortfolioIds(new Set()); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceName]);
-  const toggleAutoRefresh = (next: boolean) => {
-    setAutoRefreshEnabled(next);
-    try { localStorage.setItem(autoRefreshStorageKey, String(next)); } catch { /* ignore */ }
+  const togglePortfolioAutoRefresh = (portfolioId: string, next: boolean) => {
+    setAutoRefreshPortfolioIds(prev => {
+      const updated = new Set(prev);
+      if (next) updated.add(portfolioId); else updated.delete(portfolioId);
+      try { localStorage.setItem(autoRefreshStorageKey, JSON.stringify(Array.from(updated))); } catch { /* ignore */ }
+      return updated;
+    });
   };
 
   // Zerodha (Kite Connect) and Groww both use daily-expiring access tokens by design, not a
@@ -1776,7 +1786,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setImportSaving(false);
   };
 
-  const refreshAllPrices = async (scope: 'active' | 'sold' = 'active') => {
+  const refreshAllPrices = async (scope: 'active' | 'sold' = 'active', portfolioIds?: string[]) => {
     setRefreshingPrices(true);
     setPriceRefreshSummary(null);
     await runAction(async () => {
@@ -1792,6 +1802,13 @@ export default function PortfolioView(props: PortfolioViewProps) {
         scopedHoldings = soldHoldings.filter(h => h.sold_date && new Date(h.sold_date).getTime() >= oneYearAgo);
       } else {
         scopedHoldings = activeHoldings;
+      }
+      // Optional portfolio scoping - used by the per-portfolio auto-refresh toggle so a
+      // portfolio with auto-refresh off is genuinely never touched by an automatic run, not
+      // just excluded from the staleness check that decides whether to trigger one.
+      if (portfolioIds && portfolioIds.length > 0) {
+        const idSet = new Set(portfolioIds);
+        scopedHoldings = scopedHoldings.filter(h => idSet.has(h.portfolio_id || ''));
       }
       // Falls back to symbol when ticker is still null - covers rows inserted before the
       // ticker fix for eToro/Webull, so a plain Refresh click backfills them too rather than
@@ -2028,18 +2045,18 @@ export default function PortfolioView(props: PortfolioViewProps) {
     setRefreshingPrices(false);
   };
 
-  // Auto-refresh gated by the autoRefreshEnabled toggle above (user-controlled, under
-  // Portfolio Settings) rather than being permanently hardcoded off - the earlier egress
-  // incident's actual root cause (a full-dataset reload firing per-holding during every
-  // refresh) is already fixed separately, so this is now a genuine, safe user preference
-  // rather than a safety measure. Defaults to off. The manual Refresh Prices button is
-  // completely unaffected either way - it always works regardless of this toggle.
+  // Auto-refresh gated per-portfolio by autoRefreshPortfolioIds above (user-controlled, under
+  // Portfolio Settings) rather than one workspace-wide switch or being permanently hardcoded
+  // off - the earlier egress incident's actual root cause (a full-dataset reload firing
+  // per-holding during every refresh) is already fixed separately, so this is now a genuine,
+  // safe user preference rather than a safety measure. Defaults to none enabled. The manual
+  // Refresh Prices button is completely unaffected either way - it always works regardless.
   const autoRefreshTriggeredRef = React.useRef(false);
   useEffect(() => {
-    if (!autoRefreshEnabled) return;
+    if (autoRefreshPortfolioIds.size === 0) return;
     if (autoRefreshTriggeredRef.current) return;
     if (isReadOnly) return;
-    const refreshableStocks = activeHoldings.filter(h => h.holding_type !== 'mutual_fund');
+    const refreshableStocks = activeHoldings.filter(h => h.holding_type !== 'mutual_fund' && autoRefreshPortfolioIds.has(h.portfolio_id || ''));
     if (refreshableStocks.length === 0) return;
     const staleThresholdMs = 6 * 60 * 60 * 1000; // 6 hours
     const isStale = refreshableStocks.some(h => !h.current_price_updated_at || (Date.now() - new Date(h.current_price_updated_at).getTime()) > staleThresholdMs);
@@ -2052,9 +2069,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
       localStorage.setItem(cooldownKey, String(Date.now()));
     } catch { /* ignore storage errors, fall through to refresh */ }
     autoRefreshTriggeredRef.current = true;
-    refreshAllPrices('active');
+    refreshAllPrices('active', Array.from(autoRefreshPortfolioIds));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeHoldings.length, autoRefreshEnabled]);
+  }, [activeHoldings.length, autoRefreshPortfolioIds]);
 
   const handleAddHolding = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2934,22 +2951,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
               <RefreshCw className="w-3.5 h-3.5" /> Broker Connections
             </span>
-            <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
-              <span className="text-[9px] font-bold text-slate-400 uppercase">Auto-refresh</span>
-              <button
-                type="button"
-                onClick={() => toggleAutoRefresh(!autoRefreshEnabled)}
-                className={`relative w-8 h-[18px] rounded-full transition-colors cursor-pointer ${autoRefreshEnabled ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}
-                aria-label="Toggle automatic price refresh"
-              >
-                <span className={`absolute top-0.5 left-0.5 w-[14px] h-[14px] rounded-full bg-white transition-transform ${autoRefreshEnabled ? 'translate-x-[14px]' : ''}`} />
-              </button>
-            </label>
           </div>
           <p className="text-[9px] text-slate-400 mb-3">
-            {autoRefreshEnabled
-              ? 'Prices refresh automatically when stale (checked on page load, at most once per 30 min).'
-              : 'Automatic refresh is off - use the Sync buttons below, or Refresh Prices, whenever you want fresh prices.'}
+            Auto-refresh (per portfolio, right-most column) checks for stale prices when the page loads, at most once per 30 min. Off by default - Sync below or Refresh Prices always work regardless.
           </p>
           {(() => {
             const tablePortfolios = portfolioMode === 'multiple'
@@ -2965,6 +2969,21 @@ export default function PortfolioView(props: PortfolioViewProps) {
               if (type === 'groww') { setZerodhaConnectPortfolioId(c.portfolio_id || ''); setGrowwEditing(true); return; }
             };
             const rows: React.ReactNode[] = [];
+            const autoToggleCell = (portfolioId: string, rowSpan?: number) => {
+              const on = autoRefreshPortfolioIds.has(portfolioId);
+              return (
+                <td rowSpan={rowSpan} className="py-2 pr-1 text-right align-top">
+                  <button
+                    type="button"
+                    onClick={() => togglePortfolioAutoRefresh(portfolioId, !on)}
+                    className={`relative inline-block w-7 h-4 rounded-full transition-colors cursor-pointer ${on ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}
+                    aria-label={`Toggle automatic price refresh for this portfolio`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${on ? 'translate-x-3' : ''}`} />
+                  </button>
+                </td>
+              );
+            };
             for (const p of tablePortfolios) {
               const conns = portfolioBrokerConnections.filter((c: any) => String(c.portfolio_id || '') === String(p.id || ''));
               if (conns.length === 0) {
@@ -2972,6 +2991,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   <tr key={`${p.id || 'ws'}-none`}>
                     <td className="py-2 pl-1 font-bold text-slate-700 dark:text-slate-300 align-top">{p.name}</td>
                     <td className="py-2 text-slate-400 italic" colSpan={2}>No broker connected</td>
+                    {autoToggleCell(p.id || '')}
                   </tr>
                 );
                 continue;
@@ -3029,6 +3049,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         )}
                       </div>
                     </td>
+                    {idx === 0 && autoToggleCell(p.id || '', conns.length)}
                   </tr>
                 );
               });
@@ -3042,6 +3063,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       <th className="text-left pb-2 pl-1">Portfolio</th>
                       <th className="text-left pb-2 pl-2">Broker</th>
                       <th className="text-right pb-2 pr-1">Status</th>
+                      <th className="text-right pb-2 pr-1">Auto</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-900">{rows}</tbody>
