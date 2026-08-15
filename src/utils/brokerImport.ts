@@ -22,7 +22,7 @@ export interface ParsedHolding {
   matchKey?: string;
 }
 
-export type BrokerTemplate = 'zerodha' | 'groww_stocks' | 'groww_mf' | 'stake' | 'universal' | 'moomoo' | 'tiger';
+export type BrokerTemplate = 'zerodha' | 'groww_stocks' | 'groww_mf' | 'stake' | 'universal' | 'moomoo' | 'tiger' | 'tiger_statement';
 export const UNIVERSAL_TEMPLATE_HEADERS = ['Broker', 'Holding Type', 'Symbol', 'ISIN', 'Exchange', 'Quantity', 'Buy Price', 'Current Price', 'Currency', 'Source', 'Folio Number'];
 export const UNIVERSAL_TEMPLATE_EXAMPLE_ROW = ['eToro', 'Stock', 'AAPL', '', 'NASDAQ', 10, 150.25, 175.50, 'USD', '', ''];
 
@@ -412,6 +412,104 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
     return out;
   }
 
+  if (template === 'tiger_statement') {
+    // Real Tiger Brokers (AU) "Activity Statement" export - a multi-section report dumped
+    // as one CSV, not a plain single-table file. Every section shares the same shape:
+    // col0 = section name ("Holdings", "Cash Report", ...), col1 = sub-type ("Stock", ...),
+    // col2 = mostly unused, col3 = row kind (blank on the header row itself, "DATA" for a
+    // real row, "TOTAL"/"HEADER_DATA" for summary rows to skip), col4+ = the actual fields,
+    // matching whatever the section's own header row lists at col4+ (e.g. Symbol, Quantity,
+    // Cost Price, Close Price, Currency for Holdings). Field lookups below are by header
+    // name, not fixed position, since that's the part Tiger could plausibly reorder.
+    const splitCsvLine = (line: string): string[] => {
+      const out: string[] = [];
+      let cur = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (inQuotes) {
+          if (c === '"') {
+            if (line[i + 1] === '"') { cur += '"'; i++; } else inQuotes = false;
+          } else cur += c;
+        } else if (c === '"') {
+          inQuotes = true;
+        } else if (c === ',') {
+          out.push(cur);
+          cur = '';
+        } else {
+          cur += c;
+        }
+      }
+      out.push(cur);
+      return out.map((s) => s.trim());
+    };
+
+    const text = (await file.text()).replace(/^\uFEFF/, '');
+    const lines = text.split(/\r?\n/);
+    let headerCols: string[] | null = null;
+    const dataRows: string[][] = [];
+    for (const raw of lines) {
+      if (!raw.trim()) continue;
+      const cols = splitCsvLine(raw);
+      if (cols[0] !== 'Holdings') continue;
+      if (!headerCols && cols.includes('Symbol') && cols.includes('Quantity')) {
+        headerCols = cols;
+        continue;
+      }
+      if (headerCols && cols[3] === 'DATA') dataRows.push(cols);
+    }
+    if (!headerCols) {
+      throw new Error("Couldn't find a Holdings section - is this a Tiger Brokers (AU) Activity Statement CSV export?");
+    }
+    const idx = (name: string) => headerCols!.findIndex((h) => h.trim().toLowerCase() === name.toLowerCase());
+    const iType = 1;
+    const iSymbol = idx('Symbol');
+    const iQty = idx('Quantity');
+    const iCost = idx('Cost Price');
+    const iClose = idx('Close Price');
+    const iCcy = idx('Currency');
+    if (iSymbol < 0 || iQty < 0) {
+      throw new Error('Tiger statement: could not find Symbol/Quantity columns in the Holdings section.');
+    }
+    const exchangeForCcy = (ccy: string): string => {
+      switch (ccy.toUpperCase()) {
+        case 'AUD': return 'ASX';
+        case 'HKD': return 'HKEX';
+        case 'SGD': return 'SGX';
+        default: return 'US';
+      }
+    };
+    const out: ParsedHolding[] = [];
+    for (const cols of dataRows) {
+      // "Symbol" here is actually "Full Name (TICKER)" (e.g. "Micron Technology (MU)") -
+      // the clean ticker lives in the trailing parentheses; falls back to the raw text
+      // (unlikely, but avoids silently dropping a row) if that pattern isn't there.
+      const rawSymbol = String(cols[iSymbol] || '').trim();
+      if (!rawSymbol) continue;
+      const qty = Number(String(cols[iQty] || '').replace(/,/g, ''));
+      if (!Number.isFinite(qty) || qty === 0) continue;
+      const m = rawSymbol.match(/\(([^()]+)\)\s*$/);
+      const ticker = (m ? m[1] : rawSymbol).trim().toUpperCase();
+      const buy = iCost >= 0 ? Number(String(cols[iCost] || '').replace(/,/g, '')) || 0 : 0;
+      const cur = iClose >= 0 ? (Number(String(cols[iClose] || '').replace(/,/g, '')) || buy) : buy;
+      const ccy = ((iCcy >= 0 ? cols[iCcy] : '') || 'USD').toUpperCase();
+      const holdingType = String(cols[iType] || '').toLowerCase().includes('fund') ? 'mutual_fund' as const : 'stock' as const;
+      out.push({
+        broker: 'Tiger',
+        holdingType,
+        symbol: ticker,
+        exchange: exchangeForCcy(ccy),
+        quantity: Math.abs(qty),
+        buyPrice: buy,
+        currentPrice: cur,
+        currency: ccy as ParsedHolding['currency'],
+        source: 'Tiger',
+      });
+    }
+    if (!out.length) throw new Error("No DATA rows found in the Holdings section - check this is a Tiger Brokers Activity Statement.");
+    return out;
+  }
+
   if (template === 'groww_stocks') {
     const headerIdx = findHeaderRowIndex(rows, 'Stock Name');
     if (headerIdx === -1) throw new Error("Couldn't find the 'Stock Name' column - is this a Groww stocks holdings export?");
@@ -461,6 +559,14 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
 // processed as a historical timeline. Zerodha embeds it in the sheet ("...as on
 // YYYY-MM-DD"); Groww embeds it in the filename (DD-MM-YYYY).
 export function extractFileDate(fileName: string, workbook: XLSX.WorkBook, template: BrokerTemplate): string | null {
+  if (template === 'tiger_statement') {
+    // Statement_<account>_<startYYYYMMDD>_<endYYYYMMDD>.csv - anchored to end-of-filename
+    // (not just "8 digits, underscore, 8 digits" anywhere) because the account number
+    // itself is often 8 digits too and would otherwise false-match as a date range.
+    const m = fileName.match(/(\d{4})(\d{2})(\d{2})_(\d{4})(\d{2})(\d{2})\.csv$/i);
+    if (m) return `${m[4]}-${m[5]}-${m[6]}`; // period end date
+    return null;
+  }
   if (template === 'stake') {
     // PORTFOLIO_VALUATION_YYYY-MM-DD-....xlsx or "as at YYYY-MM-DD" / Statement Date in sheet
     const fromName = fileName.match(/(20\d{2}-\d{2}-\d{2})/);

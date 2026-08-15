@@ -4589,8 +4589,11 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   { id: 'groww_stocks', label: 'Groww Stocks', hint: 'Stocks holdings statement' },
                   { id: 'groww_mf', label: 'Groww MF', hint: 'Mutual fund holdings XLSX' },
                   { id: 'stake', label: 'Stake (AU)', hint: 'Portfolio Valuation XLSX as downloaded' },
+                  { id: 'tiger_statement', label: 'Tiger (AU)', hint: 'Activity Statement CSV export' },
                   { id: 'universal', label: 'Universal', hint: 'Blank template — any broker' },
                 ];
+                const csvTemplates: BrokerTemplate[] = ['tiger_statement', 'moomoo', 'tiger'];
+                const isCsvTemplate = csvTemplates.includes(importTemplate);
                 const fileOpen = importPath === 'file';
 
                 return (
@@ -4708,6 +4711,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                             {importTemplate === 'groww_stocks' && 'Groww → Reports → Stocks Holdings Statement (XLSX)'}
                             {importTemplate === 'groww_mf' && 'Groww → Reports → Mutual Funds Holdings Statement (XLSX)'}
                             {importTemplate === 'stake' && 'Stake → Portfolio Valuation XLSX as-is (Aus Equities + Wall St Equities). ASX→AUD / Stake AU · Wall St→USD / Stake US.'}
+                            {importTemplate === 'tiger_statement' && 'Tiger Trade app → Statements → Activity Statement → Export → CSV. Reads the Holdings section; symbol is taken from the ticker in parentheses (e.g. "Micron Technology (MU)" → MU).'}
                             {importTemplate === 'universal' && 'Any broker — use blank template. Already-imported holdings are skipped.'}
                           </p>
                           {importTemplate === 'universal' && (
@@ -4717,9 +4721,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           )}
                           <label className="flex flex-col items-center justify-center gap-2 px-4 py-6 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-violet-400 dark:hover:border-violet-500 rounded-xl cursor-pointer transition-colors bg-white/50 dark:bg-slate-950/40">
                             <Upload className="w-5 h-5 text-slate-400" />
-                            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{importParsing ? 'Reading file…' : `Choose ${allTemplates.find(x => x.id === importTemplate)?.label || ''} .xlsx file`}</span>
+                            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{importParsing ? 'Reading file…' : `Choose ${allTemplates.find(x => x.id === importTemplate)?.label || ''} ${isCsvTemplate ? '.csv' : '.xlsx'} file`}</span>
                             <span className="text-[10px] text-slate-400">or drag it here</span>
-                            <input type="file" accept=".xlsx,.xls" onChange={handleImportFile} disabled={importParsing} className="hidden" />
+                            <input type="file" accept={isCsvTemplate ? '.csv' : '.xlsx,.xls'} onChange={handleImportFile} disabled={importParsing} className="hidden" />
                           </label>
                         </div>
                       )}
