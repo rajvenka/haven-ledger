@@ -2478,6 +2478,7 @@ export default function PortfolioV1View({
               </div>
             </button>
             <div
+              key={`total-${portfolioFilter}-${totalPortfolioTile.displayCcy}-${cfdView}`}
               className="px-3 sm:px-3.5 pb-3"
               onClick={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
@@ -2591,6 +2592,7 @@ export default function PortfolioV1View({
                 </button>
                 {primary && (
                   <div
+                    key={`cat-${id}-${portfolioFilter}-${primary.currency}-${cfdView}`}
                     className="px-3 sm:px-3.5 pb-3"
                     onClick={(e) => e.stopPropagation()}
                     onPointerDown={(e) => e.stopPropagation()}
