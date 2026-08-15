@@ -3876,31 +3876,42 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       <ChevronDown className={`w-3 h-3 transition-transform ${bookedPlHistoryExpanded ? 'rotate-180' : ''}`} />
                     </button>
                     {bookedPlHistoryExpanded && (
-                      <div className="mt-1.5 space-y-1.5">
-                        {(bookedPlHistoryShowAll ? history : history.slice(0, 5)).map((h: any) => {
-                          const changer = workspaceMembers.find((m: any) => m.uid === h.changed_by);
-                          const changerLabel = changer?.displayName || changer?.email || (h.changed_by ? 'Unknown' : 'System');
-                          const changedAtDisplay = h.changed_at ? new Date(h.changed_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '';
-                          return (
-                            <div key={h.id} className="text-[10px] py-1.5 border-b border-slate-50 dark:border-slate-900/50 last:border-0">
-                              <div className="flex items-center justify-between">
-                                <span className="text-slate-500">As of {h.baseline_date}</span>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <span className="font-semibold text-slate-700 dark:text-slate-300">{fmt(Number(h.new_amount))}</span>
-                                  {h.previous_amount != null && (
-                                    <span className={Number(h.changed_amount) >= 0 ? 'text-emerald-500' : 'text-rose-500'}>
-                                      ({Number(h.changed_amount) >= 0 ? '+' : ''}{fmt(Number(h.changed_amount))})
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex items-center justify-between mt-0.5 text-slate-400">
-                                <span>{changedAtDisplay} · by {changerLabel}</span>
-                              </div>
-                              {h.notes && <p className="text-slate-400 italic mt-0.5">{h.notes}</p>}
-                            </div>
-                          );
-                        })}
+                      <div className="mt-1.5 overflow-x-auto -mx-1">
+                        <table className="w-full text-[10px] min-w-[360px]">
+                          <thead>
+                            <tr className="text-[8px] font-black text-slate-400 uppercase tracking-wider">
+                              <th className="text-left pb-1.5 pl-1">As of</th>
+                              <th className="text-right pb-1.5">Amount</th>
+                              <th className="text-right pb-1.5 pr-1">By / when</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50 dark:divide-slate-900/50">
+                            {(bookedPlHistoryShowAll ? history : history.slice(0, 5)).map((h: any) => {
+                              const changer = workspaceMembers.find((m: any) => m.uid === h.changed_by);
+                              const changerLabel = changer?.displayName || changer?.email || (h.changed_by ? 'Unknown' : 'System');
+                              const changedAtDisplay = h.changed_at ? new Date(h.changed_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+                              return (
+                                <tr key={h.id}>
+                                  <td className="py-1.5 pl-1 align-top">
+                                    <span className="text-slate-500">{h.baseline_date}</span>
+                                    {h.notes && <p className="text-slate-400 italic mt-0.5">{h.notes}</p>}
+                                  </td>
+                                  <td className="py-1.5 text-right align-top">
+                                    <span className="font-semibold text-slate-700 dark:text-slate-300">{fmt(Number(h.new_amount))}</span>
+                                    {h.previous_amount != null && (
+                                      <span className={`block ${Number(h.changed_amount) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                        {Number(h.changed_amount) >= 0 ? '+' : ''}{fmt(Number(h.changed_amount))}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="py-1.5 pr-1 text-right align-top text-slate-400">
+                                    {changedAtDisplay}<br />by {changerLabel}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                         {!bookedPlHistoryShowAll && history.length > 5 && (
                           <button
                             onClick={() => setBookedPlHistoryShowAll(true)}
@@ -4007,28 +4018,38 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       <ChevronDown className={`w-3 h-3 transition-transform ${bankBalanceHistoryExpanded ? 'rotate-180' : ''}`} />
                     </button>
                     {bankBalanceHistoryExpanded && (
-                      <div className="mt-1.5 space-y-1.5">
-                        {(bankBalanceHistoryShowAll ? bbHistory : bbHistory.slice(0, 5)).map((h: any) => {
-                          const changer = workspaceMembers.find((m: any) => m.uid === h.changed_by);
-                          const changerLabel = changer?.displayName || changer?.email || (h.changed_by ? 'Unknown' : 'System');
-                          const changedAtDisplay = h.changed_at ? new Date(h.changed_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '';
-                          return (
-                            <div key={h.id} className="text-[10px] py-1.5 border-b border-slate-50 dark:border-slate-900/50 last:border-0">
-                              <div className="flex items-center justify-between">
-                                <span className="text-slate-400">{changedAtDisplay} · by {changerLabel}</span>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <span className="font-semibold text-slate-700 dark:text-slate-300">{fmt(Number(h.new_amount))}</span>
-                                  {h.previous_amount != null && (
-                                    <span className={Number(h.changed_amount) >= 0 ? 'text-emerald-500' : 'text-rose-500'}>
-                                      ({Number(h.changed_amount) >= 0 ? '+' : ''}{fmt(Number(h.changed_amount))})
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              {h.notes && <p className="text-slate-400 italic mt-0.5">{h.notes}</p>}
-                            </div>
-                          );
-                        })}
+                      <div className="mt-1.5 overflow-x-auto -mx-1">
+                        <table className="w-full text-[10px] min-w-[360px]">
+                          <thead>
+                            <tr className="text-[8px] font-black text-slate-400 uppercase tracking-wider">
+                              <th className="text-left pb-1.5 pl-1">When / by</th>
+                              <th className="text-right pb-1.5 pr-1">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50 dark:divide-slate-900/50">
+                            {(bankBalanceHistoryShowAll ? bbHistory : bbHistory.slice(0, 5)).map((h: any) => {
+                              const changer = workspaceMembers.find((m: any) => m.uid === h.changed_by);
+                              const changerLabel = changer?.displayName || changer?.email || (h.changed_by ? 'Unknown' : 'System');
+                              const changedAtDisplay = h.changed_at ? new Date(h.changed_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+                              return (
+                                <tr key={h.id}>
+                                  <td className="py-1.5 pl-1 align-top text-slate-400">
+                                    {changedAtDisplay}<br />by {changerLabel}
+                                    {h.notes && <p className="text-slate-400 italic mt-0.5">{h.notes}</p>}
+                                  </td>
+                                  <td className="py-1.5 pr-1 text-right align-top">
+                                    <span className="font-semibold text-slate-700 dark:text-slate-300">{fmt(Number(h.new_amount))}</span>
+                                    {h.previous_amount != null && (
+                                      <span className={`block ${Number(h.changed_amount) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                        {Number(h.changed_amount) >= 0 ? '+' : ''}{fmt(Number(h.changed_amount))}
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                         {!bankBalanceHistoryShowAll && bbHistory.length > 5 && (
                           <button
                             onClick={() => setBankBalanceHistoryShowAll(true)}
