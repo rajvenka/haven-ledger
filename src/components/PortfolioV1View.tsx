@@ -2113,12 +2113,12 @@ export default function PortfolioV1View({
                   Overall
                 </button>
               </div>
-              <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5">
+              <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5 overflow-x-auto max-w-[60vw] sm:max-w-none" style={{ scrollbarWidth: 'none' }}>
                 <button
                   type="button"
-                  onClick={() => setMoversUnit('dollar')}
-                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                    moversUnit === 'dollar'
+                  onClick={() => { setMoversUnit('dollar'); setCfdView(false); }}
+                  className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold cursor-pointer ${
+                    moversUnit === 'dollar' && !cfdView
                       ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
                       : 'text-slate-500'
                   }`}
@@ -2127,32 +2127,44 @@ export default function PortfolioV1View({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setMoversUnit('pct')}
-                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                    moversUnit === 'pct'
+                  onClick={() => { setMoversUnit('pct'); setCfdView(false); }}
+                  className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold cursor-pointer ${
+                    moversUnit === 'pct' && !cfdView
                       ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-sm'
                       : 'text-slate-500'
                   }`}
                 >
                   %
                 </button>
+                {totalPortfolioTile.hasLeveraged && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => { setMoversUnit('dollar'); setCfdView(true); }}
+                      title="Full CFD exposure (raw market value), not real cash committed"
+                      className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold cursor-pointer ${
+                        moversUnit === 'dollar' && cfdView
+                          ? 'bg-amber-500 text-white shadow-sm'
+                          : 'text-amber-600 dark:text-amber-400'
+                      }`}
+                    >
+                      CFD $
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setMoversUnit('pct'); setCfdView(true); }}
+                      title="Full CFD exposure (raw market value), not real cash committed"
+                      className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold cursor-pointer ${
+                        moversUnit === 'pct' && cfdView
+                          ? 'bg-amber-500 text-white shadow-sm'
+                          : 'text-amber-600 dark:text-amber-400'
+                      }`}
+                    >
+                      CFD %
+                    </button>
+                  </>
+                )}
               </div>
-              {totalPortfolioTile.hasLeveraged && (
-                <div className="inline-flex rounded-full bg-amber-50 dark:bg-amber-950/30 p-0.5 border border-amber-200 dark:border-amber-900">
-                  <button
-                    type="button"
-                    onClick={() => setCfdView((v) => !v)}
-                    title={cfdView ? 'Showing full CFD exposure - tap for real cash value' : 'Showing real cash value - tap for full CFD exposure'}
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold cursor-pointer ${
-                      cfdView
-                        ? 'bg-amber-500 text-white shadow-sm'
-                        : 'text-amber-600 dark:text-amber-400'
-                    }`}
-                  >
-                    {moversUnit === 'dollar' ? 'CFD $' : 'CFD %'}
-                  </button>
-                </div>
-              )}
               <button
                 type="button"
                 onClick={() => setShowPnlCalendar((v) => !v)}
@@ -2168,6 +2180,9 @@ export default function PortfolioV1View({
             </div>
 
             <div className="flex items-center justify-end gap-1.5 flex-wrap min-w-0">
+              <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                Actions
+              </span>
               <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-teal-100/90 dark:bg-teal-950/50 border border-teal-200/70 dark:border-teal-800/60">
                 <button
                   type="button"
