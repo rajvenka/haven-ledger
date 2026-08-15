@@ -38,3 +38,26 @@ Exact clocks should be **configurable** (not hard-coded only to AU), using IANA 
 ### Out of scope (for later)
 - Auto-sync on open for that market’s broker.
 - Per-user custom hour ranges UI (v1 can ship sensible AU defaults + region tags).
+
+## Vercel MCP not connected to the account that owns haven-ledger
+
+**Status:** Backlog · not started
+**Area:** Infra / tooling (Vercel access for AI agents)
+**Requested:** 2026-08-15
+
+### Issue
+The Vercel MCP connector available in this environment can only see one team (`havenvalut`), and `list_projects` under that team returns zero projects. Direct lookups for `haven-ledger` / `haven-vault` under that team both 404. Meanwhile the Supabase MCP connects fine and correctly resolves the `haven-ledger` Supabase project (`kvyegcurnwntykqmwrzs`, ap-southeast-2).
+
+This means whichever Vercel account is linked to this session is not the account that actually owns the `haven-ledger` Vercel project / deployment (`haven-ledger.vercel.app`). As a result, an AI agent working in this environment cannot read or set Vercel env vars, inspect deployments, or pull runtime logs/errors for this project — all of that currently has to be done manually in the Vercel dashboard.
+
+### Trigger
+Came up while diagnosing the "Preview today's digest" `Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY` error (api/daily-digest.ts / api/whatsapp-webhook.ts admin() check) — env vars were fixed manually in the dashboard since the MCP tool couldn't confirm or set them.
+
+### Fix
+- Confirm which Vercel account/team `haven-ledger` actually lives under (dashboard → Project Settings).
+- Reconnect/re-authorize the Vercel MCP integration to that account.
+- Re-verify `list_projects` / `get_project` resolve `haven-ledger` afterward.
+
+### Acceptance
+- [ ] Vercel MCP `list_projects` shows `haven-ledger`.
+- [ ] Can read env var names (not just values) and deployment/runtime logs for `haven-ledger` via MCP.
