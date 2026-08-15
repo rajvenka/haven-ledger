@@ -327,6 +327,73 @@ function extractStakeStatementDate(workbook: XLSX.WorkBook): string | undefined 
 }
 
 export async function parseBrokerFile(file: File, template: BrokerTemplate): Promise<ParsedHolding[]> {
+  if (template === 'tiger_portfolio') {
+    // Tiger Trade desktop app's own "Portfolio Details" export (Position tab -> Export),
+    // not the mobile-app Activity Statement handled below - a single flat table with real
+    // FIFO cost basis, no multi-section parsing needed. Saved as UTF-16LE with a BOM,
+    // tab-separated despite the .csv extension.
+    //
+    // Handled entirely before XLSX.read() runs (unlike every other template here), and
+    // deliberately never touches the xlsx library at all for this template: XLSX.read()
+    // sniffs the UTF-16 BOM and routes into its own internal read_utf16 helper, which
+    // throws "Cannot read properties of undefined (reading 'utils')" in the ESM build Vite
+    // bundles (its codepage table isn't wired up there) - reproduced directly against
+    // xlsx.mjs. The file is parsed by hand instead: sniff the BOM ourselves, decode with
+    // TextDecoder, split on tabs.
+    const buf = await file.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let text: string;
+    if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) {
+      text = new TextDecoder('utf-16le').decode(bytes.subarray(2));
+    } else if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) {
+      text = new TextDecoder('utf-16be').decode(bytes.subarray(2));
+    } else {
+      text = new TextDecoder('utf-8').decode(bytes).replace(/^\uFEFF/, '');
+    }
+    const lines = text.split(/\r?\n/).filter((l) => l.trim());
+    if (lines.length < 2) throw new Error('Empty Tiger Portfolio Details file');
+    const headers = lines[0].split('\t').map((h) => h.trim());
+    const idx = (name: string) => headers.findIndex((h) => h.toLowerCase() === name.toLowerCase());
+    const iSymbol = idx('Symbol');
+    const iInstrument = idx('Instrument');
+    const iCurrent = idx('Current');
+    const iCost = idx('Cost (FIFO)');
+    const iHoldings = idx('Holdings');
+    const iCcy = idx('Currency');
+    if (iSymbol < 0 || iHoldings < 0) {
+      throw new Error("Couldn't find Symbol/Holdings columns - is this a Tiger Trade desktop 'Portfolio Details' export?");
+    }
+    const out: ParsedHolding[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split('\t').map((c) => c.trim());
+      // Options/futures/warrants rows share the same columns but aren't something this app
+      // can represent as a plain equity holding (they'd need expiry/strike tracked
+      // separately) - only plain Stock/ETF rows are imported, everything else is skipped.
+      const instrument = String(cols[iInstrument] ?? '').trim().toLowerCase();
+      if (instrument && instrument !== 'stock' && instrument !== 'etf') continue;
+      const symbol = String(cols[iSymbol] ?? '').trim();
+      if (!symbol) continue;
+      const qty = Number(String(cols[iHoldings] ?? '').replace(/,/g, ''));
+      if (!Number.isFinite(qty) || qty === 0) continue;
+      const buy = iCost >= 0 ? Number(String(cols[iCost] ?? '').replace(/,/g, '')) || 0 : 0;
+      const cur = iCurrent >= 0 ? (Number(String(cols[iCurrent] ?? '').replace(/,/g, '')) || buy) : buy;
+      const ccy = ((iCcy >= 0 ? cols[iCcy] : '') || 'USD').toUpperCase();
+      out.push({
+        broker: 'Tiger',
+        holdingType: 'stock',
+        symbol: symbol.toUpperCase(),
+        exchange: exchangeForCcy(ccy),
+        quantity: Math.abs(qty),
+        buyPrice: buy,
+        currentPrice: cur,
+        currency: ccy as ParsedHolding['currency'],
+        source: 'Tiger',
+      });
+    }
+    if (!out.length) throw new Error('No Stock/ETF rows found - check this is a Tiger Trade desktop Portfolio Details export.');
+    return out;
+  }
+
   const buf = await file.arrayBuffer();
   const workbook = XLSX.read(buf, { type: 'array' });
 
@@ -522,67 +589,6 @@ export async function parseBrokerFile(file: File, template: BrokerTemplate): Pro
     return out;
   }
 
-  if (template === 'tiger_portfolio') {
-    // Tiger Trade desktop app's own "Portfolio Details" export (Position tab -> Export),
-    // not the mobile-app Activity Statement handled above - a single flat table with real
-    // FIFO cost basis, no multi-section parsing needed. Saved as UTF-16LE with a BOM,
-    // tab-separated despite the .csv extension - reading it as UTF-8 (the default for
-    // every other CSV template here) produces mojibake with a stray null-byte gap between
-    // every character, so the encoding is sniffed from the byte-order-mark on the raw
-    // ArrayBuffer already fetched above, same buffer XLSX.read used.
-    const bytes = new Uint8Array(buf);
-    let text: string;
-    if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) {
-      text = new TextDecoder('utf-16le').decode(bytes.subarray(2));
-    } else if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) {
-      text = new TextDecoder('utf-16be').decode(bytes.subarray(2));
-    } else {
-      text = new TextDecoder('utf-8').decode(bytes).replace(/^\uFEFF/, '');
-    }
-    const lines = text.split(/\r?\n/).filter((l) => l.trim());
-    if (lines.length < 2) throw new Error('Empty Tiger Portfolio Details file');
-    const headers = lines[0].split('\t').map((h) => h.trim());
-    const idx = (name: string) => headers.findIndex((h) => h.toLowerCase() === name.toLowerCase());
-    const iSymbol = idx('Symbol');
-    const iInstrument = idx('Instrument');
-    const iCurrent = idx('Current');
-    const iCost = idx('Cost (FIFO)');
-    const iHoldings = idx('Holdings');
-    const iCcy = idx('Currency');
-    if (iSymbol < 0 || iHoldings < 0) {
-      throw new Error("Couldn't find Symbol/Holdings columns - is this a Tiger Trade desktop 'Portfolio Details' export?");
-    }
-    const out: ParsedHolding[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split('\t').map((c) => c.trim());
-      // Options/futures/warrants rows share the same columns but aren't something this app
-      // can represent as a plain equity holding (they'd need expiry/strike tracked
-      // separately) - only plain Stock/ETF rows are imported, everything else is skipped.
-      const instrument = String(cols[iInstrument] ?? '').trim().toLowerCase();
-      if (instrument && instrument !== 'stock' && instrument !== 'etf') continue;
-      const symbol = String(cols[iSymbol] ?? '').trim();
-      if (!symbol) continue;
-      const qty = Number(String(cols[iHoldings] ?? '').replace(/,/g, ''));
-      if (!Number.isFinite(qty) || qty === 0) continue;
-      const buy = iCost >= 0 ? Number(String(cols[iCost] ?? '').replace(/,/g, '')) || 0 : 0;
-      const cur = iCurrent >= 0 ? (Number(String(cols[iCurrent] ?? '').replace(/,/g, '')) || buy) : buy;
-      const ccy = ((iCcy >= 0 ? cols[iCcy] : '') || 'USD').toUpperCase();
-      out.push({
-        broker: 'Tiger',
-        holdingType: 'stock',
-        symbol: symbol.toUpperCase(),
-        exchange: exchangeForCcy(ccy),
-        quantity: Math.abs(qty),
-        buyPrice: buy,
-        currentPrice: cur,
-        currency: ccy as ParsedHolding['currency'],
-        source: 'Tiger',
-      });
-    }
-    if (!out.length) throw new Error('No Stock/ETF rows found - check this is a Tiger Trade desktop Portfolio Details export.');
-    return out;
-  }
-
   if (template === 'groww_stocks') {
     const headerIdx = findHeaderRowIndex(rows, 'Stock Name');
     if (headerIdx === -1) throw new Error("Couldn't find the 'Stock Name' column - is this a Groww stocks holdings export?");
@@ -701,6 +707,14 @@ export function extractFileDate(fileName: string, workbook: XLSX.WorkBook, templ
 }
 
 export async function parseBrokerFileWithDate(file: File, template: BrokerTemplate): Promise<{ holdings: ParsedHolding[]; fileDate: string | null }> {
+  if (template === 'tiger_portfolio') {
+    // Same reason as in parseBrokerFile: must never call XLSX.read() on this file (UTF-16
+    // BOM crashes its internal read_utf16 helper). extractFileDate's tiger_portfolio branch
+    // only reads the filename, not the workbook, so an empty placeholder is safe here.
+    const fileDate = extractFileDate(file.name, { SheetNames: [], Sheets: {} } as unknown as XLSX.WorkBook, template);
+    const holdings = await parseBrokerFile(file, template);
+    return { holdings, fileDate };
+  }
   const buf = await file.arrayBuffer();
   const workbook = XLSX.read(buf, { type: 'array' });
   const fileDate = extractFileDate(file.name, workbook, template);
