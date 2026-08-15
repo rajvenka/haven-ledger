@@ -2184,18 +2184,28 @@ export function usePaymentState() {
     return data ?? [];
   };
 
-  // Called right after an eToro import saves its master (consolidated) holdings - queries
-  // Supabase directly for the just-saved rows rather than trusting component state, since
-  // the write calls just before this won't have re-rendered into props yet within the same
-  // function execution (same reasoning as recalculateProjectedBankBalance). Matches by
-  // symbol alone (not symbol+source) - source can be overridden by a global import tag at
-  // save time, which would silently break a source-based match. Known limitation: if the
-  // same stock genuinely has both a Real Asset and a CFD position simultaneously, both
-  // would map to the same symbol and this match becomes ambiguous - rare enough in
-  // practice not to block on, but worth knowing.
+  // Called right after a multi-lot import (eToro, or Amundi's ESOP statement) saves its
+  // master (consolidated) holdings - queries Supabase directly for the just-saved rows
+  // rather than trusting component state, since the write calls just before this won't
+  // have re-rendered into props yet within the same function execution (same reasoning as
+  // recalculateProjectedBankBalance). Matches by symbol alone (not symbol+source) - source
+  // can be overridden by a global import tag at save time, which would silently break a
+  // source-based match. Known limitation: if the same stock genuinely has both a Real
+  // Asset and a CFD position simultaneously, both would map to the same symbol and this
+  // match becomes ambiguous - rare enough in practice not to block on, but worth knowing.
+  //
+  // Broker filter is derived from the lots' own `broker` field (not hardcoded to 'eToro') -
+  // originally this only ever ran for eToro syncs, but Amundi's statement upload reuses
+  // this same function and its master holding is saved under broker 'Amundi ESR', not
+  // 'eToro'. A hardcoded eq('broker','eToro') silently matched zero master rows for Amundi
+  // and skipped the lot-attach step entirely (master holding saved fine, no lots ever
+  // written) - this bug shipped in the initial Amundi feature and was only caught after a
+  // real upload landed with 1 holding and 0 lots.
   const syncEtoroHoldingLots = async (symbols: string[], rawLotsBySymbol: Map<string, any[]>, portfolioId?: string) => {
     if (!activeWorkspaceId || symbols.length === 0) return;
-    let query = supabase.from('portfolio_holdings').select('id, symbol, source').eq('workspace_id', activeWorkspaceId).eq('broker', 'eToro').eq('status', 'active');
+    const brokers = Array.from(new Set(Array.from(rawLotsBySymbol.values()).flat().map((l: any) => l?.broker).filter(Boolean)));
+    let query = supabase.from('portfolio_holdings').select('id, symbol, source').eq('workspace_id', activeWorkspaceId).eq('status', 'active');
+    query = brokers.length > 0 ? query.in('broker', brokers) : query.eq('broker', 'eToro');
     query = portfolioId ? query.eq('portfolio_id', portfolioId) : query.is('portfolio_id', null);
     const { data: masterRows } = await query;
     if (!masterRows) return;
