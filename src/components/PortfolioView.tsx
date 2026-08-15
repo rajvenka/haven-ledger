@@ -4639,6 +4639,35 @@ export default function PortfolioView(props: PortfolioViewProps) {
                       </div>
                     )}
 
+                    {/* Amundi/Capgemini ESOP statement (PDF) — only meaningful for EUR books,
+                        and not a template brokerImport.ts can parse (it's a PDF, not an
+                        XLSX), so it gets its own dedicated card rather than joining the
+                        template chip row below. Reuses the same handleAmundiUpload used by
+                        the standalone card in the Connect Broker section - both paths end
+                        up in the same importRawParsed/etoroRawLots/amundiSarGrants state. */}
+                    {String(portfolios.find((p: any) => p.id === pid)?.currency || baseCurrency || '').toUpperCase() === 'EUR' && (
+                      <div className="rounded-2xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/20 p-3 space-y-2">
+                        <p className="text-[12px] font-black text-indigo-700 dark:text-indigo-300">Amundi / Capgemini ESOP statement</p>
+                        <p className="text-[9px] text-slate-500">Upload your Amundi ESR account statement (PDF) — each vintage-year tranche becomes its own lot under one consolidated Capgemini holding.</p>
+                        <label className={`flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wide cursor-pointer ${amundiUploading ? 'bg-slate-100 dark:bg-slate-800 text-slate-400' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}>
+                          <Upload className={`w-3.5 h-3.5 ${amundiUploading ? 'animate-pulse' : ''}`} />
+                          {amundiUploading ? 'Parsing statement…' : 'Choose Amundi statement (PDF)'}
+                          <input
+                            type="file"
+                            accept="application/pdf"
+                            disabled={amundiUploading}
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              e.target.value = '';
+                              if (file) handleAmundiUpload(file, pid);
+                            }}
+                          />
+                        </label>
+                        {amundiUploadError && <p className="text-[10px] text-rose-500">{amundiUploadError}</p>}
+                      </div>
+                    )}
+
                     {/* Import file — template chips always visible under this section */}
                     <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/40 dark:bg-slate-900/40 p-3 space-y-2.5">
                       <p className="text-[12px] font-black text-slate-800 dark:text-slate-100">Import file</p>
