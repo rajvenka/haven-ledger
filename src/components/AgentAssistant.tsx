@@ -260,14 +260,6 @@ export default function AgentAssistant({
     setErrorMessage(null);
 
     try {
-      // Only send the (potentially large) portfolio summary when the prompt (or the agent's
-      // own most recent reply, e.g. it just asked "which portfolio?") actually looks
-      // portfolio-related - keeps bill-entry messages (the common case) fast and light,
-      // rather than sending every holding on every single message regardless of relevance.
-      const portfolioKeywordPattern = /\b(stock|share|portfolio|invest|holding|fund|gainer|loser|perform|etoro|zerodha|webull|groww|stake|sasi)\b/i;
-      const lastAssistantText = [...messages].reverse().find(m => m.sender === 'assistant')?.text || '';
-      const looksPortfolioRelated = portfolioKeywordPattern.test(command) || portfolioKeywordPattern.test(lastAssistantText);
-
       // Build full chat history including the latest message
       const chatHistory = [...messages, newUserMessage].map(m => ({
         sender: m.sender,
@@ -280,6 +272,14 @@ export default function AgentAssistant({
       // it was Vercel's default 10s function timeout silently killing api/agent.ts regardless
       // of what this was set to, since maxDuration was never configured for that function.
       // Now that it is, this just needs to not abort before the backend's own window ends.
+      //
+      // portfolioSummary is now always sent (previously gated behind a keyword heuristic
+      // intended to keep bill-only messages light - removed after it turned out to be a real
+      // source of bugs: a portfolio question that didn't happen to match any keyword would
+      // silently send no portfolio data at all, leaving even the server-side fallback with
+      // nothing to work with). The backend already caps what it actually sends to Gemini
+      // (top/bottom 8 per portfolio) regardless of how many holdings exist, so this is no
+      // longer the bottleneck it once was.
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 65000);
       let response: Response;
@@ -294,7 +294,7 @@ export default function AgentAssistant({
             payments,
             history,
             userProfile,
-            portfolioSummary: looksPortfolioRelated ? portfolioSummary : undefined,
+            portfolioSummary,
             chatHistory
           }),
           signal: controller.signal,
