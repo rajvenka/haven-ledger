@@ -143,6 +143,44 @@ async function buildDigestForUser(sb: any, userId: string) {
   bigMovers.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
   const topMovers = bigMovers.slice(0, 3);
 
+  // Multi-day trend - looks back up to 7 calendar days but only ever reports the number of
+  // days actually covered by real snapshots (the cron job may have only started recently),
+  // rather than assuming a fixed window that isn't there yet.
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const { data: snapshots } = await sb
+    .from("portfolio_daily_positions")
+    .select("holding_id, symbol, snapshot_date, market_value, cost_basis, currency")
+    .in("workspace_id", wids)
+    .gte("snapshot_date", sevenDaysAgo.toISOString().slice(0, 10))
+    .order("snapshot_date", { ascending: true })
+    .limit(2000);
+
+  const trendMovers: { label: string; pct: number; currency: string }[] = [];
+  let trendDaysCovered = 0;
+  if (snapshots?.length) {
+    const distinctDays = new Set(snapshots.map((s: any) => s.snapshot_date));
+    trendDaysCovered = distinctDays.size;
+    const byHolding = new Map<string, any[]>();
+    for (const s of snapshots) {
+      const key = s.holding_id || s.symbol || "?";
+      if (!byHolding.has(key)) byHolding.set(key, []);
+      byHolding.get(key)!.push(s);
+    }
+    for (const [, rows] of Array.from(byHolding.entries())) {
+      if (rows.length < 2) continue; // need at least an earliest and latest snapshot to compare
+      const first = rows[0];
+      const last = rows[rows.length - 1];
+      const firstVal = Number(first.market_value);
+      const lastVal = Number(last.market_value);
+      if (!Number.isFinite(firstVal) || !Number.isFinite(lastVal) || firstVal <= 0) continue;
+      const pct = ((lastVal - firstVal) / firstVal) * 100;
+      trendMovers.push({ label: last.symbol || "?", pct, currency: last.currency || "" });
+    }
+  }
+  trendMovers.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+  const topTrendMovers = trendMovers.slice(0, 3);
+
   const lines: string[] = [];
   lines.push(`Haven Ledger · ${today}`);
   lines.push("");
@@ -170,6 +208,14 @@ async function buildDigestForUser(sb: any, userId: string) {
     for (const m of topMovers) {
       const sign = m.pct >= 0 ? "+" : "";
       lines.push(`  • ${m.label}: ${sign}${m.pct.toFixed(1)}% (${sign}${m.dollar.toFixed(0)} ${m.currency || ""})`);
+    }
+  }
+  if (topTrendMovers.length && trendDaysCovered >= 2) {
+    lines.push("");
+    lines.push(`Trending over the last ${trendDaysCovered} day${trendDaysCovered === 1 ? "" : "s"} (that's all the history available so far):`);
+    for (const m of topTrendMovers) {
+      const sign = m.pct >= 0 ? "+" : "";
+      lines.push(`  • ${m.label}: ${sign}${m.pct.toFixed(1)}%`);
     }
   }
   if (!portfolioLines.length) {
