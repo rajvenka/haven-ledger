@@ -313,6 +313,7 @@ export default function App() {
         quantity: Number(h.quantity) || 0,
         buyPrice: Number(h.buy_price) || 0,
         livePrice: Number(h.live_price ?? h.current_price ?? h.buy_price) || 0,
+        previousClose: h.previous_close != null ? Number(h.previous_close) : null,
         currency: h.currency || 'USD',
         broker: h.broker || 'Unknown',
         holdingType: h.holding_type || 'stock',
@@ -2594,6 +2595,7 @@ export default function App() {
             userProfile={userProfile}
             summaryCurrency={summaryCurrency}
             portfolioSummary={agentPortfolioSummary}
+            workspaceId={activeWorkspaceId}
             onAddPayment={addPayment}
             onUpdatePayment={updatePayment}
             onRecordPayment={async (paymentId, amount, status, taggedFor) => {

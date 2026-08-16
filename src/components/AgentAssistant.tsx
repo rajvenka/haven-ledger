@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { RecurringPayment, PaymentHistory, UserProfile } from '../types';
 import { getPaymentsDueNextWeek, getNextPaymentDate } from '../utils/paymentUtils';
+import { supabase } from '../lib/supabase';
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -127,9 +128,10 @@ function BillsTableCard({ rows }: { rows: BillsTableRow[] }) {
 // deterministic request with no need for Gemini's natural-language understanding at all.
 // Faster (no network round trip to Gemini), free (no API usage), and can't be affected by
 // any of the model-reliability issues seen with portfolioTable in the general case.
-const DAILY_DIGEST_PATTERN = /\bdaily\s*digest\b/i;
+const DAILY_DIGEST_PATTERN = /\b(daily|weekly)\s*digest\b/i;
 
 type DigestGroupBy = 'portfolio' | 'broker' | 'type';
+type DigestPeriod = 'all' | 'daily' | 'weekly';
 
 const DIGEST_GROUP_LABELS: Record<DigestGroupBy, string> = {
   portfolio: 'portfolio',
@@ -137,11 +139,74 @@ const DIGEST_GROUP_LABELS: Record<DigestGroupBy, string> = {
   type: 'holding type',
 };
 
+const PRICE_FLOOR = 0.01; // below this, a price is almost certainly a broken/placeholder feed, not real
+
+// Computes the % change for the requested period. Each period genuinely means a different
+// comparison, not just a relabeled version of the same number: all-time is buy vs today
+// (how this position has done since purchase), daily is yesterday's close vs today (today's
+// actual move), weekly needs an external pre-fetched map since it depends on historical
+// snapshot data this function has no way to fetch itself (see fetchWeeklyChangeMap).
+function computePctChange(
+  h: PortfolioSummaryItem,
+  period: DigestPeriod,
+  weeklyMap?: Map<string, { pnlPct: number; daysCovered: number }>
+): number | null {
+  const live = Number(h.livePrice) || 0;
+  if (period === 'daily') {
+    const prev = h.previousClose;
+    if (prev == null || prev < PRICE_FLOOR || live < PRICE_FLOOR) return null;
+    return ((live - prev) / prev) * 100;
+  }
+  if (period === 'weekly') {
+    return weeklyMap?.get(h.symbol)?.pnlPct ?? null;
+  }
+  const buy = Number(h.buyPrice) || 0;
+  if (buy <= 0) return null;
+  if (buy < PRICE_FLOOR || live < PRICE_FLOOR) return 0; // unreliable tiny-price data - neutral, not a fabricated swing
+  return ((live - buy) / buy) * 100;
+}
+
+// Fetches historical snapshot data for the weekly digest - still no Gemini call, just a
+// direct Supabase read. Looks back up to 7 calendar days but returns whatever number of real
+// snapshot days actually exist per symbol (currently limited - the snapshot cron has only
+// been running a few days), rather than assuming a full week is there.
+async function fetchWeeklyChangeMap(workspaceId: string | undefined): Promise<Map<string, { pnlPct: number; daysCovered: number }>> {
+  const map = new Map<string, { pnlPct: number; daysCovered: number }>();
+  if (!workspaceId) return map;
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const { data, error } = await supabase
+    .from('portfolio_daily_positions')
+    .select('symbol, snapshot_date, market_value')
+    .eq('workspace_id', workspaceId)
+    .gte('snapshot_date', sevenDaysAgo.toISOString().slice(0, 10))
+    .order('snapshot_date', { ascending: true })
+    .limit(2000);
+  if (error || !data?.length) return map;
+  const bySymbol = new Map<string, { snapshot_date: string; market_value: number }[]>();
+  for (const row of data) {
+    const key = row.symbol || '?';
+    if (!bySymbol.has(key)) bySymbol.set(key, []);
+    bySymbol.get(key)!.push(row);
+  }
+  for (const [symbol, rows] of Array.from(bySymbol.entries())) {
+    if (rows.length < 2) continue; // need at least an earliest and latest snapshot to compare
+    const distinctDays = new Set(rows.map((r) => r.snapshot_date)).size;
+    const first = Number(rows[0].market_value);
+    const last = Number(rows[rows.length - 1].market_value);
+    if (!Number.isFinite(first) || !Number.isFinite(last) || first <= 0) continue;
+    map.set(symbol, { pnlPct: ((last - first) / first) * 100, daysCovered: distinctDays });
+  }
+  return map;
+}
+
 function buildLocalDailyDigest(
   payments: RecurringPayment[],
   history: PaymentHistory[],
   portfolioSummary: PortfolioSummaryItem[] | undefined,
-  groupBy: DigestGroupBy = 'portfolio'
+  groupBy: DigestGroupBy = 'portfolio',
+  period: DigestPeriod = 'all',
+  weeklyMap?: Map<string, { pnlPct: number; daysCovered: number }>
 ): { text: string; billsTable: BillsTableRow[]; portfolioTable: PortfolioTableRow[]; followUpChips: FollowUpChip[] } {
   const today = new Date();
 
@@ -163,10 +228,7 @@ function buildLocalDailyDigest(
     });
   }
 
-  // Top 5 gainers + top 5 losers per group - same tiny-price safeguard used server-side
-  // (api/agent.ts) so a broken/sanctioned-stock price feed doesn't show up as a false extreme
-  // gain or loss here either.
-  const PRICE_FLOOR = 0.01;
+  // Top 5 gainers + top 5 losers per group, for whichever period was requested.
   const groupKeyOf = (h: PortfolioSummaryItem): string => {
     if (groupBy === 'broker') return h.broker || 'Unknown';
     if (groupBy === 'type') return h.holdingType || 'stock';
@@ -174,48 +236,62 @@ function buildLocalDailyDigest(
   };
   const byGroup = new Map<string, { symbol: string; pnlPct: number; currency: string }[]>();
   for (const h of portfolioSummary || []) {
-    const buy = Number(h.buyPrice) || 0;
-    const live = Number(h.livePrice) || 0;
-    if (buy <= 0) continue;
-    const looksUnreliable = buy < PRICE_FLOOR || live < PRICE_FLOOR;
-    const pnlPct = looksUnreliable ? 0 : ((live - buy) / buy) * 100;
+    const pnlPct = computePctChange(h, period, weeklyMap);
+    if (pnlPct == null) continue; // no reliable figure for this period - omit rather than guess
     const key = groupKeyOf(h);
     if (!byGroup.has(key)) byGroup.set(key, []);
     byGroup.get(key)!.push({ symbol: h.symbol || '?', pnlPct, currency: h.currency || '' });
   }
   const portfolioTable: PortfolioTableRow[] = [];
   for (const [group, holdings] of Array.from(byGroup.entries())) {
-    const sorted = [...holdings].sort((a, b) => b.pnlPct - a.pnlPct);
-    const gainers = sorted.slice(0, 5);
-    const losers = sorted.length > 5 ? sorted.slice(-5).reverse() : [];
+    // Filter by actual sign first - a "top loser" that's still up 3% isn't a loser at all,
+    // it's just a smaller gainer. Previously took top-N/bottom-N regardless of sign, so a
+    // portfolio with no real losses would show its smallest gains labeled as "losers".
+    const gainers = holdings.filter((h) => h.pnlPct >= 0).sort((a, b) => b.pnlPct - a.pnlPct).slice(0, 5);
+    const losers = holdings.filter((h) => h.pnlPct < 0).sort((a, b) => a.pnlPct - b.pnlPct).slice(0, 5);
     for (const g of gainers) portfolioTable.push({ symbol: g.symbol, portfolio: group, pnlPct: g.pnlPct, currency: g.currency });
     for (const l of losers) portfolioTable.push({ symbol: l.symbol, portfolio: group, pnlPct: l.pnlPct, currency: l.currency });
   }
 
+  const periodLabel = period === 'daily' ? "today's" : period === 'weekly' ? 'this week\'s' : 'all-time';
   const lines: string[] = [];
   if (groupBy === 'portfolio') {
-    lines.push(`Daily digest · ${today.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`);
+    const title = period === 'weekly' ? 'Weekly digest' : 'Daily digest';
+    lines.push(`${title} · ${today.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`);
     lines.push(billsTable.length ? `${billsTable.length} bill${billsTable.length === 1 ? '' : 's'} due today through next week:` : 'No bills due in the next week.');
     if (portfolioTable.length) {
       lines.push('');
-      lines.push('Top gainers/losers per portfolio:');
+      lines.push(`Top ${periodLabel} gainers/losers per portfolio:`);
     } else if (!portfolioSummary || portfolioSummary.length === 0) {
       lines.push('');
       lines.push('(No portfolio holdings available to analyze.)');
+    } else if (period !== 'all') {
+      lines.push('');
+      lines.push(`(No ${period} price data available yet to compute this.)`);
+    }
+    if (period === 'weekly' && weeklyMap && weeklyMap.size > 0) {
+      const daysCovered = Math.max(...Array.from(weeklyMap.values()).map((v) => v.daysCovered));
+      if (daysCovered < 7) {
+        lines.push('');
+        lines.push(`(Based on the last ${daysCovered} day${daysCovered === 1 ? '' : 's'} - that's all the price history available so far, will cover a full week automatically as more accumulates.)`);
+      }
     }
   } else {
-    lines.push(`Top gainers/losers by ${DIGEST_GROUP_LABELS[groupBy]}:`);
+    lines.push(`Top ${periodLabel} gainers/losers by ${DIGEST_GROUP_LABELS[groupBy]}:`);
     if (!portfolioTable.length) lines.push('(No portfolio holdings available to analyze.)');
   }
 
-  // Offer the groupings not currently shown as tappable follow-ups, handled locally same as
-  // the initial digest itself - lets the person switch views without retyping anything.
-  const allChips: FollowUpChip[] = [
+  // Offer the groupings and periods not currently shown as tappable follow-ups, handled
+  // locally same as the initial digest itself - lets the person switch views without
+  // retyping anything.
+  const groupChips: FollowUpChip[] = ([
     { label: 'By portfolio', action: 'digest_by_portfolio' },
     { label: 'By broker', action: 'digest_by_broker' },
     { label: 'By type', action: 'digest_by_type' },
-  ];
-  const followUpChips = allChips.filter((c) => c.action !== `digest_by_${groupBy}`);
+  ] as FollowUpChip[]).filter((c) => c.action !== `digest_by_${groupBy}`);
+  const periodChips: FollowUpChip[] =
+    period === 'weekly' ? [{ label: 'Daily instead', action: 'digest_daily' }] : [{ label: 'Weekly instead', action: 'digest_weekly' }];
+  const followUpChips = [...periodChips, ...groupChips];
 
   return { text: lines.join('\n'), billsTable, portfolioTable, followUpChips };
 }
@@ -226,6 +302,7 @@ interface PortfolioSummaryItem {
   quantity: number;
   buyPrice: number;
   livePrice: number;
+  previousClose: number | null;
   currency: string;
   broker: string;
   holdingType: string;
@@ -237,6 +314,7 @@ interface AgentAssistantProps {
   userProfile: UserProfile | null;
   summaryCurrency: string;
   portfolioSummary?: PortfolioSummaryItem[];
+  workspaceId?: string;
   onAddPayment: (payment: Omit<RecurringPayment, 'id'>) => Promise<any>;
   onUpdatePayment?: (payment: RecurringPayment) => Promise<any>;
   onRecordPayment: (paymentId: string, amount?: number, status?: 'paid' | 'delayed' | 'carry', taggedFor?: string) => Promise<any>;
@@ -261,7 +339,7 @@ interface BillsTableRow {
 
 interface FollowUpChip {
   label: string;
-  action: 'digest_by_portfolio' | 'digest_by_broker' | 'digest_by_type';
+  action: 'digest_by_portfolio' | 'digest_by_broker' | 'digest_by_type' | 'digest_daily' | 'digest_weekly';
 }
 
 interface Message {
@@ -280,6 +358,7 @@ export default function AgentAssistant({
   userProfile,
   summaryCurrency,
   portfolioSummary,
+  workspaceId,
   onAddPayment,
   onUpdatePayment,
   onRecordPayment,
@@ -362,11 +441,13 @@ export default function AgentAssistant({
     setIsProcessing(true);
     setErrorMessage(null);
 
-    // "Daily digest" is handled entirely locally, before any network call - see
-    // buildLocalDailyDigest for why this specific request doesn't need Gemini at all.
+    // "Daily digest" / "weekly digest" are handled entirely locally, before any network call
+    // - see buildLocalDailyDigest for why this specific request doesn't need Gemini at all.
     if (DAILY_DIGEST_PATTERN.test(command)) {
       const groupBy: DigestGroupBy = /\bbroker\b/i.test(command) ? 'broker' : /\btype\b/i.test(command) ? 'type' : 'portfolio';
-      const digest = buildLocalDailyDigest(payments, history, portfolioSummary, groupBy);
+      const period: DigestPeriod = /\bweekly\b/i.test(command) ? 'weekly' : /\bdaily\b/i.test(command) ? 'daily' : 'all';
+      const weeklyMap = period === 'weekly' ? await fetchWeeklyChangeMap(workspaceId) : undefined;
+      const digest = buildLocalDailyDigest(payments, history, portfolioSummary, groupBy, period, weeklyMap);
       setMessages(prev => [
         ...prev,
         {
@@ -697,7 +778,16 @@ export default function AgentAssistant({
                               key={chip.action}
                               type="button"
                               disabled={isProcessing}
-                              onClick={() => handleUserCommand(`daily digest ${chip.action.replace('digest_by_', 'by ')}`)}
+                              onClick={() => {
+                                const commandByAction: Record<FollowUpChip['action'], string> = {
+                                  digest_by_portfolio: 'daily digest by portfolio',
+                                  digest_by_broker: 'daily digest by broker',
+                                  digest_by_type: 'daily digest by type',
+                                  digest_daily: 'daily digest',
+                                  digest_weekly: 'weekly digest',
+                                };
+                                handleUserCommand(commandByAction[chip.action]);
+                              }}
                               className="px-2.5 py-1 rounded-full border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30 text-[9px] font-bold hover:bg-indigo-100 dark:hover:bg-indigo-950/60 disabled:opacity-40 disabled:pointer-events-none cursor-pointer transition-colors"
                             >
                               {chip.label}

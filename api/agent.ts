@@ -377,9 +377,11 @@ export default async function handler(req: any, res: any) {
           ? portfolioContext.topRows.filter((r) => r.portfolio === matchedPortfolio)
           : portfolioContext.topRows;
         const wantsLosers = /\b(worst|loser)\b/.test(replyLower) || /\b(worst|loser)\b/.test(promptLower);
+        // Filter by actual sign first - a "top loser" that's still up 3% isn't a loser, it's
+        // just a smaller gainer. Previously took top-N/bottom-N regardless of sign.
         result.portfolioTable = wantsLosers
-          ? [...candidateRows].sort((a, b) => a.pnlPct - b.pnlPct).slice(0, 5)
-          : [...candidateRows].sort((a, b) => b.pnlPct - a.pnlPct).slice(0, 5);
+          ? candidateRows.filter((r) => r.pnlPct < 0).sort((a, b) => a.pnlPct - b.pnlPct).slice(0, 5)
+          : candidateRows.filter((r) => r.pnlPct >= 0).sort((a, b) => b.pnlPct - a.pnlPct).slice(0, 5);
       } else {
         result.portfolioTable = undefined;
       }
