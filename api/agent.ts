@@ -37,8 +37,12 @@ function containsCredentialLikeData(value: any, path = ""): string | null {
 // the actual cause of requests timing out even at 45s - this keeps the prompt lean regardless
 // of portfolio size, while still guaranteeing the genuine top/bottom performers are always
 // included (since they're computed here, not left to the model to find).
-function buildPortfolioContext(summary: any): string {
-  if (!Array.isArray(summary) || summary.length === 0) return "(No portfolio holdings available)";
+// Returns both the text block for the prompt AND the same structured rows as a fallback -
+// used when the model's response doesn't actually populate portfolioTable itself (an
+// optional schema field it doesn't always reliably fill in), so the table still renders
+// correctly by falling back to this deterministic, already-computed data instead.
+function buildPortfolioContext(summary: any): { text: string; topRows: { symbol: string; portfolio: string; pnlPct: number; currency: string }[] } {
+  if (!Array.isArray(summary) || summary.length === 0) return { text: "(No portfolio holdings available)", topRows: [] };
   const byPortfolio = new Map<string, any[]>();
   for (const h of summary) {
     const key = String(h?.portfolio || "Default");
@@ -46,6 +50,7 @@ function buildPortfolioContext(summary: any): string {
     byPortfolio.get(key)!.push(h);
   }
   const lines: string[] = [];
+  const allTopRows: { symbol: string; portfolio: string; pnlPct: number; currency: string }[] = [];
   for (const [portfolio, holdings] of Array.from(byPortfolio.entries())) {
     const withPnl = holdings.map((h) => {
       const buy = Number(h?.buyPrice) || 0;
@@ -63,18 +68,20 @@ function buildPortfolioContext(summary: any): string {
     lines.push(`  ${portfolio} (${withPnl.length} holdings total):`);
     for (const { h, buy, live, pnlPct } of top) {
       lines.push(`    - ${h?.symbol || "?"}: qty ${h?.quantity ?? "?"}, buy ${buy}, live ${live}, P&L ${pnlPct == null ? "n/a" : pnlPct.toFixed(2) + "%"}, ${h?.currency || ""}`);
+      if (pnlPct != null) allTopRows.push({ symbol: h?.symbol || "?", portfolio, pnlPct, currency: h?.currency || "" });
     }
     if (bottom.length) {
       lines.push(`    (bottom performers)`);
       for (const { h, buy, live, pnlPct } of bottom) {
         lines.push(`    - ${h?.symbol || "?"}: qty ${h?.quantity ?? "?"}, buy ${buy}, live ${live}, P&L ${pnlPct == null ? "n/a" : pnlPct.toFixed(2) + "%"}, ${h?.currency || ""}`);
+        if (pnlPct != null) allTopRows.push({ symbol: h?.symbol || "?", portfolio, pnlPct, currency: h?.currency || "" });
       }
     }
     if (omitted > 0) {
       lines.push(`    (+${omitted} more mid-range holdings not shown - only extremes listed above)`);
     }
   }
-  return lines.join("\n");
+  return { text: lines.join("\n"), topRows: allTopRows };
 }
 
 export default async function handler(req: any, res: any) {
@@ -103,6 +110,8 @@ export default async function handler(req: any, res: any) {
       }
     }
 
+    const portfolioContext = buildPortfolioContext(portfolioSummary);
+
     const response = await generateContentWithFallback({
       contents: `
         You are the Haven Agent, an AI-powered financial assistant for a Bill and Expense Manager app called "Haven Vault", which also tracks investment portfolios.
@@ -114,7 +123,7 @@ export default async function handler(req: any, res: any) {
         - User Profile: ${JSON.stringify(userProfile)}
         - Investment Portfolios (grouped by portfolio, with P&L% already computed - do not
           recompute or guess figures, just read and rank these):
-        ${buildPortfolioContext(portfolioSummary)}
+        ${portfolioContext.text}
         - Recent Conversation History:
         ${chatHistory && Array.isArray(chatHistory) ? chatHistory.map((m: any) => `${m.sender === 'user' ? 'User' : 'Assistant'}: ${m.text}`).join('\n') : '(None)'}
         - New User Input: "${prompt}"
@@ -336,6 +345,34 @@ export default async function handler(req: any, res: any) {
     });
 
     const result = JSON.parse(response.text || "{}");
+
+    // Deterministic fallback: portfolioTable is an optional schema field the model doesn't
+    // always reliably populate, even when its own replyMessage clearly implies a list (e.g.
+    // "Here are the top gainers..." followed by nothing). Rather than leave the user with a
+    // promise and no table, fall back to the same pre-sorted, already-computed data used to
+    // build the prompt itself whenever the intent and reply text suggest a ranked list.
+    if (result.intent === "portfolio_query" && (!Array.isArray(result.portfolioTable) || result.portfolioTable.length === 0)) {
+      const replyLower = String(result.replyMessage || "").toLowerCase();
+      const promptLower = String(prompt || "").toLowerCase();
+      const impliesRankedList = /\b(top|best|worst|gainer|loser|performer)\b/.test(replyLower);
+      if (impliesRankedList && portfolioContext.topRows.length > 0) {
+        // Portfolio-aware: if a specific portfolio name from the actual data is mentioned in
+        // either the question or the reply, filter to just that one - matches what was
+        // actually asked rather than mixing every portfolio together.
+        const mentionedPortfolios = new Set(portfolioContext.topRows.map((r) => r.portfolio));
+        const matchedPortfolio = Array.from(mentionedPortfolios).find(
+          (p) => promptLower.includes(p.toLowerCase()) || replyLower.includes(p.toLowerCase())
+        );
+        const candidateRows = matchedPortfolio
+          ? portfolioContext.topRows.filter((r) => r.portfolio === matchedPortfolio)
+          : portfolioContext.topRows;
+        result.portfolioTable = candidateRows.filter((r) => r.pnlPct >= 0).sort((a, b) => b.pnlPct - a.pnlPct).slice(0, 5);
+        if (result.portfolioTable.length === 0) {
+          // No gainers at all - fall back to the overall top-ranked rows regardless of sign.
+          result.portfolioTable = [...candidateRows].sort((a, b) => b.pnlPct - a.pnlPct).slice(0, 5);
+        }
+      }
+    }
 
     // SAFETY NET: strip any field value that looks like leaked model reasoning
     // (long, sentence-like, full of hedging words) rather than real data.
