@@ -283,7 +283,7 @@ export default function AgentAssistant({
   const suggestions = [
     { label: "Log Gas Bill payment", prompt: "log transaction for Gas Bill" },
     { label: "Add Netflix Payment", prompt: "add Netflix payment of 15 AUD on day 10" },
-    { label: "EB Bill paid for $40", prompt: "marked EB Bill as paid for 40 AUD" },
+    { label: "Daily digest", prompt: "daily digest" },
     { label: "How is my budget looking?", prompt: "How is my monthly budget looking?" }
   ];
 
