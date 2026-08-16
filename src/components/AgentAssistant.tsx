@@ -275,10 +275,13 @@ export default function AgentAssistant({
       }));
 
       // Send command, history, and current database state to the backend Agent endpoint.
-      // 45s (up from 25s) - portfolio questions now involve meaningfully more prompt data and
-      // a more complex output schema than the original bills-only design, genuinely slower.
+      // 65s - slightly above the backend's own maxDuration (60s, configured in vercel.json).
+      // The actual root cause of persistent timeouts wasn't this client-side value at all -
+      // it was Vercel's default 10s function timeout silently killing api/agent.ts regardless
+      // of what this was set to, since maxDuration was never configured for that function.
+      // Now that it is, this just needs to not abort before the backend's own window ends.
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 45000);
+      const timeoutId = setTimeout(() => controller.abort(), 65000);
       let response: Response;
       try {
         response = await fetch('/api/agent', {
@@ -433,6 +436,10 @@ export default function AgentAssistant({
 
     } catch (err: any) {
       console.error(err);
+      // Restore the message into the input box on failure - it was already cleared
+      // optimistically when sending, so without this the user would need to retype the
+      // whole thing just to retry after a transient failure like a timeout.
+      setTextInput(command);
       setMessages(prev => [
         ...prev,
         {
