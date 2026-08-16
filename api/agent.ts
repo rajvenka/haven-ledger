@@ -55,7 +55,14 @@ function buildPortfolioContext(summary: any): { text: string; topRows: { symbol:
     const withPnl = holdings.map((h) => {
       const buy = Number(h?.buyPrice) || 0;
       const live = Number(h?.livePrice) || 0;
-      const pnlPct = buy > 0 ? ((live - buy) / buy) * 100 : null;
+      // A price below $0.01 on these brokers is almost never a genuine market price - far
+      // more likely a broken/placeholder value (e.g. a sanctioned or delisted stock with a
+      // dead price feed, like a Russian stock frozen since 2022). Computing a percentage from
+      // numbers like that produces a mathematically correct but meaningless figure (a $0.0001
+      // -> $0.00025 move looks like "+150%"). Treated as a neutral 0% instead.
+      const PRICE_FLOOR = 0.01;
+      const looksUnreliable = buy > 0 && (buy < PRICE_FLOOR || live < PRICE_FLOOR);
+      const pnlPct = looksUnreliable ? 0 : (buy > 0 ? ((live - buy) / buy) * 100 : null);
       return { h, buy, live, pnlPct };
     });
     withPnl.sort((a, b) => (b.pnlPct ?? -Infinity) - (a.pnlPct ?? -Infinity));
