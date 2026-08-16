@@ -48,6 +48,34 @@ interface InvestmentPlanViewProps {
 }
 
 const fmt = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+// Same currency-aware formatter as PortfolioView.tsx - contributions carry their own
+// portfolio_id, so each one has a real currency that shouldn't be flattened to INR.
+const CURRENCY_META: Record<string, { symbol: string; locale: string }> = {
+  INR: { symbol: '₹', locale: 'en-IN' },
+  USD: { symbol: '$', locale: 'en-US' },
+  AUD: { symbol: 'A$', locale: 'en-AU' },
+  EUR: { symbol: '€', locale: 'en-IE' },
+  GBP: { symbol: '£', locale: 'en-GB' },
+  SGD: { symbol: 'S$', locale: 'en-SG' },
+  AED: { symbol: 'AED ', locale: 'en-AE' },
+  CAD: { symbol: 'C$', locale: 'en-CA' },
+};
+const fmtCur = (n: number, currency: string = 'INR') => {
+  const meta = CURRENCY_META[currency] || { symbol: `${currency} `, locale: 'en-US' };
+  return `${meta.symbol}${n.toLocaleString(meta.locale, { maximumFractionDigits: 2 })}`;
+};
+// Same as PortfolioView.tsx - needed here because Contribution Growth / Total Contribution
+// by Person charts sum across all contributions regardless of portfolio, and a workspace
+// can have contributions to portfolios in different currencies.
+const convertToBase = (amount: number, fromCurrency: string, targetCurrency: string, rates: any[], workspaceBaseCurrency: string): number => {
+  if (fromCurrency === targetCurrency) return amount;
+  const rateFor = (ccy: string) => ccy === workspaceBaseCurrency ? 1 : rates.find((r: any) => r.currency === ccy)?.rate_to_base;
+  const fromRate = rateFor(fromCurrency);
+  const toRate = rateFor(targetCurrency);
+  if (fromRate == null || toRate == null) return 0;
+  return (amount * fromRate) / toRate;
+};
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const memberName = (m: WorkspaceMemberLite) => m.displayName || m.email.split('@')[0];
 const contribTypeLabel = (c: any) => c.contribution_type === 'recurring' ? 'Plan' : c.contribution_type === 'initial' ? 'Initial' : 'One-off';
@@ -417,7 +445,9 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
         <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 rounded-xl text-[11px] text-rose-600 dark:text-rose-400 font-semibold">{formError}</div>
       )}
 
-      {myContributionReminder && (
+      {myContributionReminder && (() => {
+        const reminderCurrency = allPortfolios.find((p: any) => p.id === myContributionReminder.plan.portfolio_id)?.currency || baseCurrency;
+        return (
         <div className={`p-3.5 rounded-xl border flex items-center gap-3 ${myContributionReminder.daysUntilDue < 0 ? 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900' : 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900'}`}>
           <AlertTriangle className={`w-5 h-5 shrink-0 ${myContributionReminder.daysUntilDue < 0 ? 'text-rose-500' : 'text-amber-500'}`} />
           <div className="flex-1 min-w-0">
@@ -429,11 +459,11 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                 : `Your contribution is due in ${myContributionReminder.daysUntilDue} day${myContributionReminder.daysUntilDue !== 1 ? 's' : ''}`}
             </p>
             <p className="text-[10px] text-slate-500 dark:text-slate-400">
-              {fmt(myContributionReminder.remaining)} remaining for this {myContributionReminder.plan.frequency} period
+              {fmtCur(myContributionReminder.remaining, reminderCurrency)} remaining for this {myContributionReminder.plan.frequency} period
               {myContributionReminder.carryForward !== 0 && (
                 myContributionReminder.carryForward > 0
-                  ? ` (includes ${fmt(myContributionReminder.carryForward)} carried forward from a shortfall)`
-                  : ` (usual ${fmt(myContributionReminder.periodExpected)}, reduced by ${fmt(Math.abs(myContributionReminder.carryForward))} credit from an earlier overpayment)`
+                  ? ` (includes ${fmtCur(myContributionReminder.carryForward, reminderCurrency)} carried forward from a shortfall)`
+                  : ` (usual ${fmtCur(myContributionReminder.periodExpected, reminderCurrency)}, reduced by ${fmtCur(Math.abs(myContributionReminder.carryForward), reminderCurrency)} credit from an earlier overpayment)`
               )}
             </p>
           </div>
@@ -453,7 +483,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
             <X className="w-4 h-4" />
           </button>
         </div>
-      )}
+        );
+      })()}
 
       {pulseMode ? (
         <div className="flex gap-1 p-1 rounded-2xl bg-slate-100/90 dark:bg-slate-900/80 border border-slate-200/70 dark:border-slate-800">
@@ -483,22 +514,23 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
       {planTab === 'overview' && (
         <>
         {portfolioContributions.length > 0 && (() => {
+          const currencyFor = (portfolioId: string | null) => allPortfolios.find((p: any) => p.id === portfolioId)?.currency || baseCurrency;
           const events = [
-            ...portfolioContributions.map((c: any) => ({ date: c.contribution_date, delta: Number(c.amount) })),
-            ...portfolioWithdrawals.map((w: any) => ({ date: w.withdrawal_date, delta: -Number(w.amount) })),
+            ...portfolioContributions.map((c: any) => ({ date: c.contribution_date, delta: convertToBase(Number(c.amount), currencyFor(c.portfolio_id), baseCurrency, workspaceCurrencyRates, baseCurrency) })),
+            ...portfolioWithdrawals.map((w: any) => ({ date: w.withdrawal_date, delta: -convertToBase(Number(w.amount), currencyFor(w.portfolio_id), baseCurrency, workspaceCurrencyRates, baseCurrency) })),
           ].sort((a, b) => a.date.localeCompare(b.date));
           let running = 0;
           const chartData = events.map(e => { running += e.delta; return { date: e.date, total: running }; });
           return (
             <div className="apple-card p-4 space-y-2">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Contribution Growth</span>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Contribution Growth{portfolioMode === 'multiple' ? ` (in ${baseCurrency})` : ''}</span>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.3} vertical={false} />
                     <XAxis dataKey="date" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${(v / 100000).toFixed(1)}L`} />
-                    <Tooltip formatter={(v: number) => [fmt(v), 'Total Contributed']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                    <Tooltip formatter={(v: number) => [fmtCur(v, baseCurrency), 'Total Contributed']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
                     <Line type="monotone" dataKey="total" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
                   </LineChart>
                 </ResponsiveContainer>
@@ -508,22 +540,23 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
         })()}
 
         {workspaceMembers.length > 0 && (() => {
+          const currencyFor = (portfolioId: string | null) => allPortfolios.find((p: any) => p.id === portfolioId)?.currency || baseCurrency;
           const chartData = workspaceMembers.map(m => {
-            const contributed = portfolioContributions.filter((c: any) => c.member_user_id === m.uid).reduce((s: number, c: any) => s + Number(c.amount), 0);
-            const withdrawn = portfolioWithdrawals.filter((w: any) => w.member_user_id === m.uid).reduce((s: number, w: any) => s + Number(w.amount), 0);
+            const contributed = portfolioContributions.filter((c: any) => c.member_user_id === m.uid).reduce((s: number, c: any) => s + convertToBase(Number(c.amount), currencyFor(c.portfolio_id), baseCurrency, workspaceCurrencyRates, baseCurrency), 0);
+            const withdrawn = portfolioWithdrawals.filter((w: any) => w.member_user_id === m.uid).reduce((s: number, w: any) => s + convertToBase(Number(w.amount), currencyFor(w.portfolio_id), baseCurrency, workspaceCurrencyRates, baseCurrency), 0);
             return { name: memberName(m), amount: contributed - withdrawn };
           });
           const colors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'];
           return (
             <div className="apple-card p-4 space-y-2">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Contribution by Person</span>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Contribution by Person{portfolioMode === 'multiple' ? ` (in ${baseCurrency})` : ''}</span>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.3} vertical={false} />
                     <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${(v / 100000).toFixed(1)}L`} />
-                    <Tooltip formatter={(v: number) => [fmt(v), 'Net Contributed']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                    <Tooltip formatter={(v: number) => [fmtCur(v, baseCurrency), 'Net Contributed']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
                     <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
                       {chartData.map((_, i) => <Cell key={i} fill={colors[i % colors.length]} />)}
                     </Bar>
@@ -545,6 +578,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
             <div className="space-y-2">
               {portfolioRecurringPlans.filter(p => p.active).map(plan => {
                 const m = workspaceMembers.find(x => x.uid === plan.member_user_id);
+                const planCurrency = allPortfolios.find((p: any) => p.id === plan.portfolio_id)?.currency || baseCurrency;
                 const { period, remaining, transferredThisPeriod, fulfilled } = (() => {
                   const info = computeTransferInfo(plan);
                   return { period: info.period, remaining: info.remaining, transferredThisPeriod: Math.max(0, info.periodExpected - info.remaining), fulfilled: info.remaining === 0 };
@@ -557,7 +591,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                   <div key={plan.id} className="flex items-center justify-between gap-3 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg">
                     <div className="min-w-0">
                       <p className="text-xs font-bold text-slate-900 dark:text-white">{m ? memberName(m) : 'Former member'}</p>
-                      <p className="text-[10px] text-slate-400">{period.label} · expected {fmt(Number(plan.expected_amount))}{transferredThisPeriod > 0 && !fulfilled ? ` · ${fmt(transferredThisPeriod)} already covered by an advance` : ''}</p>
+                      <p className="text-[10px] text-slate-400">{period.label} · expected {fmtCur(Number(plan.expected_amount), planCurrency)}{transferredThisPeriod > 0 && !fulfilled ? ` · ${fmtCur(transferredThisPeriod, planCurrency)} already covered by an advance` : ''}</p>
                     </div>
                     {isSkipped ? (
                       <span className="px-2.5 py-1 bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase rounded-full shrink-0">Skipped</span>
@@ -568,7 +602,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                         onClick={() => openTransferModal(plan)}
                         className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer shrink-0"
                       >
-                        Confirm {fmt(remaining)} Paid
+                        Confirm {fmtCur(remaining, planCurrency)} Paid
                       </button>
                     ) : (
                       <span className="px-2.5 py-1 bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase rounded-full shrink-0">Pending</span>
@@ -633,11 +667,12 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
               <p className="text-center text-xs text-slate-400 py-4">No recurring plan set up yet.</p>
             ) : portfolioRecurringPlans.map(plan => {
               const m = workspaceMembers.find(x => x.uid === plan.member_user_id);
+              const planCurrency = allPortfolios.find((p: any) => p.id === plan.portfolio_id)?.currency || baseCurrency;
               return (
                 <div key={plan.id} className="py-2.5 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-xs font-bold text-slate-900 dark:text-white">{m ? memberName(m) : 'Former member'}</p>
-                    <p className="text-[10px] text-slate-400">{fmt(Number(plan.expected_amount))} · {plan.frequency}{plan.day_of_month ? ` on day ${plan.day_of_month}` : ''} · from {plan.start_date}</p>
+                    <p className="text-[10px] text-slate-400">{fmtCur(Number(plan.expected_amount), planCurrency)} · {plan.frequency}{plan.day_of_month ? ` on day ${plan.day_of_month}` : ''} · from {plan.start_date}</p>
                     {plan.notes && <p className="text-[10px] text-slate-400 italic mt-0.5">{plan.notes}</p>}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -811,6 +846,10 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
             );
             const dataRow = (c: any) => {
               const m = workspaceMembers.find(x => x.uid === c.member_user_id);
+              // Contributions carry their own portfolio_id - resolve that portfolio's real
+              // currency per row instead of assuming INR for everyone. Falls back to
+              // baseCurrency only if the portfolio can't be found (e.g. deleted).
+              const contribCurrency = allPortfolios.find((p: any) => p.id === c.portfolio_id)?.currency || baseCurrency;
               return (
                 <tr key={c.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
                   <td className="p-2 text-slate-700 dark:text-slate-300 font-semibold">{m ? memberName(m) : 'Former member'}</td>
@@ -827,7 +866,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                   <td className="p-2 text-slate-400 italic truncate max-w-[120px]">{c.notes || '—'}</td>
                   <td className="p-2 text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      <span className="font-bold text-slate-900 dark:text-white">{fmt(Number(c.amount))}</span>
+                      <span className="font-bold text-slate-900 dark:text-white">{fmtCur(Number(c.amount), contribCurrency)}</span>
                       {!isReadOnly && (
                         <button
                           onClick={() => { setEditingContributionId(c.id); setEditContributionAmount(String(c.amount)); setEditContributionDate(c.contribution_date); setEditContributionNotes(c.notes || ''); }}
@@ -979,11 +1018,12 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
               <p className="text-center text-xs text-slate-400 py-4">No withdrawals logged.</p>
             ) : portfolioWithdrawals.map(w => {
               const m = workspaceMembers.find(x => x.uid === w.member_user_id);
+              const withdrawalCurrency = allPortfolios.find((p: any) => p.id === w.portfolio_id)?.currency || baseCurrency;
               return (
                 <div key={w.id} className="py-2 flex items-center justify-between text-xs">
                   <span className="text-slate-600 dark:text-slate-300">{m ? memberName(m) : 'Former member'} · {w.withdrawal_date}</span>
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-rose-500">-{fmt(Number(w.amount))}</span>
+                    <span className="font-bold text-rose-500">-{fmtCur(Number(w.amount), withdrawalCurrency)}</span>
                     {!isReadOnly && <button onClick={() => runAction(() => deletePortfolioWithdrawal(w.id))} className="text-slate-300 hover:text-rose-500 cursor-pointer"><Trash2 className="w-3 h-3" /></button>}
                   </div>
                 </div>
@@ -1001,6 +1041,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
         const info = computeTransferInfo(plan);
         const linkable = linkableContributionsFor(plan.member_user_id);
         const closeModal = () => { setTransferModalPlanId(null); setLinkingContributionId(null); };
+        const modalCurrency = allPortfolios.find((p: any) => p.id === plan.portfolio_id)?.currency || baseCurrency;
 
         return (
           <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={closeModal}>
@@ -1012,7 +1053,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
               <div className="p-4 space-y-3">
                 {transferModalStep === 'ask' && (
                   <>
-                    <p className="text-xs text-slate-600 dark:text-slate-400">We don't see an earlier contribution covering this period yet. Has {m ? memberName(m) : 'this person'} already transferred the {fmt(info.periodExpected)} for {info.period.label}?</p>
+                    <p className="text-xs text-slate-600 dark:text-slate-400">We don't see an earlier contribution covering this period yet. Has {m ? memberName(m) : 'this person'} already transferred the {fmtCur(info.periodExpected, modalCurrency)} for {info.period.label}?</p>
                     <div className="flex flex-col gap-2">
                       <button
                         onClick={() => setTransferModalStep('link')}
@@ -1027,7 +1068,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                         })}
                         className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase rounded-xl cursor-pointer"
                       >
-                        No - record a new {fmt(info.remaining)} transfer
+                        No - record a new {fmtCur(info.remaining, modalCurrency)} transfer
                       </button>
                       <button
                         onClick={() => runAction(async () => {
@@ -1056,7 +1097,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                             className={`w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-xs cursor-pointer border ${linkingContributionId === c.id ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/20' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950'}`}
                           >
                             <span className="text-slate-600 dark:text-slate-400">{c.contribution_date}{c.notes ? ` · ${c.notes}` : ''}</span>
-                            <span className="font-bold text-slate-800 dark:text-slate-200 shrink-0 ml-2">{fmt(Number(c.amount))}</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200 shrink-0 ml-2">{fmtCur(Number(c.amount), modalCurrency)}</span>
                           </button>
                         ))}
                       </div>
@@ -1083,12 +1124,12 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                 {transferModalStep === 'breakdown' && (
                   <>
                     <div className="text-[11px] text-slate-600 dark:text-slate-400 space-y-1">
-                      <div className="flex justify-between"><span>Usual {plan.frequency} amount</span><span className="font-semibold">{fmt(info.periodExpected)}</span></div>
+                      <div className="flex justify-between"><span>Usual {plan.frequency} amount</span><span className="font-semibold">{fmtCur(info.periodExpected, modalCurrency)}</span></div>
                       {info.carryForward > 0 && (
-                        <div className="flex justify-between text-rose-600 dark:text-rose-400"><span>+ Shortfall carried from before</span><span className="font-semibold">{fmt(info.carryForward)}</span></div>
+                        <div className="flex justify-between text-rose-600 dark:text-rose-400"><span>+ Shortfall carried from before</span><span className="font-semibold">{fmtCur(info.carryForward, modalCurrency)}</span></div>
                       )}
                       {info.carryForward < 0 && (
-                        <div className="flex justify-between text-emerald-600 dark:text-emerald-400"><span>− Credit from an earlier overpayment</span><span className="font-semibold">{fmt(Math.abs(info.carryForward))}</span></div>
+                        <div className="flex justify-between text-emerald-600 dark:text-emerald-400"><span>− Credit from an earlier overpayment</span><span className="font-semibold">{fmtCur(Math.abs(info.carryForward), modalCurrency)}</span></div>
                       )}
                       {info.advanceContributions.length > 0 && (
                         <div className="pt-1.5 space-y-1">
@@ -1096,12 +1137,12 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                           {info.advanceContributions.map(c => (
                             <div key={c.id} className="flex items-center justify-between px-2 py-1 bg-slate-50 dark:bg-slate-950 rounded text-[10px]">
                               <span className="text-slate-500">{c.contribution_date}{c.notes ? ` · ${c.notes}` : ''}</span>
-                              <span className="font-semibold">{fmt(Number(c.amount))}</span>
+                              <span className="font-semibold">{fmtCur(Number(c.amount), modalCurrency)}</span>
                             </div>
                           ))}
                         </div>
                       )}
-                      <div className="flex justify-between font-black text-slate-800 dark:text-slate-200 pt-1 border-t border-slate-200 dark:border-slate-800"><span>Total to transfer now</span><span>{fmt(info.remaining)}</span></div>
+                      <div className="flex justify-between font-black text-slate-800 dark:text-slate-200 pt-1 border-t border-slate-200 dark:border-slate-800"><span>Total to transfer now</span><span>{fmtCur(info.remaining, modalCurrency)}</span></div>
                     </div>
                     <button
                       onClick={() => runAction(async () => {
@@ -1110,7 +1151,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                       })}
                       className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase rounded-xl cursor-pointer"
                     >
-                      Confirm {fmt(info.remaining)} Transferred
+                      Confirm {fmtCur(info.remaining, modalCurrency)} Transferred
                     </button>
                     <button
                       onClick={() => runAction(async () => {
