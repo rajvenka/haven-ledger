@@ -129,62 +129,95 @@ function BillsTableCard({ rows }: { rows: BillsTableRow[] }) {
 // any of the model-reliability issues seen with portfolioTable in the general case.
 const DAILY_DIGEST_PATTERN = /\bdaily\s*digest\b/i;
 
+type DigestGroupBy = 'portfolio' | 'broker' | 'type';
+
+const DIGEST_GROUP_LABELS: Record<DigestGroupBy, string> = {
+  portfolio: 'portfolio',
+  broker: 'broker',
+  type: 'holding type',
+};
+
 function buildLocalDailyDigest(
   payments: RecurringPayment[],
   history: PaymentHistory[],
-  portfolioSummary: PortfolioSummaryItem[] | undefined
-): { text: string; billsTable: BillsTableRow[]; portfolioTable: PortfolioTableRow[] } {
+  portfolioSummary: PortfolioSummaryItem[] | undefined,
+  groupBy: DigestGroupBy = 'portfolio'
+): { text: string; billsTable: BillsTableRow[]; portfolioTable: PortfolioTableRow[]; followUpChips: FollowUpChip[] } {
   const today = new Date();
 
-  // Bills due today through the next 7 days - reuses the app's own existing logic rather
-  // than reimplementing due-date calculation from dayOfMonth/billingCycle here.
-  const upcomingBills = getPaymentsDueNextWeek(payments || [], today, history || []);
-  const billsTable: BillsTableRow[] = upcomingBills.map((p) => {
-    const dueDate = getNextPaymentDate(p, today, history || []);
-    return {
-      name: p.name || 'Bill',
-      amount: p.amount || 0,
-      currency: p.currency || '',
-      dueDate: dueDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }),
-    };
-  });
+  // Bills only shown on the initial (portfolio-grouped) call - a broker/type follow-up is
+  // specifically about re-viewing the portfolio data differently, not re-showing bills again.
+  let billsTable: BillsTableRow[] = [];
+  if (groupBy === 'portfolio') {
+    // Bills due today through the next 7 days - reuses the app's own existing logic rather
+    // than reimplementing due-date calculation from dayOfMonth/billingCycle here.
+    const upcomingBills = getPaymentsDueNextWeek(payments || [], today, history || []);
+    billsTable = upcomingBills.map((p) => {
+      const dueDate = getNextPaymentDate(p, today, history || []);
+      return {
+        name: p.name || 'Bill',
+        amount: p.amount || 0,
+        currency: p.currency || '',
+        dueDate: dueDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }),
+      };
+    });
+  }
 
-  // Top 5 gainers + top 5 losers per portfolio - same tiny-price safeguard used server-side
+  // Top 5 gainers + top 5 losers per group - same tiny-price safeguard used server-side
   // (api/agent.ts) so a broken/sanctioned-stock price feed doesn't show up as a false extreme
   // gain or loss here either.
   const PRICE_FLOOR = 0.01;
-  const byPortfolio = new Map<string, { symbol: string; pnlPct: number; currency: string }[]>();
+  const groupKeyOf = (h: PortfolioSummaryItem): string => {
+    if (groupBy === 'broker') return h.broker || 'Unknown';
+    if (groupBy === 'type') return h.holdingType || 'stock';
+    return h.portfolio || 'Default';
+  };
+  const byGroup = new Map<string, { symbol: string; pnlPct: number; currency: string }[]>();
   for (const h of portfolioSummary || []) {
     const buy = Number(h.buyPrice) || 0;
     const live = Number(h.livePrice) || 0;
     if (buy <= 0) continue;
     const looksUnreliable = buy < PRICE_FLOOR || live < PRICE_FLOOR;
     const pnlPct = looksUnreliable ? 0 : ((live - buy) / buy) * 100;
-    const key = h.portfolio || 'Default';
-    if (!byPortfolio.has(key)) byPortfolio.set(key, []);
-    byPortfolio.get(key)!.push({ symbol: h.symbol || '?', pnlPct, currency: h.currency || '' });
+    const key = groupKeyOf(h);
+    if (!byGroup.has(key)) byGroup.set(key, []);
+    byGroup.get(key)!.push({ symbol: h.symbol || '?', pnlPct, currency: h.currency || '' });
   }
   const portfolioTable: PortfolioTableRow[] = [];
-  for (const [portfolio, holdings] of Array.from(byPortfolio.entries())) {
+  for (const [group, holdings] of Array.from(byGroup.entries())) {
     const sorted = [...holdings].sort((a, b) => b.pnlPct - a.pnlPct);
     const gainers = sorted.slice(0, 5);
     const losers = sorted.length > 5 ? sorted.slice(-5).reverse() : [];
-    for (const g of gainers) portfolioTable.push({ symbol: g.symbol, portfolio, pnlPct: g.pnlPct, currency: g.currency });
-    for (const l of losers) portfolioTable.push({ symbol: l.symbol, portfolio, pnlPct: l.pnlPct, currency: l.currency });
+    for (const g of gainers) portfolioTable.push({ symbol: g.symbol, portfolio: group, pnlPct: g.pnlPct, currency: g.currency });
+    for (const l of losers) portfolioTable.push({ symbol: l.symbol, portfolio: group, pnlPct: l.pnlPct, currency: l.currency });
   }
 
   const lines: string[] = [];
-  lines.push(`Daily digest · ${today.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`);
-  lines.push(billsTable.length ? `${billsTable.length} bill${billsTable.length === 1 ? '' : 's'} due today through next week:` : 'No bills due in the next week.');
-  if (portfolioTable.length) {
-    lines.push('');
-    lines.push('Top gainers/losers per portfolio:');
-  } else if (!portfolioSummary || portfolioSummary.length === 0) {
-    lines.push('');
-    lines.push("(No portfolio holdings available to analyze.)");
+  if (groupBy === 'portfolio') {
+    lines.push(`Daily digest · ${today.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`);
+    lines.push(billsTable.length ? `${billsTable.length} bill${billsTable.length === 1 ? '' : 's'} due today through next week:` : 'No bills due in the next week.');
+    if (portfolioTable.length) {
+      lines.push('');
+      lines.push('Top gainers/losers per portfolio:');
+    } else if (!portfolioSummary || portfolioSummary.length === 0) {
+      lines.push('');
+      lines.push('(No portfolio holdings available to analyze.)');
+    }
+  } else {
+    lines.push(`Top gainers/losers by ${DIGEST_GROUP_LABELS[groupBy]}:`);
+    if (!portfolioTable.length) lines.push('(No portfolio holdings available to analyze.)');
   }
 
-  return { text: lines.join('\n'), billsTable, portfolioTable };
+  // Offer the groupings not currently shown as tappable follow-ups, handled locally same as
+  // the initial digest itself - lets the person switch views without retyping anything.
+  const allChips: FollowUpChip[] = [
+    { label: 'By portfolio', action: 'digest_by_portfolio' },
+    { label: 'By broker', action: 'digest_by_broker' },
+    { label: 'By type', action: 'digest_by_type' },
+  ];
+  const followUpChips = allChips.filter((c) => c.action !== `digest_by_${groupBy}`);
+
+  return { text: lines.join('\n'), billsTable, portfolioTable, followUpChips };
 }
 
 interface PortfolioSummaryItem {
@@ -194,6 +227,8 @@ interface PortfolioSummaryItem {
   buyPrice: number;
   livePrice: number;
   currency: string;
+  broker: string;
+  holdingType: string;
 }
 
 interface AgentAssistantProps {
@@ -224,6 +259,11 @@ interface BillsTableRow {
   dueDate: string;
 }
 
+interface FollowUpChip {
+  label: string;
+  action: 'digest_by_portfolio' | 'digest_by_broker' | 'digest_by_type';
+}
+
 interface Message {
   id: string;
   sender: 'user' | 'assistant';
@@ -231,6 +271,7 @@ interface Message {
   timestamp: Date;
   portfolioTable?: PortfolioTableRow[];
   billsTable?: BillsTableRow[];
+  followUpChips?: FollowUpChip[];
 }
 
 export default function AgentAssistant({
@@ -324,7 +365,8 @@ export default function AgentAssistant({
     // "Daily digest" is handled entirely locally, before any network call - see
     // buildLocalDailyDigest for why this specific request doesn't need Gemini at all.
     if (DAILY_DIGEST_PATTERN.test(command)) {
-      const digest = buildLocalDailyDigest(payments, history, portfolioSummary);
+      const groupBy: DigestGroupBy = /\bbroker\b/i.test(command) ? 'broker' : /\btype\b/i.test(command) ? 'type' : 'portfolio';
+      const digest = buildLocalDailyDigest(payments, history, portfolioSummary, groupBy);
       setMessages(prev => [
         ...prev,
         {
@@ -334,6 +376,7 @@ export default function AgentAssistant({
           timestamp: new Date(),
           billsTable: digest.billsTable.length > 0 ? digest.billsTable : undefined,
           portfolioTable: digest.portfolioTable.length > 0 ? digest.portfolioTable : undefined,
+          followUpChips: digest.followUpChips,
         },
       ]);
       setIsProcessing(false);
@@ -647,6 +690,21 @@ export default function AgentAssistant({
                         {msg.portfolioTable && <PortfolioTableCard rows={msg.portfolioTable} />}
                         {msg.billsTable && <BillsTableCard rows={msg.billsTable} />}
                       </div>
+                      {msg.followUpChips && msg.followUpChips.length > 0 && (
+                        <div className="flex gap-1.5 flex-wrap mt-0.5">
+                          {msg.followUpChips.map((chip) => (
+                            <button
+                              key={chip.action}
+                              type="button"
+                              disabled={isProcessing}
+                              onClick={() => handleUserCommand(`daily digest ${chip.action.replace('digest_by_', 'by ')}`)}
+                              className="px-2.5 py-1 rounded-full border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30 text-[9px] font-bold hover:bg-indigo-100 dark:hover:bg-indigo-950/60 disabled:opacity-40 disabled:pointer-events-none cursor-pointer transition-colors"
+                            >
+                              {chip.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       <span className="text-[8px] text-slate-400 font-bold px-1 select-none text-left">
                         {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>

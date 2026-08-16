@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Info, 
   Sparkles,
+  Bot,
   Smartphone,
   ChevronRight,
   ShieldAlert,
@@ -313,6 +314,8 @@ export default function App() {
         buyPrice: Number(h.buy_price) || 0,
         livePrice: Number(h.live_price ?? h.current_price ?? h.buy_price) || 0,
         currency: h.currency || 'USD',
+        broker: h.broker || 'Unknown',
+        holdingType: h.holding_type || 'stock',
       }));
   }, [portfolioHoldings, portfolios]);
   const [isFamilyChatOpen, setIsFamilyChatOpen] = useState(false);
@@ -1640,10 +1643,10 @@ export default function App() {
               {user && hasFeature('agent') && (
                 <button
                   onClick={toggleAgent}
-                  className={`shrink-0 p-2 rounded-full transition-colors cursor-pointer ${isAgentOpen ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30' : 'text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-900'}`}
+                  className={`shrink-0 p-2 rounded-full transition-colors cursor-pointer ${isAgentOpen ? 'text-white bg-indigo-600' : 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-950/70'}`}
                   title="Haven AI Agent"
                 >
-                  <Sparkles className="w-4.5 h-4.5" />
+                  <Bot className="w-4.5 h-4.5" />
                 </button>
               )}
               {user && hasFeature('chat') && (
