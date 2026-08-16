@@ -31,8 +31,12 @@ function containsCredentialLikeData(value: any, path = ""): string | null {
   return null;
 }
 
-// Precomputes P&L% per holding and groups by portfolio, so the model reads/ranks
-// already-correct figures rather than doing arithmetic on raw numbers itself.
+// Precomputes P&L% per holding, groups by portfolio, and caps each portfolio to its top 8
+// gainers + top 8 losers (pre-sorted, server-side) rather than sending every raw holding for
+// the model to sort through itself. A workspace with 275 holdings across 'All' portfolios was
+// the actual cause of requests timing out even at 45s - this keeps the prompt lean regardless
+// of portfolio size, while still guaranteeing the genuine top/bottom performers are always
+// included (since they're computed here, not left to the model to find).
 function buildPortfolioContext(summary: any): string {
   if (!Array.isArray(summary) || summary.length === 0) return "(No portfolio holdings available)";
   const byPortfolio = new Map<string, any[]>();
@@ -43,12 +47,31 @@ function buildPortfolioContext(summary: any): string {
   }
   const lines: string[] = [];
   for (const [portfolio, holdings] of Array.from(byPortfolio.entries())) {
-    lines.push(`  ${portfolio}:`);
-    for (const h of holdings) {
+    const withPnl = holdings.map((h) => {
       const buy = Number(h?.buyPrice) || 0;
       const live = Number(h?.livePrice) || 0;
-      const pnlPct = buy > 0 ? (((live - buy) / buy) * 100).toFixed(2) : "n/a";
-      lines.push(`    - ${h?.symbol || "?"}: qty ${h?.quantity ?? "?"}, buy ${buy}, live ${live}, P&L ${pnlPct}%, ${h?.currency || ""}`);
+      const pnlPct = buy > 0 ? ((live - buy) / buy) * 100 : null;
+      return { h, buy, live, pnlPct };
+    });
+    withPnl.sort((a, b) => (b.pnlPct ?? -Infinity) - (a.pnlPct ?? -Infinity));
+    const CAP = 8;
+    const top = withPnl.slice(0, CAP);
+    const bottom = withPnl.length > CAP * 2 ? withPnl.slice(-CAP) : [];
+    const shown = new Set([...top, ...bottom]);
+    const omitted = withPnl.length - shown.size;
+
+    lines.push(`  ${portfolio} (${withPnl.length} holdings total):`);
+    for (const { h, buy, live, pnlPct } of top) {
+      lines.push(`    - ${h?.symbol || "?"}: qty ${h?.quantity ?? "?"}, buy ${buy}, live ${live}, P&L ${pnlPct == null ? "n/a" : pnlPct.toFixed(2) + "%"}, ${h?.currency || ""}`);
+    }
+    if (bottom.length) {
+      lines.push(`    (bottom performers)`);
+      for (const { h, buy, live, pnlPct } of bottom) {
+        lines.push(`    - ${h?.symbol || "?"}: qty ${h?.quantity ?? "?"}, buy ${buy}, live ${live}, P&L ${pnlPct == null ? "n/a" : pnlPct.toFixed(2) + "%"}, ${h?.currency || ""}`);
+      }
+    }
+    if (omitted > 0) {
+      lines.push(`    (+${omitted} more mid-range holdings not shown - only extremes listed above)`);
     }
   }
   return lines.join("\n");
@@ -127,6 +150,14 @@ export default async function handler(req: any, res: any) {
         too - the app renders portfolioTable as an actual table, so listing it twice is
         redundant. For a single-holding answer, just answer in replyMessage as normal and
         omit portfolioTable entirely.
+
+        *** BILLS LISTING QUESTIONS ***
+        If the answer lists multiple bills (e.g. "what's due next week", "show overdue
+        bills") - put them into the billsTable array (one row per bill) instead of a bulleted
+        list in replyMessage. Keep replyMessage to one short intro sentence (e.g. "You have 7
+        bills coming up next week:"). Don't repeat the same list as prose bullets too - the
+        app renders billsTable as an actual table. For a single-bill answer or a question that
+        isn't really a listing, just answer in replyMessage as normal and omit billsTable.
 
         *** CRITICAL: FIELD VALUES MUST BE FINAL, CLEAN DATA — NEVER YOUR REASONING ***
         Every field in your JSON output (name, taggedFor, notes, category, etc.) must contain ONLY the final, clean value — a short name, a number, or null/omitted.
@@ -281,6 +312,19 @@ export default async function handler(req: any, res: any) {
                   portfolio: { type: Type.STRING },
                   pnlPct: { type: Type.NUMBER },
                   currency: { type: Type.STRING },
+                },
+              },
+            },
+            billsTable: {
+              type: Type.ARRAY,
+              description: "For answers listing multiple bills (e.g. 'what's due next week', 'show overdue bills') - one row per bill mentioned in replyMessage, so the app can render an actual table instead of a bulleted list. Omit entirely for single-bill or non-listing answers.",
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  amount: { type: Type.NUMBER },
+                  currency: { type: Type.STRING },
+                  dueDate: { type: Type.STRING, description: "e.g. 'Aug 17' - short, human-readable" },
                 },
               },
             },

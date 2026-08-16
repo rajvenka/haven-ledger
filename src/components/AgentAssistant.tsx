@@ -96,6 +96,35 @@ function PortfolioTableCard({ rows }: { rows: PortfolioTableRow[] }) {
   );
 }
 
+// Simpler than PortfolioTableCard - no chart needed for a bills list, and amounts are
+// color-neutral (unlike P&L, a bill amount isn't inherently a "gain" or "loss").
+function BillsTableCard({ rows }: { rows: BillsTableRow[] }) {
+  return (
+    <div className="mt-2 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+      <table className="w-full text-[11px]">
+        <thead>
+          <tr className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+            <th className="text-left font-bold px-2.5 py-1.5">Bill</th>
+            <th className="text-left font-bold px-2.5 py-1.5">Due</th>
+            <th className="text-right font-bold px-2.5 py-1.5">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-t border-slate-100 dark:border-slate-800">
+              <td className="px-2.5 py-1.5 font-semibold text-slate-900 dark:text-slate-100 truncate max-w-[120px]">{r.name}</td>
+              <td className="px-2.5 py-1.5 text-slate-500 dark:text-slate-400 whitespace-nowrap">{r.dueDate}</td>
+              <td className="px-2.5 py-1.5 text-right font-black text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                {r.amount} {r.currency}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 interface PortfolioSummaryItem {
   portfolio: string;
   symbol: string;
@@ -126,12 +155,20 @@ interface PortfolioTableRow {
   currency: string;
 }
 
+interface BillsTableRow {
+  name: string;
+  amount: number;
+  currency: string;
+  dueDate: string;
+}
+
 interface Message {
   id: string;
   sender: 'user' | 'assistant';
   text: string;
   timestamp: Date;
   portfolioTable?: PortfolioTableRow[];
+  billsTable?: BillsTableRow[];
 }
 
 export default function AgentAssistant({
@@ -282,6 +319,7 @@ export default function AgentAssistant({
         text: result.replyMessage || "I processed that, but I'm not sure how to respond.",
         timestamp: new Date(),
         portfolioTable: Array.isArray(result.portfolioTable) && result.portfolioTable.length > 0 ? result.portfolioTable : undefined,
+        billsTable: Array.isArray(result.billsTable) && result.billsTable.length > 0 ? result.billsTable : undefined,
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -509,7 +547,7 @@ export default function AgentAssistant({
                       </div>
                     )}
 
-                    <div className={`flex flex-col gap-1 ${msg.portfolioTable ? 'max-w-[92%]' : 'max-w-[75%]'}`}>
+                    <div className={`flex flex-col gap-1 ${(msg.portfolioTable || msg.billsTable) ? 'max-w-[92%]' : 'max-w-[75%]'}`}>
                       <div
                         className={`px-3.5 py-2.5 rounded-2xl text-xs font-semibold leading-relaxed shadow-sm ${
                           msg.sender === 'user'
@@ -519,6 +557,7 @@ export default function AgentAssistant({
                       >
                         {msg.sender === 'assistant' ? renderColorizedText(msg.text) : msg.text}
                         {msg.portfolioTable && <PortfolioTableCard rows={msg.portfolioTable} />}
+                        {msg.billsTable && <BillsTableCard rows={msg.billsTable} />}
                       </div>
                       <span className="text-[8px] text-slate-400 font-bold px-1 select-none text-left">
                         {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
