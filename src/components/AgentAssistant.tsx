@@ -6,7 +6,6 @@ import {
   Loader2, 
   Bot, 
   User, 
-  Sparkles,
   AlertCircle,
   TrendingUp,
   MessageSquare,
@@ -46,33 +45,50 @@ function renderColorizedText(text: string): React.ReactNode {
 // instead of a wall of prose text. Sorted by pnlPct descending (should already arrive sorted
 // from the model, but re-sorted here defensively rather than trusting that blindly).
 function PortfolioTableCard({ rows }: { rows: PortfolioTableRow[] }) {
-  const sorted = [...rows].sort((a, b) => (b.pnlPct ?? 0) - (a.pnlPct ?? 0));
+  // One separate table per portfolio, with a text label between each - instead of one
+  // combined table with a "Portfolio" column repeated on every row. Groups by first-seen
+  // order in the data (not re-sorted alphabetically), each portfolio's own rows sorted by
+  // P&L% descending.
+  const byPortfolio = new Map<string, PortfolioTableRow[]>();
+  for (const r of rows) {
+    const key = r.portfolio || 'Portfolio';
+    if (!byPortfolio.has(key)) byPortfolio.set(key, []);
+    byPortfolio.get(key)!.push(r);
+  }
 
   return (
-    <div className="mt-2 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
-      <table className="w-full text-[11px]">
-        <thead>
-          <tr className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-            <th className="text-left font-bold px-2.5 py-1.5">Symbol</th>
-            <th className="text-left font-bold px-2.5 py-1.5">Portfolio</th>
-            <th className="text-right font-bold px-2.5 py-1.5">P&L</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((r, i) => {
-            const isGain = (r.pnlPct ?? 0) >= 0;
-            return (
-              <tr key={i} className="border-t border-slate-100 dark:border-slate-800">
-                <td className="px-2.5 py-1.5 font-semibold text-slate-900 dark:text-slate-100 truncate max-w-[110px]">{r.symbol}</td>
-                <td className="px-2.5 py-1.5 text-slate-500 dark:text-slate-400 truncate max-w-[90px]">{r.portfolio}</td>
-                <td className={`px-2.5 py-1.5 text-right font-black ${isGain ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                  {isGain ? '+' : ''}{(r.pnlPct ?? 0).toFixed(1)}%
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="mt-2 space-y-2">
+      {Array.from(byPortfolio.entries()).map(([portfolio, portfolioRows]) => {
+        const sorted = [...portfolioRows].sort((a, b) => (b.pnlPct ?? 0) - (a.pnlPct ?? 0));
+        return (
+          <div key={portfolio}>
+            <p className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">{portfolio}</p>
+            <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                    <th className="text-left font-bold px-2.5 py-1.5">Symbol</th>
+                    <th className="text-right font-bold px-2.5 py-1.5">P&L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map((r, i) => {
+                    const isGain = (r.pnlPct ?? 0) >= 0;
+                    return (
+                      <tr key={i} className="border-t border-slate-100 dark:border-slate-800">
+                        <td className="px-2.5 py-1.5 font-semibold text-slate-900 dark:text-slate-100 truncate max-w-[140px]">{r.symbol}</td>
+                        <td className={`px-2.5 py-1.5 text-right font-black ${isGain ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                          {isGain ? '+' : ''}{(r.pnlPct ?? 0).toFixed(1)}%
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -281,9 +297,9 @@ export default function AgentAssistant({
   }, [messages, isOpen]);
 
   const suggestions = [
+    { label: "Daily digest", prompt: "daily digest" },
     { label: "Log Gas Bill payment", prompt: "log transaction for Gas Bill" },
     { label: "Add Netflix Payment", prompt: "add Netflix payment of 15 AUD on day 10" },
-    { label: "Daily digest", prompt: "daily digest" },
     { label: "How is my budget looking?", prompt: "How is my monthly budget looking?" }
   ];
 
@@ -540,7 +556,7 @@ export default function AgentAssistant({
           {/* Subtle glowing Siri/Apple AI color accent background overlay on hover */}
           <div className="absolute inset-0 bg-gradient-to-tr from-[#5856d6]/20 via-[#007aff]/25 to-[#34c759]/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
           
-          <Sparkles className="w-5 h-5 text-[#0a84ff] dark:text-[#007aff] group-hover:text-pink-500 dark:group-hover:text-pink-500 transition-colors duration-300 animate-pulse relative z-10" />
+          <Bot className="w-5 h-5 text-[#0a84ff] dark:text-[#007aff] group-hover:text-pink-500 dark:group-hover:text-pink-500 transition-colors duration-300 animate-pulse relative z-10" />
         </motion.button>
       </div>
       )}
@@ -615,7 +631,7 @@ export default function AgentAssistant({
                   >
                     {msg.sender === 'assistant' && (
                       <div className="w-7 h-7 rounded-full text-white flex items-center justify-center shrink-0 shadow-sm bg-gradient-to-tr from-[#5856d6] via-[#007aff] to-[#34c759]">
-                        <Sparkles className="w-3.5 h-3.5 text-white" />
+                        <Bot className="w-3.5 h-3.5 text-white" />
                       </div>
                     )}
 
@@ -646,7 +662,7 @@ export default function AgentAssistant({
                 {isProcessing && (
                   <div className="flex gap-2.5 justify-start text-left">
                     <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-[#5856d6] via-[#007aff] to-[#34c759] text-white flex items-center justify-center shrink-0">
-                      <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                      <Bot className="w-3.5 h-3.5" />
                     </div>
                     <div className="bg-[#f2f2f7] dark:bg-[#2c2c2e] px-3.5 py-2.5 rounded-2xl rounded-tl-sm shadow-sm flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-semibold">
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-[#007aff] dark:text-[#0a84ff]" />
