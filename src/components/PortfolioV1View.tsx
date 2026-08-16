@@ -666,6 +666,14 @@ function TileMetricScroller({
   );
 }
 
+// Debug tooling built for the currency-lag investigation (found: a mobile browser paint/
+// compositing bug on the swipeable tile, fixed via forced remount on portfolio/currency
+// change - see the `key` props on the TileMetricScroller wrapper divs below). Kept in place,
+// disabled, rather than deleted - flip this back to true to re-enable the on-screen debug
+// panel, the on-tile render timestamp, and the console logging, if a similar hard-to-diagnose
+// rendering issue ever comes up again.
+const CCY_DEBUG_ENABLED = false;
+
 export default function PortfolioV1View({
   isReadOnly,
   isDataLoading,
@@ -961,8 +969,10 @@ export default function PortfolioV1View({
   }, [scoped]);
 
   const selectPortfolioBook = (id: string) => {
-    // eslint-disable-next-line no-console
-    console.log('[CCY-DEBUG] selectPortfolioBook called, switching portfolioFilter to:', id, 'previous value was:', portfolioFilter);
+    if (CCY_DEBUG_ENABLED) {
+      // eslint-disable-next-line no-console
+      console.log('[CCY-DEBUG] selectPortfolioBook called, switching portfolioFilter to:', id, 'previous value was:', portfolioFilter);
+    }
     setPortfolioFilter(id);
     setBrokerFilter(new Set());
     setCategoryFilter('All');
@@ -1079,15 +1089,6 @@ export default function PortfolioV1View({
   // last selected while 'All' was active; view-currency is only ever consulted when 'All'
   // portfolios are actually selected right now.
   const effectiveDisplayCurrency = useMemo(() => {
-    const entry = {
-      at: new Date().toISOString(),
-      portfolioFilter,
-      scopedLength: scoped.length,
-      scopedFirstCurrency: scoped[0]?.currency,
-      scopedFirstPortfolioId: scoped[0]?.portfolio_id,
-      viewCurrency,
-      baseCurrency,
-    };
     let result: string;
     let branch: string;
     if (portfolioFilter !== 'All' && portfolioFilter !== '__pending__') {
@@ -1112,9 +1113,20 @@ export default function PortfolioV1View({
       result = String(baseCurrency || 'USD').toUpperCase();
       branch = `falling back to baseCurrency/USD: ${result}`;
     }
-    ccyDebugLogRef.current = [...ccyDebugLogRef.current.slice(-19), { ...entry, branch, result }];
-    // eslint-disable-next-line no-console
-    console.log('[CCY-DEBUG]', branch, entry);
+    if (CCY_DEBUG_ENABLED) {
+      const entry = {
+        at: new Date().toISOString(),
+        portfolioFilter,
+        scopedLength: scoped.length,
+        scopedFirstCurrency: scoped[0]?.currency,
+        scopedFirstPortfolioId: scoped[0]?.portfolio_id,
+        viewCurrency,
+        baseCurrency,
+      };
+      ccyDebugLogRef.current = [...ccyDebugLogRef.current.slice(-19), { ...entry, branch, result }];
+      // eslint-disable-next-line no-console
+      console.log('[CCY-DEBUG]', branch, entry);
+    }
     return result;
   }, [portfolioFilter, scoped, portfolios, viewCurrency, baseCurrency]);
 
@@ -1208,23 +1220,25 @@ export default function PortfolioV1View({
     const pnlPctVal = inv > 0 ? (pnlAmt / inv) * 100 : 0;
     const pnlPctCfdVal = investedCfd > 0 ? ((marketCfd - investedCfd) / investedCfd) * 100 : 0;
     const dayPctVal = dayBase > 0 ? (dayPnl / dayBase) * 100 : null;
-    // TEMPORARY: log the actual computed market/invested value alongside the currency, in
-    // the same debug log as effectiveDisplayCurrency - lets a direct comparison against
-    // what's actually shown on screen at the same moment, to see whether the VALUE itself is
-    // also wrong, or only ever the currency label. Remove once diagnosed.
-    ccyDebugLogRef.current = [
-      ...ccyDebugLogRef.current.slice(-19),
-      {
-        at: new Date().toISOString(),
-        tag: 'totalPortfolioTile RESULT',
-        portfolioFilter,
-        displayCcy,
-        market: Math.round(market),
-        invested: Math.round(inv),
-        pnlAmt: Math.round(pnlAmt),
-        scopedLength: scoped.length,
-      },
-    ];
+    // Debug log for the currency-lag investigation (disabled by default, see
+    // CCY_DEBUG_ENABLED) - logs the actual computed market/invested value alongside the
+    // currency, letting a direct comparison against what's actually shown on screen at the
+    // same moment.
+    if (CCY_DEBUG_ENABLED) {
+      ccyDebugLogRef.current = [
+        ...ccyDebugLogRef.current.slice(-19),
+        {
+          at: new Date().toISOString(),
+          tag: 'totalPortfolioTile RESULT',
+          portfolioFilter,
+          displayCcy,
+          market: Math.round(market),
+          invested: Math.round(inv),
+          pnlAmt: Math.round(pnlAmt),
+          scopedLength: scoped.length,
+        },
+      ];
+    }
     return {
       displayCcy,
       market,
@@ -2394,7 +2408,7 @@ export default function PortfolioV1View({
             </button>
           )}
         </div>
-        {/* TEMPORARY debug panel for the currency-lag investigation - remove once diagnosed */}
+        {CCY_DEBUG_ENABLED && (
         <div className="rounded-xl border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/30 p-2 space-y-1.5">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[9px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-wider">CCY Debug Log</span>
@@ -2431,6 +2445,7 @@ export default function PortfolioV1View({
             </pre>
           )}
         </div>
+        )}
         <div
           className="grid gap-2.5"
           style={{
@@ -2492,9 +2507,11 @@ export default function PortfolioV1View({
                         <p className="text-[13px] sm:text-[15px] font-black tabular-nums text-slate-900 dark:text-white">
                           {money(cfdView ? totalPortfolioTile.marketCfd : totalPortfolioTile.market, totalPortfolioTile.displayCcy)}
                         </p>
-                        <p className="text-[7px] text-rose-500 font-mono">
-                          rendered {new Date().toISOString().slice(11, 19)} · {totalPortfolioTile.displayCcy} · pf={portfolioFilter === 'All' ? 'All' : portfolioFilter.slice(0, 6)}
-                        </p>
+                        {CCY_DEBUG_ENABLED && (
+                          <p className="text-[7px] text-rose-500 font-mono">
+                            rendered {new Date().toISOString().slice(11, 19)} · {totalPortfolioTile.displayCcy} · pf={portfolioFilter === 'All' ? 'All' : portfolioFilter.slice(0, 6)}
+                          </p>
+                        )}
                         <p
                           className={`text-[11px] sm:text-[12px] font-black tabular-nums leading-tight mt-0.5 ${
                             formatTotalPerf().positive ? 'text-emerald-600' : 'text-rose-600'
