@@ -21,11 +21,21 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
+interface PortfolioSummaryItem {
+  portfolio: string;
+  symbol: string;
+  quantity: number;
+  buyPrice: number;
+  livePrice: number;
+  currency: string;
+}
+
 interface AgentAssistantProps {
   payments: RecurringPayment[];
   history: PaymentHistory[];
   userProfile: UserProfile | null;
   summaryCurrency: string;
+  portfolioSummary?: PortfolioSummaryItem[];
   onAddPayment: (payment: Omit<RecurringPayment, 'id'>) => Promise<any>;
   onUpdatePayment?: (payment: RecurringPayment) => Promise<any>;
   onRecordPayment: (paymentId: string, amount?: number, status?: 'paid' | 'delayed' | 'carry', taggedFor?: string) => Promise<any>;
@@ -46,6 +56,7 @@ export default function AgentAssistant({
   history,
   userProfile,
   summaryCurrency,
+  portfolioSummary,
   onAddPayment,
   onUpdatePayment,
   onRecordPayment,
@@ -68,7 +79,7 @@ export default function AgentAssistant({
     {
       id: 'welcome',
       sender: 'assistant',
-      text: "Hello! I am your Haven Agent. How can I help you today? You can write comments here to quickly add bills or log transactions.",
+      text: "Hello! I am your Haven Agent. How can I help you today? You can write comments here to quickly add bills or log transactions, or ask about your portfolios - e.g. \"what's my best performer?\"",
       timestamp: new Date()
     }
   ]);
@@ -130,6 +141,7 @@ export default function AgentAssistant({
             payments,
             history,
             userProfile,
+            portfolioSummary,
             chatHistory
           }),
           signal: controller.signal,

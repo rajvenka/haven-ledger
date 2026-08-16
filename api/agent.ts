@@ -1,6 +1,59 @@
 import { Type } from "@google/genai";
 import { generateContentWithFallback } from "./_gemini.js";
 
+// Defense-in-depth: even though portfolioSummary is built by the frontend from an explicit
+// field allowlist (symbol/quantity/price/currency/portfolio name only - portfolio_holdings
+// has no credential columns at all), this scans it one more time before it's allowed anywhere
+// near the Gemini prompt. Rejects the whole request rather than silently stripping - if this
+// ever actually matches, something upstream already went wrong and should fail loudly, not
+// quietly send a redacted version.
+const CREDENTIAL_KEY_PATTERN = /api[_-]?key|access[_-]?token|refresh[_-]?token|secret|password|credential|bearer|client[_-]?secret/i;
+const LONG_TOKEN_LIKE_VALUE = /^[A-Za-z0-9_\-\.]{40,}$/; // typical shape of a real API key/token
+function containsCredentialLikeData(value: any, path = ""): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") {
+    return LONG_TOKEN_LIKE_VALUE.test(value) ? `suspicious long token-like string at ${path || "(root)"}` : null;
+  }
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      const hit = containsCredentialLikeData(value[i], `${path}[${i}]`);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  if (typeof value === "object") {
+    for (const key of Object.keys(value)) {
+      if (CREDENTIAL_KEY_PATTERN.test(key)) return `suspicious key name "${key}" at ${path || "(root)"}`;
+      const hit = containsCredentialLikeData(value[key], path ? `${path}.${key}` : key);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+// Precomputes P&L% per holding and groups by portfolio, so the model reads/ranks
+// already-correct figures rather than doing arithmetic on raw numbers itself.
+function buildPortfolioContext(summary: any): string {
+  if (!Array.isArray(summary) || summary.length === 0) return "(No portfolio holdings available)";
+  const byPortfolio = new Map<string, any[]>();
+  for (const h of summary) {
+    const key = String(h?.portfolio || "Default");
+    if (!byPortfolio.has(key)) byPortfolio.set(key, []);
+    byPortfolio.get(key)!.push(h);
+  }
+  const lines: string[] = [];
+  for (const [portfolio, holdings] of Array.from(byPortfolio.entries())) {
+    lines.push(`  ${portfolio}:`);
+    for (const h of holdings) {
+      const buy = Number(h?.buyPrice) || 0;
+      const live = Number(h?.livePrice) || 0;
+      const pnlPct = buy > 0 ? (((live - buy) / buy) * 100).toFixed(2) : "n/a";
+      lines.push(`    - ${h?.symbol || "?"}: qty ${h?.quantity ?? "?"}, buy ${buy}, live ${live}, P&L ${pnlPct}%, ${h?.currency || ""}`);
+    }
+  }
+  return lines.join("\n");
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -8,7 +61,7 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { prompt, payments, history, userProfile, chatHistory } = req.body || {};
+    const { prompt, payments, history, userProfile, portfolioSummary, chatHistory } = req.body || {};
 
     if (!prompt) {
       res.status(400).json({ error: "Missing prompt" });
@@ -18,19 +71,42 @@ export default async function handler(req: any, res: any) {
       res.status(500).json({ error: "GEMINI_API_KEY is not configured on the server." });
       return;
     }
+    if (portfolioSummary != null) {
+      const suspicious = containsCredentialLikeData(portfolioSummary, "portfolioSummary");
+      if (suspicious) {
+        console.error(`[Agent] Rejected request - ${suspicious}`);
+        res.status(400).json({ error: "Portfolio data rejected by safety check - contact support." });
+        return;
+      }
+    }
 
     const response = await generateContentWithFallback({
       contents: `
-        You are the Haven Agent, an AI-powered financial assistant for a Bill and Expense Manager app called "Haven Vault".
+        You are the Haven Agent, an AI-powered financial assistant for a Bill and Expense Manager app called "Haven Vault", which also tracks investment portfolios.
         Your task is to interpret the user's comments or instructions.
 
         Context:
         - Current date/time: ${new Date().toISOString()}
         - Current configured payments: ${JSON.stringify(payments)}
         - User Profile: ${JSON.stringify(userProfile)}
+        - Investment Portfolios (grouped by portfolio, with P&L% already computed - do not
+          recompute or guess figures, just read and rank these):
+        ${buildPortfolioContext(portfolioSummary)}
         - Recent Conversation History:
         ${chatHistory && Array.isArray(chatHistory) ? chatHistory.map((m: any) => `${m.sender === 'user' ? 'User' : 'Assistant'}: ${m.text}`).join('\n') : '(None)'}
         - New User Input: "${prompt}"
+
+        *** PORTFOLIO QUESTIONS (intent: "portfolio_query") ***
+        If the user asks about their investments/portfolios/stocks - e.g. "what's my best
+        performer", "how's ETORO RAJ doing", "who's up this week" - set intent to
+        "portfolio_query" and answer directly and specifically in replyMessage using ONLY the
+        portfolio data given above (symbol, portfolio name, P&L%, currency). Name the actual
+        symbol(s) and figures. If the portfolio data above is empty, say you don't see any
+        holdings to analyze rather than guessing. Never fabricate a symbol, price, or
+        percentage that isn't in the data given. This app distinguishes real cash committed
+        from raw leveraged/CFD exposure for margin positions - if asked about "value" for a
+        leveraged holding, prefer whichever figure is actually present in the data rather than
+        assuming which one it is.
 
         *** CRITICAL: FIELD VALUES MUST BE FINAL, CLEAN DATA — NEVER YOUR REASONING ***
         Every field in your JSON output (name, taggedFor, notes, category, etc.) must contain ONLY the final, clean value — a short name, a number, or null/omitted.
@@ -75,7 +151,7 @@ export default async function handler(req: any, res: any) {
 
         Return a structured JSON with these exact fields:
         {
-          "intent": "add_expense" | "add_bulk_expenses" | "mark_paid" | "update_expense" | "chat_clarify",
+          "intent": "add_expense" | "add_bulk_expenses" | "mark_paid" | "update_expense" | "portfolio_query" | "chat_clarify",
           "addExpenseData": {
             "name": string,
             "amount": number,
@@ -116,7 +192,7 @@ export default async function handler(req: any, res: any) {
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            intent: { type: Type.STRING, description: "One of: 'add_expense', 'add_bulk_expenses', 'mark_paid', 'update_expense', 'chat_clarify'" },
+            intent: { type: Type.STRING, description: "One of: 'add_expense', 'add_bulk_expenses', 'mark_paid', 'update_expense', 'portfolio_query', 'chat_clarify'" },
             addExpenseData: {
               type: Type.OBJECT,
               properties: {

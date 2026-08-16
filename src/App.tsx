@@ -296,6 +296,25 @@ export default function App() {
   const lastLandingWorkspaceId = React.useRef<string | null>(null);
   const [settingsSubTab, setSettingsSubTab] = useState<'preferences' | 'team'>('preferences');
   const [isAgentOpen, setIsAgentOpen] = useState(false);
+  // Carefully narrowed portfolio summary for the Agent - explicit field allowlist, built only
+  // from portfolio_holdings (a table with no credential fields at all - verified directly
+  // against the schema before building this). Never touches portfolioBrokerConnections or any
+  // credentials/tokens data anywhere in this mapping. Active holdings only, one line of real
+  // data per holding, nothing else - deliberately not just passing the raw holding objects
+  // through, in case those ever grow additional fields later that shouldn't leave the app.
+  const agentPortfolioSummary = React.useMemo(() => {
+    const portfolioNameById = new Map((portfolios || []).map((p: any) => [p.id, p.name]));
+    return (portfolioHoldings || [])
+      .filter((h: any) => (h.status || 'active') === 'active')
+      .map((h: any) => ({
+        portfolio: portfolioNameById.get(h.portfolio_id) || 'Default',
+        symbol: h.ticker || h.symbol || '',
+        quantity: Number(h.quantity) || 0,
+        buyPrice: Number(h.buy_price) || 0,
+        livePrice: Number(h.live_price ?? h.current_price ?? h.buy_price) || 0,
+        currency: h.currency || 'USD',
+      }));
+  }, [portfolioHoldings, portfolios]);
   const [isFamilyChatOpen, setIsFamilyChatOpen] = useState(false);
 
   // Limited-access members only see the essentials; hasFeature checks each optional tab individually.
@@ -2571,6 +2590,7 @@ export default function App() {
             history={history}
             userProfile={userProfile}
             summaryCurrency={summaryCurrency}
+            portfolioSummary={agentPortfolioSummary}
             onAddPayment={addPayment}
             onUpdatePayment={updatePayment}
             onRecordPayment={async (paymentId, amount, status, taggedFor) => {
