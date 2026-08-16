@@ -10,7 +10,8 @@ import {
   AlertCircle,
   TrendingUp,
   MessageSquare,
-  ArrowRight
+  ArrowRight,
+  Trash2
 } from 'lucide-react';
 import { RecurringPayment, PaymentHistory, UserProfile } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer, Tooltip } from 'recharts';
@@ -157,14 +158,34 @@ export default function AgentAssistant({
   };
   const [isProcessing, setIsProcessing] = useState(false);
   const [textInput, setTextInput] = useState('');
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'welcome',
-      sender: 'assistant',
-      text: "Hello! I am your Haven Agent. How can I help you today? You can write comments here to quickly add bills or log transactions, or ask about your portfolios - e.g. \"what's my best performer?\"",
-      timestamp: new Date()
+  const welcomeMessage: Message = {
+    id: 'welcome',
+    sender: 'assistant',
+    text: "Hello! I am your Haven Agent. How can I help you today? You can write comments here to quickly add bills or log transactions, or ask about your portfolios - e.g. \"what's my best performer?\"",
+    timestamp: new Date()
+  };
+  const chatHistoryStorageKey = userProfile?.uid ? `haven_agent_chat_${userProfile.uid}` : null;
+  const [messages, setMessages] = useState<Message[]>(() => {
+    try {
+      if (!chatHistoryStorageKey) return [welcomeMessage];
+      const raw = localStorage.getItem(chatHistoryStorageKey);
+      if (!raw) return [welcomeMessage];
+      const parsed = JSON.parse(raw) as Message[];
+      if (!Array.isArray(parsed) || parsed.length === 0) return [welcomeMessage];
+      // JSON round-trip loses Date objects (timestamp becomes a string) - restore them.
+      return parsed.map(m => ({ ...m, timestamp: new Date(m.timestamp) }));
+    } catch {
+      return [welcomeMessage];
     }
-  ]);
+  });
+  // Persist on every change, capped at the last 50 messages so storage doesn't grow unbounded
+  // over a long-running chat history.
+  useEffect(() => {
+    if (!chatHistoryStorageKey) return;
+    try {
+      localStorage.setItem(chatHistoryStorageKey, JSON.stringify(messages.slice(-50)));
+    } catch { /* ignore storage errors (e.g. quota exceeded) */ }
+  }, [messages, chatHistoryStorageKey]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -202,15 +223,25 @@ export default function AgentAssistant({
     setErrorMessage(null);
 
     try {
+      // Only send the (potentially large) portfolio summary when the prompt (or the agent's
+      // own most recent reply, e.g. it just asked "which portfolio?") actually looks
+      // portfolio-related - keeps bill-entry messages (the common case) fast and light,
+      // rather than sending every holding on every single message regardless of relevance.
+      const portfolioKeywordPattern = /\b(stock|share|portfolio|invest|holding|fund|gainer|loser|perform|etoro|zerodha|webull|groww|stake|sasi)\b/i;
+      const lastAssistantText = [...messages].reverse().find(m => m.sender === 'assistant')?.text || '';
+      const looksPortfolioRelated = portfolioKeywordPattern.test(command) || portfolioKeywordPattern.test(lastAssistantText);
+
       // Build full chat history including the latest message
       const chatHistory = [...messages, newUserMessage].map(m => ({
         sender: m.sender,
         text: m.text
       }));
 
-      // Send command, history, and current database state to the backend Agent endpoint
+      // Send command, history, and current database state to the backend Agent endpoint.
+      // 45s (up from 25s) - portfolio questions now involve meaningfully more prompt data and
+      // a more complex output schema than the original bills-only design, genuinely slower.
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25000);
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
       let response: Response;
       try {
         response = await fetch('/api/agent', {
@@ -223,7 +254,7 @@ export default function AgentAssistant({
             payments,
             history,
             userProfile,
-            portfolioSummary,
+            portfolioSummary: looksPortfolioRelated ? portfolioSummary : undefined,
             chatHistory
           }),
           signal: controller.signal,
@@ -443,12 +474,26 @@ export default function AgentAssistant({
                   </div>
                 </div>
 
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="p-1.5 hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] rounded-full text-slate-500 transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => {
+                      setMessages([welcomeMessage]);
+                      if (chatHistoryStorageKey) {
+                        try { localStorage.removeItem(chatHistoryStorageKey); } catch { /* ignore */ }
+                      }
+                    }}
+                    title="Clear chat history"
+                    className="p-1.5 hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] rounded-full text-slate-400 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setIsOpen(false)}
+                    className="p-1.5 hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] rounded-full text-slate-500 transition-colors cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               {/* Chat messages Area */}
