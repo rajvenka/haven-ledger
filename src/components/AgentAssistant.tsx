@@ -13,6 +13,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { RecurringPayment, PaymentHistory, UserProfile } from '../types';
+import { BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -40,6 +41,60 @@ function renderColorizedText(text: string): React.ReactNode {
   });
 }
 
+// Renders the agent's structured portfolioTable as an actual table + horizontal bar chart,
+// instead of a wall of prose text. Sorted by pnlPct descending (should already arrive sorted
+// from the model, but re-sorted here defensively rather than trusting that blindly).
+function PortfolioTableCard({ rows }: { rows: PortfolioTableRow[] }) {
+  const sorted = [...rows].sort((a, b) => (b.pnlPct ?? 0) - (a.pnlPct ?? 0));
+  const chartData = sorted.map(r => ({ name: r.symbol, pnl: Number(r.pnlPct?.toFixed?.(1) ?? r.pnlPct) }));
+  const chartHeight = Math.max(80, sorted.length * 28);
+
+  return (
+    <div className="mt-2 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+      <table className="w-full text-[11px]">
+        <thead>
+          <tr className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+            <th className="text-left font-bold px-2.5 py-1.5">Symbol</th>
+            <th className="text-left font-bold px-2.5 py-1.5">Portfolio</th>
+            <th className="text-right font-bold px-2.5 py-1.5">P&L</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((r, i) => {
+            const isGain = (r.pnlPct ?? 0) >= 0;
+            return (
+              <tr key={i} className="border-t border-slate-100 dark:border-slate-800">
+                <td className="px-2.5 py-1.5 font-semibold text-slate-900 dark:text-slate-100 truncate max-w-[110px]">{r.symbol}</td>
+                <td className="px-2.5 py-1.5 text-slate-500 dark:text-slate-400 truncate max-w-[90px]">{r.portfolio}</td>
+                <td className={`px-2.5 py-1.5 text-right font-black ${isGain ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                  {isGain ? '+' : ''}{(r.pnlPct ?? 0).toFixed(1)}%
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div className="px-1.5 pt-1 pb-1.5" style={{ height: chartHeight }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
+            <XAxis type="number" tick={{ fontSize: 9 }} unit="%" />
+            <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={70} />
+            <Tooltip
+              formatter={(v: number) => [`${v}%`, 'P&L']}
+              contentStyle={{ fontSize: 11, borderRadius: 8 }}
+            />
+            <Bar dataKey="pnl" radius={[0, 4, 4, 0]}>
+              {chartData.map((d, i) => (
+                <Cell key={i} fill={d.pnl >= 0 ? '#059669' : '#e11d48'} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 interface PortfolioSummaryItem {
   portfolio: string;
   symbol: string;
@@ -63,11 +118,19 @@ interface AgentAssistantProps {
   hideFab?: boolean;
 }
 
+interface PortfolioTableRow {
+  symbol: string;
+  portfolio: string;
+  pnlPct: number;
+  currency: string;
+}
+
 interface Message {
   id: string;
   sender: 'user' | 'assistant';
   text: string;
   timestamp: Date;
+  portfolioTable?: PortfolioTableRow[];
 }
 
 export default function AgentAssistant({
@@ -186,7 +249,8 @@ export default function AgentAssistant({
         id: assistantMsgId,
         sender: 'assistant',
         text: result.replyMessage || "I processed that, but I'm not sure how to respond.",
-        timestamp: new Date()
+        timestamp: new Date(),
+        portfolioTable: Array.isArray(result.portfolioTable) && result.portfolioTable.length > 0 ? result.portfolioTable : undefined,
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -400,7 +464,7 @@ export default function AgentAssistant({
                       </div>
                     )}
 
-                    <div className="flex flex-col max-w-[75%] gap-1">
+                    <div className={`flex flex-col gap-1 ${msg.portfolioTable ? 'max-w-[92%]' : 'max-w-[75%]'}`}>
                       <div
                         className={`px-3.5 py-2.5 rounded-2xl text-xs font-semibold leading-relaxed shadow-sm ${
                           msg.sender === 'user'
@@ -409,6 +473,7 @@ export default function AgentAssistant({
                         }`}
                       >
                         {msg.sender === 'assistant' ? renderColorizedText(msg.text) : msg.text}
+                        {msg.portfolioTable && <PortfolioTableCard rows={msg.portfolioTable} />}
                       </div>
                       <span className="text-[8px] text-slate-400 font-bold px-1 select-none text-left">
                         {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

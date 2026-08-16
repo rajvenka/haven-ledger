@@ -119,6 +119,15 @@ export default async function handler(req: any, res: any) {
         leveraged holding, prefer whichever figure is actually present in the data rather than
         assuming which one it is.
 
+        If the answer involves comparing more than one holding (top gainers/losers, "how's
+        this portfolio doing", etc.) - put the actual per-holding figures into the
+        portfolioTable array (one row per holding, sorted by pnlPct descending), and keep
+        replyMessage to a single short sentence introducing it (e.g. "Here are your top 5
+        gainers in ETORO RAJ:"). Don't repeat the same list as prose text inside replyMessage
+        too - the app renders portfolioTable as an actual table, so listing it twice is
+        redundant. For a single-holding answer, just answer in replyMessage as normal and
+        omit portfolioTable entirely.
+
         *** CRITICAL: FIELD VALUES MUST BE FINAL, CLEAN DATA — NEVER YOUR REASONING ***
         Every field in your JSON output (name, taggedFor, notes, category, etc.) must contain ONLY the final, clean value — a short name, a number, or null/omitted.
         NEVER write out your thought process, uncertainty, or deliberation as the content of a field (e.g. never write something like "or we can omit it but let's just..." as a field's value).
@@ -260,6 +269,19 @@ export default async function handler(req: any, res: any) {
                 paymentMethod: { type: Type.STRING },
                 paymentType: { type: Type.STRING },
                 active: { type: Type.BOOLEAN },
+              },
+            },
+            portfolioTable: {
+              type: Type.ARRAY,
+              description: "For portfolio_query answers involving multiple holdings (e.g. 'top gainers', 'how's this portfolio doing') - one row per holding shown in replyMessage, so the app can render an actual table/chart. Omit entirely for single-holding or non-numeric answers.",
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  symbol: { type: Type.STRING },
+                  portfolio: { type: Type.STRING },
+                  pnlPct: { type: Type.NUMBER },
+                  currency: { type: Type.STRING },
+                },
               },
             },
             replyMessage: { type: Type.STRING },
