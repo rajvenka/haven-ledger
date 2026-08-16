@@ -346,15 +346,18 @@ export default async function handler(req: any, res: any) {
 
     const result = JSON.parse(response.text || "{}");
 
-    // Deterministic fallback: portfolioTable is an optional schema field the model doesn't
-    // always reliably populate, even when its own replyMessage clearly implies a list (e.g.
-    // "Here are the top gainers..." followed by nothing). Rather than leave the user with a
-    // promise and no table, fall back to the same pre-sorted, already-computed data used to
-    // build the prompt itself whenever the intent and reply text suggest a ranked list.
-    if (result.intent === "portfolio_query" && (!Array.isArray(result.portfolioTable) || result.portfolioTable.length === 0)) {
+    // portfolioTable is no longer trusted from Gemini's own output at all - only its intent
+    // and reply wording decide WHETHER a table should show. The actual contents always come
+    // from the same pre-sorted, pre-computed data used to build the prompt (portfolioContext
+    // .topRows), with zero dependency on Gemini correctly transcribing symbols or numbers.
+    // Two earlier attempts (fill in only if empty, then correct-in-place by symbol match)
+    // both still depended on some part of Gemini's own output being reliable - one on it
+    // recognizing when it had nothing, the other on exact symbol string/number-type matching
+    // - and both were observed failing (empty table, then 0% values). This is unconditional.
+    if (result.intent === "portfolio_query") {
       const replyLower = String(result.replyMessage || "").toLowerCase();
       const promptLower = String(prompt || "").toLowerCase();
-      const impliesRankedList = /\b(top|best|worst|gainer|loser|performer)\b/.test(replyLower);
+      const impliesRankedList = /\b(top|best|worst|gainer|loser|performer)\b/.test(replyLower) || /\b(top|best|worst|gainer|loser|performer)\b/.test(promptLower);
       if (impliesRankedList && portfolioContext.topRows.length > 0) {
         // Portfolio-aware: if a specific portfolio name from the actual data is mentioned in
         // either the question or the reply, filter to just that one - matches what was
@@ -366,27 +369,13 @@ export default async function handler(req: any, res: any) {
         const candidateRows = matchedPortfolio
           ? portfolioContext.topRows.filter((r) => r.portfolio === matchedPortfolio)
           : portfolioContext.topRows;
-        result.portfolioTable = candidateRows.filter((r) => r.pnlPct >= 0).sort((a, b) => b.pnlPct - a.pnlPct).slice(0, 5);
-        if (result.portfolioTable.length === 0) {
-          // No gainers at all - fall back to the overall top-ranked rows regardless of sign.
-          result.portfolioTable = [...candidateRows].sort((a, b) => b.pnlPct - a.pnlPct).slice(0, 5);
-        }
+        const wantsLosers = /\b(worst|loser)\b/.test(replyLower) || /\b(worst|loser)\b/.test(promptLower);
+        result.portfolioTable = wantsLosers
+          ? [...candidateRows].sort((a, b) => a.pnlPct - b.pnlPct).slice(0, 5)
+          : [...candidateRows].sort((a, b) => b.pnlPct - a.pnlPct).slice(0, 5);
+      } else {
+        result.portfolioTable = undefined;
       }
-    }
-
-    // Always correct any portfolioTable Gemini did populate itself against the actual
-    // pre-computed values, rather than trusting whatever numbers it transcribed. It can
-    // reliably pick which symbols belong in the answer, but doesn't always carry the correct
-    // pnlPct value into the structured output (seen defaulting to 0 rather than the real
-    // figure) - this guarantees displayed numbers are always the real computed ones.
-    if (Array.isArray(result.portfolioTable) && result.portfolioTable.length > 0 && portfolioContext.topRows.length > 0) {
-      const bySymbol = new Map(portfolioContext.topRows.map((r) => [r.symbol.toLowerCase(), r]));
-      result.portfolioTable = result.portfolioTable
-        .map((row: any) => {
-          const match = bySymbol.get(String(row?.symbol || "").toLowerCase());
-          return match ? { symbol: match.symbol, portfolio: match.portfolio, pnlPct: match.pnlPct, currency: match.currency } : row;
-        })
-        .filter((row: any) => Number.isFinite(row?.pnlPct)); // drop any row we couldn't verify against real data
     }
 
     // SAFETY NET: strip any field value that looks like leaked model reasoning
