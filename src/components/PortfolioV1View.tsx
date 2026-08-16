@@ -459,6 +459,12 @@ function classifyHolding(h: any): CategoryId {
   if (ccy === 'USD' || broker.includes('webull') || broker.includes('etoro') || broker.includes('moomoo') || broker.includes('tiger')) {
     return 'us_stock';
   }
+  // Any other real currency (EUR, GBP, etc.) is still a genuine international stock - route
+  // it to the same bucket as USD/eToro/Webull rather than silently falling into "other" just
+  // because the specific broker name (e.g. an ESOP platform like "Amundi ESR") isn't one of
+  // the explicitly named ones above. "other" is reserved for holdings with no usable
+  // currency at all.
+  if (ccy) return 'us_stock';
   return 'other';
 }
 
