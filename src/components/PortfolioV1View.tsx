@@ -1553,11 +1553,18 @@ export default function PortfolioV1View({
       .filter(Boolean) as { h: any; p: number; dollar: number; displayCcy: string }[];
     // $ mode ranks by absolute P&L; % mode ranks by percentage
     const byDollar = moversUnit === 'dollar';
-    const gainers = [...rows]
-      .sort((a, b) => (byDollar ? b.dollar - a.dollar : b.p - a.p))
+    const valueOf = (r: { p: number; dollar: number }) => (byDollar ? r.dollar : r.p);
+    // Filter by actual sign first - a "top loser" that's still positive isn't a loser at
+    // all, it's just a smaller gainer. Previously took top-5/bottom-5 regardless of sign, so
+    // a portfolio with fewer than 5 real losers would pad the list with its smallest
+    // gainers, shown in red (forced by block.good below) despite being genuinely positive.
+    const gainers = rows
+      .filter((r) => valueOf(r) >= 0)
+      .sort((a, b) => valueOf(b) - valueOf(a))
       .slice(0, 5);
-    const losers = [...rows]
-      .sort((a, b) => (byDollar ? a.dollar - b.dollar : a.p - b.p))
+    const losers = rows
+      .filter((r) => valueOf(r) < 0)
+      .sort((a, b) => valueOf(a) - valueOf(b))
       .slice(0, 5);
     return { gainers, losers };
   }, [filtered, moversMode, moversUnit, viewCurrency, workspaceCurrencyRates, baseCurrency, totalPortfolioTile.displayCcy]);
