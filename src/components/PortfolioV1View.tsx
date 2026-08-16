@@ -737,6 +737,18 @@ export default function PortfolioV1View({
   const [expandedCategory, setExpandedCategory] = useState<CategoryId | null>(null);
   const [holdingsExpanded, setHoldingsExpanded] = useState(true);
   const [showLotsOnly, setShowLotsOnly] = useState(false);
+  // Per-row lot expansion - clicking a specific holding with lots expands just that one
+  // inline, independent of the showLotsOnly toggle above (which switches every holding at
+  // once). Previously there was no way to expand a single holding's lots without turning on
+  // that global mode for the whole table.
+  const [expandedLotHoldingIds, setExpandedLotHoldingIds] = useState<Set<string>>(new Set());
+  const toggleLotExpand = (holdingId: string) => {
+    setExpandedLotHoldingIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(holdingId)) next.delete(holdingId); else next.add(holdingId);
+      return next;
+    });
+  };
   const [moversMode, setMoversMode] = useState<'overall' | 'day'>('day');
   // Single source of truth for the P&L value display - one atomic selection, not two
   // separately-settable states that could combine inconsistently. moversUnit/cfdView below
@@ -1390,47 +1402,57 @@ export default function PortfolioV1View({
   // Table rows: when Lots is on, expand one row per lot/position (repeat symbol).
   type TableRow = { h: any; lot?: any; stop?: number | null; lotQty?: number; dist?: number | null; rowKey: string };
   const tableRows = useMemo((): TableRow[] => {
-    if (!showLotsOnly) {
-      return filtered.map((h) => ({ h, rowKey: String(h.id) }));
-    }
-    const rows: TableRow[] = [];
-    for (const h of filtered) {
+    // Expands one holding into its lot/stop sub-rows - same logic whether triggered by the
+    // global showLotsOnly toggle or by expanding a single row individually.
+    const expandHolding = (h: any): TableRow[] => {
       const lots = lotsByHoldingId.get(String(h.id)) || [];
       if (lots.length > 0) {
         // One table row per position/lot (e.g. Netflix ×5)
-        lots.forEach((lot: any, idx: number) => {
+        return lots.map((lot: any, idx: number) => {
           const stop = lot.stop_loss_rate != null ? Number(lot.stop_loss_rate) : null;
           const live = Number(lot.current_price ?? h.live_price ?? h.current_price ?? lot.buy_price ?? h.buy_price) || 0;
           const dist = stop != null && live > 0 ? ((live - stop) / live) * 100 : null;
-          rows.push({
+          return {
             h,
             lot,
             stop,
             lotQty: Number(lot.quantity) || 0,
             dist,
             rowKey: `${h.id}-lot-${lot.id || lot.external_position_id || idx}`,
-          });
+          };
         });
+      }
+      // No lot rows in DB — still surface master stop if present
+      const stops = stopsForHolding(h);
+      if (stops.length > 1) {
+        return stops.map((s, idx) => ({
+          h,
+          stop: s.stop,
+          lotQty: s.qty,
+          dist: s.dist,
+          rowKey: `${h.id}-stop-${idx}`,
+        }));
+      }
+      return [{ h, rowKey: String(h.id) }];
+    };
+
+    if (showLotsOnly) {
+      const rows: TableRow[] = [];
+      for (const h of filtered) rows.push(...expandHolding(h));
+      return rows;
+    }
+    // Per-row mode: one summary row per holding, except any individually expanded via
+    // expandedLotHoldingIds, whose lot/stop sub-rows are inserted right after it.
+    const rows: TableRow[] = [];
+    for (const h of filtered) {
+      if (expandedLotHoldingIds.has(String(h.id))) {
+        rows.push(...expandHolding(h));
       } else {
-        // No lot rows in DB — still surface master stop if present
-        const stops = stopsForHolding(h);
-        if (stops.length > 1) {
-          stops.forEach((s, idx) => {
-            rows.push({
-              h,
-              stop: s.stop,
-              lotQty: s.qty,
-              dist: s.dist,
-              rowKey: `${h.id}-stop-${idx}`,
-            });
-          });
-        } else {
-          rows.push({ h, rowKey: String(h.id) });
-        }
+        rows.push({ h, rowKey: String(h.id) });
       }
     }
     return rows;
-  }, [filtered, showLotsOnly, lotsByHoldingId]);
+  }, [filtered, showLotsOnly, lotsByHoldingId, expandedLotHoldingIds]);
 
   const sortedTableRows = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1;
@@ -3006,15 +3028,29 @@ export default function PortfolioV1View({
                   const stopVal = lotStop != null ? lotStop : (h.stop_loss_rate != null ? Number(h.stop_loss_rate) : null);
                   const distVal = lotDist != null ? lotDist : stopLossDistancePct(h);
 
+                  const canExpandLots = !lot && (lotsByHoldingId.get(String(h.id))?.length || stopsForHolding(h).length > 1);
+                  const isExpanded = expandedLotHoldingIds.has(String(h.id));
                   const cells: Record<string, React.ReactNode> = {
                     symbol: (
-                      <div className="min-w-0">
-                        <p className="font-bold text-slate-900 dark:text-white truncate">{h.ticker || h.symbol}</p>
-                        {lot && (
-                          <p className="text-[9px] text-amber-600 font-bold truncate">
-                            Lot{lot.external_position_id ? ` · ${String(lot.external_position_id).slice(-6)}` : ''}
-                          </p>
+                      <div className="min-w-0 flex items-center gap-1">
+                        {canExpandLots && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); toggleLotExpand(String(h.id)); }}
+                            className="shrink-0 p-0.5 -ml-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                            aria-label={isExpanded ? 'Collapse lots' : 'Expand lots'}
+                          >
+                            <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                          </button>
                         )}
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-900 dark:text-white truncate">{h.ticker || h.symbol}</p>
+                          {lot && (
+                            <p className="text-[9px] text-amber-600 font-bold truncate">
+                              Lot{lot.external_position_id ? ` · ${String(lot.external_position_id).slice(-6)}` : ''}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     ),
                     type: (
