@@ -14,6 +14,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { RecurringPayment, PaymentHistory, UserProfile } from '../types';
+import { getPaymentsDueNextWeek, getNextPaymentDate } from '../utils/paymentUtils';
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -103,6 +104,71 @@ function BillsTableCard({ rows }: { rows: BillsTableRow[] }) {
       </table>
     </div>
   );
+}
+
+// Recognizes the "daily digest" request specifically, so it can be handled entirely locally
+// - bills due today/this week plus top gainers/losers per portfolio is a well-defined,
+// deterministic request with no need for Gemini's natural-language understanding at all.
+// Faster (no network round trip to Gemini), free (no API usage), and can't be affected by
+// any of the model-reliability issues seen with portfolioTable in the general case.
+const DAILY_DIGEST_PATTERN = /\bdaily\s*digest\b/i;
+
+function buildLocalDailyDigest(
+  payments: RecurringPayment[],
+  history: PaymentHistory[],
+  portfolioSummary: PortfolioSummaryItem[] | undefined
+): { text: string; billsTable: BillsTableRow[]; portfolioTable: PortfolioTableRow[] } {
+  const today = new Date();
+
+  // Bills due today through the next 7 days - reuses the app's own existing logic rather
+  // than reimplementing due-date calculation from dayOfMonth/billingCycle here.
+  const upcomingBills = getPaymentsDueNextWeek(payments || [], today, history || []);
+  const billsTable: BillsTableRow[] = upcomingBills.map((p) => {
+    const dueDate = getNextPaymentDate(p, today, history || []);
+    return {
+      name: p.name || 'Bill',
+      amount: p.amount || 0,
+      currency: p.currency || '',
+      dueDate: dueDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }),
+    };
+  });
+
+  // Top 5 gainers + top 5 losers per portfolio - same tiny-price safeguard used server-side
+  // (api/agent.ts) so a broken/sanctioned-stock price feed doesn't show up as a false extreme
+  // gain or loss here either.
+  const PRICE_FLOOR = 0.01;
+  const byPortfolio = new Map<string, { symbol: string; pnlPct: number; currency: string }[]>();
+  for (const h of portfolioSummary || []) {
+    const buy = Number(h.buyPrice) || 0;
+    const live = Number(h.livePrice) || 0;
+    if (buy <= 0) continue;
+    const looksUnreliable = buy < PRICE_FLOOR || live < PRICE_FLOOR;
+    const pnlPct = looksUnreliable ? 0 : ((live - buy) / buy) * 100;
+    const key = h.portfolio || 'Default';
+    if (!byPortfolio.has(key)) byPortfolio.set(key, []);
+    byPortfolio.get(key)!.push({ symbol: h.symbol || '?', pnlPct, currency: h.currency || '' });
+  }
+  const portfolioTable: PortfolioTableRow[] = [];
+  for (const [portfolio, holdings] of Array.from(byPortfolio.entries())) {
+    const sorted = [...holdings].sort((a, b) => b.pnlPct - a.pnlPct);
+    const gainers = sorted.slice(0, 5);
+    const losers = sorted.length > 5 ? sorted.slice(-5).reverse() : [];
+    for (const g of gainers) portfolioTable.push({ symbol: g.symbol, portfolio, pnlPct: g.pnlPct, currency: g.currency });
+    for (const l of losers) portfolioTable.push({ symbol: l.symbol, portfolio, pnlPct: l.pnlPct, currency: l.currency });
+  }
+
+  const lines: string[] = [];
+  lines.push(`Daily digest · ${today.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`);
+  lines.push(billsTable.length ? `${billsTable.length} bill${billsTable.length === 1 ? '' : 's'} due today through next week:` : 'No bills due in the next week.');
+  if (portfolioTable.length) {
+    lines.push('');
+    lines.push('Top gainers/losers per portfolio:');
+  } else if (!portfolioSummary || portfolioSummary.length === 0) {
+    lines.push('');
+    lines.push("(No portfolio holdings available to analyze.)");
+  }
+
+  return { text: lines.join('\n'), billsTable, portfolioTable };
 }
 
 interface PortfolioSummaryItem {
@@ -238,6 +304,25 @@ export default function AgentAssistant({
     setTextInput('');
     setIsProcessing(true);
     setErrorMessage(null);
+
+    // "Daily digest" is handled entirely locally, before any network call - see
+    // buildLocalDailyDigest for why this specific request doesn't need Gemini at all.
+    if (DAILY_DIGEST_PATTERN.test(command)) {
+      const digest = buildLocalDailyDigest(payments, history, portfolioSummary);
+      setMessages(prev => [
+        ...prev,
+        {
+          id: Math.random().toString(),
+          sender: 'assistant',
+          text: digest.text,
+          timestamp: new Date(),
+          billsTable: digest.billsTable.length > 0 ? digest.billsTable : undefined,
+          portfolioTable: digest.portfolioTable.length > 0 ? digest.portfolioTable : undefined,
+        },
+      ]);
+      setIsProcessing(false);
+      return;
+    }
 
     try {
       // Build full chat history including the latest message
