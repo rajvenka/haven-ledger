@@ -14,7 +14,6 @@ import {
   Trash2
 } from 'lucide-react';
 import { RecurringPayment, PaymentHistory, UserProfile } from '../types';
-import { BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -47,8 +46,6 @@ function renderColorizedText(text: string): React.ReactNode {
 // from the model, but re-sorted here defensively rather than trusting that blindly).
 function PortfolioTableCard({ rows }: { rows: PortfolioTableRow[] }) {
   const sorted = [...rows].sort((a, b) => (b.pnlPct ?? 0) - (a.pnlPct ?? 0));
-  const chartData = sorted.map(r => ({ name: r.symbol, pnl: Number(r.pnlPct?.toFixed?.(1) ?? r.pnlPct) }));
-  const chartHeight = Math.max(80, sorted.length * 28);
 
   return (
     <div className="mt-2 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
@@ -75,23 +72,6 @@ function PortfolioTableCard({ rows }: { rows: PortfolioTableRow[] }) {
           })}
         </tbody>
       </table>
-      <div className="px-1.5 pt-1 pb-1.5" style={{ height: chartHeight }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
-            <XAxis type="number" tick={{ fontSize: 9 }} unit="%" />
-            <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={70} />
-            <Tooltip
-              formatter={(v: number) => [`${v}%`, 'P&L']}
-              contentStyle={{ fontSize: 11, borderRadius: 8 }}
-            />
-            <Bar dataKey="pnl" radius={[0, 4, 4, 0]}>
-              {chartData.map((d, i) => (
-                <Cell key={i} fill={d.pnl >= 0 ? '#059669' : '#e11d48'} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
     </div>
   );
 }

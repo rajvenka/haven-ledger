@@ -374,6 +374,21 @@ export default async function handler(req: any, res: any) {
       }
     }
 
+    // Always correct any portfolioTable Gemini did populate itself against the actual
+    // pre-computed values, rather than trusting whatever numbers it transcribed. It can
+    // reliably pick which symbols belong in the answer, but doesn't always carry the correct
+    // pnlPct value into the structured output (seen defaulting to 0 rather than the real
+    // figure) - this guarantees displayed numbers are always the real computed ones.
+    if (Array.isArray(result.portfolioTable) && result.portfolioTable.length > 0 && portfolioContext.topRows.length > 0) {
+      const bySymbol = new Map(portfolioContext.topRows.map((r) => [r.symbol.toLowerCase(), r]));
+      result.portfolioTable = result.portfolioTable
+        .map((row: any) => {
+          const match = bySymbol.get(String(row?.symbol || "").toLowerCase());
+          return match ? { symbol: match.symbol, portfolio: match.portfolio, pnlPct: match.pnlPct, currency: match.currency } : row;
+        })
+        .filter((row: any) => Number.isFinite(row?.pnlPct)); // drop any row we couldn't verify against real data
+    }
+
     // SAFETY NET: strip any field value that looks like leaked model reasoning
     // (long, sentence-like, full of hedging words) rather than real data.
     const REASONING_MARKERS = /\b(let'?s|we can|actually|or omit|or null|wait|as applicable|not required|to be safe)\b/i;
