@@ -21,6 +21,25 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
+// Colorizes +N%/-N% and +$N/-$N figures within assistant chat text - green for gains, rose
+// for losses. String.split() with a capturing group puts the matched figures at odd array
+// indices and the plain text between them at even indices - more reliable than re-testing
+// each piece against the pattern, since a global regex's own lastIndex state would otherwise
+// give inconsistent results across the map iteration.
+const SIGNED_FIGURE_PATTERN = /([+\-]\$?[\d,]+(?:\.\d+)?%?)/g;
+function renderColorizedText(text: string): React.ReactNode {
+  const parts = text.split(SIGNED_FIGURE_PATTERN);
+  return parts.map((part, i) => {
+    if (i % 2 === 0) return <React.Fragment key={i}>{part}</React.Fragment>;
+    const isGain = part.startsWith('+');
+    return (
+      <span key={i} className={`font-black ${isGain ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+        {part}
+      </span>
+    );
+  });
+}
+
 interface PortfolioSummaryItem {
   portfolio: string;
   symbol: string;
@@ -389,7 +408,7 @@ export default function AgentAssistant({
                             : 'bg-[#f2f2f7] dark:bg-[#2c2c2e] text-slate-900 dark:text-slate-100 rounded-tl-sm text-left'
                         }`}
                       >
-                        {msg.text}
+                        {msg.sender === 'assistant' ? renderColorizedText(msg.text) : msg.text}
                       </div>
                       <span className="text-[8px] text-slate-400 font-bold px-1 select-none text-left">
                         {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

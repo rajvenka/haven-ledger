@@ -99,10 +99,21 @@ export default async function handler(req: any, res: any) {
         *** PORTFOLIO QUESTIONS (intent: "portfolio_query") ***
         If the user asks about their investments/portfolios/stocks - e.g. "what's my best
         performer", "how's ETORO RAJ doing", "who's up this week" - set intent to
-        "portfolio_query" and answer directly and specifically in replyMessage using ONLY the
-        portfolio data given above (symbol, portfolio name, P&L%, currency). Name the actual
-        symbol(s) and figures. If the portfolio data above is empty, say you don't see any
-        holdings to analyze rather than guessing. Never fabricate a symbol, price, or
+        "portfolio_query".
+
+        If the question doesn't say which portfolio/book they mean AND the data above covers
+        more than one portfolio, don't combine everything into one answer - ask which
+        portfolio they mean first, and list the actual portfolio names present in the data
+        above so they can just reply with one (e.g. "Which one - Zerodha, ETORO RAJ, ETORO
+        SASI, or STAKE AU?"). Exceptions: answer directly without asking if (a) only one
+        portfolio actually exists in the data, (b) the question already names a specific
+        portfolio, or (c) the question explicitly asks for something "overall", "combined",
+        or "across everything".
+
+        Once you know which portfolio, answer directly and specifically in replyMessage using
+        ONLY the portfolio data given above (symbol, portfolio name, P&L%, currency). Name the
+        actual symbol(s) and figures. If the portfolio data above is empty, say you don't see
+        any holdings to analyze rather than guessing. Never fabricate a symbol, price, or
         percentage that isn't in the data given. This app distinguishes real cash committed
         from raw leveraged/CFD exposure for margin positions - if asked about "value" for a
         leveraged holding, prefer whichever figure is actually present in the data rather than
