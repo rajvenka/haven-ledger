@@ -3141,11 +3141,25 @@ export default function PortfolioV1View({
                     const dist = stopLossDistancePct(h);
                     const ccy = h.currency || baseCurrency;
                     const cat = classifyHolding(h);
+                    const holdingLots = lotsByHoldingId.get(String(h.id)) || [];
+                    const holdingStops = stopsForHolding(h);
+                    const canExpandLots = holdingLots.length > 0 || holdingStops.length > 1;
+                    const isExpanded = expandedLotHoldingIds.has(String(h.id));
                     return (
                       <div key={h.id} className="px-3 py-2.5">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5">
+                              {canExpandLots && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleLotExpand(String(h.id))}
+                                  className="shrink-0 p-0.5 -ml-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                                  aria-label={isExpanded ? 'Collapse lots' : 'Expand lots'}
+                                >
+                                  <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                </button>
+                              )}
                               <p className="text-[13px] font-bold truncate">{h.ticker || h.symbol}</p>
                               <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full ${CATEGORY_META[cat].chip}`}>
                                 {CATEGORY_META[cat].label.split('·').pop()?.trim()}
@@ -3175,6 +3189,33 @@ export default function PortfolioV1View({
                             SL {moneyPrecise(stop, ccy)}
                             {dist != null ? ` · ${dist < 0 ? 'past' : `${dist.toFixed(1)}% away`}` : ''}
                           </p>
+                        )}
+                        {isExpanded && (
+                          <div className="mt-2 space-y-1.5 border-t border-slate-100 dark:border-slate-800 pt-2">
+                            {(holdingLots.length > 0 ? holdingLots : holdingStops).map((row: any, idx: number) => {
+                              const isLot = holdingLots.length > 0;
+                              const lotStop = isLot ? (row.stop_loss_rate != null ? Number(row.stop_loss_rate) : null) : row.stop;
+                              const lotQty = isLot ? Number(row.quantity) || 0 : row.qty;
+                              const lotLive = isLot ? Number(row.current_price ?? h.live_price ?? h.current_price ?? row.buy_price ?? h.buy_price) || 0 : liveP;
+                              const lotDist = isLot
+                                ? (lotStop != null && lotLive > 0 ? ((lotLive - lotStop) / lotLive) * 100 : null)
+                                : row.dist;
+                              return (
+                                <div key={isLot ? (row.id || row.external_position_id || idx) : idx} className="flex items-center justify-between gap-2 pl-4 text-[10px]">
+                                  <span className="text-amber-600 font-bold truncate">
+                                    Lot{isLot && row.external_position_id ? ` · ${String(row.external_position_id).slice(-6)}` : ''}
+                                    {' · '}{lotQty.toLocaleString(undefined, { maximumFractionDigits: 2 })} qty
+                                  </span>
+                                  {lotStop != null && (
+                                    <span className="text-amber-700 font-bold shrink-0">
+                                      SL {moneyPrecise(lotStop, ccy)}
+                                      {lotDist != null ? ` · ${lotDist < 0 ? 'past' : `${lotDist.toFixed(1)}%`}` : ''}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         )}
                       </div>
                     );
