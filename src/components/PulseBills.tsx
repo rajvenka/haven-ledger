@@ -84,6 +84,7 @@ export default function PulseBills({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [methodFilter, setMethodFilter] = useState<MethodFilter>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
+  const [taggedForFilter, setTaggedForFilter] = useState<string>('All');
   const [groupMode, setGroupMode] = useState<GroupMode>('method');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [bulkText, setBulkText] = useState('');
@@ -102,6 +103,12 @@ export default function PulseBills({
     return ['All', ...Array.from(set).sort()];
   }, [payments]);
 
+  const taggedForOptions = useMemo(() => {
+    const set = new Set<string>();
+    payments.forEach((p) => set.add((p.taggedFor || 'Self').trim() || 'Self'));
+    return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+  }, [payments]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return payments.filter((p) => {
@@ -109,13 +116,14 @@ export default function PulseBills({
       if (statusFilter === 'paused' && p.active) return false;
       if (methodFilter !== 'all' && billMethodGroup(p) !== methodFilter) return false;
       if (categoryFilter !== 'All' && p.category !== categoryFilter) return false;
+      if (taggedForFilter !== 'All' && (p.taggedFor || 'Self').trim() !== taggedForFilter) return false;
       if (q) {
         const hay = `${p.name} ${p.category} ${p.taggedFor || ''} ${p.notes || ''} ${p.billingCycle || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [payments, search, statusFilter, methodFilter, categoryFilter]);
+  }, [payments, search, statusFilter, methodFilter, categoryFilter, taggedForFilter]);
 
   const sortedFiltered = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -511,6 +519,28 @@ export default function PulseBills({
                       }`}
                     >
                       {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {taggedForOptions.length > 2 && (
+              <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+                <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-violet-600/80 w-12">For</span>
+                <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-violet-100/80 dark:bg-violet-950/40 border border-violet-200/60 dark:border-violet-900/50">
+                  {taggedForOptions.map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setTaggedForFilter(t)}
+                      className={`shrink-0 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                        taggedForFilter === t
+                          ? 'bg-violet-600 text-white shadow-md shadow-violet-600/25'
+                          : 'text-violet-800/70 dark:text-violet-300/70'
+                      }`}
+                    >
+                      {t}
                     </button>
                   ))}
                 </div>

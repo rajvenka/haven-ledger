@@ -81,6 +81,12 @@ export default function PulseExpenses({
 
   const [searchQ, setSearchQ] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'overdue' | 'today' | 'soon' | 'unpaid' | 'paid'>('all');
+  const [taggedForFilter, setTaggedForFilter] = useState<string>('all');
+  const taggedForOptions = useMemo(() => {
+    const set = new Set<string>();
+    payments.forEach((p) => set.add((p.taggedFor || 'Self').trim() || 'Self'));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [payments]);
   const isPaymentReadOnly = (payment: RecurringPayment) => {
     if (!isReadOnly) return false;
     if (currentUserUid && payment.userId === currentUserUid) return false;
@@ -105,9 +111,10 @@ export default function PulseExpenses({
 
   const filteredPayments = useMemo(() => {
     const active = payments.filter((p) => p.active);
-    if (isAll) return active;
-    return active.filter((p) => String(p.currency || '').toUpperCase() === String(activeCurrency).toUpperCase());
-  }, [payments, isAll, activeCurrency]);
+    const byCurrency = isAll ? active : active.filter((p) => String(p.currency || '').toUpperCase() === String(activeCurrency).toUpperCase());
+    if (taggedForFilter === 'all') return byCurrency;
+    return byCurrency.filter((p) => (p.taggedFor || 'Self').trim() === taggedForFilter);
+  }, [payments, isAll, activeCurrency, taggedForFilter]);
 
   const now = new Date();
   const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -514,6 +521,34 @@ export default function PulseExpenses({
               </button>
             ))}
           </div>
+
+          {/* For Whom — clickable, only shown when there's more than one tag to filter by */}
+          {taggedForOptions.length > 1 && (
+            <div className="flex flex-wrap gap-1.5">
+              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 self-center mr-0.5">For</span>
+              <button
+                type="button"
+                onClick={() => setTaggedForFilter('all')}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 ${
+                  taggedForFilter === 'all' ? 'ring-2 ring-offset-1 ring-offset-slate-50 dark:ring-offset-slate-950 ring-violet-500' : ''
+                }`}
+              >
+                All
+              </button>
+              {taggedForOptions.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => setTaggedForFilter((prev) => (prev === tag ? 'all' : tag))}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer bg-violet-500/15 text-violet-700 dark:text-violet-400 ring-1 ring-violet-500/20 ${
+                    taggedForFilter === tag ? 'ring-2 ring-offset-1 ring-offset-slate-50 dark:ring-offset-slate-950 ring-violet-500' : ''
+                  }`}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Show: All / To be paid / Paid */}
           <div className="flex items-center gap-2 flex-wrap">

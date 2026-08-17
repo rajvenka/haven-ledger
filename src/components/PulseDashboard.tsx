@@ -113,6 +113,7 @@ export default function PulseDashboard({
   monthlyIncomeEstimate = 0,
 }: Props) {
   const [paidFilter, setPaidFilter] = useState<'all' | 'unpaid' | 'paid'>('unpaid');
+  const [taggedForFilter, setTaggedForFilter] = useState<string>('all');
   const [searchQ, setSearchQ] = useState('');
   const [statusFilter, setStatusFilter] = useState<DueStatus | 'all'>('all');
   const isPaymentReadOnly = (payment?: RecurringPayment) => {
@@ -208,13 +209,19 @@ export default function PulseDashboard({
         : [...upcomingList, ...paidThisMonthInstances].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
   const q = searchQ.trim().toLowerCase();
+  const taggedForOptions = useMemo(() => {
+    const set = new Set<string>();
+    payments.forEach((p) => set.add((p.taggedFor || 'Self').trim() || 'Self'));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [payments]);
   const listForFilter = listBase.filter((ins) => {
     if (statusFilter !== 'all' && paidFilter !== 'paid') {
       const st = dueStatus(ins.dueDate, todayStr);
       if (st !== statusFilter) return false;
     }
-    if (!q) return true;
     const payment = payments.find((p) => p.id === ins.paymentId);
+    if (taggedForFilter !== 'all' && (payment?.taggedFor || 'Self').trim() !== taggedForFilter) return false;
+    if (!q) return true;
     const hay = [
       ins.paymentName,
       payment?.name,
@@ -422,6 +429,34 @@ export default function PulseDashboard({
             >
               {lab}
               <span className="tabular-nums opacity-80">{count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* For Whom — clickable, only shown when there's more than one tag to filter by */}
+      {taggedForOptions.length > 1 && (
+        <div className="flex flex-wrap gap-1.5">
+          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 self-center mr-0.5">For</span>
+          <button
+            type="button"
+            onClick={() => setTaggedForFilter('all')}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 ${
+              taggedForFilter === 'all' ? 'ring-2 ring-offset-1 ring-offset-slate-50 dark:ring-offset-slate-950 ring-violet-500' : ''
+            }`}
+          >
+            All
+          </button>
+          {taggedForOptions.map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              onClick={() => setTaggedForFilter((prev) => (prev === tag ? 'all' : tag))}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer bg-violet-500/15 text-violet-700 dark:text-violet-400 ring-1 ring-violet-500/20 ${
+                taggedForFilter === tag ? 'ring-2 ring-offset-1 ring-offset-slate-50 dark:ring-offset-slate-950 ring-violet-500' : ''
+              }`}
+            >
+              {tag}
             </button>
           ))}
         </div>
