@@ -262,7 +262,7 @@ export default function App() {
     return hash.includes('type=invite') || hash.includes('type=recovery');
   });
 
-  const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'configure' | 'account' | 'history' | 'ai' | 'income' | 'rewards' | 'portfolio' | 'portfolio_v1' | 'investment_plan' | 'reports' | 'admin_users'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'configure' | 'account' | 'history' | 'ai' | 'income' | 'rewards' | 'portfolio' | 'portfolio_v1' | 'investment_plan' | 'quote_connections' | 'reports' | 'admin_users'>('summary');
   const [uiPulse, setUiPulse] = useState<boolean>(() => {
     try {
       // One-time migration: bills/membership Pulse rollout enables Pulse once
@@ -942,6 +942,24 @@ export default function App() {
                   </button>
 
                   <button
+                    id="tour-tab-quote_connections-desktop"
+                    onClick={() => setActiveTab('quote_connections')}
+                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                      activeTab === 'quote_connections'
+                        ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <RefreshCw className="w-4 h-4 shrink-0 opacity-80" />
+                      <span>Quote/Connections</span>
+                    </div>
+                    {activeTab === 'quote_connections' && (
+                      <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
+                    )}
+                  </button>
+
+                  <button
                     id="tour-tab-reports-desktop"
                     onClick={() => setActiveTab('reports')}
                     className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
@@ -1382,6 +1400,25 @@ export default function App() {
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                         )}
                       </button>
+
+                      <button
+                        id="tour-tab-quote_connections-mobile"
+                        onClick={() => { setActiveTab('quote_connections'); setIsMobileMenuOpen(false); }}
+                        className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                          activeTab === 'quote_connections'
+                            ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <RefreshCw className="w-4.5 h-4.5 shrink-0 opacity-80" />
+                          <span>Quote/Connections</span>
+                        </div>
+                        {activeTab === 'quote_connections' && (
+                          <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
+                        )}
+                      </button>
+
 
                       <button
                         id="tour-tab-reports-mobile"
@@ -1974,6 +2011,16 @@ export default function App() {
                 portfolioFees={portfolioFees}
                 addPortfolioFee={addPortfolioFee}
                 deletePortfolioFee={deletePortfolioFee}
+                currentUserId={user?.id}
+                dismissedReminderKey={activeWorkspace?.dismissedReminderKey}
+                onDismissContributionReminder={dismissContributionReminder}
+                portfolioRecurringPlans={portfolioRecurringPlans}
+                portfolioRecurringPlanSkips={portfolioRecurringPlanSkips}
+                skipRecurringPeriod={skipRecurringPeriod}
+                unskipRecurringPeriod={unskipRecurringPeriod}
+                addPortfolioRecurringPlan={addPortfolioRecurringPlan}
+                updatePortfolioRecurringPlan={updatePortfolioRecurringPlan}
+                deletePortfolioRecurringPlan={deletePortfolioRecurringPlan}
               />
               )
             ) : activeTab === 'investment_plan' ? (
@@ -2015,6 +2062,81 @@ export default function App() {
                 updatePortfolioRecurringPlan={updatePortfolioRecurringPlan}
                 deletePortfolioRecurringPlan={deletePortfolioRecurringPlan}
                               />
+) : activeTab === 'quote_connections' ? (
+                <PortfolioView
+                embedMode="quote-connections"
+                workspaceName={activeWorkspace?.name}
+                workspaceMembers={familyMembers}
+                isReadOnly={isReadOnly}
+                isDataLoading={portfolioDataLoading}
+                columnPrefs={activeWorkspace?.columnPrefs}
+                onUpdateColumnPrefs={updateWorkspaceColumnPrefs}
+                portfolios={portfolios}
+                portfolioMode={activeWorkspace?.portfolioMode}
+                workspaceCurrencyRates={workspaceCurrencyRates}
+                baseCurrency={activeWorkspace?.baseCurrency}
+                mfHoldingsCache={mfHoldingsCache}
+                loadMfHoldingsCache={loadMfHoldingsCache}
+                fetchAndCacheMfHoldings={fetchAndCacheMfHoldings}
+                saveManualMfHoldings={saveManualMfHoldings}
+                portfolioSplits={portfolioSplits}
+                addPortfolioSplit={addPortfolioSplit}
+                deletePortfolioSplit={deletePortfolioSplit}
+                portfolioHoldings={portfolioHoldings}
+                portfolioPriceHistory={portfolioPriceHistory}
+                addPortfolioHolding={addPortfolioHolding}
+                bulkAddPortfolioHoldings={bulkAddPortfolioHoldings}
+                reconcilePortfolioHoldingQuantity={reconcilePortfolioHoldingQuantity}
+                markPortfolioHoldingSoldFromImport={markPortfolioHoldingSoldFromImport}
+                bulkHistoricalImport={bulkHistoricalImport}
+                updatePortfolioHolding={updatePortfolioHolding}
+                sellPortfolioHolding={sellPortfolioHolding}
+                updatePortfolioHoldingLivePrice={updatePortfolioHoldingLivePrice}
+                markPriceLookupFailed={markPriceLookupFailed}
+                loadPortfolioDetails={loadPortfolioDetails}
+                deletePortfolioHolding={deletePortfolioHolding}
+                bulkTagPortfolioHoldings={bulkTagPortfolioHoldings}
+                bulkDeletePortfolioHoldings={bulkDeletePortfolioHoldings}
+                deleteAllPortfolioData={deleteAllPortfolioData}
+                portfolioCashBalances={portfolioCashBalances}
+                setPortfolioCashBalance={setPortfolioCashBalance}
+                deletePortfolioCashBalance={deletePortfolioCashBalance}
+                portfolioBookedPlBaselines={portfolioBookedPlBaselines}
+                portfolioBookedPlHistory={portfolioBookedPlHistory}
+                portfolioBankBalanceHistory={portfolioBankBalanceHistory}
+                setBookedPlBaseline={setBookedPlBaseline}
+                portfolioProjectedBankBalances={portfolioProjectedBankBalances}
+                setProjectedBankBalance={setProjectedBankBalance}
+                recalculateProjectedBankBalance={recalculateProjectedBankBalance}
+                portfolioBrokerConnections={portfolioBrokerConnections}
+                setPortfolioBrokerConnection={setPortfolioBrokerConnection}
+                deletePortfolioBrokerConnection={deletePortfolioBrokerConnection}
+                markBrokerConnectionSynced={markBrokerConnectionSynced}
+                syncEtoroHoldingLots={syncEtoroHoldingLots}
+                upsertAmundiSarGrants={upsertAmundiSarGrants}
+                portfolioEmployeeGrants={portfolioEmployeeGrants}
+                syncEtoroLivePrices={syncEtoroLivePrices}
+                loadPortfolioHoldingLots={loadPortfolioHoldingLots}
+                portfolioHoldingLots={portfolioHoldingLots}
+                portfolioSnapshots={portfolioSnapshots}
+                takePortfolioSnapshot={takePortfolioSnapshot}
+                snapshotPortfolioDailyPositions={snapshotPortfolioDailyPositions}
+                loadPortfolioDailyPositions={loadPortfolioDailyPositions}
+                deletePortfolioSnapshotBatch={deletePortfolioSnapshotBatch}
+                portfolioContributions={portfolioContributions}
+                addPortfolioContribution={addPortfolioContribution}
+                updatePortfolioContribution={updatePortfolioContribution}
+                deletePortfolioContribution={deletePortfolioContribution}
+                portfolioWithdrawals={portfolioWithdrawals}
+                addPortfolioWithdrawal={addPortfolioWithdrawal}
+                deletePortfolioWithdrawal={deletePortfolioWithdrawal}
+                portfolioDividends={portfolioDividends}
+                addPortfolioDividend={addPortfolioDividend}
+                deletePortfolioDividend={deletePortfolioDividend}
+                portfolioFees={portfolioFees}
+                addPortfolioFee={addPortfolioFee}
+                deletePortfolioFee={deletePortfolioFee}
+              />
 ) : activeTab === 'reports' ? (
                 <ReportsView
                 pulseMode={uiPulse}

@@ -1,10 +1,11 @@
 import PortfolioPnLCalendar from './PortfolioPnLCalendar';
+import InvestmentPlanView from './InvestmentPlanView';
 import { parseBrokerFile, parseBrokerFileWithDate, BrokerTemplate, ParsedHolding, downloadUniversalTemplate } from '../utils/brokerImport';
 import * as XLSX from 'xlsx';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   TrendingUp, TrendingDown, Plus, Trash2, RefreshCw, Users, Wallet, Banknote,
-  CheckCircle2, X, Briefcase, Gift, Receipt, Upload, Edit2, ChevronDown, ArrowUpDown, Settings, ChevronUp, Download, Search, PieChart
+  CheckCircle2, X, Briefcase, Gift, Receipt, Upload, Edit2, ChevronDown, ArrowUpDown, Settings, ChevronUp, Download, Search, PieChart, ClipboardList
 } from 'lucide-react';
 
 interface WorkspaceMemberLite {
@@ -14,6 +15,7 @@ interface WorkspaceMemberLite {
 }
 
 interface PortfolioViewProps {
+  embedMode?: 'quote-connections';
   workspaceName?: string;
   workspaceMembers: WorkspaceMemberLite[];
   isReadOnly?: boolean;
@@ -92,6 +94,16 @@ interface PortfolioViewProps {
   portfolioFees: any[];
   addPortfolioFee: (broker: string, feeType: string, amount: number, date: string, notes?: string) => Promise<void>;
   deletePortfolioFee: (id: string) => Promise<void>;
+  currentUserId?: string;
+  dismissedReminderKey?: string | null;
+  onDismissContributionReminder?: (key: string) => Promise<void>;
+  portfolioRecurringPlans?: any[];
+  portfolioRecurringPlanSkips?: any[];
+  skipRecurringPeriod?: (planId: string, periodLabel: string, notes?: string) => Promise<void>;
+  unskipRecurringPeriod?: (planId: string, periodLabel: string) => Promise<void>;
+  addPortfolioRecurringPlan?: (memberUserId: string, amount: number, frequency: 'monthly' | 'quarterly' | 'yearly', startDate: string, dayOfMonth?: number, notes?: string, portfolioId?: string) => Promise<void>;
+  updatePortfolioRecurringPlan?: (id: string, updates: { active?: boolean; expectedAmount?: number }) => Promise<void>;
+  deletePortfolioRecurringPlan?: (id: string) => Promise<void>;
 }
 
 const fmt = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
@@ -309,6 +321,7 @@ const memberName = (m: WorkspaceMemberLite) => m.displayName || m.email.split('@
 
 export default function PortfolioView(props: PortfolioViewProps) {
   const {
+    embedMode,
     workspaceName, workspaceMembers, isReadOnly, isDataLoading, columnPrefs, onUpdateColumnPrefs,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances, portfolioBookedPlBaselines = [], portfolioBookedPlHistory = [], portfolioBankBalanceHistory = [], portfolioProjectedBankBalances = [],
     setPortfolioCashBalance, deletePortfolioCashBalance, setBookedPlBaseline, setProjectedBankBalance, recalculateProjectedBankBalance,
@@ -321,6 +334,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
     portfolioWithdrawals, addPortfolioWithdrawal, deletePortfolioWithdrawal,
     portfolioDividends, addPortfolioDividend, deletePortfolioDividend,
     portfolioFees, addPortfolioFee, deletePortfolioFee,
+    currentUserId, dismissedReminderKey, onDismissContributionReminder,
+    portfolioRecurringPlans = [], portfolioRecurringPlanSkips = [], skipRecurringPeriod, unskipRecurringPeriod,
+    addPortfolioRecurringPlan, updatePortfolioRecurringPlan, deletePortfolioRecurringPlan,
   } = props;
 
   const [formError, setFormError] = useState<string | null>(null);
@@ -543,6 +559,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
 
   const [wipeConfirmText, setWipeConfirmText] = useState('');
   const [holdingsTab, setHoldingsTab] = useState<'active' | 'sold' | 'search' | 'mf-holdings' | 'settings' | 'lots' | 'pnl_calendar'>('active');
+  // Only used when embedMode === 'quote-connections' (the standalone Quote/Connections page).
+  // Broker Connections shown first per explicit request.
+  const [embedTab, setEmbedTab] = useState<'broker' | 'search'>('broker');
   const [pnlCalendarRows, setPnlCalendarRows] = useState<any[]>([]);
   const [pnlCalendarLoading, setPnlCalendarLoading] = useState(false);
   const [pnlCalendarCcy, setPnlCalendarCcy] = useState<string>(String(baseCurrency || 'INR').toUpperCase());
@@ -1039,7 +1058,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
   const [refreshingPrices, setRefreshingPrices] = useState(false);
   const [priceRefreshSummary, setPriceRefreshSummary] = useState<string | null>(null);
   const [syncingConnectionId, setSyncingConnectionId] = useState<string | null>(null);
-  const [settingsFilter, setSettingsFilter] = useState<'broker' | 'cash' | 'pl' | 'bank'>('broker');
+  const [settingsFilter, setSettingsFilter] = useState<'cash' | 'pl' | 'bank' | 'investment_plan'>('cash');
 
   // Auto price refresh - user-controlled, PER-PORTFOLIO, persisted via localStorage.
   // Defaults to all off given the earlier Supabase egress incident - the person explicitly
@@ -2579,111 +2598,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [holdingsTab]);
 
-  return (
-    <div className="flex-1 flex flex-col overflow-y-auto px-3 sm:px-4 pt-3 pb-24 md:pb-4 space-y-5 text-left bg-slate-50 dark:bg-slate-900">
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <Briefcase className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-        <h2 className="text-lg font-bold text-slate-900 dark:text-white">{workspaceName ? `${workspaceName} Portfolio` : 'Portfolio'}</h2>
-      </div>
-
-      {isDataLoading ? (
-        <div className="flex-1 w-full flex flex-col items-center justify-center gap-3 py-24 bg-slate-50 dark:bg-slate-900">
-          <RefreshCw className="w-6 h-6 text-indigo-500 animate-spin" />
-          <p className="text-xs text-slate-400">Loading your portfolio…</p>
-        </div>
-      ) : (
-      <>
-      {formError && (
-        <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 rounded-xl flex items-center justify-between gap-2">
-          <span className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold">{formError}</span>
-          <button onClick={() => setFormError(null)} className="text-rose-400 hover:text-rose-600 cursor-pointer"><X className="w-3.5 h-3.5" /></button>
-        </div>
-      )}
-
-      {/* Holdings tabs — horizontal scroll on mobile (same pattern as Book chips) */}
-      <div className="w-full min-w-0 max-w-full">
-        <div
-          className="w-full min-w-0 overflow-x-auto overscroll-x-contain touch-pan-x"
-          style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
-        >
-          <div className="flex flex-nowrap items-center gap-1.5 w-max pr-2">
-            <button
-              type="button"
-              onClick={() => setHoldingsTab('active')}
-              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer border ${
-                holdingsTab === 'active'
-                  ? 'bg-emerald-600 text-white border-transparent shadow-sm'
-                  : 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900'
-              }`}
-            >
-              Active ({activeHoldings.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setHoldingsTab('sold')}
-              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer border ${
-                holdingsTab === 'sold'
-                  ? 'bg-violet-600 text-white border-transparent shadow-sm'
-                  : 'bg-white dark:bg-slate-900 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-900'
-              }`}
-            >
-              Sold ({soldHoldings.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setHoldingsTab('search')}
-              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 border ${
-                holdingsTab === 'search'
-                  ? 'bg-blue-600 text-white border-transparent shadow-sm'
-                  : 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900'
-              }`}
-            >
-              <Search className="w-3 h-3" /> Quote Search
-            </button>
-            <button
-              type="button"
-              onClick={() => setHoldingsTab('settings')}
-              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 border ${
-                holdingsTab === 'settings'
-                  ? 'bg-teal-600 text-white border-transparent shadow-sm'
-                  : 'bg-white dark:bg-slate-900 text-teal-600 dark:text-teal-400 border-teal-200 dark:border-teal-900'
-              }`}
-            >
-              <Settings className="w-3 h-3" /> Settings
-            </button>
-            <button
-              type="button"
-              onClick={() => setHoldingsTab('pnl_calendar')}
-              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer border ${
-                holdingsTab === 'pnl_calendar'
-                  ? 'bg-amber-600 text-white border-transparent shadow-sm'
-                  : 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900'
-              }`}
-            >
-              P&L Calendar
-            </button>
-            {activeHoldings.some((h) => h.holding_type === 'mutual_fund') && (
-              <button
-                type="button"
-                onClick={() => {
-                  setHoldingsTab('mf-holdings');
-                  loadMfHoldingsCache?.();
-                }}
-                className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 border ${
-                  holdingsTab === 'mf-holdings'
-                    ? 'bg-fuchsia-600 text-white border-transparent shadow-sm'
-                    : 'bg-white dark:bg-slate-900 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-200 dark:border-fuchsia-900'
-                }`}
-              >
-                <PieChart className="w-3 h-3" /> MF Holdings
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {holdingsTab === 'search' && (
+  const quoteSearchSection = (
         <div className="apple-card p-4 space-y-3">
           <div>
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">Quote Search</span>
@@ -2771,280 +2686,10 @@ export default function PortfolioView(props: PortfolioViewProps) {
             <p className="text-[10px] text-slate-400 text-center py-3">No results yet - try searching above.</p>
           )}
         </div>
-      )}
+  );
 
-      {holdingsTab === 'mf-holdings' && (() => {
-        const mfHoldings = activeHoldings.filter(h => h.holding_type === 'mutual_fund');
-        // Cache is keyed by the official AMFI scheme name (e.g. "HDFC Small Cap Fund -
-        // Growth Option - Direct Plan"), but h.symbol is the broker's own, differently
-        // worded name (e.g. "HDFC SMALL CAP FUND - DIRECT PLAN") - exact string matching
-        // after normalization failed for almost every fund except the few where the
-        // broker's name happened to exactly equal AMFI's, even though the backend had
-        // already correctly fetched and cached real data for all of them. Requires every
-        // significant word from the broker's symbol to appear in the cached scheme name,
-        // same fuzzy approach the backend already uses to resolve the fund in the first place.
-        const cacheFor = (h: any) => {
-          const bySchemeCode = mfHoldingsCache.filter((c: any) => c.scheme_code === `MANUAL-${h.id}`);
-          if (bySchemeCode.length > 0) return bySchemeCode;
-          // "plan"/"option" excluded - broker names and the cached scheme name don't always
-          // agree on including these generic structural words (e.g. broker says "- Direct
-          // Plan", cached name says just "- Direct - Growth" with no "Plan" anywhere), and
-          // neither word actually helps identify which fund this is.
-          const targetWords = (h.symbol || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w: string) => w.length > 1 && w !== 'plan' && w !== 'option' && w !== 'options');
-          if (targetWords.length === 0) return [];
-          const grouped = new Map<string, any[]>();
-          mfHoldingsCache.forEach((c: any) => {
-            const list = grouped.get(c.scheme_code) || [];
-            list.push(c);
-            grouped.set(c.scheme_code, list);
-          });
-          for (const [, rows] of grouped) {
-            const nameLower = (rows[0]?.scheme_name || '').toLowerCase();
-            if (targetWords.every((w: string) => nameLower.includes(w))) return rows;
-          }
-          return [];
-        };
-        const missingCache = mfHoldings.filter(h => cacheFor(h).length === 0);
-
-        const doFetch = async (h: any) => {
-          setMfHoldingsFetchingId(h.id);
-          setMfHoldingsError(null);
-          try {
-            const result = await fetchAndCacheMfHoldings?.(h.isin ?? null, h.symbol);
-            if (result?.error && (!result.holdings || result.holdings.length === 0)) {
-              setMfHoldingsError(`${h.symbol}: ${result.error}`);
-            }
-          } catch (err: any) {
-            setMfHoldingsError(err.message || 'Failed to fetch fund holdings.');
-          } finally {
-            setMfHoldingsFetchingId(null);
-          }
-        };
-
-        // One button, fetches every fund that's missing data in sequence (not parallel -
-        // gentler on the third-party API, and lets progress be shown per-fund rather than
-        // just a single spinner with no idea how far along it is).
-        const fetchAllMissing = async () => {
-          setMfFetchingAll(true);
-          setMfHoldingsError(null);
-          const failures: string[] = [];
-          for (let i = 0; i < missingCache.length; i++) {
-            const h = missingCache[i];
-            setMfFetchProgress({ current: i + 1, total: missingCache.length, currentName: h.symbol });
-            try {
-              const result = await fetchAndCacheMfHoldings?.(h.isin ?? null, h.symbol);
-              if (result?.error && (!result.holdings || result.holdings.length === 0)) failures.push(h.symbol);
-            } catch {
-              failures.push(h.symbol);
-            }
-          }
-          setMfFetchProgress(null);
-          setMfFetchingAll(false);
-          if (failures.length > 0) setMfHoldingsError(`Couldn't resolve: ${failures.join(', ')} - try Manual entry for these.`);
-        };
-
-        const aggregated = (() => {
-          const totals = new Map<string, number>();
-          let totalMfValue = 0;
-          mfHoldings.forEach(h => {
-            const value = Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity);
-            totalMfValue += value;
-            cacheFor(h).forEach((c: any) => {
-              const exposure = value * (Number(c.weight_pct) / 100);
-              totals.set(c.stock_name, (totals.get(c.stock_name) || 0) + exposure);
-            });
-          });
-          return Array.from(totals.entries())
-            .map(([stockName, exposure]) => ({ stockName, exposure, pctOfMf: totalMfValue > 0 ? (exposure / totalMfValue) * 100 : 0 }))
-            .sort((a, b) => b.exposure - a.exposure);
-        })();
-        const maxExposure = aggregated[0]?.exposure || 1;
-
-        const renderManualForm = (h: any) => (
-          <div className="bg-white dark:bg-slate-950 rounded-lg p-2.5 space-y-2 mt-2">
-            <div className="space-y-1.5 max-h-64 overflow-y-auto">
-              {manualRows.map((row, i) => (
-                <div key={i} className="flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    value={row.stockName}
-                    onChange={(e) => updateManualRow(i, 'stockName', e.target.value)}
-                    placeholder="Stock name e.g. HDFC Bank"
-                    className="flex-1 px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
-                  />
-                  <input
-                    type="number"
-                    value={row.weightPct}
-                    onChange={(e) => updateManualRow(i, 'weightPct', e.target.value)}
-                    placeholder="Weight %"
-                    className="w-20 px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
-                  />
-                  <button onClick={() => removeManualRow(i)} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
-                </div>
-              ))}
-            </div>
-            <button onClick={addManualRow} className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Add Row</button>
-            {manualError && <p className="text-[10px] text-rose-500 font-semibold">{manualError}</p>}
-            <div className="flex gap-2">
-              <button
-                onClick={() => saveManualMfEntry(h)}
-                disabled={manualSaving}
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
-              >
-                {manualSaving ? 'Saving…' : 'Save Holdings'}
-              </button>
-              <button onClick={() => setManualEntryHoldingId(null)} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
-                Cancel
-              </button>
-            </div>
-          </div>
-        );
-
-        return (
-          <div className="space-y-3">
-            <div className="apple-card p-4 space-y-1">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">MF Underlying Holdings</span>
-              <p className="text-[9px] text-slate-400">What stocks your mutual funds actually hold, and your combined exposure to each one across every fund.</p>
-            </div>
-
-            {/* Combined exposure - always visible, no dropdown needed for the single most useful view */}
-            <div className="apple-card p-4 space-y-2.5">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Combined Top Holdings</span>
-              {aggregated.length === 0 ? (
-                <p className="text-[11px] text-slate-400 text-center py-4">No holdings data yet - fetch or enter it for your funds below to see your real combined stock exposure here.</p>
-              ) : (
-                <div className="space-y-2">
-                  {aggregated.slice(0, 10).map((row, i) => (
-                    <div key={i} className="relative">
-                      <div className="absolute inset-0 bg-indigo-50 dark:bg-indigo-950/30 rounded-md" style={{ width: `${Math.max(4, (row.exposure / maxExposure) * 100)}%` }} />
-                      <div className="relative flex items-center justify-between px-2.5 py-1.5">
-                        <span className="text-xs font-bold text-slate-900 dark:text-white">{i + 1}. {row.stockName}</span>
-                        <span className="text-xs text-right shrink-0 ml-2">
-                          <span className="font-black text-slate-700 dark:text-slate-300">{fmtHeader(row.exposure)}</span>
-                          <span className="text-slate-400 ml-1.5">{row.pctOfMf.toFixed(1)}%</span>
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Single bulk-fetch button with live per-fund progress */}
-            {missingCache.length > 0 && (
-              <div className="apple-card p-4 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[11px] font-bold text-slate-600 dark:text-slate-400">{missingCache.length} fund{missingCache.length !== 1 ? 's' : ''} not yet allocated</p>
-                  <button
-                    onClick={fetchAllMissing}
-                    disabled={mfFetchingAll}
-                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer flex items-center gap-1.5 shrink-0"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${mfFetchingAll ? 'animate-spin' : ''}`} />
-                    {mfFetchingAll ? 'Fetching…' : 'Fetch All Holdings'}
-                  </button>
-                </div>
-                {mfFetchProgress && (
-                  <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">Currently fetching {mfFetchProgress.currentName} ({mfFetchProgress.current} of {mfFetchProgress.total})…</p>
-                )}
-                {mfHoldingsError && <p className="text-[10px] text-rose-500 font-semibold">{mfHoldingsError}</p>}
-              </div>
-            )}
-
-            {/* Per-fund accordion - status badge shows allocated/not at a glance, expand for detail */}
-            <div className="apple-card divide-y divide-slate-100 dark:divide-slate-900">
-              {mfHoldings.map(h => {
-                const rows = cacheFor(h).sort((a: any, b: any) => Number(b.weight_pct) - Number(a.weight_pct));
-                const isAllocated = rows.length > 0;
-                const isExpanded = expandedFundId === h.id;
-                const isFetchingThis = mfHoldingsFetchingId === h.id || (mfFetchingAll && mfFetchProgress?.currentName === h.symbol);
-                return (
-                  <div key={h.id} className="p-3">
-                    <button onClick={() => setExpandedFundId(isExpanded ? null : h.id)} className="w-full flex items-center justify-between gap-2 cursor-pointer">
-                      <span className="text-xs font-bold text-slate-900 dark:text-white truncate text-left">{h.symbol}</span>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {isFetchingThis ? (
-                          <span className="text-[9px] font-black uppercase text-indigo-500 flex items-center gap-1"><RefreshCw className="w-2.5 h-2.5 animate-spin" /> Fetching</span>
-                        ) : isAllocated ? (
-                          <span className="text-[9px] font-black uppercase text-emerald-600 dark:text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Allocated</span>
-                        ) : (
-                          <span className="text-[9px] font-black uppercase text-amber-600 dark:text-amber-400">Not Fetched</span>
-                        )}
-                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
-                      </div>
-                    </button>
-                    {isExpanded && (
-                      <div className="mt-2.5 pl-1">
-                        {isAllocated ? (
-                          <div className="divide-y divide-slate-100 dark:divide-slate-900">
-                            {rows.map((c: any) => (
-                              <div key={c.id} className="flex items-center justify-between py-1.5">
-                                <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">{c.stock_name}</span>
-                                <span className="text-[11px] font-black text-slate-500">{Number(c.weight_pct).toFixed(2)}%</span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-[10px] text-slate-400 pb-1">No holdings data yet for this fund.</p>
-                        )}
-                        <div className="flex gap-1.5 mt-2">
-                          {!isAllocated && (
-                            <button
-                              onClick={() => doFetch(h)}
-                              disabled={isFetchingThis}
-                              className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer"
-                            >
-                              Fetch Holdings %
-                            </button>
-                          )}
-                          <button
-                            onClick={() => manualEntryHoldingId === h.id ? setManualEntryHoldingId(null) : openManualMfEntry(h)}
-                            className="px-2.5 py-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 text-[9px] font-black uppercase rounded-lg cursor-pointer flex items-center gap-1"
-                          >
-                            {isAllocated ? 'Edit Manually' : 'Enter Manually'} {manualEntryHoldingId === h.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                          </button>
-                        </div>
-                        {manualEntryHoldingId === h.id && renderManualForm(h)}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
-
-
-      {holdingsTab === 'settings' && (
-        <div className="space-y-3">
-        {/* Settings filter - one section visible at a time instead of all 4 stacked, much
-            shorter scroll on mobile. Each pill color-coded for quick visual identification. */}
-        <div className="flex items-center gap-1.5 overflow-x-auto -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
-          {(
-            [
-              ['broker', 'Broker Connections', RefreshCw, 'bg-indigo-600', 'text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-900'],
-              ['cash', 'Cash Balance', Banknote, 'bg-emerald-600', 'text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900'],
-              ['pl', 'Booked P/L', TrendingUp, 'bg-amber-600', 'text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900'],
-              ['bank', 'Projected Bank Balance', Banknote, 'bg-sky-600', 'text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-900'],
-            ] as const
-          ).map(([id, label, Icon, activeBg, inactiveClasses]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setSettingsFilter(id)}
-              className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black whitespace-nowrap transition-all cursor-pointer border ${
-                settingsFilter === id
-                  ? `${activeBg} text-white border-transparent shadow-sm`
-                  : `bg-white dark:bg-slate-900 ${inactiveClasses}`
-              }`}
-            >
-              <Icon className="w-3 h-3" />
-              {label}
-            </button>
-          ))}
-        </div>
-        {settingsFilter === 'broker' && (<>
+  const brokerConnectionsSection = (
+    <>
         {/* Broker Connections overview - quick status/action table across every portfolio and
             its connected brokers, plus the auto-refresh toggle. Reuses the existing
             handleEtoroSync/handleWebullSync/handleZerodhaSync/handleGrowwSync handlers and
@@ -3870,7 +3515,412 @@ export default function PortfolioView(props: PortfolioViewProps) {
             </div>
           );
         })()}
-        </>)}
+    </>
+  );
+
+  if (embedMode === 'quote-connections') {
+    return (
+      <div className="flex-1 flex flex-col overflow-y-auto px-3 sm:px-4 pt-3 pb-24 md:pb-4 space-y-4 text-left bg-slate-50 dark:bg-slate-900">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setEmbedTab('broker')}
+            className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 border ${
+              embedTab === 'broker'
+                ? 'bg-indigo-600 text-white border-transparent shadow-sm'
+                : 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-900'
+            }`}
+          >
+            <RefreshCw className="w-3 h-3" /> Broker Connections
+          </button>
+          <button
+            type="button"
+            onClick={() => setEmbedTab('search')}
+            className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 border ${
+              embedTab === 'search'
+                ? 'bg-blue-600 text-white border-transparent shadow-sm'
+                : 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900'
+            }`}
+          >
+            <Search className="w-3 h-3" /> Quote Search
+          </button>
+        </div>
+        {formError && (
+          <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 rounded-xl text-xs text-rose-600 dark:text-rose-400 font-semibold">
+            {formError}
+          </div>
+        )}
+        {embedTab === 'broker' && brokerConnectionsSection}
+        {embedTab === 'search' && quoteSearchSection}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col overflow-y-auto px-3 sm:px-4 pt-3 pb-24 md:pb-4 space-y-5 text-left bg-slate-50 dark:bg-slate-900">
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <Briefcase className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white">{workspaceName ? `${workspaceName} Portfolio` : 'Portfolio'}</h2>
+      </div>
+
+      {isDataLoading ? (
+        <div className="flex-1 w-full flex flex-col items-center justify-center gap-3 py-24 bg-slate-50 dark:bg-slate-900">
+          <RefreshCw className="w-6 h-6 text-indigo-500 animate-spin" />
+          <p className="text-xs text-slate-400">Loading your portfolio…</p>
+        </div>
+      ) : (
+      <>
+      {formError && (
+        <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 rounded-xl flex items-center justify-between gap-2">
+          <span className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold">{formError}</span>
+          <button onClick={() => setFormError(null)} className="text-rose-400 hover:text-rose-600 cursor-pointer"><X className="w-3.5 h-3.5" /></button>
+        </div>
+      )}
+
+      {/* Holdings tabs — horizontal scroll on mobile (same pattern as Book chips) */}
+      <div className="w-full min-w-0 max-w-full">
+        <div
+          className="w-full min-w-0 overflow-x-auto overscroll-x-contain touch-pan-x"
+          style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
+        >
+          <div className="flex flex-nowrap items-center gap-1.5 w-max pr-2">
+            <button
+              type="button"
+              onClick={() => setHoldingsTab('active')}
+              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer border ${
+                holdingsTab === 'active'
+                  ? 'bg-emerald-600 text-white border-transparent shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900'
+              }`}
+            >
+              Active ({activeHoldings.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setHoldingsTab('sold')}
+              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer border ${
+                holdingsTab === 'sold'
+                  ? 'bg-violet-600 text-white border-transparent shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-900'
+              }`}
+            >
+              Sold ({soldHoldings.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setHoldingsTab('settings')}
+              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 border ${
+                holdingsTab === 'settings'
+                  ? 'bg-teal-600 text-white border-transparent shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-teal-600 dark:text-teal-400 border-teal-200 dark:border-teal-900'
+              }`}
+            >
+              <Banknote className="w-3 h-3" /> Cash Flow
+            </button>
+            <button
+              type="button"
+              onClick={() => setHoldingsTab('pnl_calendar')}
+              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer border ${
+                holdingsTab === 'pnl_calendar'
+                  ? 'bg-amber-600 text-white border-transparent shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900'
+              }`}
+            >
+              P&L Calendar
+            </button>
+            {activeHoldings.some((h) => h.holding_type === 'mutual_fund') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setHoldingsTab('mf-holdings');
+                  loadMfHoldingsCache?.();
+                }}
+                className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 border ${
+                  holdingsTab === 'mf-holdings'
+                    ? 'bg-fuchsia-600 text-white border-transparent shadow-sm'
+                    : 'bg-white dark:bg-slate-900 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-200 dark:border-fuchsia-900'
+                }`}
+              >
+                <PieChart className="w-3 h-3" /> MF Holdings
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+
+      {holdingsTab === 'mf-holdings' && (() => {
+        const mfHoldings = activeHoldings.filter(h => h.holding_type === 'mutual_fund');
+        // Cache is keyed by the official AMFI scheme name (e.g. "HDFC Small Cap Fund -
+        // Growth Option - Direct Plan"), but h.symbol is the broker's own, differently
+        // worded name (e.g. "HDFC SMALL CAP FUND - DIRECT PLAN") - exact string matching
+        // after normalization failed for almost every fund except the few where the
+        // broker's name happened to exactly equal AMFI's, even though the backend had
+        // already correctly fetched and cached real data for all of them. Requires every
+        // significant word from the broker's symbol to appear in the cached scheme name,
+        // same fuzzy approach the backend already uses to resolve the fund in the first place.
+        const cacheFor = (h: any) => {
+          const bySchemeCode = mfHoldingsCache.filter((c: any) => c.scheme_code === `MANUAL-${h.id}`);
+          if (bySchemeCode.length > 0) return bySchemeCode;
+          // "plan"/"option" excluded - broker names and the cached scheme name don't always
+          // agree on including these generic structural words (e.g. broker says "- Direct
+          // Plan", cached name says just "- Direct - Growth" with no "Plan" anywhere), and
+          // neither word actually helps identify which fund this is.
+          const targetWords = (h.symbol || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w: string) => w.length > 1 && w !== 'plan' && w !== 'option' && w !== 'options');
+          if (targetWords.length === 0) return [];
+          const grouped = new Map<string, any[]>();
+          mfHoldingsCache.forEach((c: any) => {
+            const list = grouped.get(c.scheme_code) || [];
+            list.push(c);
+            grouped.set(c.scheme_code, list);
+          });
+          for (const [, rows] of grouped) {
+            const nameLower = (rows[0]?.scheme_name || '').toLowerCase();
+            if (targetWords.every((w: string) => nameLower.includes(w))) return rows;
+          }
+          return [];
+        };
+        const missingCache = mfHoldings.filter(h => cacheFor(h).length === 0);
+
+        const doFetch = async (h: any) => {
+          setMfHoldingsFetchingId(h.id);
+          setMfHoldingsError(null);
+          try {
+            const result = await fetchAndCacheMfHoldings?.(h.isin ?? null, h.symbol);
+            if (result?.error && (!result.holdings || result.holdings.length === 0)) {
+              setMfHoldingsError(`${h.symbol}: ${result.error}`);
+            }
+          } catch (err: any) {
+            setMfHoldingsError(err.message || 'Failed to fetch fund holdings.');
+          } finally {
+            setMfHoldingsFetchingId(null);
+          }
+        };
+
+        // One button, fetches every fund that's missing data in sequence (not parallel -
+        // gentler on the third-party API, and lets progress be shown per-fund rather than
+        // just a single spinner with no idea how far along it is).
+        const fetchAllMissing = async () => {
+          setMfFetchingAll(true);
+          setMfHoldingsError(null);
+          const failures: string[] = [];
+          for (let i = 0; i < missingCache.length; i++) {
+            const h = missingCache[i];
+            setMfFetchProgress({ current: i + 1, total: missingCache.length, currentName: h.symbol });
+            try {
+              const result = await fetchAndCacheMfHoldings?.(h.isin ?? null, h.symbol);
+              if (result?.error && (!result.holdings || result.holdings.length === 0)) failures.push(h.symbol);
+            } catch {
+              failures.push(h.symbol);
+            }
+          }
+          setMfFetchProgress(null);
+          setMfFetchingAll(false);
+          if (failures.length > 0) setMfHoldingsError(`Couldn't resolve: ${failures.join(', ')} - try Manual entry for these.`);
+        };
+
+        const aggregated = (() => {
+          const totals = new Map<string, number>();
+          let totalMfValue = 0;
+          mfHoldings.forEach(h => {
+            const value = Number(h.live_price ?? h.current_price ?? h.buy_price) * Number(h.quantity);
+            totalMfValue += value;
+            cacheFor(h).forEach((c: any) => {
+              const exposure = value * (Number(c.weight_pct) / 100);
+              totals.set(c.stock_name, (totals.get(c.stock_name) || 0) + exposure);
+            });
+          });
+          return Array.from(totals.entries())
+            .map(([stockName, exposure]) => ({ stockName, exposure, pctOfMf: totalMfValue > 0 ? (exposure / totalMfValue) * 100 : 0 }))
+            .sort((a, b) => b.exposure - a.exposure);
+        })();
+        const maxExposure = aggregated[0]?.exposure || 1;
+
+        const renderManualForm = (h: any) => (
+          <div className="bg-white dark:bg-slate-950 rounded-lg p-2.5 space-y-2 mt-2">
+            <div className="space-y-1.5 max-h-64 overflow-y-auto">
+              {manualRows.map((row, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={row.stockName}
+                    onChange={(e) => updateManualRow(i, 'stockName', e.target.value)}
+                    placeholder="Stock name e.g. HDFC Bank"
+                    className="flex-1 px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
+                  />
+                  <input
+                    type="number"
+                    value={row.weightPct}
+                    onChange={(e) => updateManualRow(i, 'weightPct', e.target.value)}
+                    placeholder="Weight %"
+                    className="w-20 px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-[10px]"
+                  />
+                  <button onClick={() => removeManualRow(i)} className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                </div>
+              ))}
+            </div>
+            <button onClick={addManualRow} className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">+ Add Row</button>
+            {manualError && <p className="text-[10px] text-rose-500 font-semibold">{manualError}</p>}
+            <div className="flex gap-2">
+              <button
+                onClick={() => saveManualMfEntry(h)}
+                disabled={manualSaving}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer"
+              >
+                {manualSaving ? 'Saving…' : 'Save Holdings'}
+              </button>
+              <button onClick={() => setManualEntryHoldingId(null)} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-black uppercase rounded-lg cursor-pointer">
+                Cancel
+              </button>
+            </div>
+          </div>
+        );
+
+        return (
+          <div className="space-y-3">
+            <div className="apple-card p-4 space-y-1">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">MF Underlying Holdings</span>
+              <p className="text-[9px] text-slate-400">What stocks your mutual funds actually hold, and your combined exposure to each one across every fund.</p>
+            </div>
+
+            {/* Combined exposure - always visible, no dropdown needed for the single most useful view */}
+            <div className="apple-card p-4 space-y-2.5">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Combined Top Holdings</span>
+              {aggregated.length === 0 ? (
+                <p className="text-[11px] text-slate-400 text-center py-4">No holdings data yet - fetch or enter it for your funds below to see your real combined stock exposure here.</p>
+              ) : (
+                <div className="space-y-2">
+                  {aggregated.slice(0, 10).map((row, i) => (
+                    <div key={i} className="relative">
+                      <div className="absolute inset-0 bg-indigo-50 dark:bg-indigo-950/30 rounded-md" style={{ width: `${Math.max(4, (row.exposure / maxExposure) * 100)}%` }} />
+                      <div className="relative flex items-center justify-between px-2.5 py-1.5">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white">{i + 1}. {row.stockName}</span>
+                        <span className="text-xs text-right shrink-0 ml-2">
+                          <span className="font-black text-slate-700 dark:text-slate-300">{fmtHeader(row.exposure)}</span>
+                          <span className="text-slate-400 ml-1.5">{row.pctOfMf.toFixed(1)}%</span>
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Single bulk-fetch button with live per-fund progress */}
+            {missingCache.length > 0 && (
+              <div className="apple-card p-4 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-bold text-slate-600 dark:text-slate-400">{missingCache.length} fund{missingCache.length !== 1 ? 's' : ''} not yet allocated</p>
+                  <button
+                    onClick={fetchAllMissing}
+                    disabled={mfFetchingAll}
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-black uppercase rounded-lg cursor-pointer flex items-center gap-1.5 shrink-0"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${mfFetchingAll ? 'animate-spin' : ''}`} />
+                    {mfFetchingAll ? 'Fetching…' : 'Fetch All Holdings'}
+                  </button>
+                </div>
+                {mfFetchProgress && (
+                  <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">Currently fetching {mfFetchProgress.currentName} ({mfFetchProgress.current} of {mfFetchProgress.total})…</p>
+                )}
+                {mfHoldingsError && <p className="text-[10px] text-rose-500 font-semibold">{mfHoldingsError}</p>}
+              </div>
+            )}
+
+            {/* Per-fund accordion - status badge shows allocated/not at a glance, expand for detail */}
+            <div className="apple-card divide-y divide-slate-100 dark:divide-slate-900">
+              {mfHoldings.map(h => {
+                const rows = cacheFor(h).sort((a: any, b: any) => Number(b.weight_pct) - Number(a.weight_pct));
+                const isAllocated = rows.length > 0;
+                const isExpanded = expandedFundId === h.id;
+                const isFetchingThis = mfHoldingsFetchingId === h.id || (mfFetchingAll && mfFetchProgress?.currentName === h.symbol);
+                return (
+                  <div key={h.id} className="p-3">
+                    <button onClick={() => setExpandedFundId(isExpanded ? null : h.id)} className="w-full flex items-center justify-between gap-2 cursor-pointer">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white truncate text-left">{h.symbol}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isFetchingThis ? (
+                          <span className="text-[9px] font-black uppercase text-indigo-500 flex items-center gap-1"><RefreshCw className="w-2.5 h-2.5 animate-spin" /> Fetching</span>
+                        ) : isAllocated ? (
+                          <span className="text-[9px] font-black uppercase text-emerald-600 dark:text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Allocated</span>
+                        ) : (
+                          <span className="text-[9px] font-black uppercase text-amber-600 dark:text-amber-400">Not Fetched</span>
+                        )}
+                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
+                      </div>
+                    </button>
+                    {isExpanded && (
+                      <div className="mt-2.5 pl-1">
+                        {isAllocated ? (
+                          <div className="divide-y divide-slate-100 dark:divide-slate-900">
+                            {rows.map((c: any) => (
+                              <div key={c.id} className="flex items-center justify-between py-1.5">
+                                <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">{c.stock_name}</span>
+                                <span className="text-[11px] font-black text-slate-500">{Number(c.weight_pct).toFixed(2)}%</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-[10px] text-slate-400 pb-1">No holdings data yet for this fund.</p>
+                        )}
+                        <div className="flex gap-1.5 mt-2">
+                          {!isAllocated && (
+                            <button
+                              onClick={() => doFetch(h)}
+                              disabled={isFetchingThis}
+                              className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[9px] font-black uppercase rounded-lg cursor-pointer"
+                            >
+                              Fetch Holdings %
+                            </button>
+                          )}
+                          <button
+                            onClick={() => manualEntryHoldingId === h.id ? setManualEntryHoldingId(null) : openManualMfEntry(h)}
+                            className="px-2.5 py-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 text-[9px] font-black uppercase rounded-lg cursor-pointer flex items-center gap-1"
+                          >
+                            {isAllocated ? 'Edit Manually' : 'Enter Manually'} {manualEntryHoldingId === h.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                          </button>
+                        </div>
+                        {manualEntryHoldingId === h.id && renderManualForm(h)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+
+      {holdingsTab === 'settings' && (
+        <div className="space-y-3">
+        {/* Settings filter - one section visible at a time instead of all 4 stacked, much
+            shorter scroll on mobile. Each pill color-coded for quick visual identification. */}
+        <div className="flex items-center gap-1.5 overflow-x-auto -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+          {(
+            [
+              ['cash', 'Cash Balance', Banknote, 'bg-emerald-600', 'text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900'],
+              ['pl', 'Booked P/L', TrendingUp, 'bg-amber-600', 'text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900'],
+              ['bank', 'Projected Bank Balance', Banknote, 'bg-sky-600', 'text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-900'],
+              ['investment_plan', 'Investment Plan', ClipboardList, 'bg-purple-600', 'text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-900'],
+            ] as const
+          ).map(([id, label, Icon, activeBg, inactiveClasses]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setSettingsFilter(id)}
+              className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black whitespace-nowrap transition-all cursor-pointer border ${
+                settingsFilter === id
+                  ? `${activeBg} text-white border-transparent shadow-sm`
+                  : `bg-white dark:bg-slate-900 ${inactiveClasses}`
+              }`}
+            >
+              <Icon className="w-3 h-3" />
+              {label}
+            </button>
+          ))}
+        </div>
 
         {settingsFilter === 'cash' && (
         <div className="apple-card p-4 space-y-3">
@@ -4211,6 +4261,44 @@ export default function PortfolioView(props: PortfolioViewProps) {
             </div>
           );
         })()}
+        {settingsFilter === 'investment_plan' && (
+          <InvestmentPlanView
+            workspaceName={workspaceName}
+            workspaceMembers={workspaceMembers}
+            isReadOnly={isReadOnly}
+            currentUserId={currentUserId}
+            portfolios={portfolios}
+            portfolioMode={portfolioMode}
+            workspaceCurrencyRates={workspaceCurrencyRates}
+            baseCurrency={baseCurrency}
+            dismissedReminderKey={dismissedReminderKey}
+            onDismissContributionReminder={onDismissContributionReminder}
+            portfolioSplits={portfolioSplits}
+            addPortfolioSplit={addPortfolioSplit}
+            deletePortfolioSplit={deletePortfolioSplit}
+            portfolioContributions={portfolioContributions}
+            addPortfolioContribution={addPortfolioContribution}
+            updatePortfolioContribution={updatePortfolioContribution}
+            deletePortfolioContribution={deletePortfolioContribution}
+            portfolioWithdrawals={portfolioWithdrawals}
+            addPortfolioWithdrawal={addPortfolioWithdrawal}
+            deletePortfolioWithdrawal={deletePortfolioWithdrawal}
+            portfolioCashBalances={portfolioCashBalances}
+            setPortfolioCashBalance={setPortfolioCashBalance}
+            deletePortfolioCashBalance={deletePortfolioCashBalance}
+            portfolioBookedPlBaselines={portfolioBookedPlBaselines}
+            setBookedPlBaseline={setBookedPlBaseline}
+            portfolioProjectedBankBalances={portfolioProjectedBankBalances}
+            setProjectedBankBalance={setProjectedBankBalance}
+            portfolioRecurringPlans={portfolioRecurringPlans}
+            portfolioRecurringPlanSkips={portfolioRecurringPlanSkips}
+            skipRecurringPeriod={skipRecurringPeriod}
+            unskipRecurringPeriod={unskipRecurringPeriod}
+            addPortfolioRecurringPlan={addPortfolioRecurringPlan}
+            updatePortfolioRecurringPlan={updatePortfolioRecurringPlan}
+            deletePortfolioRecurringPlan={deletePortfolioRecurringPlan}
+          />
+        )}
         </div>
       )}
 
