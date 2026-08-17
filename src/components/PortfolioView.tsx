@@ -16,6 +16,7 @@ interface WorkspaceMemberLite {
 
 interface PortfolioViewProps {
   embedMode?: 'quote-connections';
+  initialHoldingsTab?: 'active' | 'sold' | 'quote_connections' | 'search' | 'mf-holdings' | 'settings' | 'lots' | 'pnl_calendar';
   workspaceName?: string;
   workspaceMembers: WorkspaceMemberLite[];
   isReadOnly?: boolean;
@@ -322,6 +323,7 @@ const memberName = (m: WorkspaceMemberLite) => m.displayName || m.email.split('@
 export default function PortfolioView(props: PortfolioViewProps) {
   const {
     embedMode,
+    initialHoldingsTab,
     workspaceName, workspaceMembers, isReadOnly, isDataLoading, columnPrefs, onUpdateColumnPrefs,
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit, portfolioCashBalances, portfolioBookedPlBaselines = [], portfolioBookedPlHistory = [], portfolioBankBalanceHistory = [], portfolioProjectedBankBalances = [],
     setPortfolioCashBalance, deletePortfolioCashBalance, setBookedPlBaseline, setProjectedBankBalance, recalculateProjectedBankBalance,
@@ -3609,6 +3611,17 @@ export default function PortfolioView(props: PortfolioViewProps) {
             </button>
             <button
               type="button"
+              onClick={() => setHoldingsTab('quote_connections')}
+              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 border ${
+                holdingsTab === 'quote_connections'
+                  ? 'bg-sky-600 text-white border-transparent shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-900'
+              }`}
+            >
+              <RefreshCw className="w-3 h-3" /> Quote / Connections
+            </button>
+            <button
+              type="button"
               onClick={() => setHoldingsTab('settings')}
               className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 border ${
                 holdingsTab === 'settings'
@@ -3650,7 +3663,44 @@ export default function PortfolioView(props: PortfolioViewProps) {
       </div>
 
 
+      {holdingsTab === 'quote_connections' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setEmbedTab('broker')}
+              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 border ${
+                embedTab === 'broker'
+                  ? 'bg-indigo-600 text-white border-transparent shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-900'
+              }`}
+            >
+              <RefreshCw className="w-3 h-3" /> Broker Connections
+            </button>
+            <button
+              type="button"
+              onClick={() => setEmbedTab('search')}
+              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 border ${
+                embedTab === 'search'
+                  ? 'bg-blue-600 text-white border-transparent shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900'
+              }`}
+            >
+              <Search className="w-3 h-3" /> Quote Search
+            </button>
+          </div>
+          {formError && (
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 rounded-xl text-xs text-rose-600 dark:text-rose-400 font-semibold">
+              {formError}
+            </div>
+          )}
+          {embedTab === 'broker' && brokerConnectionsSection}
+          {embedTab === 'search' && quoteSearchSection}
+        </div>
+      )}
+
       {holdingsTab === 'mf-holdings' && (() => {
+
         const mfHoldings = activeHoldings.filter(h => h.holding_type === 'mutual_fund');
         // Cache is keyed by the official AMFI scheme name (e.g. "HDFC Small Cap Fund -
         // Growth Option - Direct Plan"), but h.symbol is the broker's own, differently

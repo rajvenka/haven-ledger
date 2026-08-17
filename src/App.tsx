@@ -942,24 +942,6 @@ export default function App() {
                   </button>
 
                   <button
-                    id="tour-tab-quote_connections-desktop"
-                    onClick={() => setActiveTab('quote_connections')}
-                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
-                      activeTab === 'quote_connections'
-                        ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
-                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <RefreshCw className="w-4 h-4 shrink-0 opacity-80" />
-                      <span>Quote/Connections</span>
-                    </div>
-                    {activeTab === 'quote_connections' && (
-                      <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
-                    )}
-                  </button>
-
-                  <button
                     id="tour-tab-reports-desktop"
                     onClick={() => setActiveTab('reports')}
                     className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
@@ -1397,24 +1379,6 @@ export default function App() {
                           <span>Investment Plan</span>
                         </div>
                         {activeTab === 'investment_plan' && (
-                          <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
-                        )}
-                      </button>
-
-                      <button
-                        id="tour-tab-quote_connections-mobile"
-                        onClick={() => { setActiveTab('quote_connections'); setIsMobileMenuOpen(false); }}
-                        className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
-                          activeTab === 'quote_connections'
-                            ? 'bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-900/20 shadow-sm'
-                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <RefreshCw className="w-4.5 h-4.5 shrink-0 opacity-80" />
-                          <span>Quote/Connections</span>
-                        </div>
-                        {activeTab === 'quote_connections' && (
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                         )}
                       </button>
@@ -2064,7 +2028,7 @@ export default function App() {
                               />
 ) : activeTab === 'quote_connections' ? (
                 <PortfolioView
-                embedMode="quote-connections"
+                initialHoldingsTab="quote_connections"
                 workspaceName={activeWorkspace?.name}
                 workspaceMembers={familyMembers}
                 isReadOnly={isReadOnly}

@@ -116,7 +116,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const portfolioCashBalances = selectedPlanPortfolioIds ? allPortfolioCashBalances.filter((c: any) => selectedPlanPortfolioIds.includes(c.portfolio_id)) : allPortfolioCashBalances;
   const portfolioRecurringPlans = selectedPlanPortfolioIds ? allPortfolioRecurringPlans.filter((p: any) => selectedPlanPortfolioIds.includes(p.portfolio_id)) : allPortfolioRecurringPlans;
 
-  const [planTab, setPlanTab] = useState<PlanTab>('overview');
+  const [planTab, setPlanTab] = useState<PlanTab>('contributions');
   const [formError, setFormError] = useState<string | null>(null);
   const runAction = async (fn: () => Promise<any>) => {
     setFormError(null);
@@ -397,8 +397,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   );
 
   const TABS: { key: PlanTab; label: string }[] = [
-    { key: 'overview', label: 'Overview' },
-    { key: 'contributions', label: 'Contributions' },
+    { key: 'contributions', label: 'Contribution Log' },
+    { key: 'overview', label: 'Chart' },
   ];
 
   return (
