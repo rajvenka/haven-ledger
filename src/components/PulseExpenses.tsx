@@ -2,7 +2,7 @@
  * Pulse Spend — next-gen Expenses (currency tiles + clean bill list).
  * Classic ExpensesView remains available.
  */
-import React, { useMemo, useRef, useState, useCallback } from 'react';
+import React, { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import {
   Plus,
   Globe,
@@ -82,11 +82,6 @@ export default function PulseExpenses({
   const [searchQ, setSearchQ] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'overdue' | 'today' | 'soon' | 'unpaid' | 'paid'>('all');
   const [taggedForFilter, setTaggedForFilter] = useState<string>('all');
-  const taggedForOptions = useMemo(() => {
-    const set = new Set<string>();
-    payments.forEach((p) => set.add((p.taggedFor || 'Self').trim() || 'Self'));
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [payments]);
   const isPaymentReadOnly = (payment: RecurringPayment) => {
     if (!isReadOnly) return false;
     if (currentUserUid && payment.userId === currentUserUid) return false;
@@ -115,6 +110,14 @@ export default function PulseExpenses({
     if (taggedForFilter === 'all') return byCurrency;
     return byCurrency.filter((p) => (p.taggedFor || 'Self').trim() === taggedForFilter);
   }, [payments, isAll, activeCurrency, taggedForFilter]);
+
+  // Same currency filter but WITHOUT the tag filter applied - used only to compute which
+  // tags are actually relevant under the current status/paid view, so 'For' doesn't offer
+  // a tag that has zero matches right now (which looked like a dead click / silent reset).
+  const currencyFilteredOnly = useMemo(() => {
+    const active = payments.filter((p) => p.active);
+    return isAll ? active : active.filter((p) => String(p.currency || '').toUpperCase() === String(activeCurrency).toUpperCase());
+  }, [payments, isAll, activeCurrency]);
 
   const now = new Date();
   const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -148,7 +151,7 @@ export default function PulseExpenses({
   };
   const sortedAll = [...filteredPayments].sort((a, b) => getDaysUntilPayment(a) - getDaysUntilPayment(b));
   const q = searchQ.trim().toLowerCase();
-  const sorted = sortedAll.filter((p) => {
+  const passesStatusPaidTile = (p: RecurringPayment) => {
     const paid = isPaymentPaidForCurrentPeriod(p, history);
     const days = getDaysUntilPayment(p);
     if (tileFilter) {
@@ -179,7 +182,19 @@ export default function PulseExpenses({
       .join(' ')
       .toLowerCase();
     return hay.includes(q);
-  });
+  };
+  const sorted = sortedAll.filter(passesStatusPaidTile);
+  const taggedForOptions = useMemo(() => {
+    const set = new Set<string>();
+    currencyFilteredOnly.filter(passesStatusPaidTile).forEach((p) => set.add((p.taggedFor || 'Self').trim() || 'Self'));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currencyFilteredOnly, statusFilter, paidFilter, tileFilter, q, history]);
+  useEffect(() => {
+    if (taggedForFilter !== 'all' && !taggedForOptions.includes(taggedForFilter)) {
+      setTaggedForFilter('all');
+    }
+  }, [taggedForFilter, taggedForOptions]);
 
   const openCounts = {
     overdue: sortedAll.filter((p) => !isPaymentPaidForCurrentPeriod(p, history) && getDaysUntilPayment(p) < 0).length,
@@ -529,8 +544,10 @@ export default function PulseExpenses({
               <button
                 type="button"
                 onClick={() => setTaggedForFilter('all')}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 ${
-                  taggedForFilter === 'all' ? 'ring-2 ring-offset-1 ring-offset-slate-50 dark:ring-offset-slate-950 ring-violet-500' : ''
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
+                  taggedForFilter === 'all'
+                    ? 'bg-violet-600 text-white shadow-md shadow-violet-600/25'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                 }`}
               >
                 All
@@ -540,8 +557,10 @@ export default function PulseExpenses({
                   key={tag}
                   type="button"
                   onClick={() => setTaggedForFilter((prev) => (prev === tag ? 'all' : tag))}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer bg-violet-500/15 text-violet-700 dark:text-violet-400 ring-1 ring-violet-500/20 ${
-                    taggedForFilter === tag ? 'ring-2 ring-offset-1 ring-offset-slate-50 dark:ring-offset-slate-950 ring-violet-500' : ''
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
+                    taggedForFilter === tag
+                      ? 'bg-violet-600 text-white shadow-md shadow-violet-600/25'
+                      : 'bg-violet-500/15 text-violet-700 dark:text-violet-400'
                   }`}
                 >
                   {tag}

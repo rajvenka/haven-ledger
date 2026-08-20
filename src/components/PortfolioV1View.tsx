@@ -2157,7 +2157,7 @@ export default function PortfolioV1View({
               its own independent horizontal scroller, so neither steals the other's space
               when both are long lists. */}
           <div className="flex items-center gap-2 min-w-0 w-full max-w-full flex-wrap lg:flex-nowrap">
-            <div className="flex items-center gap-2 min-w-0 flex-1 basis-full lg:basis-auto">
+            <div className="flex items-center gap-2 min-w-0 flex-1 basis-full lg:basis-auto lg:max-w-[55%]">
               <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-indigo-500/80 dark:text-indigo-400/80 w-10">
                 Broker
               </span>

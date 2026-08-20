@@ -2,7 +2,7 @@
  * Pulse — next-gen Dashboard (summary-first, Canva-clean).
  * Classic Dashboard remains available; toggle Classic ↔ Pulse.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Calendar,
   TrendingUp,
@@ -209,19 +209,13 @@ export default function PulseDashboard({
         : [...upcomingList, ...paidThisMonthInstances].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
   const q = searchQ.trim().toLowerCase();
-  const taggedForOptions = useMemo(() => {
-    const set = new Set<string>();
-    payments.forEach((p) => set.add((p.taggedFor || 'Self').trim() || 'Self'));
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [payments]);
-  const listForFilter = listBase.filter((ins) => {
+  const passesStatusSearch = (ins: (typeof listBase)[number]) => {
     if (statusFilter !== 'all' && paidFilter !== 'paid') {
       const st = dueStatus(ins.dueDate, todayStr);
       if (st !== statusFilter) return false;
     }
-    const payment = payments.find((p) => p.id === ins.paymentId);
-    if (taggedForFilter !== 'all' && (payment?.taggedFor || 'Self').trim() !== taggedForFilter) return false;
     if (!q) return true;
+    const payment = payments.find((p) => p.id === ins.paymentId);
     const hay = [
       ins.paymentName,
       payment?.name,
@@ -234,6 +228,26 @@ export default function PulseDashboard({
       .join(' ')
       .toLowerCase();
     return hay.includes(q);
+  };
+  const taggedForOptions = useMemo(() => {
+    const set = new Set<string>();
+    listBase.filter(passesStatusSearch).forEach((ins) => {
+      const payment = payments.find((p) => p.id === ins.paymentId);
+      set.add((payment?.taggedFor || 'Self').trim() || 'Self');
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listBase, statusFilter, paidFilter, q, payments]);
+  useEffect(() => {
+    if (taggedForFilter !== 'all' && !taggedForOptions.includes(taggedForFilter)) {
+      setTaggedForFilter('all');
+    }
+  }, [taggedForFilter, taggedForOptions]);
+  const listForFilter = listBase.filter((ins) => {
+    if (!passesStatusSearch(ins)) return false;
+    const payment = payments.find((p) => p.id === ins.paymentId);
+    if (taggedForFilter !== 'all' && (payment?.taggedFor || 'Self').trim() !== taggedForFilter) return false;
+    return true;
   });
 
   const statusCounts = {
@@ -441,8 +455,10 @@ export default function PulseDashboard({
           <button
             type="button"
             onClick={() => setTaggedForFilter('all')}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 ${
-              taggedForFilter === 'all' ? 'ring-2 ring-offset-1 ring-offset-slate-50 dark:ring-offset-slate-950 ring-violet-500' : ''
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
+              taggedForFilter === 'all'
+                ? 'bg-violet-600 text-white shadow-md shadow-violet-600/25'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
             }`}
           >
             All
@@ -452,8 +468,10 @@ export default function PulseDashboard({
               key={tag}
               type="button"
               onClick={() => setTaggedForFilter((prev) => (prev === tag ? 'all' : tag))}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer bg-violet-500/15 text-violet-700 dark:text-violet-400 ring-1 ring-violet-500/20 ${
-                taggedForFilter === tag ? 'ring-2 ring-offset-1 ring-offset-slate-50 dark:ring-offset-slate-950 ring-violet-500' : ''
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
+                taggedForFilter === tag
+                  ? 'bg-violet-600 text-white shadow-md shadow-violet-600/25'
+                  : 'bg-violet-500/15 text-violet-700 dark:text-violet-400'
               }`}
             >
               {tag}
