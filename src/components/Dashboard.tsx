@@ -27,7 +27,10 @@ import {
   XAxis, 
   YAxis, 
   Tooltip, 
-  CartesianGrid 
+  CartesianGrid,
+  BarChart,
+  Bar,
+  Cell
 } from 'recharts';
 import { 
   getPaymentsDueNextWeek, 
@@ -184,7 +187,9 @@ export default function Dashboard({
   const PRICE_FLOOR = 0.01;
   let portfolioTotalValue = 0;
   let portfolioTotalPnl = 0;
+  let portfolioTotalDayChange = 0;
   const portfolioByBroker = new Map<string, { value: number; pnl: number }>();
+  const portfolioByName = new Map<string, { value: number; pnl: number; dayChange: number }>();
   for (const h of activeHoldings) {
     const buy = Number(h.buy_price) || 0;
     const live = Number(h.live_price ?? h.current_price ?? h.buy_price) || 0;
@@ -202,19 +207,41 @@ export default function Dashboard({
       value = live * qty;
       pnl = looksUnreliable ? 0 : (live - buy) * qty;
     }
+    // Today's change - same previous_close approach as the Agent's daily digest
+    // (buildLocalDailyDigest, AgentAssistant.tsx), reusing the same data rather than a
+    // separate pipeline. Same tiny-price safeguard applied here too.
+    const prevClose = Number(h.previous_close);
+    const qtyForDay = Number(h.quantity) || 0;
+    const dayChange = !looksUnreliable && Number.isFinite(prevClose) && prevClose >= PRICE_FLOOR
+      ? (live - prevClose) * qtyForDay
+      : 0;
+
     const ccy = h.currency || baseCurrency || 'USD';
     const convValue = convertToSummaryCcy(value, ccy);
     const convPnl = convertToSummaryCcy(pnl, ccy);
+    const convDayChange = convertToSummaryCcy(dayChange, ccy);
     portfolioTotalValue += convValue;
     portfolioTotalPnl += convPnl;
+    portfolioTotalDayChange += convDayChange;
+
     const broker = h.broker || portfolioNameById.get(h.portfolio_id) || 'Other';
     if (!portfolioByBroker.has(broker)) portfolioByBroker.set(broker, { value: 0, pnl: 0 });
     const b = portfolioByBroker.get(broker)!;
     b.value += convValue;
     b.pnl += convPnl;
+
+    const portfolioName = portfolioNameById.get(h.portfolio_id) || 'Default';
+    if (!portfolioByName.has(portfolioName)) portfolioByName.set(portfolioName, { value: 0, pnl: 0, dayChange: 0 });
+    const p = portfolioByName.get(portfolioName)!;
+    p.value += convValue;
+    p.pnl += convPnl;
+    p.dayChange += convDayChange;
   }
   const portfolioBrokerBreakdown = Array.from(portfolioByBroker.entries())
     .map(([broker, v]) => ({ broker, ...v }))
+    .sort((a, b) => b.value - a.value);
+  const portfolioNameBreakdown = Array.from(portfolioByName.entries())
+    .map(([name, v]) => ({ name, ...v }))
     .sort((a, b) => b.value - a.value);
 
   // Rewards/gift cards overview card
@@ -232,6 +259,7 @@ export default function Dashboard({
   const toggleMonthTagFilter = (tag: string) => setMonthTagFilters(prev => { const next = new Set(prev); if (next.has(tag)) next.delete(tag); else next.add(tag); return next; });
   const [isHeroBreakdownOpen, setIsHeroBreakdownOpen] = useState(false);
   const [showPortfolioByBroker, setShowPortfolioByBroker] = useState(false);
+  const [showPortfolioDetail, setShowPortfolioDetail] = useState(false);
   const [showBillsDetail, setShowBillsDetail] = useState(true);
   const [isTrendExpanded, setIsTrendExpanded] = useState<boolean>(() => {
     const saved = localStorage.getItem('pm_is_trend_expanded');
@@ -407,6 +435,14 @@ export default function Dashboard({
                   )}
                 </>
               )}
+              {portfolioNameBreakdown.length > 0 && (
+                <button
+                  onClick={() => setShowPortfolioDetail(v => !v)}
+                  className="text-[10px] font-bold text-[#007aff] dark:text-[#0a84ff] mt-2 cursor-pointer block"
+                >
+                  {showPortfolioDetail ? 'Hide summary' : 'See summary'}
+                </button>
+              )}
             </div>
           )}
 
@@ -441,6 +477,74 @@ export default function Dashboard({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {showPortfolioDetail && portfolioNameBreakdown.length > 0 && (
+        <div className="apple-card p-4 shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+              <TrendingUp className="w-3.5 h-3.5" /> Portfolio Summary
+            </span>
+            <button
+              onClick={() => setShowPortfolioDetail(false)}
+              className="text-[10px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer flex items-center gap-1"
+            >
+              <ChevronUp className="w-3 h-3" /> Hide
+            </button>
+          </div>
+          {/* Chart - one bar per portfolio, colored by whether it's up or down today */}
+          <div style={{ height: Math.max(100, portfolioNameBreakdown.length * 32) }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={portfolioNameBreakdown.map(p => ({ name: p.name, value: p.value }))}
+                layout="vertical"
+                margin={{ top: 0, right: 16, left: 0, bottom: 0 }}
+              >
+                <XAxis type="number" tick={{ fontSize: 9 }} hide />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={90} />
+                <Tooltip
+                  formatter={(v: number) => [formatCurrencyValue(v, summaryCurrency, countries), 'Value']}
+                  contentStyle={{ fontSize: 11, borderRadius: 8 }}
+                />
+                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                  {portfolioNameBreakdown.map((p, i) => (
+                    <Cell key={i} fill={p.dayChange >= 0 ? '#34c759' : '#ff3b30'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          {/* Table - name, total value, total P&L, today's change - same data source as the
+              Agent's daily digest (previous_close for day change), not a separate pipeline */}
+          <div className="overflow-x-auto mt-2">
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                  <th className="text-left py-1.5">Portfolio</th>
+                  <th className="text-right py-1.5">Value</th>
+                  <th className="text-right py-1.5">P&L</th>
+                  <th className="text-right py-1.5">Today</th>
+                </tr>
+              </thead>
+              <tbody>
+                {portfolioNameBreakdown.map(p => (
+                  <tr key={p.name} className="border-b border-slate-50 dark:border-slate-900/50 last:border-0">
+                    <td className="py-1.5 font-semibold text-slate-900 dark:text-white truncate max-w-[100px]">{p.name}</td>
+                    <td className="py-1.5 text-right font-bold text-slate-800 dark:text-slate-200">
+                      {formatCurrencyValue(p.value, summaryCurrency, countries)}
+                    </td>
+                    <td className={`py-1.5 text-right font-bold ${p.pnl >= 0 ? 'text-[#34c759] dark:text-[#30d158]' : 'text-rose-500'}`}>
+                      {p.pnl >= 0 ? '+' : ''}{formatCurrencyValue(p.pnl, summaryCurrency, countries)}
+                    </td>
+                    <td className={`py-1.5 text-right font-bold ${p.dayChange >= 0 ? 'text-[#34c759] dark:text-[#30d158]' : 'text-rose-500'}`}>
+                      {p.dayChange >= 0 ? '+' : ''}{formatCurrencyValue(p.dayChange, summaryCurrency, countries)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
