@@ -275,8 +275,11 @@ export default function Dashboard({
   const toggleMonthTagFilter = (tag: string) => setMonthTagFilters(prev => { const next = new Set(prev); if (next.has(tag)) next.delete(tag); else next.add(tag); return next; });
   const [isHeroBreakdownOpen, setIsHeroBreakdownOpen] = useState(false);
   const [showPortfolioByBroker, setShowPortfolioByBroker] = useState(false);
-  const [showPortfolioDetail, setShowPortfolioDetail] = useState(false);
-  const [showBillsDetail, setShowBillsDetail] = useState(true);
+  // Only one tile's detail section shows at a time - clicking a tile sets it active,
+  // clicking the same one again (or its own hide button) closes it. Bills starts active by
+  // default since that was the previous default-open behavior.
+  const [activeTile, setActiveTile] = useState<'bills' | 'portfolio' | 'rewards' | null>('bills');
+  const toggleTile = (tile: 'bills' | 'portfolio' | 'rewards') => setActiveTile(prev => (prev === tile ? null : tile));
   const [isTrendExpanded, setIsTrendExpanded] = useState<boolean>(() => {
     const saved = localStorage.getItem('pm_is_trend_expanded');
     return saved !== 'false'; // default true
@@ -385,7 +388,10 @@ export default function Dashboard({
           {/* Bills overview card - condensed version of the detailed breakdown below, which
               is now collapsed by default. This card is the new at-a-glance entry point;
               clicking "See detail" re-expands the full bills breakdown further down. */}
-          <div className="apple-card p-4">
+          <div
+            onClick={() => toggleTile('bills')}
+            className={`apple-card p-4 cursor-pointer transition-shadow ${activeTile === 'bills' ? 'ring-2 ring-[#007aff]/40 dark:ring-[#0a84ff]/40' : 'hover:shadow-md'}`}
+          >
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                 <Wallet className="w-3.5 h-3.5" /> Bills
@@ -400,24 +406,24 @@ export default function Dashboard({
               {formatCurrencyValue(totalDueCurrentMonthConverted, summaryCurrency, countries)}
             </p>
             <p className="text-[10px] text-slate-400 mt-0.5">due this month{dueNextWeek.length > 0 ? ` · ${formatCurrencyValue(totalDueNextWeekConverted, summaryCurrency, countries)} next 7 days` : ''}</p>
-            <button
-              onClick={() => setShowBillsDetail(true)}
-              className="text-[10px] font-bold text-[#007aff] dark:text-[#0a84ff] mt-2 cursor-pointer"
-            >
-              See detail
-            </button>
+            <p className="text-[10px] font-bold text-[#007aff] dark:text-[#0a84ff] mt-2">
+              {activeTile === 'bills' ? 'Hide detail' : 'See detail'}
+            </p>
           </div>
 
           {/* Portfolio overview card - total value/P&L across every holding, with a toggle
               to break it down by broker instead of one combined figure. */}
           {activeHoldings.length > 0 && (
-            <div className="apple-card p-4">
+            <div
+              onClick={() => toggleTile('portfolio')}
+              className={`apple-card p-4 cursor-pointer transition-shadow ${activeTile === 'portfolio' ? 'ring-2 ring-[#007aff]/40 dark:ring-[#0a84ff]/40' : 'hover:shadow-md'}`}
+            >
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                   <TrendingUp className="w-3.5 h-3.5" /> Portfolio
                 </span>
                 <button
-                  onClick={() => onNavigateToTab?.('portfolio')}
+                  onClick={(e) => { e.stopPropagation(); onNavigateToTab?.('portfolio'); }}
                   className="text-[9px] font-bold text-[#007aff] dark:text-[#0a84ff] cursor-pointer"
                 >
                   Open
@@ -432,7 +438,7 @@ export default function Dashboard({
               {portfolioBrokerBreakdown.length > 1 && (
                 <>
                   <button
-                    onClick={() => setShowPortfolioByBroker(v => !v)}
+                    onClick={(e) => { e.stopPropagation(); setShowPortfolioByBroker(v => !v); }}
                     className="text-[10px] font-bold text-[#007aff] dark:text-[#0a84ff] mt-2 cursor-pointer"
                   >
                     {showPortfolioByBroker ? 'Hide by broker' : 'See by broker'}
@@ -452,25 +458,25 @@ export default function Dashboard({
                 </>
               )}
               {portfolioNameBreakdown.length > 0 && (
-                <button
-                  onClick={() => setShowPortfolioDetail(v => !v)}
-                  className="text-[10px] font-bold text-[#007aff] dark:text-[#0a84ff] mt-2 cursor-pointer block"
-                >
-                  {showPortfolioDetail ? 'Hide summary' : 'See summary'}
-                </button>
+                <p className="text-[10px] font-bold text-[#007aff] dark:text-[#0a84ff] mt-2">
+                  {activeTile === 'portfolio' ? 'Hide summary' : 'See summary'}
+                </p>
               )}
             </div>
           )}
 
           {/* Rewards/gift cards overview card */}
           {(activeGiftCards.length > 0 || activeRewardsCount > 0) && (
-            <div className="apple-card p-4">
+            <div
+              onClick={() => toggleTile('rewards')}
+              className={`apple-card p-4 cursor-pointer transition-shadow ${activeTile === 'rewards' ? 'ring-2 ring-[#007aff]/40 dark:ring-[#0a84ff]/40' : 'hover:shadow-md'}`}
+            >
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5" /> Rewards
                 </span>
                 <button
-                  onClick={() => onNavigateToTab?.('rewards')}
+                  onClick={(e) => { e.stopPropagation(); onNavigateToTab?.('rewards'); }}
                   className="text-[9px] font-bold text-[#007aff] dark:text-[#0a84ff] cursor-pointer"
                 >
                   Open
@@ -491,19 +497,22 @@ export default function Dashboard({
                   {activeRewardsCount} tracked reward{activeRewardsCount === 1 ? '' : 's'}
                 </p>
               )}
+              <p className="text-[10px] font-bold text-[#007aff] dark:text-[#0a84ff] mt-2">
+                {activeTile === 'rewards' ? 'Hide summary' : 'See summary'}
+              </p>
             </div>
           )}
         </div>
       )}
 
-      {showPortfolioDetail && portfolioNameBreakdown.length > 0 && (
+      {activeTile === 'portfolio' && portfolioNameBreakdown.length > 0 && (
         <div className="apple-card p-4 shrink-0">
           <div className="flex items-center justify-between mb-3">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
               <TrendingUp className="w-3.5 h-3.5" /> Portfolio Summary
             </span>
             <button
-              onClick={() => setShowPortfolioDetail(false)}
+              onClick={() => setActiveTile(null)}
               className="text-[10px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer flex items-center gap-1"
             >
               <ChevronUp className="w-3 h-3" /> Hide
@@ -565,6 +574,72 @@ export default function Dashboard({
         </div>
       )}
 
+      {activeTile === 'rewards' && (activeGiftCards.length > 0 || activeRewardsCount > 0) && (
+        <div className="apple-card p-4 shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5" /> Rewards Summary
+            </span>
+            <button
+              onClick={() => setActiveTile(null)}
+              className="text-[10px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer flex items-center gap-1"
+            >
+              <ChevronUp className="w-3 h-3" /> Hide
+            </button>
+          </div>
+          {activeGiftCards.length > 0 && (
+            <div className="mb-4">
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1.5">Gift Cards</p>
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                    <th className="text-left py-1.5">Brand</th>
+                    <th className="text-right py-1.5">Remaining</th>
+                    <th className="text-right py-1.5">Expires</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeGiftCards.map(c => (
+                    <tr key={c.id} className="border-b border-slate-50 dark:border-slate-900/50 last:border-0">
+                      <td className="py-1.5 font-semibold text-slate-900 dark:text-white truncate max-w-[100px]">{c.brand}</td>
+                      <td className="py-1.5 text-right font-bold text-slate-800 dark:text-slate-200">
+                        {formatCurrencyValue(c.remainingBalance, c.currency as Currency, countries)}
+                      </td>
+                      <td className="py-1.5 text-right text-slate-400">{c.expiryDate ? formatDatePretty(c.expiryDate) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {activeRewardsCount > 0 && (
+            <div>
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1.5">Tracked Rewards</p>
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                    <th className="text-left py-1.5">Provider</th>
+                    <th className="text-left py-1.5">Category</th>
+                    <th className="text-right py-1.5">Cash Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(rewardsPerks || []).map(r => (
+                    <tr key={r.id} className="border-b border-slate-50 dark:border-slate-900/50 last:border-0">
+                      <td className="py-1.5 font-semibold text-slate-900 dark:text-white truncate max-w-[100px]">{r.providerName}</td>
+                      <td className="py-1.5 text-slate-400">{r.category}</td>
+                      <td className="py-1.5 text-right font-bold text-slate-800 dark:text-slate-200">
+                        {formatCurrencyValue(r.cashValue || 0, summaryCurrency, countries)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {hasNoPaymentsConfigured ? (
         /* Empty state — first thing a brand-new user sees, so make it an invitation, not a wall of zeros */
         <div className="apple-card p-8 flex flex-col items-center text-center gap-3 shrink-0">
@@ -584,10 +659,10 @@ export default function Dashboard({
             <PlusCircle className="w-4 h-4" /> Add a bill from Manage Bills
           </button>
         </div>
-      ) : showBillsDetail ? (
+      ) : activeTile === 'bills' ? (
         <>
           <button
-            onClick={() => setShowBillsDetail(false)}
+            onClick={() => setActiveTile(null)}
             className="text-[10px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer flex items-center gap-1"
           >
             <ChevronUp className="w-3 h-3" /> Hide bill details
@@ -701,7 +776,7 @@ export default function Dashboard({
       ) : null}
 
       {/* Alternative High Density Desktop Grid Layout (Responsive split: One column setting) */}
-      {!hasNoPaymentsConfigured && showBillsDetail && (
+      {!hasNoPaymentsConfigured && activeTile === 'bills' && (
       <div className="grid grid-cols-1 gap-4 items-start pb-6">
         
         {/* Analytics, Charts & Insights */}
