@@ -849,7 +849,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
               // Contributions carry their own portfolio_id - resolve that portfolio's real
               // currency per row instead of assuming INR for everyone. Falls back to
               // baseCurrency only if the portfolio can't be found (e.g. deleted).
-              const contribCurrency = allPortfolios.find((p: any) => p.id === c.portfolio_id)?.currency || baseCurrency;
+              const contribPortfolio = allPortfolios.find((p: any) => p.id === c.portfolio_id);
+              const contribCurrency = contribPortfolio?.currency || baseCurrency;
               return (
                 <tr key={c.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
                   <td className="p-2 text-slate-700 dark:text-slate-300 font-semibold">{m ? memberName(m) : 'Former member'}</td>
@@ -862,7 +863,12 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
                       <span className="text-[8px] font-black uppercase px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">One-off</span>
                     )}
                   </td>
-                  <td className="p-2 text-slate-500">{c.contribution_date}</td>
+                  <td className="p-2 text-slate-500">
+                    {c.contribution_date}
+                    {contribPortfolio?.name && (
+                      <div className="text-[9px] text-slate-400 font-semibold truncate max-w-[100px]">{contribPortfolio.name}</div>
+                    )}
+                  </td>
                   <td className="p-2 text-slate-400 italic truncate max-w-[120px]">{c.notes || '—'}</td>
                   <td className="p-2 text-right">
                     <div className="flex items-center justify-end gap-1.5">
