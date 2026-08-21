@@ -1968,7 +1968,7 @@ export default function RewardsTracker({
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-850 dark:text-white outline-none"
                   />
                   <div className="flex gap-2">
-                    {[12, 24].map(months => (
+                    {[12, 18, 24].map(months => (
                       <button
                         key={months}
                         type="button"
