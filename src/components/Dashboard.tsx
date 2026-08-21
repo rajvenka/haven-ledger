@@ -19,7 +19,7 @@ import {
   ArrowDown,
   ArrowUp
 } from 'lucide-react';
-import { RecurringPayment, PaymentHistory, Currency, CountryConfig, CATEGORY_COLORS, getCategoryColor, ScheduledInstance, IncomeSource } from '../types';
+import { RecurringPayment, PaymentHistory, Currency, CountryConfig, CATEGORY_COLORS, getCategoryColor, ScheduledInstance, IncomeSource, GiftCard, RewardPerk, giftCardStatus } from '../types';
 import { 
   ResponsiveContainer, 
   LineChart, 
@@ -49,10 +49,17 @@ interface DashboardProps {
   summaryCurrency: Currency;
   onRecordPayment: (payment: RecurringPayment, dueDate?: string) => void;
   onNavigateToBills?: () => void;
+  onNavigateToTab?: (tab: string) => void;
   isReadOnly?: boolean;
   currentUserUid?: string;
   monthlyIncomeEstimate?: number;
   incomeSources?: IncomeSource[];
+  portfolioHoldings?: any[];
+  portfolios?: any[];
+  workspaceCurrencyRates?: any;
+  baseCurrency?: string;
+  giftCards?: GiftCard[];
+  rewardsPerks?: RewardPerk[];
 }
 
 // Simple initials extraction helper
@@ -73,10 +80,17 @@ export default function Dashboard({
   summaryCurrency,
   onRecordPayment,
   onNavigateToBills,
+  onNavigateToTab,
   isReadOnly = false,
   currentUserUid,
   monthlyIncomeEstimate = 0,
-  incomeSources = []
+  incomeSources = [],
+  portfolioHoldings = [],
+  portfolios = [],
+  workspaceCurrencyRates,
+  baseCurrency,
+  giftCards = [],
+  rewardsPerks = []
 }: DashboardProps) {
   const isPaymentReadOnly = (payment?: RecurringPayment) => {
     if (!payment) return true;
@@ -144,6 +158,70 @@ export default function Dashboard({
     return sum + converted;
   }, 0);
 
+  // Portfolio overview card - same convertAmount logic as PortfolioV1View.tsx (a separate
+  // file, not exported/shared - duplicated here rather than a bigger shared-utility refactor
+  // for one small function), and the same tiny-price safeguard (a price below $0.01 is
+  // almost never real - a broken/sanctioned-stock feed, not a genuine market move).
+  const convertToSummaryCcy = (amount: number, fromCcy: string): number => {
+    if (!Number.isFinite(amount)) return 0;
+    const from = String(fromCcy || baseCurrency || 'USD').toUpperCase();
+    const to = String(summaryCurrency || baseCurrency || 'USD').toUpperCase();
+    const base = String(baseCurrency || 'INR').toUpperCase();
+    if (from === to) return amount;
+    const rateOf = (ccy: string) => {
+      if (ccy === base) return 1;
+      const r = (workspaceCurrencyRates || []).find((x: any) => String(x.currency || '').toUpperCase() === ccy);
+      const v = Number(r?.rate_to_base);
+      return Number.isFinite(v) && v > 0 ? v : null;
+    };
+    const fromRate = rateOf(from);
+    const toRate = rateOf(to);
+    if (fromRate == null || toRate == null) return amount;
+    return (amount * fromRate) / toRate;
+  };
+  const portfolioNameById = new Map((portfolios || []).map((p: any) => [p.id, p.name]));
+  const activeHoldings = (portfolioHoldings || []).filter((h: any) => (h.status || 'active') === 'active');
+  const PRICE_FLOOR = 0.01;
+  let portfolioTotalValue = 0;
+  let portfolioTotalPnl = 0;
+  const portfolioByBroker = new Map<string, { value: number; pnl: number }>();
+  for (const h of activeHoldings) {
+    const buy = Number(h.buy_price) || 0;
+    const live = Number(h.live_price ?? h.current_price ?? h.buy_price) || 0;
+    const leverage = Number(h.leverage) || 1;
+    const looksUnreliable = buy < PRICE_FLOOR || live < PRICE_FLOOR;
+    let value: number;
+    let pnl: number;
+    if (leverage > 1 && h.etoro_net_value_amount != null) {
+      // Leveraged/CFD holding - real cash committed, not full exposure (same distinction
+      // established throughout this session's portfolio work).
+      value = Number(h.etoro_net_value_amount) || 0;
+      pnl = looksUnreliable ? 0 : value - (Number(h.buy_price) * Number(h.quantity)) / leverage;
+    } else {
+      const qty = Number(h.quantity) || 0;
+      value = live * qty;
+      pnl = looksUnreliable ? 0 : (live - buy) * qty;
+    }
+    const ccy = h.currency || baseCurrency || 'USD';
+    const convValue = convertToSummaryCcy(value, ccy);
+    const convPnl = convertToSummaryCcy(pnl, ccy);
+    portfolioTotalValue += convValue;
+    portfolioTotalPnl += convPnl;
+    const broker = h.broker || portfolioNameById.get(h.portfolio_id) || 'Other';
+    if (!portfolioByBroker.has(broker)) portfolioByBroker.set(broker, { value: 0, pnl: 0 });
+    const b = portfolioByBroker.get(broker)!;
+    b.value += convValue;
+    b.pnl += convPnl;
+  }
+  const portfolioBrokerBreakdown = Array.from(portfolioByBroker.entries())
+    .map(([broker, v]) => ({ broker, ...v }))
+    .sort((a, b) => b.value - a.value);
+
+  // Rewards/gift cards overview card
+  const activeGiftCards = (giftCards || []).filter((c) => giftCardStatus(c) === 'active');
+  const giftCardsTotalRemaining = activeGiftCards.reduce((sum, c) => sum + convertToSummaryCcy(c.remainingBalance, c.currency), 0);
+  const activeRewardsCount = (rewardsPerks || []).length;
+
   // States
   const [currentMonthFilter, setCurrentMonthFilter] = useState<'overdue' | 'outstanding' | 'all'>('outstanding');
   const [showMonthTagFilters, setShowMonthTagFilters] = useState(false);
@@ -153,6 +231,8 @@ export default function Dashboard({
   const toggleWeekTagFilter = (tag: string) => setWeekTagFilters(prev => { const next = new Set(prev); if (next.has(tag)) next.delete(tag); else next.add(tag); return next; });
   const toggleMonthTagFilter = (tag: string) => setMonthTagFilters(prev => { const next = new Set(prev); if (next.has(tag)) next.delete(tag); else next.add(tag); return next; });
   const [isHeroBreakdownOpen, setIsHeroBreakdownOpen] = useState(false);
+  const [showPortfolioByBroker, setShowPortfolioByBroker] = useState(false);
+  const [showBillsDetail, setShowBillsDetail] = useState(false);
   const [isTrendExpanded, setIsTrendExpanded] = useState<boolean>(() => {
     const saved = localStorage.getItem('pm_is_trend_expanded');
     return saved !== 'false'; // default true
@@ -255,7 +335,115 @@ export default function Dashboard({
           </div>
         </div>
       )}
-      
+
+      {!hasNoPaymentsConfigured && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
+          {/* Bills overview card - condensed version of the detailed breakdown below, which
+              is now collapsed by default. This card is the new at-a-glance entry point;
+              clicking "See detail" re-expands the full bills breakdown further down. */}
+          <div className="apple-card p-4">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                <Wallet className="w-3.5 h-3.5" /> Bills
+              </span>
+              {dueCurrentMonth.some(ins => ins.status === 'overdue') && (
+                <span className="flex items-center gap-1 text-[9px] font-black uppercase text-rose-600 dark:text-rose-400">
+                  <Bell className="w-3 h-3" /> Overdue
+                </span>
+              )}
+            </div>
+            <p className="text-xl font-black text-slate-900 dark:text-white">
+              {formatCurrencyValue(totalDueCurrentMonthConverted, summaryCurrency, countries)}
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5">due this month{dueNextWeek.length > 0 ? ` · ${formatCurrencyValue(totalDueNextWeekConverted, summaryCurrency, countries)} next 7 days` : ''}</p>
+            <button
+              onClick={() => setShowBillsDetail(true)}
+              className="text-[10px] font-bold text-[#007aff] dark:text-[#0a84ff] mt-2 cursor-pointer"
+            >
+              See detail
+            </button>
+          </div>
+
+          {/* Portfolio overview card - total value/P&L across every holding, with a toggle
+              to break it down by broker instead of one combined figure. */}
+          {activeHoldings.length > 0 && (
+            <div className="apple-card p-4">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <TrendingUp className="w-3.5 h-3.5" /> Portfolio
+                </span>
+                <button
+                  onClick={() => onNavigateToTab?.('portfolio')}
+                  className="text-[9px] font-bold text-[#007aff] dark:text-[#0a84ff] cursor-pointer"
+                >
+                  Open
+                </button>
+              </div>
+              <p className="text-xl font-black text-slate-900 dark:text-white">
+                {formatCurrencyValue(portfolioTotalValue, summaryCurrency, countries)}
+              </p>
+              <p className={`text-[11px] font-bold mt-0.5 ${portfolioTotalPnl >= 0 ? 'text-[#34c759] dark:text-[#30d158]' : 'text-rose-500'}`}>
+                {portfolioTotalPnl >= 0 ? '+' : ''}{formatCurrencyValue(portfolioTotalPnl, summaryCurrency, countries)}
+              </p>
+              {portfolioBrokerBreakdown.length > 1 && (
+                <>
+                  <button
+                    onClick={() => setShowPortfolioByBroker(v => !v)}
+                    className="text-[10px] font-bold text-[#007aff] dark:text-[#0a84ff] mt-2 cursor-pointer"
+                  >
+                    {showPortfolioByBroker ? 'Hide by broker' : 'See by broker'}
+                  </button>
+                  {showPortfolioByBroker && (
+                    <div className="mt-2 space-y-1 border-t border-slate-100 dark:border-slate-800 pt-2">
+                      {portfolioBrokerBreakdown.map(b => (
+                        <div key={b.broker} className="flex items-center justify-between text-[10px]">
+                          <span className="text-slate-500 dark:text-slate-400 truncate">{b.broker}</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200 shrink-0 ml-2">
+                            {formatCurrencyValue(b.value, summaryCurrency, countries)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Rewards/gift cards overview card */}
+          {(activeGiftCards.length > 0 || activeRewardsCount > 0) && (
+            <div className="apple-card p-4">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" /> Rewards
+                </span>
+                <button
+                  onClick={() => onNavigateToTab?.('rewards')}
+                  className="text-[9px] font-bold text-[#007aff] dark:text-[#0a84ff] cursor-pointer"
+                >
+                  Open
+                </button>
+              </div>
+              {activeGiftCards.length > 0 && (
+                <>
+                  <p className="text-xl font-black text-slate-900 dark:text-white">
+                    {formatCurrencyValue(giftCardsTotalRemaining, summaryCurrency, countries)}
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    remaining across {activeGiftCards.length} gift card{activeGiftCards.length === 1 ? '' : 's'}
+                  </p>
+                </>
+              )}
+              {activeRewardsCount > 0 && (
+                <p className={activeGiftCards.length > 0 ? 'text-[10px] text-slate-400 mt-1' : 'text-xl font-black text-slate-900 dark:text-white'}>
+                  {activeRewardsCount} tracked reward{activeRewardsCount === 1 ? '' : 's'}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {hasNoPaymentsConfigured ? (
         /* Empty state — first thing a brand-new user sees, so make it an invitation, not a wall of zeros */
         <div className="apple-card p-8 flex flex-col items-center text-center gap-3 shrink-0">
@@ -275,8 +463,14 @@ export default function Dashboard({
             <PlusCircle className="w-4 h-4" /> Add a bill from Manage Bills
           </button>
         </div>
-      ) : (
+      ) : showBillsDetail ? (
         <>
+          <button
+            onClick={() => setShowBillsDetail(false)}
+            className="text-[10px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer flex items-center gap-1"
+          >
+            <ChevronUp className="w-3 h-3" /> Hide bill details
+          </button>
           {/* Hero — the single most useful number: your real remaining surplus, or what's due if income isn't set yet */}
           <div className="apple-card p-5 shrink-0">
             {monthlyIncomeEstimate > 0 ? (
@@ -383,10 +577,10 @@ export default function Dashboard({
             </div>
           </div>
         </>
-      )}
+      ) : null}
 
       {/* Alternative High Density Desktop Grid Layout (Responsive split: One column setting) */}
-      {!hasNoPaymentsConfigured && (
+      {!hasNoPaymentsConfigured && showBillsDetail && (
       <div className="grid grid-cols-1 gap-4 items-start pb-6">
         
         {/* Analytics, Charts & Insights */}

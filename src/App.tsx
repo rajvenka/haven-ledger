@@ -1730,9 +1730,16 @@ export default function App() {
                   summaryCurrency={summaryCurrency}
                   onRecordPayment={handleRecordPayment}
                   onNavigateToBills={() => setActiveTab('configure')}
+                  onNavigateToTab={(tab) => setActiveTab(tab as any)}
                   isReadOnly={userProfile?.role === 'view'}
                   monthlyIncomeEstimate={parseFloat(monthlyIncome) || 0}
                   incomeSources={incomeSources}
+                  portfolioHoldings={portfolioHoldings}
+                  portfolios={portfolios}
+                  workspaceCurrencyRates={workspaceCurrencyRates}
+                  baseCurrency={activeWorkspace?.baseCurrency}
+                  giftCards={giftCards}
+                  rewardsPerks={rewardsPerks}
                 />
               )
             ) : activeTab === 'expenses' && hasFeature('core') ? (
