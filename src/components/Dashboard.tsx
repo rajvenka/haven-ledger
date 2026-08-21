@@ -194,18 +194,25 @@ export default function Dashboard({
     const buy = Number(h.buy_price) || 0;
     const live = Number(h.live_price ?? h.current_price ?? h.buy_price) || 0;
     const leverage = Number(h.leverage) || 1;
+    const qty = Number(h.quantity) || 0;
     const looksUnreliable = buy < PRICE_FLOOR || live < PRICE_FLOOR;
+    // Dollar P&L is always the raw, leverage-independent (live - buy) * qty, same formula
+    // for every holding regardless of leverage - matches the same fix already made this
+    // session for the Agent (api/agent.ts, AgentAssistant.tsx) and Pulse
+    // (PortfolioV1View.tsx). Deriving P&L from "value minus a separately-computed margin"
+    // is NOT mathematically guaranteed to equal the real dollar gain/loss - verified against
+    // live data this was producing a false +$14.4k "profit" for a portfolio actually down
+    // ~$29.9k, because the two sides (a live net-value figure vs a static margin
+    // calculation) have no guaranteed relationship to each other.
+    const pnl = looksUnreliable ? 0 : (live - buy) * qty;
     let value: number;
-    let pnl: number;
     if (leverage > 1 && h.etoro_net_value_amount != null) {
       // Leveraged/CFD holding - real cash committed, not full exposure (same distinction
-      // established throughout this session's portfolio work).
+      // established throughout this session's portfolio work). Only the VALUE shown differs
+      // by leverage - the dollar P&L above never does.
       value = Number(h.etoro_net_value_amount) || 0;
-      pnl = looksUnreliable ? 0 : value - (Number(h.buy_price) * Number(h.quantity)) / leverage;
     } else {
-      const qty = Number(h.quantity) || 0;
       value = live * qty;
-      pnl = looksUnreliable ? 0 : (live - buy) * qty;
     }
     // Today's change - same previous_close approach as the Agent's daily digest
     // (buildLocalDailyDigest, AgentAssistant.tsx), reusing the same data rather than a
