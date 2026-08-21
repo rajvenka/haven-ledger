@@ -232,7 +232,7 @@ export default function Dashboard({
   const toggleMonthTagFilter = (tag: string) => setMonthTagFilters(prev => { const next = new Set(prev); if (next.has(tag)) next.delete(tag); else next.add(tag); return next; });
   const [isHeroBreakdownOpen, setIsHeroBreakdownOpen] = useState(false);
   const [showPortfolioByBroker, setShowPortfolioByBroker] = useState(false);
-  const [showBillsDetail, setShowBillsDetail] = useState(false);
+  const [showBillsDetail, setShowBillsDetail] = useState(true);
   const [isTrendExpanded, setIsTrendExpanded] = useState<boolean>(() => {
     const saved = localStorage.getItem('pm_is_trend_expanded');
     return saved !== 'false'; // default true
