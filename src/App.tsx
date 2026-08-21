@@ -702,6 +702,20 @@ export default function App() {
                   <span className="absolute -top-0.5 -right-0.5 px-1 py-px rounded-full bg-rose-500 text-white text-[7px] font-black leading-none">NEW</span>
                 )}
               </button>
+              {user && hasFeature('agent') && (
+                <button
+                  type="button"
+                  onClick={toggleAgent}
+                  title="Haven AI Agent"
+                  className={`p-2 rounded-full transition-colors cursor-pointer ${
+                    isAgentOpen
+                      ? 'text-white bg-indigo-600'
+                      : 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-950/70'
+                  }`}
+                >
+                  <Bot className="w-4 h-4" />
+                </button>
+              )}
               <button
                 onClick={() => {
                   const nextTheme = theme === 'light' ? 'dark' : 'light';
