@@ -189,7 +189,7 @@ export default function Dashboard({
   let portfolioTotalPnl = 0;
   let portfolioTotalDayChange = 0;
   const portfolioByBroker = new Map<string, { value: number; pnl: number }>();
-  const portfolioByName = new Map<string, { value: number; pnl: number; dayChange: number }>();
+  const portfolioByName = new Map<string, { value: number; pnl: number; dayChange: number; nativeValue: number; nativePnl: number; nativeDayChange: number; currency: string }>();
   for (const h of activeHoldings) {
     const buy = Number(h.buy_price) || 0;
     const live = Number(h.live_price ?? h.current_price ?? h.buy_price) || 0;
@@ -238,11 +238,20 @@ export default function Dashboard({
     b.pnl += convPnl;
 
     const portfolioName = portfolioNameById.get(h.portfolio_id) || 'Default';
-    if (!portfolioByName.has(portfolioName)) portfolioByName.set(portfolioName, { value: 0, pnl: 0, dayChange: 0 });
+    if (!portfolioByName.has(portfolioName)) {
+      // A specific portfolio's own currency (from the portfolios table) - not the
+      // per-holding currency, which is usually the same but the portfolio record is the
+      // more reliable source of truth for "what currency is this portfolio in".
+      const portfolioCcy = (portfolios || []).find((p: any) => p.id === h.portfolio_id)?.currency || ccy;
+      portfolioByName.set(portfolioName, { value: 0, pnl: 0, dayChange: 0, nativeValue: 0, nativePnl: 0, nativeDayChange: 0, currency: portfolioCcy });
+    }
     const p = portfolioByName.get(portfolioName)!;
     p.value += convValue;
     p.pnl += convPnl;
     p.dayChange += convDayChange;
+    p.nativeValue += value;
+    p.nativePnl += pnl;
+    p.nativeDayChange += dayChange;
   }
   const portfolioBrokerBreakdown = Array.from(portfolioByBroker.entries())
     .map(([broker, v]) => ({ broker, ...v }))
@@ -522,8 +531,9 @@ export default function Dashboard({
               </BarChart>
             </ResponsiveContainer>
           </div>
-          {/* Table - name, total value, total P&L, today's change - same data source as the
-              Agent's daily digest (previous_close for day change), not a separate pipeline */}
+          {/* Table - name, total value, total P&L, today's change, each in the portfolio's
+              own native currency (not converted) - same data source as the Agent's daily
+              digest (previous_close for day change), not a separate pipeline */}
           <div className="overflow-x-auto mt-2">
             <table className="w-full text-[11px]">
               <thead>
@@ -539,13 +549,13 @@ export default function Dashboard({
                   <tr key={p.name} className="border-b border-slate-50 dark:border-slate-900/50 last:border-0">
                     <td className="py-1.5 font-semibold text-slate-900 dark:text-white truncate max-w-[100px]">{p.name}</td>
                     <td className="py-1.5 text-right font-bold text-slate-800 dark:text-slate-200">
-                      {formatCurrencyValue(p.value, summaryCurrency, countries)}
+                      {formatCurrencyValue(p.nativeValue, p.currency as Currency, countries)}
                     </td>
-                    <td className={`py-1.5 text-right font-bold ${p.pnl >= 0 ? 'text-[#34c759] dark:text-[#30d158]' : 'text-rose-500'}`}>
-                      {p.pnl >= 0 ? '+' : ''}{formatCurrencyValue(p.pnl, summaryCurrency, countries)}
+                    <td className={`py-1.5 text-right font-bold ${p.nativePnl >= 0 ? 'text-[#34c759] dark:text-[#30d158]' : 'text-rose-500'}`}>
+                      {p.nativePnl >= 0 ? '+' : ''}{formatCurrencyValue(p.nativePnl, p.currency as Currency, countries)}
                     </td>
-                    <td className={`py-1.5 text-right font-bold ${p.dayChange >= 0 ? 'text-[#34c759] dark:text-[#30d158]' : 'text-rose-500'}`}>
-                      {p.dayChange >= 0 ? '+' : ''}{formatCurrencyValue(p.dayChange, summaryCurrency, countries)}
+                    <td className={`py-1.5 text-right font-bold ${p.nativeDayChange >= 0 ? 'text-[#34c759] dark:text-[#30d158]' : 'text-rose-500'}`}>
+                      {p.nativeDayChange >= 0 ? '+' : ''}{formatCurrencyValue(p.nativeDayChange, p.currency as Currency, countries)}
                     </td>
                   </tr>
                 ))}
