@@ -194,7 +194,7 @@ export default function Dashboard({
   let portfolioTotalPnl = 0;
   let portfolioTotalDayChange = 0;
   const portfolioByBroker = new Map<string, { value: number; pnl: number }>();
-  const portfolioByName = new Map<string, { value: number; pnl: number; dayChange: number; nativeValue: number; nativePnl: number; nativeDayChange: number; currency: string }>();
+  const portfolioByName = new Map<string, { value: number; pnl: number; dayChange: number; nativeValue: number; nativePnl: number; nativeDayChange: number; currency: string; isMixedCurrency: boolean }>();
   for (const h of activeHoldings) {
     const buy = Number(h.buy_price) || 0;
     const live = Number(h.live_price ?? h.current_price ?? h.buy_price) || 0;
@@ -248,15 +248,24 @@ export default function Dashboard({
       // per-holding currency, which is usually the same but the portfolio record is the
       // more reliable source of truth for "what currency is this portfolio in".
       const portfolioCcy = (portfolios || []).find((p: any) => p.id === h.portfolio_id)?.currency || ccy;
-      portfolioByName.set(portfolioName, { value: 0, pnl: 0, dayChange: 0, nativeValue: 0, nativePnl: 0, nativeDayChange: 0, currency: portfolioCcy });
+      portfolioByName.set(portfolioName, { value: 0, pnl: 0, dayChange: 0, nativeValue: 0, nativePnl: 0, nativeDayChange: 0, currency: portfolioCcy, isMixedCurrency: false });
     }
     const p = portfolioByName.get(portfolioName)!;
     p.value += convValue;
     p.pnl += convPnl;
     p.dayChange += convDayChange;
-    p.nativeValue += value;
-    p.nativePnl += pnl;
-    p.nativeDayChange += dayChange;
+    // Only sum raw, unconverted numbers when this holding actually matches the portfolio's
+    // own currency - a portfolio with genuinely mixed currencies (confirmed: WEBULL SASI has
+    // both AUD and USD holdings) would otherwise get raw AUD numbers and raw USD numbers
+    // added together and mislabeled entirely as one or the other, a meaningless total. Any
+    // holding in a different currency flags the whole portfolio as mixed instead.
+    if (ccy.toUpperCase() === p.currency.toUpperCase()) {
+      p.nativeValue += value;
+      p.nativePnl += pnl;
+      p.nativeDayChange += dayChange;
+    } else {
+      p.isMixedCurrency = true;
+    }
   }
   const portfolioBrokerBreakdown = Array.from(portfolioByBroker.entries())
     .map(([broker, v]) => ({ broker, ...v }))
@@ -559,20 +568,29 @@ export default function Dashboard({
                 </tr>
               </thead>
               <tbody>
-                {portfolioNameBreakdown.map(p => (
-                  <tr key={p.name} className="border-b border-slate-50 dark:border-slate-900/50 last:border-0">
-                    <td className="py-1.5 font-semibold text-slate-900 dark:text-white truncate max-w-[100px]">{p.name}</td>
-                    <td className="py-1.5 text-right font-bold text-slate-800 dark:text-slate-200">
-                      {formatCurrencyValue(p.nativeValue, p.currency as Currency, countries)}
-                    </td>
-                    <td className={`py-1.5 text-right font-bold ${p.nativePnl >= 0 ? 'text-[#34c759] dark:text-[#30d158]' : 'text-rose-500'}`}>
-                      {p.nativePnl >= 0 ? '+' : ''}{formatCurrencyValue(p.nativePnl, p.currency as Currency, countries)}
-                    </td>
-                    <td className={`py-1.5 text-right font-bold ${p.nativeDayChange >= 0 ? 'text-[#34c759] dark:text-[#30d158]' : 'text-rose-500'}`}>
-                      {p.nativeDayChange >= 0 ? '+' : ''}{formatCurrencyValue(p.nativeDayChange, p.currency as Currency, countries)}
-                    </td>
-                  </tr>
-                ))}
+                {portfolioNameBreakdown.map(p => {
+                  const displayValue = p.isMixedCurrency ? p.value : p.nativeValue;
+                  const displayPnl = p.isMixedCurrency ? p.pnl : p.nativePnl;
+                  const displayDayChange = p.isMixedCurrency ? p.dayChange : p.nativeDayChange;
+                  const displayCcy = p.isMixedCurrency ? summaryCurrency : (p.currency as Currency);
+                  return (
+                    <tr key={p.name} className="border-b border-slate-50 dark:border-slate-900/50 last:border-0">
+                      <td className="py-1.5 font-semibold text-slate-900 dark:text-white truncate max-w-[100px]">
+                        {p.name}
+                        {p.isMixedCurrency && <span className="text-[8px] text-slate-400 font-normal ml-1">(mixed)</span>}
+                      </td>
+                      <td className="py-1.5 text-right font-bold text-slate-800 dark:text-slate-200">
+                        {formatCurrencyValue(displayValue, displayCcy, countries)}
+                      </td>
+                      <td className={`py-1.5 text-right font-bold ${displayPnl >= 0 ? 'text-[#34c759] dark:text-[#30d158]' : 'text-rose-500'}`}>
+                        {displayPnl >= 0 ? '+' : ''}{formatCurrencyValue(displayPnl, displayCcy, countries)}
+                      </td>
+                      <td className={`py-1.5 text-right font-bold ${displayDayChange >= 0 ? 'text-[#34c759] dark:text-[#30d158]' : 'text-rose-500'}`}>
+                        {displayDayChange >= 0 ? '+' : ''}{formatCurrencyValue(displayDayChange, displayCcy, countries)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
