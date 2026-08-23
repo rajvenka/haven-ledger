@@ -294,6 +294,12 @@ export default function Dashboard({
   // default since that was the previous default-open behavior.
   const [activeTile, setActiveTile] = useState<'bills' | 'portfolio' | 'rewards' | null>('bills');
   const toggleTile = (tile: 'bills' | 'portfolio' | 'rewards') => setActiveTile(prev => (prev === tile ? null : tile));
+  // Overall (all-time) vs daily (today's change) P&L - shared across the Portfolio tile,
+  // chart, and table so switching it in one place changes all three consistently.
+  const [pnlMode, setPnlMode] = useState<'overall' | 'daily'>('overall');
+  const [portfolioSort, setPortfolioSort] = useState<{ field: 'name' | 'value' | 'pnl'; dir: 'asc' | 'desc' }>({ field: 'value', dir: 'desc' });
+  const togglePortfolioSort = (field: 'name' | 'value' | 'pnl') =>
+    setPortfolioSort(prev => (prev.field === field ? { field, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: field === 'name' ? 'asc' : 'desc' }));
   const [isTrendExpanded, setIsTrendExpanded] = useState<boolean>(() => {
     const saved = localStorage.getItem('pm_is_trend_expanded');
     return saved !== 'false'; // default true
@@ -446,9 +452,26 @@ export default function Dashboard({
               <p className="text-xl font-black text-slate-900 dark:text-white">
                 {formatCurrencyValue(portfolioTotalValue, summaryCurrency, countries)}
               </p>
-              <p className={`text-[11px] font-bold mt-0.5 ${portfolioTotalPnl >= 0 ? 'text-[#34c759] dark:text-[#30d158]' : 'text-rose-500'}`}>
-                {portfolioTotalPnl >= 0 ? '+' : ''}{formatCurrencyValue(portfolioTotalPnl, summaryCurrency, countries)}
-              </p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <p className={`text-[11px] font-bold ${(pnlMode === 'daily' ? portfolioTotalDayChange : portfolioTotalPnl) >= 0 ? 'text-[#34c759] dark:text-[#30d158]' : 'text-rose-500'}`}>
+                  {(pnlMode === 'daily' ? portfolioTotalDayChange : portfolioTotalPnl) >= 0 ? '+' : ''}
+                  {formatCurrencyValue(pnlMode === 'daily' ? portfolioTotalDayChange : portfolioTotalPnl, summaryCurrency, countries)}
+                </p>
+                <div className="flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5 text-[8px] font-black uppercase" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => setPnlMode('overall')}
+                    className={`px-1.5 py-0.5 rounded-full cursor-pointer ${pnlMode === 'overall' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400'}`}
+                  >
+                    Overall
+                  </button>
+                  <button
+                    onClick={() => setPnlMode('daily')}
+                    className={`px-1.5 py-0.5 rounded-full cursor-pointer ${pnlMode === 'daily' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400'}`}
+                  >
+                    Daily
+                  </button>
+                </div>
+              </div>
               {portfolioBrokerBreakdown.length > 1 && (
                 <>
                   <button
@@ -525,75 +548,116 @@ export default function Dashboard({
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
               <TrendingUp className="w-3.5 h-3.5" /> Portfolio Summary
             </span>
-            <button
-              onClick={() => setActiveTile(null)}
-              className="text-[10px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer flex items-center gap-1"
-            >
-              <ChevronUp className="w-3 h-3" /> Hide
-            </button>
-          </div>
-          {/* Chart - one bar per portfolio, colored by whether it's up or down today */}
-          <div style={{ height: Math.max(100, portfolioNameBreakdown.length * 32) }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={portfolioNameBreakdown.map(p => ({ name: p.name, value: p.value }))}
-                layout="vertical"
-                margin={{ top: 0, right: 16, left: 0, bottom: 0 }}
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5 text-[8px] font-black uppercase">
+                <button
+                  onClick={() => setPnlMode('overall')}
+                  className={`px-1.5 py-0.5 rounded-full cursor-pointer ${pnlMode === 'overall' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400'}`}
+                >
+                  Overall
+                </button>
+                <button
+                  onClick={() => setPnlMode('daily')}
+                  className={`px-1.5 py-0.5 rounded-full cursor-pointer ${pnlMode === 'daily' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400'}`}
+                >
+                  Daily
+                </button>
+              </div>
+              <button
+                onClick={() => setActiveTile(null)}
+                className="text-[10px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer flex items-center gap-1"
               >
-                <XAxis type="number" tick={{ fontSize: 9 }} hide />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={90} />
-                <Tooltip
-                  formatter={(v: number) => [formatCurrencyValue(v, summaryCurrency, countries), 'Value']}
-                  contentStyle={{ fontSize: 11, borderRadius: 8 }}
-                />
-                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                  {portfolioNameBreakdown.map((p, i) => (
-                    <Cell key={i} fill={p.dayChange >= 0 ? '#34c759' : '#ff3b30'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+                <ChevronUp className="w-3 h-3" /> Hide
+              </button>
+            </div>
           </div>
-          {/* Table - name, total value, total P&L, today's change, each in the portfolio's
-              own native currency (not converted) - same data source as the Agent's daily
-              digest (previous_close for day change), not a separate pipeline */}
-          <div className="overflow-x-auto mt-2">
-            <table className="w-full text-[11px]">
-              <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
-                  <th className="text-left py-1.5">Portfolio</th>
-                  <th className="text-right py-1.5">Value</th>
-                  <th className="text-right py-1.5">P&L</th>
-                  <th className="text-right py-1.5">Today</th>
-                </tr>
-              </thead>
-              <tbody>
-                {portfolioNameBreakdown.map(p => {
-                  const displayValue = p.isMixedCurrency ? p.value : p.nativeValue;
-                  const displayPnl = p.isMixedCurrency ? p.pnl : p.nativePnl;
-                  const displayDayChange = p.isMixedCurrency ? p.dayChange : p.nativeDayChange;
-                  const displayCcy = p.isMixedCurrency ? summaryCurrency : (p.currency as Currency);
-                  return (
-                    <tr key={p.name} className="border-b border-slate-50 dark:border-slate-900/50 last:border-0">
-                      <td className="py-1.5 font-semibold text-slate-900 dark:text-white truncate max-w-[100px]">
-                        {p.name}
-                        {p.isMixedCurrency && <span className="text-[8px] text-slate-400 font-normal ml-1">(mixed)</span>}
-                      </td>
-                      <td className="py-1.5 text-right font-bold text-slate-800 dark:text-slate-200">
-                        {formatCurrencyValue(displayValue, displayCcy, countries)}
-                      </td>
-                      <td className={`py-1.5 text-right font-bold ${displayPnl >= 0 ? 'text-[#34c759] dark:text-[#30d158]' : 'text-rose-500'}`}>
-                        {displayPnl >= 0 ? '+' : ''}{formatCurrencyValue(displayPnl, displayCcy, countries)}
-                      </td>
-                      <td className={`py-1.5 text-right font-bold ${displayDayChange >= 0 ? 'text-[#34c759] dark:text-[#30d158]' : 'text-rose-500'}`}>
-                        {displayDayChange >= 0 ? '+' : ''}{formatCurrencyValue(displayDayChange, displayCcy, countries)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          {(() => {
+            // Pre-compute the display figures once (mode + mixed-currency resolution),
+            // reused by both the chart and the table below, and by sorting.
+            const rows = portfolioNameBreakdown.map(p => {
+              const displayValue = p.isMixedCurrency ? p.value : p.nativeValue;
+              const displayPnl = p.isMixedCurrency
+                ? (pnlMode === 'daily' ? p.dayChange : p.pnl)
+                : (pnlMode === 'daily' ? p.nativeDayChange : p.nativePnl);
+              const displayCcy = p.isMixedCurrency ? summaryCurrency : (p.currency as Currency);
+              return { ...p, displayValue, displayPnl, displayCcy };
+            });
+            const sorted = [...rows].sort((a, b) => {
+              let cmp = 0;
+              if (portfolioSort.field === 'name') cmp = a.name.localeCompare(b.name);
+              else if (portfolioSort.field === 'value') cmp = a.displayValue - b.displayValue;
+              else cmp = a.displayPnl - b.displayPnl;
+              return portfolioSort.dir === 'asc' ? cmp : -cmp;
+            });
+            const sortIcon = (field: 'name' | 'value' | 'pnl') =>
+              portfolioSort.field === field ? (portfolioSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+            return (
+              <>
+                {/* Chart - one bar per portfolio, P&L for the selected mode (overall/daily),
+                    colored green/red by sign. Bars can go negative, so the axis is visible
+                    rather than hidden. */}
+                <div style={{ height: Math.max(100, sorted.length * 32) }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={sorted.map(p => ({ name: p.name, pnl: p.displayPnl }))}
+                      layout="vertical"
+                      margin={{ top: 0, right: 16, left: 0, bottom: 0 }}
+                    >
+                      <XAxis type="number" tick={{ fontSize: 9 }} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={90} />
+                      <Tooltip
+                        formatter={(v: number) => [formatCurrencyValue(v, summaryCurrency, countries), pnlMode === 'daily' ? "Today's P&L" : 'P&L']}
+                        contentStyle={{ fontSize: 11, borderRadius: 8 }}
+                      />
+                      <Bar dataKey="pnl" radius={[0, 4, 4, 0]}>
+                        {sorted.map((p, i) => (
+                          <Cell key={i} fill={p.displayPnl >= 0 ? '#34c759' : '#ff3b30'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                {/* Table - name, total value, and P&L for the selected mode, each in the
+                    portfolio's own native currency (or converted, for genuinely
+                    mixed-currency portfolios) - same data source as the Agent's daily
+                    digest (previous_close for day change), not a separate pipeline. Columns
+                    are sortable - click a header to sort by it, click again to reverse. */}
+                <div className="overflow-x-auto mt-2">
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                        <th className="text-left py-1.5 cursor-pointer select-none" onClick={() => togglePortfolioSort('name')}>
+                          Portfolio{sortIcon('name')}
+                        </th>
+                        <th className="text-right py-1.5 cursor-pointer select-none" onClick={() => togglePortfolioSort('value')}>
+                          Value{sortIcon('value')}
+                        </th>
+                        <th className="text-right py-1.5 cursor-pointer select-none" onClick={() => togglePortfolioSort('pnl')}>
+                          {pnlMode === 'daily' ? 'Today' : 'P&L'}{sortIcon('pnl')}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sorted.map(p => (
+                        <tr key={p.name} className="border-b border-slate-50 dark:border-slate-900/50 last:border-0">
+                          <td className="py-1.5 font-semibold text-slate-900 dark:text-white truncate max-w-[100px]">
+                            {p.name}
+                            {p.isMixedCurrency && <span className="text-[8px] text-slate-400 font-normal ml-1">(mixed)</span>}
+                          </td>
+                          <td className="py-1.5 text-right font-bold text-slate-800 dark:text-slate-200">
+                            {formatCurrencyValue(p.displayValue, p.displayCcy, countries)}
+                          </td>
+                          <td className={`py-1.5 text-right font-bold ${p.displayPnl >= 0 ? 'text-[#34c759] dark:text-[#30d158]' : 'text-rose-500'}`}>
+                            {p.displayPnl >= 0 ? '+' : ''}{formatCurrencyValue(p.displayPnl, p.displayCcy, countries)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
 
