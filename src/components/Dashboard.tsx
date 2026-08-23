@@ -183,13 +183,12 @@ export default function Dashboard({
     return (amount * fromRate) / toRate;
   };
   const portfolioNameById = new Map((portfolios || []).map((p: any) => [p.id, p.name]));
-  // Options are excluded from this summary entirely - the app has no contract-multiplier or
-  // options-specific valuation logic anywhere (confirmed: PortfolioV1View.tsx uses the exact
-  // same naive (live-buy)*qty formula), so a holding's stored buy/live prices for an option
-  // can look like a huge, misleading swing that isn't actually meaningful without knowing
-  // the real contract terms. Rather than show a number that can't be guaranteed correct,
-  // it's left out until the app has proper options handling.
-  const activeHoldings = (portfolioHoldings || []).filter((h: any) => (h.status || 'active') === 'active' && h.holding_type !== 'options');
+  // Options are included here again - the earlier concern (a broken price feed corrupting
+  // an option's stored price) is fixed: both option holdings' prices are confirmed correct
+  // now, and refreshAllPrices (Classic and Pulse) excludes options entirely going forward,
+  // so the same broken Yahoo lookup can't overwrite them again. Same plain (live-buy)*qty
+  // math as every other holding, matching the Holdings page's own total.
+  const activeHoldings = (portfolioHoldings || []).filter((h: any) => (h.status || 'active') === 'active');
   const PRICE_FLOOR = 0.01;
   let portfolioTotalValue = 0;
   let portfolioTotalPnl = 0;
