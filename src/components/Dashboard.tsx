@@ -407,11 +407,14 @@ export default function Dashboard({
         </div>
       )}
 
-      {!hasNoPaymentsConfigured && (
+      {(!hasNoPaymentsConfigured || activeHoldings.length > 0 || activeGiftCards.length > 0 || activeRewardsCount > 0) && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
           {/* Bills overview card - condensed version of the detailed breakdown below, which
               is now collapsed by default. This card is the new at-a-glance entry point;
-              clicking "See detail" re-expands the full bills breakdown further down. */}
+              clicking "See detail" re-expands the full bills breakdown further down. Only
+              shown when bills actually exist - a workspace with only portfolio or rewards
+              data (no bills configured at all) shouldn't see an empty/misleading Bills tile. */}
+          {!hasNoPaymentsConfigured && (
           <div
             onClick={() => toggleTile('bills')}
             className={`apple-card p-4 cursor-pointer transition-shadow ${activeTile === 'bills' ? 'ring-2 ring-[#007aff]/40 dark:ring-[#0a84ff]/40' : 'hover:shadow-md'}`}
@@ -434,6 +437,7 @@ export default function Dashboard({
               {activeTile === 'bills' ? 'Hide detail' : 'See detail'}
             </p>
           </div>
+          )}
 
           {/* Portfolio overview card - total value/P&L across every holding, with a toggle
               to break it down by broker instead of one combined figure. */}
