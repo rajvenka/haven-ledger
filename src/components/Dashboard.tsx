@@ -165,10 +165,10 @@ export default function Dashboard({
   // file, not exported/shared - duplicated here rather than a bigger shared-utility refactor
   // for one small function), and the same tiny-price safeguard (a price below $0.01 is
   // almost never real - a broken/sanctioned-stock feed, not a genuine market move).
-  const convertToSummaryCcy = (amount: number, fromCcy: string): number => {
+  const convertToSummaryCcy = (amount: number, fromCcy: string, toCcyOverride?: string): number => {
     if (!Number.isFinite(amount)) return 0;
     const from = String(fromCcy || baseCurrency || 'USD').toUpperCase();
-    const to = String(summaryCurrency || baseCurrency || 'USD').toUpperCase();
+    const to = String(toCcyOverride || summaryCurrency || baseCurrency || 'USD').toUpperCase();
     const base = String(baseCurrency || 'INR').toUpperCase();
     if (from === to) return amount;
     const rateOf = (ccy: string) => {
@@ -300,6 +300,10 @@ export default function Dashboard({
   const [portfolioSort, setPortfolioSort] = useState<{ field: 'name' | 'value' | 'pnl'; dir: 'asc' | 'desc' }>({ field: 'value', dir: 'desc' });
   const togglePortfolioSort = (field: 'name' | 'value' | 'pnl') =>
     setPortfolioSort(prev => (prev.field === field ? { field, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: field === 'name' ? 'asc' : 'desc' }));
+  // 'native' (default) keeps the existing behavior: each portfolio shown in its own
+  // currency, falling back to summaryCurrency only for genuinely mixed-currency portfolios.
+  // Picking an explicit currency overrides this and converts every portfolio into it.
+  const [portfolioDisplayCcy, setPortfolioDisplayCcy] = useState<string>('native');
   const [isTrendExpanded, setIsTrendExpanded] = useState<boolean>(() => {
     const saved = localStorage.getItem('pm_is_trend_expanded');
     return saved !== 'false'; // default true
@@ -563,6 +567,16 @@ export default function Dashboard({
                   Daily
                 </button>
               </div>
+              <select
+                value={portfolioDisplayCcy}
+                onChange={(e) => setPortfolioDisplayCcy(e.target.value)}
+                className="text-[9px] font-bold rounded-full bg-slate-100 dark:bg-slate-800 border-0 px-2 py-1 text-slate-700 dark:text-slate-200 cursor-pointer"
+              >
+                <option value="native">Native</option>
+                {Array.from(new Set((countries || []).map((c) => c.currency))).sort().map((ccy) => (
+                  <option key={ccy} value={ccy}>{ccy}</option>
+                ))}
+              </select>
               <button
                 onClick={() => setActiveTile(null)}
                 className="text-[10px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer flex items-center gap-1"
@@ -572,15 +586,33 @@ export default function Dashboard({
             </div>
           </div>
           {(() => {
-            // Pre-compute the display figures once (mode + mixed-currency resolution),
-            // reused by both the chart and the table below, and by sorting.
+            // Pre-compute the display figures once (mode + currency resolution), reused by
+            // both the chart and the table below, and by sorting.
+            const useNative = portfolioDisplayCcy === 'native';
             const rows = portfolioNameBreakdown.map(p => {
-              const displayValue = p.isMixedCurrency ? p.value : p.nativeValue;
-              const displayPnl = p.isMixedCurrency
+              if (useNative) {
+                const displayValue = p.isMixedCurrency ? p.value : p.nativeValue;
+                const displayPnl = p.isMixedCurrency
+                  ? (pnlMode === 'daily' ? p.dayChange : p.pnl)
+                  : (pnlMode === 'daily' ? p.nativeDayChange : p.nativePnl);
+                const displayCcy = p.isMixedCurrency ? summaryCurrency : (p.currency as Currency);
+                return { ...p, displayValue, displayPnl, displayCcy };
+              }
+              // An explicit currency was picked - convert directly from each portfolio's own
+              // native value/P&L (single conversion step), or from the already-converted
+              // mixed-currency total (summaryCurrency) for portfolios that have no single
+              // native currency to convert from.
+              const targetCcy = portfolioDisplayCcy;
+              const displayValue = p.isMixedCurrency
+                ? convertToSummaryCcy(p.value, summaryCurrency, targetCcy)
+                : convertToSummaryCcy(p.nativeValue, p.currency, targetCcy);
+              const rawPnl = p.isMixedCurrency
                 ? (pnlMode === 'daily' ? p.dayChange : p.pnl)
                 : (pnlMode === 'daily' ? p.nativeDayChange : p.nativePnl);
-              const displayCcy = p.isMixedCurrency ? summaryCurrency : (p.currency as Currency);
-              return { ...p, displayValue, displayPnl, displayCcy };
+              const displayPnl = p.isMixedCurrency
+                ? convertToSummaryCcy(rawPnl, summaryCurrency, targetCcy)
+                : convertToSummaryCcy(rawPnl, p.currency, targetCcy);
+              return { ...p, displayValue, displayPnl, displayCcy: targetCcy as Currency };
             });
             const sorted = [...rows].sort((a, b) => {
               let cmp = 0;
@@ -599,14 +631,17 @@ export default function Dashboard({
                 <div style={{ height: Math.max(100, sorted.length * 32) }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
-                      data={sorted.map(p => ({ name: p.name, pnl: p.displayPnl }))}
+                      data={sorted.map(p => ({ name: p.name, pnl: p.displayPnl, ccy: p.displayCcy }))}
                       layout="vertical"
                       margin={{ top: 0, right: 16, left: 0, bottom: 0 }}
                     >
                       <XAxis type="number" tick={{ fontSize: 9 }} />
                       <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={90} />
                       <Tooltip
-                        formatter={(v: number) => [formatCurrencyValue(v, summaryCurrency, countries), pnlMode === 'daily' ? "Today's P&L" : 'P&L']}
+                        formatter={(v: number, _name: string, props: any) => [
+                          formatCurrencyValue(v, props?.payload?.ccy || summaryCurrency, countries),
+                          pnlMode === 'daily' ? "Today's P&L" : 'P&L',
+                        ]}
                         contentStyle={{ fontSize: 11, borderRadius: 8 }}
                       />
                       <Bar dataKey="pnl" radius={[0, 4, 4, 0]}>
