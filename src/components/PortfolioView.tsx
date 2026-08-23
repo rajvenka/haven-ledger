@@ -5617,8 +5617,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           <td className="p-2.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="relative max-w-[140px] min-w-[70px]">
-                                <span onClick={() => setExpandedNameId(prev => (prev === h.id ? null : h.id))} onMouseEnter={() => setExpandedNameId(h.id)} onMouseLeave={() => setExpandedNameId(prev => (prev === h.id ? null : prev))} className="font-bold text-slate-900 dark:text-white truncate cursor-pointer inline-flex items-center gap-1">
-                                  {h.symbol}
+                                <span onClick={() => setExpandedNameId(prev => (prev === h.id ? null : h.id))} onMouseEnter={() => setExpandedNameId(h.id)} onMouseLeave={() => setExpandedNameId(prev => (prev === h.id ? null : prev))} className="font-bold text-slate-900 dark:text-white cursor-pointer inline-flex items-center gap-1 max-w-full">
+                                  <span className="truncate block min-w-0">{h.symbol}</span>
                                   {h.notes && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Has a note" />}
                                 </span>
                                 {expandedNameId === h.id && (
@@ -6105,8 +6105,8 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           <td className="p-2.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="relative max-w-[140px] min-w-[70px]">
-                                <span onClick={() => setExpandedNameId(prev => (prev === h.id ? null : h.id))} onMouseEnter={() => setExpandedNameId(h.id)} onMouseLeave={() => setExpandedNameId(prev => (prev === h.id ? null : prev))} className="font-bold text-slate-900 dark:text-white truncate cursor-pointer inline-flex items-center gap-1">
-                                  {h.symbol}
+                                <span onClick={() => setExpandedNameId(prev => (prev === h.id ? null : h.id))} onMouseEnter={() => setExpandedNameId(h.id)} onMouseLeave={() => setExpandedNameId(prev => (prev === h.id ? null : prev))} className="font-bold text-slate-900 dark:text-white cursor-pointer inline-flex items-center gap-1 max-w-full">
+                                  <span className="truncate block min-w-0">{h.symbol}</span>
                                   {h.notes && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Has a note" />}
                                 </span>
                                 {expandedNameId === h.id && (
