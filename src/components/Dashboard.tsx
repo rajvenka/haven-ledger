@@ -571,16 +571,6 @@ export default function Dashboard({
                   Daily
                 </button>
               </div>
-              <select
-                value={portfolioDisplayCcy}
-                onChange={(e) => setPortfolioDisplayCcy(e.target.value)}
-                className="text-[9px] font-bold rounded-full bg-slate-100 dark:bg-slate-800 border-0 px-2 py-1 text-slate-700 dark:text-slate-200 cursor-pointer"
-              >
-                <option value="native">Native</option>
-                {Array.from(new Set((countries || []).map((c) => c.currency))).sort().map((ccy) => (
-                  <option key={ccy} value={ccy}>{ccy}</option>
-                ))}
-              </select>
               <button
                 onClick={() => setActiveTile(null)}
                 className="text-[10px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer flex items-center gap-1"
@@ -588,6 +578,23 @@ export default function Dashboard({
                 <ChevronUp className="w-3 h-3" /> Hide
               </button>
             </div>
+          </div>
+          {/* Currency tag filter - own row, since it can have several options (Native +
+              every supported currency) and would crowd the header above on mobile. */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-3 -mx-1 px-1 no-scrollbar">
+            {['native', ...Array.from(new Set((countries || []).map((c) => c.currency))).sort()].map((ccy) => (
+              <button
+                key={ccy}
+                onClick={() => setPortfolioDisplayCcy(ccy)}
+                className={`shrink-0 px-2.5 py-1 rounded-full text-[9px] font-bold uppercase cursor-pointer transition-colors ${
+                  portfolioDisplayCcy === ccy
+                    ? 'bg-[#007aff] dark:bg-[#0a84ff] text-white'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                {ccy === 'native' ? 'Native' : ccy}
+              </button>
+            ))}
           </div>
           {(() => {
             // Pre-compute the display figures once (mode + currency resolution), reused by
