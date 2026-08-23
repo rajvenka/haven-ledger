@@ -5616,7 +5616,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           )}
                           <td className="p-2.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="relative max-w-[140px] min-w-0">
+                              <span className="relative max-w-[140px] min-w-[70px]">
                                 <span onClick={() => setExpandedNameId(prev => (prev === h.id ? null : h.id))} onMouseEnter={() => setExpandedNameId(h.id)} onMouseLeave={() => setExpandedNameId(prev => (prev === h.id ? null : prev))} className="font-bold text-slate-900 dark:text-white truncate cursor-pointer inline-flex items-center gap-1">
                                   {h.symbol}
                                   {h.notes && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Has a note" />}
@@ -6104,7 +6104,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                         <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
                           <td className="p-2.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="relative max-w-[140px] min-w-0">
+                              <span className="relative max-w-[140px] min-w-[70px]">
                                 <span onClick={() => setExpandedNameId(prev => (prev === h.id ? null : h.id))} onMouseEnter={() => setExpandedNameId(h.id)} onMouseLeave={() => setExpandedNameId(prev => (prev === h.id ? null : prev))} className="font-bold text-slate-900 dark:text-white truncate cursor-pointer inline-flex items-center gap-1">
                                   {h.symbol}
                                   {h.notes && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Has a note" />}
