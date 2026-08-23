@@ -177,25 +177,43 @@ async function fetchWeeklyChangeMap(workspaceId: string | undefined): Promise<Ma
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const { data, error } = await supabase
     .from('portfolio_daily_positions')
-    .select('symbol, snapshot_date, market_value')
+    .select('symbol, holding_id, snapshot_date, market_value')
     .eq('workspace_id', workspaceId)
     .gte('snapshot_date', sevenDaysAgo.toISOString().slice(0, 10))
     .order('snapshot_date', { ascending: true })
     .limit(2000);
   if (error || !data?.length) return map;
-  const bySymbol = new Map<string, { snapshot_date: string; market_value: number }[]>();
+  // Group by holding_id first - two different holdings can share the same symbol name
+  // (confirmed: two entirely separate positions both named "ADSL" existed at once), and
+  // grouping by symbol alone mixed their rows together, comparing one holding's earliest
+  // snapshot against a completely different holding's latest one - producing a nonsense
+  // swing (verified against real data: a false +7000%+ "gain").
+  const byHolding = new Map<string, { symbol: string; snapshot_date: string; market_value: number }[]>();
   for (const row of data) {
-    const key = row.symbol || '?';
-    if (!bySymbol.has(key)) bySymbol.set(key, []);
-    bySymbol.get(key)!.push(row);
+    const key = row.holding_id || `${row.symbol}-unknown`;
+    if (!byHolding.has(key)) byHolding.set(key, []);
+    byHolding.get(key)!.push(row);
   }
-  for (const [symbol, rows] of Array.from(bySymbol.entries())) {
+  // Then combine per symbol - a holding's own first/last are always compared against
+  // itself, and multiple holdings sharing one symbol are summed before computing one %
+  // change for that symbol, matching how portfolioSummary itself is keyed by symbol.
+  const bySymbol = new Map<string, { first: number; last: number; daysCovered: number }>();
+  for (const rows of Array.from(byHolding.values())) {
     if (rows.length < 2) continue; // need at least an earliest and latest snapshot to compare
+    const symbol = rows[0].symbol || '?';
     const distinctDays = new Set(rows.map((r) => r.snapshot_date)).size;
     const first = Number(rows[0].market_value);
     const last = Number(rows[rows.length - 1].market_value);
     if (!Number.isFinite(first) || !Number.isFinite(last) || first <= 0) continue;
-    map.set(symbol, { pnlPct: ((last - first) / first) * 100, daysCovered: distinctDays });
+    if (!bySymbol.has(symbol)) bySymbol.set(symbol, { first: 0, last: 0, daysCovered: 0 });
+    const agg = bySymbol.get(symbol)!;
+    agg.first += first;
+    agg.last += last;
+    agg.daysCovered = Math.max(agg.daysCovered, distinctDays);
+  }
+  for (const [symbol, agg] of Array.from(bySymbol.entries())) {
+    if (agg.first <= 0) continue;
+    map.set(symbol, { pnlPct: ((agg.last - agg.first) / agg.first) * 100, daysCovered: agg.daysCovered });
   }
   return map;
 }
