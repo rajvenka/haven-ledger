@@ -1591,8 +1591,12 @@ export default function PortfolioV1View({
     setPriceRefreshSummary(null);
     try {
       const scoped = (filtered || []).filter((h: any) => String(h.status || 'active') === 'active');
+      // Options excluded (same as mutual_fund) - the underlying price source (Yahoo Finance)
+      // has no way to recognize a custom options symbol like "MSFT OPT FS000000", which is
+      // exactly what corrupted a manually-corrected price before. Matches the same
+      // exclusion just added in Classic (PortfolioView.tsx).
       const refreshable = scoped.filter(
-        (h: any) => h.holding_type !== 'mutual_fund' && (h.ticker || h.symbol)
+        (h: any) => h.holding_type !== 'mutual_fund' && h.holding_type !== 'options' && (h.ticker || h.symbol)
       );
       const mutualFunds = scoped.filter((h: any) => h.holding_type === 'mutual_fund');
       let succeeded = 0;

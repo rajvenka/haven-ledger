@@ -1907,8 +1907,14 @@ export default function PortfolioView(props: PortfolioViewProps) {
       // Falls back to symbol when ticker is still null - covers rows inserted before the
       // ticker fix for eToro/Webull, so a plain Refresh click backfills them too rather than
       // silently skipping every pre-existing row until a fresh sync happens.
-      const refreshable = scopedHoldings.filter(h => h.holding_type !== 'mutual_fund' && (h.ticker || h.symbol));
-      const skippedNoTicker = scopedHoldings.filter(h => h.holding_type !== 'mutual_fund' && !h.ticker && !h.symbol).length;
+      // Options excluded (same as mutual_fund) - confirmed the underlying price source
+      // (Yahoo Finance) has no way to recognize a custom options symbol like
+      // "MSFT OPT FS000000", which is exactly what corrupted a manually-corrected price
+      // before. Options prices are only ever updated by an explicit manual data correction
+      // now, never by this refresh path (manual button or auto-refresh, since both share
+      // this same function).
+      const refreshable = scopedHoldings.filter(h => h.holding_type !== 'mutual_fund' && h.holding_type !== 'options' && (h.ticker || h.symbol));
+      const skippedNoTicker = scopedHoldings.filter(h => h.holding_type !== 'mutual_fund' && h.holding_type !== 'options' && !h.ticker && !h.symbol).length;
       const mutualFunds = scopedHoldings.filter(h => h.holding_type === 'mutual_fund');
 
       let succeeded = 0;
@@ -2150,7 +2156,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
     if (autoRefreshPortfolioIds.size === 0) return;
     if (autoRefreshTriggeredRef.current) return;
     if (isReadOnly) return;
-    const refreshableStocks = activeHoldings.filter(h => h.holding_type !== 'mutual_fund' && autoRefreshPortfolioIds.has(h.portfolio_id || ''));
+    const refreshableStocks = activeHoldings.filter(h => h.holding_type !== 'mutual_fund' && h.holding_type !== 'options' && autoRefreshPortfolioIds.has(h.portfolio_id || ''));
     if (refreshableStocks.length === 0) return;
     const staleThresholdMs = 6 * 60 * 60 * 1000; // 6 hours
     const isStale = refreshableStocks.some(h => !h.current_price_updated_at || (Date.now() - new Date(h.current_price_updated_at).getTime()) > staleThresholdMs);
