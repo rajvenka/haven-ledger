@@ -183,6 +183,13 @@ export default function Dashboard({
     return (amount * fromRate) / toRate;
   };
   const portfolioNameById = new Map((portfolios || []).map((p: any) => [p.id, p.name]));
+  // Upcoming earnings dates - fetched from api/earnings-calendar.ts (Yahoo Finance's
+  // calendarEvents module, same unofficial source already used for prices), keyed by symbol.
+  // Declared here (not with the other state further below) because upcomingEarnings and the
+  // fetch effect just below both need it immediately - it was previously declared after both
+  // usages, which is a genuine temporal-dead-zone crash on every render.
+  const [earningsBySymbol, setEarningsBySymbol] = useState<Map<string, string>>(new Map());
+  const [earningsLoading, setEarningsLoading] = useState(false);
   // Options are included here again - the earlier concern (a broken price feed corrupting
   // an option's stored price) is fixed: both option holdings' prices are confirmed correct
   // now, and refreshAllPrices (Classic and Pulse) excludes options entirely going forward,
@@ -345,10 +352,6 @@ export default function Dashboard({
   // default since that was the previous default-open behavior.
   const [activeTile, setActiveTile] = useState<'bills' | 'portfolio' | 'rewards' | 'earnings' | null>('bills');
   const toggleTile = (tile: 'bills' | 'portfolio' | 'rewards' | 'earnings') => setActiveTile(prev => (prev === tile ? null : tile));
-  // Upcoming earnings dates - fetched from api/earnings-calendar.ts (Yahoo Finance's
-  // calendarEvents module, same unofficial source already used for prices), keyed by symbol.
-  const [earningsBySymbol, setEarningsBySymbol] = useState<Map<string, string>>(new Map());
-  const [earningsLoading, setEarningsLoading] = useState(false);
   // Overall (all-time) vs daily (today's change) P&L - shared across the Portfolio tile,
   // chart, and table so switching it in one place changes all three consistently.
   const [pnlMode, setPnlMode] = useState<'overall' | 'daily'>('overall');
