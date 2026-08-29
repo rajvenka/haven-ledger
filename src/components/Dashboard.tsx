@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Calendar, 
   TrendingUp, 
@@ -189,6 +189,42 @@ export default function Dashboard({
   // so the same broken Yahoo lookup can't overwrite them again. Same plain (live-buy)*qty
   // math as every other holding, matching the Holdings page's own total.
   const activeHoldings = (portfolioHoldings || []).filter((h: any) => (h.status || 'active') === 'active');
+  // Stable key that only changes when the actual set of holdings changes (not on every
+  // render, which the array reference itself would trigger) - correct across workspace
+  // switches too, since holding IDs differ between workspaces even if counts coincide.
+  const activeHoldingIdsKey = activeHoldings.map((h: any) => h.id).sort().join(',');
+  useEffect(() => {
+    if (activeHoldings.length === 0) {
+      setEarningsBySymbol(new Map());
+      return;
+    }
+    let cancelled = false;
+    setEarningsLoading(true);
+    const symbolsPayload = activeHoldings.map((h: any) => ({
+      symbol: h.ticker ?? h.symbol,
+      exchange: h.exchange,
+      currency: h.currency,
+    }));
+    fetch('/api/earnings-calendar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbols: symbolsPayload }),
+    })
+      .then((resp) => (resp.ok ? resp.json() : { results: [] }))
+      .then(({ results }) => {
+        if (cancelled) return;
+        const map = new Map<string, string>();
+        (results || []).forEach((r: any) => {
+          if (r.earningsDate) map.set(String(r.symbol || '').toUpperCase(), r.earningsDate);
+        });
+        setEarningsBySymbol(map);
+      })
+      .catch(() => { if (!cancelled) setEarningsBySymbol(new Map()); })
+      .finally(() => { if (!cancelled) setEarningsLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeHoldingIdsKey]);
+
   const PRICE_FLOOR = 0.01;
   let portfolioTotalValue = 0;
   let portfolioTotalPnl = 0;
@@ -274,6 +310,21 @@ export default function Dashboard({
     .map(([name, v]) => ({ name, ...v }))
     .sort((a, b) => b.value - a.value);
 
+  // Upcoming earnings - active holdings with a fetched earnings date in the next 14 days,
+  // sorted soonest first.
+  const upcomingEarnings = activeHoldings
+    .map((h: any) => {
+      const key = String(h.ticker ?? h.symbol ?? '').toUpperCase();
+      const dateStr = earningsBySymbol.get(key);
+      if (!dateStr) return null;
+      const date = new Date(dateStr);
+      const daysAway = Math.ceil((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+      if (daysAway < 0 || daysAway > 14) return null;
+      return { symbol: h.ticker ?? h.symbol, date: dateStr, daysAway };
+    })
+    .filter((x): x is { symbol: string; date: string; daysAway: number } => x != null)
+    .sort((a, b) => a.daysAway - b.daysAway);
+
   // Rewards/gift cards overview card
   const activeGiftCards = (giftCards || []).filter((c) => giftCardStatus(c) === 'active');
   const giftCardsTotalRemaining = activeGiftCards.reduce((sum, c) => sum + convertToSummaryCcy(c.remainingBalance, c.currency), 0);
@@ -292,8 +343,12 @@ export default function Dashboard({
   // Only one tile's detail section shows at a time - clicking a tile sets it active,
   // clicking the same one again (or its own hide button) closes it. Bills starts active by
   // default since that was the previous default-open behavior.
-  const [activeTile, setActiveTile] = useState<'bills' | 'portfolio' | 'rewards' | null>('bills');
-  const toggleTile = (tile: 'bills' | 'portfolio' | 'rewards') => setActiveTile(prev => (prev === tile ? null : tile));
+  const [activeTile, setActiveTile] = useState<'bills' | 'portfolio' | 'rewards' | 'earnings' | null>('bills');
+  const toggleTile = (tile: 'bills' | 'portfolio' | 'rewards' | 'earnings') => setActiveTile(prev => (prev === tile ? null : tile));
+  // Upcoming earnings dates - fetched from api/earnings-calendar.ts (Yahoo Finance's
+  // calendarEvents module, same unofficial source already used for prices), keyed by symbol.
+  const [earningsBySymbol, setEarningsBySymbol] = useState<Map<string, string>>(new Map());
+  const [earningsLoading, setEarningsLoading] = useState(false);
   // Overall (all-time) vs daily (today's change) P&L - shared across the Portfolio tile,
   // chart, and table so switching it in one place changes all three consistently.
   const [pnlMode, setPnlMode] = useState<'overall' | 'daily'>('overall');
@@ -547,6 +602,39 @@ export default function Dashboard({
               </p>
             </div>
           )}
+
+          {/* Upcoming earnings card - active holdings reporting within the next 14 days,
+              via api/earnings-calendar.ts (Yahoo Finance's calendarEvents module, same
+              unofficial source already used for prices). */}
+          {(upcomingEarnings.length > 0 || (earningsLoading && activeHoldings.length > 0)) && (
+            <div
+              onClick={() => toggleTile('earnings')}
+              className={`apple-card p-4 cursor-pointer transition-shadow ${activeTile === 'earnings' ? 'ring-2 ring-[#007aff]/40 dark:ring-[#0a84ff]/40' : 'hover:shadow-md'}`}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5" /> Earnings
+                </span>
+              </div>
+              {earningsLoading && upcomingEarnings.length === 0 ? (
+                <p className="text-[10px] text-slate-400">Checking dates…</p>
+              ) : (
+                <>
+                  <p className="text-xl font-black text-slate-900 dark:text-white">
+                    {upcomingEarnings.length}
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {upcomingEarnings.length > 0
+                      ? `next 14 days · ${upcomingEarnings[0].symbol} in ${upcomingEarnings[0].daysAway === 0 ? 'today' : `${upcomingEarnings[0].daysAway}d`}`
+                      : 'reporting soon'}
+                  </p>
+                  <p className="text-[10px] font-bold text-[#007aff] dark:text-[#0a84ff] mt-2">
+                    {activeTile === 'earnings' ? 'Hide list' : 'See list'}
+                  </p>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -770,6 +858,45 @@ export default function Dashboard({
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {activeTile === 'earnings' && upcomingEarnings.length > 0 && (
+        <div className="apple-card p-4 shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5" /> Upcoming Earnings
+            </span>
+            <button
+              onClick={() => setActiveTile(null)}
+              className="text-[10px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer flex items-center gap-1"
+            >
+              <ChevronUp className="w-3 h-3" /> Hide
+            </button>
+          </div>
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="border-b border-slate-100 dark:border-slate-900 text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                <th className="text-left py-1.5">Symbol</th>
+                <th className="text-right py-1.5">Date</th>
+                <th className="text-right py-1.5">In</th>
+              </tr>
+            </thead>
+            <tbody>
+              {upcomingEarnings.map((e) => (
+                <tr key={e.symbol} className="border-b border-slate-50 dark:border-slate-900/50 last:border-0">
+                  <td className="py-1.5 font-semibold text-slate-900 dark:text-white truncate max-w-[100px]">{e.symbol}</td>
+                  <td className="py-1.5 text-right text-slate-500 dark:text-slate-400">
+                    {formatDatePretty(new Date(e.date))}
+                  </td>
+                  <td className={`py-1.5 text-right font-bold ${e.daysAway <= 2 ? 'text-rose-500' : 'text-slate-500 dark:text-slate-400'}`}>
+                    {e.daysAway === 0 ? 'Today' : `${e.daysAway}d`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="text-[9px] text-slate-400 mt-2">Dates from Yahoo Finance, may occasionally be estimates or change without notice.</p>
         </div>
       )}
 

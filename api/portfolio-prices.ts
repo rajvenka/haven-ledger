@@ -8,6 +8,8 @@
 // trips Yahoo rate limits, which previously marked most of a workspace as
 // "Symbol Not Found" even though the tickers were valid.
 
+import { resolveYahooSymbolCandidates, mapPool } from "./_lib/yahoo-symbols.js";
+
 async function fetchYahooPrice(yahooSymbol: string) {
   const resp = await fetch(
     `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}`,
@@ -23,46 +25,6 @@ async function fetchYahooPrice(yahooSymbol: string) {
   const currency = data?.chart?.result?.[0]?.meta?.currency ?? null;
   if (typeof price !== "number") return { price: null, previousClose: null, currency: null, error: "No price found for this symbol" };
   return { price, previousClose: typeof previousClose === "number" ? previousClose : null, currency, error: null };
-}
-
-/** Turn broker display symbols into Yahoo-friendly tickers. */
-function normalizeYahooSymbol(raw: string): string {
-  let s = String(raw || "").trim().toUpperCase();
-  if (!s) return s;
-  if (/\.(NS|BO|AX)$/i.test(s)) return s;
-  s = s.replace(/\*+$/g, "").trim();
-  if (s.includes(" - ")) {
-    const parts = s.split(" - ").map((p) => p.trim()).filter(Boolean);
-    if (parts.length >= 2) s = parts[parts.length - 1];
-  }
-  s = s.replace(/\b(ETF|BEES)\b/g, "").replace(/\s+/g, "").trim() || s;
-
-  const aliases: Record<string, string> = {
-    NASDAQ100: "MON100",
-    NASDAQ100ETF: "MON100",
-    MOTILALOSNASDAQ100ETF: "MON100",
-    MOTILALOSNASDAQ100: "MON100",
-    MAFANG: "MAFANG",
-    MONQ50: "MONQ50",
-    SML100CASE: "SML100CASE",
-  };
-  const noHyphen = s.replace(/-/g, "");
-  if (aliases[s]) return aliases[s];
-  if (aliases[noHyphen]) return aliases[noHyphen];
-  return s;
-}
-
-async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-    while (next < items.length) {
-      const i = next++;
-      results[i] = await fn(items[i], i);
-    }
-  });
-  await Promise.all(workers);
-  return results;
 }
 
 export default async function handler(req: any, res: any) {
@@ -82,29 +44,11 @@ export default async function handler(req: any, res: any) {
     // Cap parallel Yahoo hits — 6 keeps India portfolios (~100 names) reliable.
     const results = await mapPool(list, 6, async ({ symbol, exchange, currency }: { symbol: string; exchange: string; currency?: string }) => {
       try {
-        const rawSymbol = normalizeYahooSymbol(String(symbol || "").trim());
         const originalSymbol = String(symbol || "").trim();
         const rawExchange = String(exchange || "").trim().toUpperCase();
         const rawCurrency = currency ? String(currency).trim().toUpperCase() : "";
+        const { primary: primarySymbol, fallbacks: candidates } = resolveYahooSymbolCandidates(symbol, exchange, currency);
 
-        const isUsExchange = ["NASDAQ", "NYSE", "AMEX", "NYSEARCA", "BATS", "OTC"].includes(rawExchange);
-        const isAsxListed = rawExchange === "ASX" || rawCurrency === "AUD";
-        const isIndianExchange =
-          rawExchange === "NSE" ||
-          rawExchange === "BSE" ||
-          rawExchange === "INDIA" ||
-          rawCurrency === "INR" ||
-          (!rawExchange && !isUsExchange && !isAsxListed);
-
-        const alreadySuffixed = /\.(NS|BO|AX)$/i.test(rawSymbol) || rawSymbol.includes("=");
-        let primarySuffix = "";
-        if (!alreadySuffixed) {
-          if (rawExchange === "BSE") primarySuffix = ".BO";
-          else if (isIndianExchange) primarySuffix = ".NS";
-          else if (isAsxListed) primarySuffix = ".AX";
-        }
-
-        const primarySymbol = alreadySuffixed || !primarySuffix ? rawSymbol : `${rawSymbol}${primarySuffix}`;
         const tried: string[] = [primarySymbol];
         let result = await fetchYahooPrice(primarySymbol);
 
@@ -114,22 +58,14 @@ export default async function handler(req: any, res: any) {
           result = await fetchYahooPrice(primarySymbol);
         }
 
-        if (result.price == null && !result.rateLimited && !alreadySuffixed) {
-          const candidates: string[] = [];
-          if (primarySuffix === ".NS") candidates.push(`${rawSymbol}.BO`);
-          else if (primarySuffix === ".BO") candidates.push(`${rawSymbol}.NS`);
-          else if (!isUsExchange && !isAsxListed) {
-            candidates.push(`${rawSymbol}.NS`, `${rawSymbol}.BO`);
-            if (rawCurrency === "AUD") candidates.push(`${rawSymbol}.AX`);
-          }
-
+        if (result.price == null && !result.rateLimited) {
           for (const candidate of candidates) {
             if (tried.includes(candidate)) continue;
             tried.push(candidate);
             const fallbackResult = await fetchYahooPrice(candidate);
             if (fallbackResult.rateLimited) {
               return {
-                symbol: originalSymbol || rawSymbol,
+                symbol: originalSymbol,
                 exchange: rawExchange || exchange,
                 price: null,
                 previousClose: null,
@@ -146,7 +82,7 @@ export default async function handler(req: any, res: any) {
 
         if (result.price == null) {
           return {
-            symbol: originalSymbol || rawSymbol,
+            symbol: originalSymbol,
             exchange: rawExchange || exchange,
             price: null,
             previousClose: null,
@@ -159,7 +95,7 @@ export default async function handler(req: any, res: any) {
           // INR holdings sometimes get USD collision on bare tickers — reject wrong market
           if (!(rawCurrency === "INR" && result.currency.toUpperCase() === "INR")) {
             return {
-              symbol: rawSymbol,
+              symbol: originalSymbol,
               exchange: rawExchange || exchange,
               price: null,
               previousClose: null,
@@ -169,7 +105,7 @@ export default async function handler(req: any, res: any) {
         }
 
         return {
-          symbol: originalSymbol || rawSymbol,
+          symbol: originalSymbol,
           exchange: rawExchange || exchange,
           price: result.price,
           previousClose: result.previousClose,
