@@ -33,6 +33,7 @@ import {
   Trash2,
   Upload,
   ExternalLink,
+  Clock,
 } from 'lucide-react';
 
 type BrokerType = 'etoro' | 'ig' | 'webull' | 'zerodha' | 'groww' | 'moomoo' | 'tiger' | 'stake';
@@ -3055,7 +3056,12 @@ export default function PortfolioV1View({
                           </button>
                         )}
                         <div className="min-w-0">
-                          <p className="font-bold text-slate-900 dark:text-white truncate">{h.ticker || h.symbol}</p>
+                          <p className="font-bold text-slate-900 dark:text-white truncate flex items-center gap-1">
+                            <span className="truncate">{h.ticker || h.symbol}</span>
+                            {h.price_stale && (
+                              <Clock className="w-3 h-3 text-amber-500 shrink-0" title="Price refresh failed - showing last known price" />
+                            )}
+                          </p>
                           {lot && (
                             <p className="text-[9px] text-amber-600 font-bold truncate">
                               Lot{lot.external_position_id ? ` · ${String(lot.external_position_id).slice(-6)}` : ''}
@@ -3171,7 +3177,12 @@ export default function PortfolioV1View({
                                   <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                                 </button>
                               )}
-                              <p className="text-[13px] font-bold truncate">{h.ticker || h.symbol}</p>
+                              <p className="text-[13px] font-bold truncate flex items-center gap-1">
+                                <span className="truncate">{h.ticker || h.symbol}</span>
+                                {h.price_stale && (
+                                  <Clock className="w-3 h-3 text-amber-500 shrink-0" title="Price refresh failed - showing last known price" />
+                                )}
+                              </p>
                               <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full ${CATEGORY_META[cat].chip}`}>
                                 {CATEGORY_META[cat].label.split('·').pop()?.trim()}
                               </span>

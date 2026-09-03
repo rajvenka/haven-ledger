@@ -8,24 +8,7 @@
 // trips Yahoo rate limits, which previously marked most of a workspace as
 // "Symbol Not Found" even though the tickers were valid.
 
-import { resolveYahooSymbolCandidates, mapPool } from "./_lib/yahoo-symbols.js";
-
-async function fetchYahooPrice(yahooSymbol: string) {
-  const resp = await fetch(
-    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}`,
-    { headers: { "User-Agent": "Mozilla/5.0" } }
-  );
-  if (resp.status === 429) {
-    return { price: null, previousClose: null, currency: null, error: "rate_limited", rateLimited: true };
-  }
-  if (!resp.ok) return { price: null, previousClose: null, currency: null, error: `Yahoo returned ${resp.status}` };
-  const data = await resp.json();
-  const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-  const previousClose = data?.chart?.result?.[0]?.meta?.chartPreviousClose ?? data?.chart?.result?.[0]?.meta?.previousClose;
-  const currency = data?.chart?.result?.[0]?.meta?.currency ?? null;
-  if (typeof price !== "number") return { price: null, previousClose: null, currency: null, error: "No price found for this symbol" };
-  return { price, previousClose: typeof previousClose === "number" ? previousClose : null, currency, error: null };
-}
+import { resolveYahooSymbolCandidates, mapPool, fetchYahooPrice } from "./_lib/yahoo-symbols.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {

@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   TrendingUp, TrendingDown, Plus, Trash2, RefreshCw, Users, Wallet, Banknote,
-  CheckCircle2, X, Briefcase, Gift, Receipt, Upload, Edit2, ChevronDown, ArrowUpDown, Settings, ChevronUp, Download, Search, PieChart, ClipboardList
+  CheckCircle2, X, Briefcase, Gift, Receipt, Upload, Edit2, ChevronDown, ArrowUpDown, Settings, ChevronUp, Download, Search, PieChart, ClipboardList, Clock
 } from 'lucide-react';
 
 interface WorkspaceMemberLite {
@@ -5620,6 +5620,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                 <span onClick={() => setExpandedNameId(prev => (prev === h.id ? null : h.id))} onMouseEnter={() => setExpandedNameId(h.id)} onMouseLeave={() => setExpandedNameId(prev => (prev === h.id ? null : prev))} className="font-bold text-slate-900 dark:text-white cursor-pointer inline-flex items-center gap-1 max-w-full">
                                   <span className="truncate block min-w-0">{h.symbol}</span>
                                   {h.notes && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Has a note" />}
+                                  {h.price_stale && (
+                                    <Clock className="w-3 h-3 text-amber-500 shrink-0" title="Price refresh failed - showing last known price" />
+                                  )}
                                 </span>
                                 {expandedNameId === h.id && (
                                   <div className="absolute left-0 bottom-full mb-0.5 z-20 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-normal max-w-[220px] space-y-1">
@@ -6108,6 +6111,9 @@ export default function PortfolioView(props: PortfolioViewProps) {
                                 <span onClick={() => setExpandedNameId(prev => (prev === h.id ? null : h.id))} onMouseEnter={() => setExpandedNameId(h.id)} onMouseLeave={() => setExpandedNameId(prev => (prev === h.id ? null : prev))} className="font-bold text-slate-900 dark:text-white cursor-pointer inline-flex items-center gap-1 max-w-full">
                                   <span className="truncate block min-w-0">{h.symbol}</span>
                                   {h.notes && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Has a note" />}
+                                  {h.price_stale && (
+                                    <Clock className="w-3 h-3 text-amber-500 shrink-0" title="Price refresh failed - showing last known price" />
+                                  )}
                                 </span>
                                 {expandedNameId === h.id && (
                                   <div className="absolute left-0 bottom-full mb-0.5 z-20 px-2 py-1 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-semibold rounded-md shadow-lg whitespace-normal max-w-[220px] space-y-1">
