@@ -615,11 +615,11 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     </div>
   );
   const topRows = [...rows].sort((a, b) => b.value - a.value);
-  const brokerGroups = useMemo(() => {
+  const brokerGroups = (() => {
     const m = new Map<string, any[]>();
     rows.forEach((r) => m.set(r.broker, [...(m.get(r.broker) || []), r]));
     return Array.from(m.entries()).map(([name, items]) => ({ name, items: items.sort((a, b) => b.value - a.value), value: items.reduce((a, r) => a + r.value, 0), cost: items.reduce((a, r) => a + r.cost, 0), pnl: items.reduce((a, r) => a + r.pnl, 0), day: items.reduce((a, r) => a + r.day, 0) })).sort((a, b) => b.value - a.value);
-  }, [rows]);
+  })();
   const heatColor = (v: number | null) => { if (v == null) return '#334155'; const t = Math.min(1, Math.abs(v) / (heatBy === 'dayPct' ? 4 : 30)); return v >= 0 ? `rgba(16,185,129,${0.25 + t * 0.7})` : `rgba(244,63,94,${0.25 + t * 0.7})`; };
   const HeatTile = (props: any) => {
     const { x, y, width, height, name, pv, id } = props;
