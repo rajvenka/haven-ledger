@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis } from 'recharts';
+import PortfolioPnLCalendar from './PortfolioPnLCalendar';
 import PortfolioV1View from './PortfolioV1View';
-import { Search, TrendingUp, TrendingDown, X, SlidersHorizontal, Settings2 } from 'lucide-react';
+import { Search, TrendingUp, TrendingDown, X, SlidersHorizontal, Plus, Pencil, Trash2, LayoutDashboard, List, CheckCircle2, CalendarDays, Wallet, RefreshCw, AlertTriangle } from 'lucide-react';
 
 type GroupBy = 'category' | 'broker' | 'currency' | 'portfolio';
 type SortKey = 'symbol' | 'broker' | 'category' | 'portfolio' | 'qty' | 'buy' | 'price' | 'dayPct' | 'day' | 'cost' | 'value' | 'pnl' | 'pnlPct' | 'weight' | 'buyDate' | 'heldDays' | 'leverage' | 'stop' | 'target' | 'updated';
@@ -89,10 +90,44 @@ interface Props {
   onManage: () => void;
   isReadOnly?: boolean;
   importProps?: any;
+  cashBalances?: any[];
+  loadDailyPositions?: (from: string, to: string, portfolioId?: string | null) => Promise<any[]>;
+  snapshotDaily?: (currencies?: string[], timezone?: string) => Promise<void>;
+  addHolding?: (h: any) => Promise<any>;
+  updateHolding?: (id: string, u: any) => Promise<any>;
+  sellHolding?: (id: string, p: { quantity: number; soldPrice: number; soldDate: string }) => Promise<any>;
+  deleteHolding?: (id: string) => Promise<any>;
+  bulkDelete?: (ids: string[]) => Promise<any>;
+  setCash?: (location: any, amount: number, asOf?: string, notes?: string, portfolioId?: string) => Promise<any>;
+  deleteCash?: (id: string) => Promise<any>;
 }
 
-export default function PulsePortfolio({ holdings, lots = [], portfolios = [], rates = [], baseCurrency = 'INR', connections = [], isLoading, onManage, isReadOnly, importProps }: Props) {
-  const [tab, setTab] = useState<'holdings' | 'sync'>('holdings');
+type Section = 'overview' | 'holdings' | 'sold' | 'calendar' | 'cash' | 'sync';
+const NAV: { k: Section; label: string; icon: React.ReactNode }[] = [
+  { k: 'overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
+  { k: 'holdings', label: 'Holdings', icon: <List className="w-4 h-4" /> },
+  { k: 'sold', label: 'Sold', icon: <CheckCircle2 className="w-4 h-4" /> },
+  { k: 'calendar', label: 'Calendar', icon: <CalendarDays className="w-4 h-4" /> },
+  { k: 'cash', label: 'Cash', icon: <Wallet className="w-4 h-4" /> },
+  { k: 'sync', label: 'Import & Sync', icon: <RefreshCw className="w-4 h-4" /> },
+];
+
+export default function PulsePortfolio({ holdings, lots = [], portfolios = [], rates = [], baseCurrency = 'INR', connections = [], isLoading, onManage, isReadOnly, importProps, cashBalances = [], loadDailyPositions, snapshotDaily, addHolding, updateHolding, sellHolding, deleteHolding, bulkDelete, setCash, deleteCash }: Props) {
+  const [section, setSectionState] = useState<Section>(() => { try { return (localStorage.getItem('hv_pp_section') as Section) || 'overview'; } catch { return 'overview'; } });
+  const setSection = (k: Section) => { setSectionState(k); try { localStorage.setItem('hv_pp_section', k); } catch { /* */ } };
+  const [book, setBook] = useState<string>('All');
+  const [checked, setChecked] = useState<string[]>([]);
+  const [form, setForm] = useState<any | null>(null);   // add / edit holding
+  const [sellFor, setSellFor] = useState<any | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [trendRows, setTrendRows] = useState<any[]>([]);
+  const [trendDays, setTrendDays] = useState(90);
+  const [calRows, setCalRows] = useState<any[]>([]);
+  const [calLoading, setCalLoading] = useState(false);
+  const [calCcy, setCalCcy] = useState(baseCurrency.toUpperCase());
+  const [calBook, setCalBook] = useState('all');
+  const [cashForm, setCashForm] = useState<{ location: string; amount: string; portfolioId: string }>({ location: 'Bank', amount: '', portfolioId: '' });
   const bridge = React.useRef<any>(null);
   const [, bump] = useState(0);
   const [syncAllBusy, setSyncAllBusy] = useState(false);
@@ -119,7 +154,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
 
   const rows = useMemo(() => {
     return holdings
-      .filter((h) => (h.status || 'active') === 'active')
+      .filter((h) => (h.status || 'active') === 'active' && (book === 'All' || h.portfolio_id === book))
       .map((h) => {
         const native = String(h.currency || baseCurrency).toUpperCase();
         const qty = Number(h.quantity || 0);
@@ -148,7 +183,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           isin: String(h.isin || ''), exchange: String(h.exchange || ''),
         };
       });
-  }, [holdings, portfolios, fx, ccy, baseCurrency]);
+  }, [holdings, portfolios, fx, ccy, baseCurrency, book]);
 
   const totals = useMemo(() => {
     const value = rows.reduce((a, r) => a + r.value, 0);
@@ -193,6 +228,72 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
     const a = document.createElement('a'); a.href = url; a.download = 'portfolio.csv'; a.click(); URL.revokeObjectURL(url);
   };
+
+  const soldRows = useMemo(() => holdings
+    .filter((h) => h.status === 'sold' && (book === 'All' || h.portfolio_id === book))
+    .map((h) => {
+      const native = String(h.currency || baseCurrency).toUpperCase();
+      const qty = Number(h.quantity || 0);
+      const cost = Number(h.buy_price || 0) * qty;
+      const proceeds = Number(h.sold_price || 0) * qty;
+      return { id: String(h.id), symbol: String(h.ticker || h.symbol || '—'), broker: String(h.broker || ''), qty, native,
+        buy: Number(h.buy_price || 0), sell: Number(h.sold_price || 0), buyDate: h.buy_date || '', soldDate: h.sold_date || '',
+        cost: fx(cost, native, ccy), proceeds: fx(proceeds, native, ccy), pnl: fx(proceeds - cost, native, ccy), pnlPct: cost > 0 ? ((proceeds - cost) / cost) * 100 : 0 };
+    })
+    .sort((a, b) => String(b.soldDate).localeCompare(String(a.soldDate))), [holdings, book, fx, ccy, baseCurrency]);
+  const soldTotals = useMemo(() => ({ pnl: soldRows.reduce((a, r) => a + r.pnl, 0), proceeds: soldRows.reduce((a, r) => a + r.proceeds, 0),
+    wins: soldRows.filter((r) => r.pnl > 0).length }), [soldRows]);
+  const soldByYear = useMemo(() => { const m: Record<string, number> = {}; soldRows.forEach((r) => { const y = String(r.soldDate).slice(0, 4) || '—'; m[y] = (m[y] || 0) + r.pnl; }); return Object.entries(m).sort((a, b) => b[0].localeCompare(a[0])); }, [soldRows]);
+
+  const cashRows = useMemo(() => cashBalances.filter((c) => book === 'All' || !c.portfolio_id || c.portfolio_id === book).map((c) => ({ ...c, conv: fx(Number(c.amount || 0), String(c.currency || baseCurrency).toUpperCase(), ccy) })), [cashBalances, book, fx, ccy, baseCurrency]);
+  const cashTotal = cashRows.reduce((a, c) => a + c.conv, 0);
+
+  // Value-over-time (from daily snapshots)
+  React.useEffect(() => {
+    if (section !== 'overview' || !loadDailyPositions) return;
+    let alive = true;
+    const to = new Date(); const from = new Date(Date.now() - trendDays * 86400000);
+    loadDailyPositions(from.toISOString().slice(0, 10), to.toISOString().slice(0, 10), book === 'All' ? null : book).then((d) => { if (alive) setTrendRows(d || []); }).catch(() => {});
+    return () => { alive = false; };
+  }, [section, trendDays, book, loadDailyPositions]);
+  const trend = useMemo(() => {
+    const m: Record<string, number> = {};
+    trendRows.forEach((r: any) => { const c = String(r.currency || '').toUpperCase(); m[r.snapshot_date] = (m[r.snapshot_date] || 0) + fx(Number(r.market_value || 0), c, ccy); });
+    return Object.entries(m).sort((a, b) => a[0].localeCompare(b[0])).map(([date, value]) => ({ date: date.slice(5), value: Math.round(value) }));
+  }, [trendRows, fx, ccy]);
+
+  const reloadCal = async () => {
+    if (!loadDailyPositions) return;
+    setCalLoading(true);
+    try {
+      const to = new Date(); const from = new Date(to.getFullYear() - 1, to.getMonth(), to.getDate());
+      const d = await loadDailyPositions(from.toISOString().slice(0, 10), to.toISOString().slice(0, 10), calBook === 'all' ? null : calBook);
+      setCalRows(d || []);
+    } finally { setCalLoading(false); }
+  };
+  React.useEffect(() => { if (section === 'calendar') reloadCal(); /* eslint-disable-next-line */ }, [section, calBook]);
+
+  const run = async (fn: () => Promise<any>, done?: () => void) => {
+    setBusy(true); setErr(null);
+    try { await fn(); done?.(); } catch (e: any) { setErr(e?.message || 'Something went wrong'); } finally { setBusy(false); }
+  };
+  const emptyForm = { id: '', symbol: '', broker: '', exchange: '', quantity: '', buyPrice: '', buyDate: new Date().toISOString().slice(0, 10), currency: baseCurrency.toUpperCase(), portfolioId: book !== 'All' ? book : '', currentPrice: '', targetPrice: '', stopLoss: '', notes: '' };
+  const openEdit = (h: any) => setForm({ id: String(h.id), symbol: h.symbol || '', broker: h.broker || '', exchange: h.exchange || '', quantity: String(h.quantity ?? ''), buyPrice: String(h.buy_price ?? ''), buyDate: h.buy_date || '', currency: String(h.currency || baseCurrency).toUpperCase(), portfolioId: h.portfolio_id || '', currentPrice: String(h.live_price ?? h.current_price ?? ''), targetPrice: h.target_price ? String(h.target_price) : '', stopLoss: h.stop_loss_rate ? String(h.stop_loss_rate) : '', notes: h.notes || '' });
+  const saveForm = () => {
+    const f = form; if (!f) return;
+    const qty = Number(f.quantity), bp = Number(f.buyPrice);
+    if (!f.symbol.trim() || !f.broker.trim() || !(qty > 0) || !(bp >= 0)) { setErr('Symbol, broker, quantity and buy price are required.'); return; }
+    run(async () => {
+      if (f.id) {
+        await updateHolding?.(f.id, { symbol: f.symbol.trim().toUpperCase(), broker: f.broker.trim(), exchange: f.exchange.trim(), quantity: qty, buyPrice: bp, buyDate: f.buyDate, currency: f.currency, portfolioId: f.portfolioId || null,
+          ...(f.currentPrice !== '' ? { currentPrice: Number(f.currentPrice) } : {}), targetType: f.targetPrice ? 'price' : null, targetPrice: f.targetPrice ? Number(f.targetPrice) : null, ...(f.stopLoss ? { stopLossRate: Number(f.stopLoss) } : {}), notes: f.notes });
+      } else {
+        await addHolding?.({ broker: f.broker.trim(), symbol: f.symbol.trim(), exchange: f.exchange.trim(), quantity: qty, buyPrice: bp, buyDate: f.buyDate, currency: f.currency, portfolioId: f.portfolioId || undefined,
+          currentPrice: f.currentPrice !== '' ? Number(f.currentPrice) : undefined, targetType: f.targetPrice ? 'price' : undefined, targetPrice: f.targetPrice ? Number(f.targetPrice) : undefined, notes: f.notes || undefined });
+      }
+    }, () => { setForm(null); setSelected(null); });
+  };
+
   const best = useMemo(() => [...rows].sort((a, b) => b.pnl - a.pnl)[0], [rows]);
   const worst = useMemo(() => [...rows].sort((a, b) => a.pnl - b.pnl)[0], [rows]);
   const sel = selected ? rows.find((r) => r.id === selected) : null;
@@ -281,31 +382,221 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     </div>
   );
 
+  const nearStop = rows.map((r) => ({ ...r, stopDist: r.stop && r.price > 0 ? ((r.price - r.stop) / r.price) * 100 : null as number | null })).filter((r) => r.stopDist != null && r.stopDist >= 0 && r.stopDist < 8).sort((a, b) => (a.stopDist as number) - (b.stopDist as number)).slice(0, 5) as any[];
+
+  const inputCls = 'w-full px-3 py-2 rounded-xl text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none focus:border-indigo-400';
+  const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (<label className="block"><span className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</span><div className="mt-1">{children}</div></label>);
+  const setF = (k: string, v: string) => setForm((f: any) => ({ ...f, [k]: v }));
+
+  const soldView = (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Kpi label="Realized P&L" value={money(soldTotals.pnl, ccy, true)} subTone={tone(soldTotals.pnl)} sub={`${soldRows.length} sales`} />
+        <Kpi label="Proceeds" value={money(soldTotals.proceeds, ccy, true)} />
+        <Kpi label="Win rate" value={soldRows.length ? `${Math.round((soldTotals.wins / soldRows.length) * 100)}%` : '—'} sub={`${soldTotals.wins} winners`} />
+        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4"><div className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">By year</div>{soldByYear.length === 0 ? <div className="text-xs text-slate-400">—</div> : soldByYear.slice(0, 4).map(([y, v]) => <div key={y} className="flex justify-between text-xs"><span className="font-bold">{y}</span><span className={`tabular-nums font-bold ${tone(v)}`}>{money(v, ccy, true)}</span></div>)}</div>
+      </div>
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-auto max-h-[70vh]">
+        <table className="w-full text-xs whitespace-nowrap">
+          <thead className="sticky top-0 bg-slate-50 dark:bg-slate-800 text-[10px] uppercase text-slate-400"><tr>{['Holding', 'Broker', 'Qty', 'Buy', 'Sell', 'Bought', 'Sold', 'Proceeds', 'P&L', 'P&L %'].map((h, i) => <th key={h} className={`p-2.5 ${i < 2 ? 'text-left' : 'text-right'}`}>{h}</th>)}<th /></tr></thead>
+          <tbody>
+            {soldRows.map((r) => (
+              <tr key={r.id} className="border-t border-slate-100 dark:border-slate-800">
+                <td className="p-2.5 font-black">{r.symbol}</td><td className="p-2.5 text-slate-500">{r.broker}</td>
+                <td className="p-2.5 text-right tabular-nums">{px(r.qty)}</td><td className="p-2.5 text-right tabular-nums">{px(r.buy)}</td><td className="p-2.5 text-right tabular-nums">{px(r.sell)}</td>
+                <td className="p-2.5 text-right">{r.buyDate || '—'}</td><td className="p-2.5 text-right">{r.soldDate || '—'}</td>
+                <td className="p-2.5 text-right tabular-nums">{money(r.proceeds, ccy, true)}</td>
+                <td className={`p-2.5 text-right tabular-nums font-bold ${tone(r.pnl)}`}>{money(r.pnl, ccy, true)}</td><td className={`p-2.5 text-right tabular-nums ${tone(r.pnl)}`}>{pct(r.pnlPct)}</td>
+                <td className="p-2.5 text-right">{!isReadOnly && <button onClick={() => { if (window.confirm('Delete this sale record?')) run(() => deleteHolding!(r.id)); }} className="text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>}</td>
+              </tr>
+            ))}
+            {soldRows.length === 0 && <tr><td colSpan={11} className="p-8 text-center text-slate-400">No sold positions yet. Use Sell on any holding.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const calendarView = (
+    <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4">
+      <PortfolioPnLCalendar
+        rows={calRows}
+        loading={calLoading}
+        currencies={Array.from(new Set([...calRows.map((r: any) => String(r.currency || '').toUpperCase()).filter(Boolean), baseCurrency.toUpperCase()]))}
+        selectedCurrency={calCcy}
+        onCurrencyChange={setCalCcy}
+        portfolios={portfolios.map((p: any) => ({ id: p.id, name: p.name, currency: p.currency }))}
+        selectedPortfolioId={calBook}
+        onPortfolioChange={setCalBook}
+        portfolioLabel={calBook !== 'all' ? portfolios.find((p: any) => p.id === calBook)?.name : undefined}
+        canSnapshot={!isReadOnly}
+        onRefreshSnapshot={snapshotDaily}
+        onReload={reloadCal}
+      />
+    </div>
+  );
+
+  const cashView = (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Kpi label="Total cash" value={money(cashTotal, ccy, true)} sub={`${cashRows.length} account${cashRows.length === 1 ? '' : 's'}`} />
+        <Kpi label="Invested" value={money(totals.value, ccy, true)} />
+        <Kpi label="Net worth" value={money(totals.value + cashTotal, ccy, true)} />
+        <Kpi label="Cash share" value={totals.value + cashTotal > 0 ? `${((cashTotal / (totals.value + cashTotal)) * 100).toFixed(1)}%` : '—'} />
+      </div>
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
+        {cashRows.length === 0 && <div className="p-6 text-sm text-slate-500">No cash balances yet. Add one below.</div>}
+        {cashRows.map((c: any) => (
+          <div key={c.id} className="flex items-center gap-3 px-4 py-3 border-t first:border-t-0 border-slate-100 dark:border-slate-800">
+            <div className="flex-1"><div className="text-sm font-black">{c.location}</div><div className="text-[11px] text-slate-500">{c.portfolio_id ? portfolios.find((p: any) => p.id === c.portfolio_id)?.name : 'All books'} · as of {c.as_of_date}</div></div>
+            <div className="text-sm font-black tabular-nums">{money(c.conv, ccy)}</div>
+            {!isReadOnly && <button onClick={() => { if (window.confirm('Delete this cash balance?')) run(() => deleteCash!(c.id)); }} className="text-rose-500 p-1"><Trash2 className="w-4 h-4" /></button>}
+          </div>
+        ))}
+      </div>
+      {!isReadOnly && (
+        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 grid sm:grid-cols-4 gap-3 items-end">
+          <Field label="Where"><select className={inputCls} value={cashForm.location} onChange={(e) => setCashForm({ ...cashForm, location: e.target.value })}>{['Bank', 'Zerodha', 'Groww', 'Other'].map((l) => <option key={l}>{l}</option>)}</select></Field>
+          <Field label="Amount"><input className={inputCls} type="number" value={cashForm.amount} onChange={(e) => setCashForm({ ...cashForm, amount: e.target.value })} placeholder="0" /></Field>
+          <Field label="Book"><select className={inputCls} value={cashForm.portfolioId} onChange={(e) => setCashForm({ ...cashForm, portfolioId: e.target.value })}><option value="">All books</option>{portfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
+          <button disabled={busy || cashForm.amount === ''} onClick={() => run(() => setCash!(cashForm.location, Number(cashForm.amount), undefined, undefined, cashForm.portfolioId || undefined), () => setCashForm({ ...cashForm, amount: '' }))} className="py-2 rounded-xl bg-indigo-600 text-white text-sm font-black disabled:opacity-50">Save balance</button>
+        </div>
+      )}
+    </div>
+  );
+
+  const holdingsView = (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {!isReadOnly && <button onClick={() => { setErr(null); setForm({ ...emptyForm }); }} className="inline-flex items-center gap-1 text-xs font-black px-3 py-2 rounded-xl bg-indigo-600 text-white"><Plus className="w-3.5 h-3.5" /> Add holding</button>}
+        {!isReadOnly && checked.length > 0 && <button disabled={busy} onClick={() => { if (window.confirm(`Delete ${checked.length} holding(s)? This cannot be undone.`)) run(() => bulkDelete!(checked), () => setChecked([])); }} className="inline-flex items-center gap-1 text-xs font-black px-3 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600"><Trash2 className="w-3.5 h-3.5" /> Delete {checked.length}</button>}
+        {err && !form && <span className="text-xs font-bold text-rose-600">{err}</span>}
+      </div>
+      <div className="grid gap-4">
+        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
+          <div className="p-3 flex flex-wrap items-center gap-2 border-b border-slate-100 dark:border-slate-800">
+            <div className="relative flex-1 min-w-[140px]">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search symbol, name, broker" className="w-full pl-8 pr-2 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-transparent focus:border-indigo-400 outline-none" />
+            </div>
+            {(['all', 'gainers', 'losers'] as const).map((v) => (
+              <button key={v} onClick={() => setView(v)} className={`text-[11px] font-black px-2.5 py-1.5 rounded-full capitalize ${view === v ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{v}</button>
+            ))}
+            <button onClick={() => setGroup((g) => !g)} className={`text-[11px] font-black px-2.5 py-1.5 rounded-full ${group ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Group by {groupBy}</button>
+            <div className="relative">
+              <button onClick={() => setColsOpen((o) => !o)} className="text-[11px] font-black px-2.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 inline-flex items-center gap-1"><SlidersHorizontal className="w-3 h-3" /> Columns</button>
+              {colsOpen && (
+                <div className="absolute right-0 mt-1 z-20 w-48 max-h-72 overflow-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl p-2">
+                  {COLS.filter((c) => !c.left).map((c) => (
+                    <label key={c.k} className="flex items-center gap-2 text-xs py-1 px-1 cursor-pointer">
+                      <input type="checkbox" checked={!hidden.includes(c.k)} onChange={() => toggleCol(c.k)} /> {c.label}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button onClick={exportCsv} className="text-[11px] font-black px-2.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">CSV</button>
+            {filter !== 'All' && <button onClick={() => setFilter('All')} className="text-[11px] font-black text-indigo-600 inline-flex items-center gap-0.5">{filter} <X className="w-3 h-3" /></button>}
+          </div>
+          <div className="max-h-[70vh] overflow-auto">
+            <table className="w-full text-xs whitespace-nowrap">
+              <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800 text-[10px] uppercase text-slate-400">
+                <tr>
+                  <th className="p-2.5 w-8 sticky left-0 bg-slate-50 dark:bg-slate-800"><input type="checkbox" checked={visible.length > 0 && checked.length === visible.length} onChange={(e) => setChecked(e.target.checked ? visible.map((r) => r.id) : [])} /></th>
+                  {COLS.filter((c) => !hidden.includes(c.k)).map((c) => (
+                    <th key={c.k} onClick={() => clickSort(c.k as SortKey)} className={`p-2.5 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200 ${c.left ? 'text-left sticky left-0 bg-slate-50 dark:bg-slate-800' : 'text-right'}`}>
+                      {c.label}{sort === c.k ? (dir === 1 ? ' ▲' : ' ▼') : ''}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(group ? grouped : [{ name: '', items: visible }]).map((g) => (
+                  <React.Fragment key={g.name || 'all'}>
+                    {group && (
+                      <tr className="bg-slate-100/70 dark:bg-slate-800/60">
+                        <td colSpan={99} className="p-2 text-[11px] font-black text-slate-700 dark:text-slate-200">
+                          {g.name} <span className="text-slate-400 font-bold">· {g.items.length} · {money(g.items.reduce((a: number, r: any) => a + r.value, 0), ccy, true)} · <span className={tone(g.items.reduce((a: number, r: any) => a + r.pnl, 0))}>{money(g.items.reduce((a: number, r: any) => a + r.pnl, 0), ccy, true)}</span></span>
+                        </td>
+                      </tr>
+                    )}
+                    {g.items.map((r: any) => (
+                      <tr key={r.id} onClick={() => setSelected(r.id)} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer">
+                        <td className="p-2.5 w-8" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={checked.includes(r.id)} onChange={(e) => setChecked((cs) => (e.target.checked ? [...cs, r.id] : cs.filter((x) => x !== r.id)))} /></td>
+                        {COLS.filter((c) => !hidden.includes(c.k)).map((c) => (
+                          <td key={c.k} className={`p-2.5 ${c.left ? 'text-left sticky left-0 bg-white dark:bg-slate-900' : 'text-right tabular-nums'} ${c.tone ? tone(c.tone(r)) : ''}`}>{c.cell(r, totals.value, ccy)}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                ))}
+                {visible.length === 0 && <tr><td colSpan={99} className="p-8 text-center text-slate-400">No holdings match.</td></tr>}
+              </tbody>
+              {visible.length > 0 && (
+                <tfoot className="sticky bottom-0 bg-slate-50 dark:bg-slate-800 font-black">
+                  <tr>
+                    <td />
+                    {COLS.filter((c) => !hidden.includes(c.k)).map((c, i) => {
+                      const sum = (f: string) => visible.reduce((a, r: any) => a + (r[f] || 0), 0);
+                      let t: React.ReactNode = '';
+                      if (i === 0) t = `Total · ${visible.length}`;
+                      else if (c.k === 'cost') t = money(sum('cost'), ccy, true);
+                      else if (c.k === 'value') t = money(sum('value'), ccy, true);
+                      else if (c.k === 'pnl') t = <span className={tone(sum('pnl'))}>{money(sum('pnl'), ccy, true)}</span>;
+                      else if (c.k === 'pnlPct') { const co = sum('cost'); t = <span className={tone(sum('pnl'))}>{co > 0 ? pct((sum('pnl') / co) * 100) : '—'}</span>; }
+                      else if (c.k === 'day') t = <span className={tone(sum('day'))}>{money(sum('day'), ccy, true)}</span>;
+                      else if (c.k === 'weight') t = totals.value > 0 ? `${((sum('value') / totals.value) * 100).toFixed(1)}%` : '';
+                      return <td key={c.k} className={`p-2.5 ${c.left ? 'text-left sticky left-0 bg-slate-50 dark:bg-slate-800' : 'text-right tabular-nums'}`}>{t}</td>;
+                    })}
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const NAV_BADGE: Record<string, number | undefined> = { holdings: rows.length, sold: soldRows.length || undefined, sync: connections.length || undefined };
+
   return (
-    <div className="max-w-[1600px] mx-auto p-3 sm:p-6 space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="max-w-[1600px] mx-auto p-3 sm:p-6 pb-24 md:pb-6">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <div>
           <h1 className="text-2xl font-black text-slate-900 dark:text-white">Portfolio</h1>
           <p className="text-xs text-slate-500">{rows.length} positions · {connections.length} broker connection{connections.length === 1 ? '' : 's'}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <select value={ccy} onChange={(e) => setCcy(e.target.value)} className="text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1.5">
-            {currencies.map((c) => <option key={c}>{c}</option>)}
-          </select>
-          <button onClick={onManage} className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900">
-            <Settings2 className="w-3.5 h-3.5" /> Edit holdings (current design)
-          </button>
+      </div>
+      <div className="space-y-2 mb-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 w-14">Portfolio</span>
+          {[{ id: 'All', name: 'All' }, ...portfolios].map((p: any) => (
+            <button key={p.id} onClick={() => { setBook(p.id); setFilter('All'); setChecked([]); }} className={`text-xs font-black px-3.5 py-1.5 rounded-full transition-all ${book === p.id ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>{p.name}</button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 w-14">Currency</span>
+          {currencies.map((c) => (
+            <button key={c} onClick={() => setCcy(c)} className={`text-xs font-black px-3.5 py-1.5 rounded-full transition-all ${ccy === c ? 'bg-indigo-600 text-white shadow' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>{c}</button>
+          ))}
         </div>
       </div>
 
-      <div className="flex gap-1 border-b border-slate-200 dark:border-slate-800">
-        {([['holdings', 'Holdings'], ['sync', 'Import & Sync']] as const).map(([k, l]) => (
-          <button key={k} onClick={() => setTab(k)} className={`px-4 py-2 text-sm font-black -mb-px border-b-2 ${tab === k ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}>{l}{k === 'sync' && connections.length ? <span className="ml-1.5 text-[10px] bg-slate-100 dark:bg-slate-800 rounded-full px-1.5 py-0.5">{connections.length}</span> : null}</button>
-        ))}
-      </div>
-      {tab === 'sync' && syncHub}
-      {importProps && <PortfolioV1View {...importProps} headless bridgeRef={bridge} onBridge={() => bump((n) => n + 1)} />}
-      {tab === 'holdings' && (<>
+      <div className="md:flex md:gap-6">
+        <nav className="hidden md:block w-48 shrink-0">
+          <div className="sticky top-2 space-y-1">
+            {NAV.map((n) => (
+              <button key={n.k} onClick={() => setSection(n.k)} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-bold text-left ${section === n.k ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
+                {n.icon}<span className="flex-1">{n.label}</span>{NAV_BADGE[n.k] ? <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${section === n.k ? 'bg-white/20' : 'bg-slate-100 dark:bg-slate-800'}`}>{NAV_BADGE[n.k]}</span> : null}
+              </button>
+            ))}
+            <button onClick={onManage} className="w-full text-[11px] font-bold text-slate-400 hover:text-slate-600 px-3 pt-3 text-left">Back to current design</button>
+          </div>
+        </nav>
+        <div className="flex-1 min-w-0">
+          {section === 'overview' && (
+          <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Kpi label="Total value" value={money(totals.value, ccy, true)} sub={`Invested ${money(totals.cost, ccy, true)}`} />
         <Kpi label="Total P&L" value={money(totals.pnl, ccy, true)} sub={pct(totals.pnlPct)} subTone={tone(totals.pnl)} />
@@ -313,7 +604,34 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         <Kpi label="Best / worst" value={best ? best.symbol : '—'} sub={worst ? `Worst: ${worst.symbol} ${money(worst.pnl, ccy, true)}` : ''} subTone="text-slate-500" />
       </div>
 
-      <div className="grid gap-4">
+
+            <div className="grid lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm font-black">Portfolio value</div>
+                  <div className="flex gap-1">{[30, 90, 180, 365].map((d) => <button key={d} onClick={() => setTrendDays(d)} className={`text-[10px] font-black px-2 py-1 rounded-full ${trendDays === d ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{d === 365 ? '1Y' : d === 180 ? '6M' : d === 90 ? '3M' : '1M'}</button>)}</div>
+                </div>
+                {trend.length > 1 ? (
+                  <div className="h-48"><ResponsiveContainer width="100%" height="100%"><AreaChart data={trend}><defs><linearGradient id="pv" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#6366f1" stopOpacity={0.35} /><stop offset="100%" stopColor="#6366f1" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={30} /><YAxis hide domain={['auto', 'auto']} /><Tooltip formatter={(v: any) => money(Number(v), ccy)} /><Area type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={2} fill="url(#pv)" /></AreaChart></ResponsiveContainer></div>
+                ) : <div className="h-48 flex items-center justify-center text-xs text-slate-400 text-center px-6">No daily history for this range yet. Open the Calendar tab and press snapshot, or wait for the nightly snapshot.</div>}
+              </div>
+              <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+                {[['Top gainers', [...rows].sort((a, b) => b.pnl - a.pnl).filter((r) => r.pnl > 0).slice(0, 5)], ['Top losers', [...rows].sort((a, b) => a.pnl - b.pnl).filter((r) => r.pnl < 0).slice(0, 5)]].map(([t, list]: any) => (
+                  <div key={t}>
+                    <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">{t}</div>
+                    {list.length === 0 && <div className="text-xs text-slate-400">None</div>}
+                    {list.map((r: any) => <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex justify-between text-xs py-1 hover:bg-slate-50 dark:hover:bg-slate-800 rounded px-1"><span className="font-bold">{r.symbol}</span><span className={`tabular-nums font-bold ${tone(r.pnl)}`}>{money(r.pnl, ccy, true)} · {pct(r.pnlPct)}</span></button>)}
+                  </div>
+                ))}
+                {nearStop.length > 0 && (
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-wider text-amber-600 mb-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Near stop-loss</div>
+                    {nearStop.map((r: any) => <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex justify-between text-xs py-1 hover:bg-slate-50 dark:hover:bg-slate-800 rounded px-1"><span className="font-bold">{r.symbol}</span><span className="text-amber-600 font-bold">{r.stopDist.toFixed(1)}% away</span></button>)}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="grid gap-4">
         <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="text-sm font-black text-slate-800 dark:text-slate-100">Allocation</div>
@@ -347,87 +665,60 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           </div>
         </div>
 
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
-          <div className="p-3 flex flex-wrap items-center gap-2 border-b border-slate-100 dark:border-slate-800">
-            <div className="relative flex-1 min-w-[140px]">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search symbol, name, broker" className="w-full pl-8 pr-2 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-transparent focus:border-indigo-400 outline-none" />
             </div>
-            {(['all', 'gainers', 'losers'] as const).map((v) => (
-              <button key={v} onClick={() => setView(v)} className={`text-[11px] font-black px-2.5 py-1.5 rounded-full capitalize ${view === v ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{v}</button>
-            ))}
-            <button onClick={() => setGroup((g) => !g)} className={`text-[11px] font-black px-2.5 py-1.5 rounded-full ${group ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Group by {groupBy}</button>
-            <div className="relative">
-              <button onClick={() => setColsOpen((o) => !o)} className="text-[11px] font-black px-2.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 inline-flex items-center gap-1"><SlidersHorizontal className="w-3 h-3" /> Columns</button>
-              {colsOpen && (
-                <div className="absolute right-0 mt-1 z-20 w-48 max-h-72 overflow-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl p-2">
-                  {COLS.filter((c) => !c.left).map((c) => (
-                    <label key={c.k} className="flex items-center gap-2 text-xs py-1 px-1 cursor-pointer">
-                      <input type="checkbox" checked={!hidden.includes(c.k)} onChange={() => toggleCol(c.k)} /> {c.label}
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-            <button onClick={exportCsv} className="text-[11px] font-black px-2.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">CSV</button>
-            {filter !== 'All' && <button onClick={() => setFilter('All')} className="text-[11px] font-black text-indigo-600 inline-flex items-center gap-0.5">{filter} <X className="w-3 h-3" /></button>}
           </div>
-          <div className="max-h-[70vh] overflow-auto">
-            <table className="w-full text-xs whitespace-nowrap">
-              <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800 text-[10px] uppercase text-slate-400">
-                <tr>
-                  {COLS.filter((c) => !hidden.includes(c.k)).map((c) => (
-                    <th key={c.k} onClick={() => clickSort(c.k as SortKey)} className={`p-2.5 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200 ${c.left ? 'text-left sticky left-0 bg-slate-50 dark:bg-slate-800' : 'text-right'}`}>
-                      {c.label}{sort === c.k ? (dir === 1 ? ' ▲' : ' ▼') : ''}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(group ? grouped : [{ name: '', items: visible }]).map((g) => (
-                  <React.Fragment key={g.name || 'all'}>
-                    {group && (
-                      <tr className="bg-slate-100/70 dark:bg-slate-800/60">
-                        <td colSpan={99} className="p-2 text-[11px] font-black text-slate-700 dark:text-slate-200">
-                          {g.name} <span className="text-slate-400 font-bold">· {g.items.length} · {money(g.items.reduce((a: number, r: any) => a + r.value, 0), ccy, true)} · <span className={tone(g.items.reduce((a: number, r: any) => a + r.pnl, 0))}>{money(g.items.reduce((a: number, r: any) => a + r.pnl, 0), ccy, true)}</span></span>
-                        </td>
-                      </tr>
-                    )}
-                    {g.items.map((r: any) => (
-                      <tr key={r.id} onClick={() => setSelected(r.id)} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer">
-                        {COLS.filter((c) => !hidden.includes(c.k)).map((c) => (
-                          <td key={c.k} className={`p-2.5 ${c.left ? 'text-left sticky left-0 bg-white dark:bg-slate-900' : 'text-right tabular-nums'} ${c.tone ? tone(c.tone(r)) : ''}`}>{c.cell(r, totals.value, ccy)}</td>
-                        ))}
-                      </tr>
-                    ))}
-                  </React.Fragment>
-                ))}
-                {visible.length === 0 && <tr><td colSpan={99} className="p-8 text-center text-slate-400">No holdings match.</td></tr>}
-              </tbody>
-              {visible.length > 0 && (
-                <tfoot className="sticky bottom-0 bg-slate-50 dark:bg-slate-800 font-black">
-                  <tr>
-                    {COLS.filter((c) => !hidden.includes(c.k)).map((c, i) => {
-                      const sum = (f: string) => visible.reduce((a, r: any) => a + (r[f] || 0), 0);
-                      let t: React.ReactNode = '';
-                      if (i === 0) t = `Total · ${visible.length}`;
-                      else if (c.k === 'cost') t = money(sum('cost'), ccy, true);
-                      else if (c.k === 'value') t = money(sum('value'), ccy, true);
-                      else if (c.k === 'pnl') t = <span className={tone(sum('pnl'))}>{money(sum('pnl'), ccy, true)}</span>;
-                      else if (c.k === 'pnlPct') { const co = sum('cost'); t = <span className={tone(sum('pnl'))}>{co > 0 ? pct((sum('pnl') / co) * 100) : '—'}</span>; }
-                      else if (c.k === 'day') t = <span className={tone(sum('day'))}>{money(sum('day'), ccy, true)}</span>;
-                      else if (c.k === 'weight') t = totals.value > 0 ? `${((sum('value') / totals.value) * 100).toFixed(1)}%` : '';
-                      return <td key={c.k} className={`p-2.5 ${c.left ? 'text-left sticky left-0 bg-slate-50 dark:bg-slate-800' : 'text-right tabular-nums'}`}>{t}</td>;
-                    })}
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
+)}
+          {section === 'holdings' && holdingsView}
+          {section === 'sold' && soldView}
+          {section === 'calendar' && calendarView}
+          {section === 'cash' && cashView}
+          {section === 'sync' && syncHub}
+          {importProps && <PortfolioV1View {...importProps} headless bridgeRef={bridge} onBridge={() => bump((n) => n + 1)} />}
         </div>
       </div>
 
-      </>)}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur border-t border-slate-200 dark:border-slate-800 grid grid-cols-6">
+        {NAV.map((n) => (
+          <button key={n.k} onClick={() => setSection(n.k)} className={`flex flex-col items-center gap-0.5 py-2 text-[9px] font-black ${section === n.k ? 'text-indigo-600' : 'text-slate-400'}`}>{n.icon}{n.label.replace('Import & Sync', 'Sync')}</button>
+        ))}
+      </nav>
+
+      {form && (
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40 p-3" onClick={() => !busy && setForm(null)}>
+          <div className="w-full sm:max-w-lg max-h-[90vh] overflow-auto rounded-2xl bg-white dark:bg-slate-900 p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between"><h3 className="text-base font-black">{form.id ? 'Edit holding' : 'Add holding'}</h3><button onClick={() => setForm(null)}><X className="w-4 h-4" /></button></div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Symbol"><input className={inputCls} value={form.symbol} onChange={(e) => setF('symbol', e.target.value)} /></Field>
+              <Field label="Broker"><input className={inputCls} value={form.broker} onChange={(e) => setF('broker', e.target.value)} placeholder="Zerodha, eToro…" /></Field>
+              <Field label="Quantity"><input className={inputCls} type="number" value={form.quantity} onChange={(e) => setF('quantity', e.target.value)} /></Field>
+              <Field label="Buy price"><input className={inputCls} type="number" value={form.buyPrice} onChange={(e) => setF('buyPrice', e.target.value)} /></Field>
+              <Field label="Buy date"><input className={inputCls} type="date" value={form.buyDate} onChange={(e) => setF('buyDate', e.target.value)} /></Field>
+              <Field label="Currency"><select className={inputCls} value={form.currency} onChange={(e) => setF('currency', e.target.value)}>{Array.from(new Set(['INR', 'USD', 'AUD', 'EUR', 'GBP', ...currencies])).map((c) => <option key={c}>{c}</option>)}</select></Field>
+              <Field label="Current price"><input className={inputCls} type="number" value={form.currentPrice} onChange={(e) => setF('currentPrice', e.target.value)} placeholder="optional" /></Field>
+              <Field label="Exchange"><input className={inputCls} value={form.exchange} onChange={(e) => setF('exchange', e.target.value)} placeholder="NSE, NASDAQ…" /></Field>
+              <Field label="Target price"><input className={inputCls} type="number" value={form.targetPrice} onChange={(e) => setF('targetPrice', e.target.value)} placeholder="optional" /></Field>
+              <Field label="Stop loss"><input className={inputCls} type="number" value={form.stopLoss} onChange={(e) => setF('stopLoss', e.target.value)} placeholder="optional" /></Field>
+              {portfolios.length > 0 && <Field label="Book"><select className={inputCls} value={form.portfolioId} onChange={(e) => setF('portfolioId', e.target.value)}><option value="">None</option>{portfolios.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>}
+              <div className="col-span-2"><Field label="Notes"><input className={inputCls} value={form.notes} onChange={(e) => setF('notes', e.target.value)} /></Field></div>
+            </div>
+            {err && <p className="text-xs font-bold text-rose-600">{err}</p>}
+            <div className="flex gap-2 pt-1"><button disabled={busy} onClick={saveForm} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-black disabled:opacity-50">{busy ? 'Saving…' : 'Save'}</button><button onClick={() => setForm(null)} className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm font-bold">Cancel</button></div>
+          </div>
+        </div>
+      )}
+
+      {sellFor && (
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40 p-3" onClick={() => !busy && setSellFor(null)}>
+          <div className="w-full sm:max-w-sm rounded-2xl bg-white dark:bg-slate-900 p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-black">Sell {sellFor.symbol}</h3>
+            <Field label={`Quantity (max ${px(sellFor.max)})`}><input className={inputCls} type="number" value={sellFor.qty} onChange={(e) => setSellFor({ ...sellFor, qty: e.target.value })} /></Field>
+            <Field label="Sold price"><input className={inputCls} type="number" value={sellFor.price} onChange={(e) => setSellFor({ ...sellFor, price: e.target.value })} /></Field>
+            <Field label="Date"><input className={inputCls} type="date" value={sellFor.date} onChange={(e) => setSellFor({ ...sellFor, date: e.target.value })} /></Field>
+            {err && <p className="text-xs font-bold text-rose-600">{err}</p>}
+            <div className="flex gap-2"><button disabled={busy} onClick={() => run(() => sellHolding!(sellFor.id, { quantity: Number(sellFor.qty), soldPrice: Number(sellFor.price), soldDate: sellFor.date }), () => { setSellFor(null); setSelected(null); })} className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-black disabled:opacity-50">{busy ? 'Saving…' : 'Confirm sale'}</button><button onClick={() => setSellFor(null)} className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm font-bold">Cancel</button></div>
+          </div>
+        </div>
+      )}
 
       {sel && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setSelected(null)}>
@@ -473,6 +764,13 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
               </div>
             )}
             {sel.h.notes && <p className="text-xs text-slate-500">{sel.h.notes}</p>}
+            {!isReadOnly && (
+              <div className="flex gap-2 pt-2">
+                <button onClick={() => { setErr(null); openEdit(sel.h); }} className="flex-1 inline-flex items-center justify-center gap-1 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-black"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+                <button onClick={() => { setErr(null); setSellFor({ id: sel.id, symbol: sel.symbol, max: sel.qty, qty: String(sel.qty), price: String(sel.price), date: new Date().toISOString().slice(0, 10) }); }} className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-black">Sell</button>
+                <button onClick={() => { if (window.confirm(`Delete ${sel.symbol}?`)) run(() => deleteHolding!(sel.id), () => setSelected(null)); }} className="px-3 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600"><Trash2 className="w-4 h-4" /></button>
+              </div>
+            )}
           </div>
         </div>
       )}

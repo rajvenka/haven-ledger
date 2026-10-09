@@ -2002,6 +2002,16 @@ export default function App() {
                   isLoading={portfolioDataLoading}
                   onManage={() => setTryNewUi(false)}
                   isReadOnly={isReadOnly}
+                  cashBalances={portfolioCashBalances}
+                  loadDailyPositions={loadPortfolioDailyPositions}
+                  snapshotDaily={snapshotPortfolioDailyPositions}
+                  addHolding={addPortfolioHolding}
+                  updateHolding={updatePortfolioHolding}
+                  sellHolding={sellPortfolioHolding}
+                  deleteHolding={deletePortfolioHolding}
+                  bulkDelete={bulkDeletePortfolioHoldings}
+                  setCash={setPortfolioCashBalance}
+                  deleteCash={deletePortfolioCashBalance}
                   importProps={{
                     isReadOnly, baseCurrency: activeWorkspace?.baseCurrency, workspaceName: activeWorkspace?.name,
                     portfolios, portfolioMode: activeWorkspace?.portfolioMode, portfolioHoldings, portfolioHoldingLots,
