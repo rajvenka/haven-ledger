@@ -36,16 +36,34 @@ export function readZerodhaPending(): ZerodhaPending | null {
 }
 export const clearZerodhaPending = () => { try { localStorage.removeItem(PENDING_KEY); } catch { /* ignore */ } };
 
-/** request_token from the current URL (Kite redirect), or null. */
+const CB_KEY = 'hv_zerodha_cb';
+
+/** request_token from the current URL (Kite redirect) or the stash saved before sign-in, or null. */
 export function readZerodhaCallback(): { requestToken: string; failed: boolean } | null {
   if (typeof window === 'undefined') return null;
   const q = new URLSearchParams(window.location.search);
   const token = q.get('request_token');
-  if (!token) return null;
-  return { requestToken: token, failed: (q.get('status') || 'success') !== 'success' };
+  if (token) return { requestToken: token, failed: (q.get('status') || 'success') !== 'success' };
+  try {
+    const c = JSON.parse(sessionStorage.getItem(CB_KEY) || 'null');
+    if (c && Date.now() - Number(c.ts || 0) < 10 * 60 * 1000) return { requestToken: c.requestToken, failed: !!c.failed };
+  } catch { /* ignore */ }
+  return null;
+}
+
+// Runs as soon as the app loads - BEFORE the sign-in screen can drop the URL - so the login
+// can finish after the user signs in to Haven Ledger.
+if (typeof window !== 'undefined') {
+  try {
+    const cb = readZerodhaCallback();
+    if (cb && new URLSearchParams(window.location.search).get('request_token')) {
+      sessionStorage.setItem(CB_KEY, JSON.stringify({ ...cb, ts: Date.now() }));
+    }
+  } catch { /* ignore */ }
 }
 
 export function stripZerodhaCallbackFromUrl() {
+  try { sessionStorage.removeItem(CB_KEY); } catch { /* ignore */ }
   try {
     const u = new URL(window.location.href);
     ['request_token', 'action', 'status', 'type'].forEach((k) => u.searchParams.delete(k));
