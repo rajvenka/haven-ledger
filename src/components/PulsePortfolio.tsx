@@ -121,6 +121,8 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const setSection = (k: Section) => { setSectionState(k); try { localStorage.setItem('hv_pp_section', k); } catch { /* */ } };
   const [design, setDesignState] = useState<number>(() => { try { return Number(localStorage.getItem('hv_pp_design')) || 1; } catch { return 1; } });
   const setDesign = (n: number) => { setDesignState(n); try { localStorage.setItem('hv_pp_design', String(n)); } catch { /* */ } };
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const [drill, setDrill] = useState<string | null>(null);
   const [heatBy, setHeatBy] = useState<'pnlPct' | 'dayPct'>('pnlPct');
   const [openBrokers, setOpenBrokers] = useState<string[]>([]);
   const [defaultBook, setDefaultBook] = useState<string>(() => { try { return localStorage.getItem('hv_pp_default_book') || ''; } catch { return ''; } });
@@ -724,6 +726,125 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         </div>
       </div>
     );
+
+    if (design === 7) {
+      const list = topRows.filter((r) => !q.trim() || r.symbol.toLowerCase().includes(q.trim().toLowerCase()) || r.broker.toLowerCase().includes(q.trim().toLowerCase()));
+      const f = (focusId && rows.find((r) => r.id === focusId)) || list[0];
+      return (
+        <div className="grid lg:grid-cols-[360px_1fr] gap-4 items-start">
+          <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="p-3 border-b border-slate-100 dark:border-slate-800"><div className="relative"><Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${rows.length} holdings`} className="w-full pl-8 pr-2 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 outline-none" /></div></div>
+            <div className="max-h-[70vh] overflow-auto">
+              {list.map((r, i) => (
+                <button key={r.id} onClick={() => setFocusId(r.id)} className={`w-full flex items-center gap-3 px-3 py-2.5 border-t border-slate-100 dark:border-slate-800 text-left ${f?.id === r.id ? 'bg-indigo-50 dark:bg-indigo-950/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
+                  <Avatar t={r.symbol} i={i} />
+                  <div className="flex-1 min-w-0"><div className="text-sm font-black truncate">{r.symbol}</div><div className="text-[11px] text-slate-400 truncate">{r.broker}</div></div>
+                  <div className="text-right"><div className="text-xs font-black tabular-nums">{money(r.value, ccy, true)}</div><div className={`text-[11px] font-bold ${tone(r.pnl)}`}>{pct(r.pnlPct)}</div></div>
+                </button>
+              ))}
+            </div>
+          </div>
+          {f ? (
+            <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 space-y-5 lg:sticky lg:top-2">
+              <div className="flex items-start justify-between gap-3"><div><div className="text-3xl font-black">{f.symbol}</div><div className="text-xs text-slate-500">{f.name !== f.symbol ? f.name + ' · ' : ''}{f.broker} · {f.portfolio} · {f.category}</div></div><Pill v={f.pnlPct} /></div>
+              <div className="text-4xl font-black tabular-nums">{money(f.value, ccy)}</div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                {[['P&L', money(f.pnl, ccy, true)], ['Invested', money(f.cost, ccy, true)], ['Quantity', px(f.qty)], ['Avg cost', `${px(f.buy)} ${f.native}`], ['Last price', `${px(f.price)} ${f.native}`], ['Today', f.day ? money(f.day, ccy, true) : '—'], ['Weight', `${totals.value > 0 ? ((f.value / totals.value) * 100).toFixed(2) : 0}%`], ['Held', f.heldDays != null ? `${f.heldDays} days` : '—'], ['Target', f.target ? px(f.target) : '—'], ['Stop loss', f.stop ? px(f.stop) : '—'], ['Bought', f.buyDate || '—'], ['Price updated', f.updated ? new Date(f.updated).toLocaleDateString() : '—']].map(([k, v]) => <div key={k} className="rounded-xl bg-slate-50 dark:bg-slate-800 p-3"><div className="text-[10px] uppercase font-black text-slate-400">{k}</div><div className="font-bold mt-0.5">{v}</div></div>)}
+              </div>
+              {!isReadOnly && <div className="flex gap-2"><button onClick={() => { setErr(null); openEdit(f.h); }} className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-black">Edit</button><button onClick={() => { setErr(null); setSellFor({ id: f.id, symbol: f.symbol, max: f.qty, qty: String(f.qty), price: String(f.price), date: new Date().toISOString().slice(0, 10) }); }} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-black">Sell</button></div>}
+            </div>
+          ) : <div className="text-sm text-slate-400 p-8">No holdings.</div>}
+        </div>
+      );
+    }
+    if (design === 8) return (
+      <div className="grid grid-cols-2 lg:grid-cols-4 auto-rows-[120px] gap-3">
+        <div className="col-span-2 row-span-2 rounded-3xl bg-slate-900 text-white p-5 flex flex-col justify-between"><div className="text-xs font-bold text-slate-400">Total value</div><div><div className="text-4xl font-black tabular-nums">{money(totals.value, ccy, true)}</div><div className={`text-sm font-black ${totals.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{money(totals.pnl, ccy, true)} · {pct(totals.pnlPct)}</div></div>{heroSpark}</div>
+        <div className="rounded-3xl bg-emerald-50 dark:bg-emerald-950/30 p-4"><div className="text-[10px] font-black uppercase text-emerald-700 dark:text-emerald-300">Today</div><div className={`text-2xl font-black mt-2 ${tone(totals.day)}`}>{money(totals.day, ccy, true)}</div><div className={`text-xs font-bold ${tone(totals.day)}`}>{pct(totals.dayPct)}</div></div>
+        <div className="rounded-3xl bg-amber-50 dark:bg-amber-950/30 p-4"><div className="text-[10px] font-black uppercase text-amber-700 dark:text-amber-300">Cash</div><div className="text-2xl font-black mt-2">{money(cashTotal, ccy, true)}</div><div className="text-xs text-slate-500">{cashRows.length} accounts</div></div>
+        <div className="col-span-2 row-span-2 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3"><div className="text-xs font-black px-1">Allocation by {groupBy}</div><div className="h-[190px]"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={groups} dataKey="value" nameKey="name" innerRadius={45} outerRadius={80} paddingAngle={2}>{groups.map((g, i) => <Cell key={g.name} fill={PALETTE[i % PALETTE.length]} />)}</Pie><Tooltip formatter={(v: any) => money(Number(v), ccy)} /></PieChart></ResponsiveContainer></div></div>
+        <div className="rounded-3xl bg-violet-50 dark:bg-violet-950/30 p-4"><div className="text-[10px] font-black uppercase text-violet-700 dark:text-violet-300">Positions</div><div className="text-3xl font-black mt-2">{rows.length}</div><div className="text-xs text-slate-500">{brokerGroups.length} brokers</div></div>
+        <div className="rounded-3xl bg-sky-50 dark:bg-sky-950/30 p-4"><div className="text-[10px] font-black uppercase text-sky-700 dark:text-sky-300">Realized</div><div className={`text-2xl font-black mt-2 ${tone(soldTotals.pnl)}`}>{money(soldTotals.pnl, ccy, true)}</div><div className="text-xs text-slate-500">{soldRows.length} sales</div></div>
+        <div className="col-span-2 row-span-2 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 overflow-auto"><div className="text-xs font-black mb-2">Top winners</div>{[...rows].sort((a, b) => b.pnl - a.pnl).slice(0, 6).map((r) => <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex justify-between text-xs py-1"><b>{r.symbol}</b><span className={`font-bold ${tone(r.pnl)}`}>{money(r.pnl, ccy, true)} · {pct(r.pnlPct)}</span></button>)}</div>
+        <div className="col-span-2 row-span-2 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 overflow-auto"><div className="text-xs font-black mb-2">Needs attention</div>{[...rows].sort((a, b) => a.pnl - b.pnl).slice(0, 4).map((r) => <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex justify-between text-xs py-1"><b>{r.symbol}</b><span className={`font-bold ${tone(r.pnl)}`}>{money(r.pnl, ccy, true)} · {pct(r.pnlPct)}</span></button>)}{nearStop.slice(0, 2).map((r: any) => <div key={r.id} className="flex justify-between text-xs py-1 text-amber-600"><b>{r.symbol} stop-loss</b><span>{r.stopDist.toFixed(1)}% away</span></div>)}{nearTarget.slice(0, 2).map((r: any) => <div key={r.id} className="flex justify-between text-xs py-1 text-emerald-600"><b>{r.symbol} target</b><span>{r.tgtDist <= 0 ? 'reached' : `${r.tgtDist.toFixed(1)}% to go`}</span></div>)}</div>
+      </div>
+    );
+    if (design === 9) return (
+      <div className="space-y-3">
+        {kpiRow}
+        <div className="flex gap-3 overflow-x-auto pb-3 items-start">
+          {groups.map((g, i) => (
+            <div key={g.name} className="w-72 shrink-0 rounded-2xl bg-slate-100/70 dark:bg-slate-800/50 p-2">
+              <div className="flex items-center justify-between px-2 py-1.5"><div className="flex items-center gap-2"><i className="w-2.5 h-2.5 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} /><b className="text-sm">{g.name}</b></div><span className="text-xs font-black tabular-nums">{money(g.value, ccy, true)}</span></div>
+              <div className="space-y-2 max-h-[60vh] overflow-auto">
+                {rows.filter((r) => r[groupBy] === g.name).sort((a, b) => b.value - a.value).map((r) => (
+                  <button key={r.id} onClick={() => setSelected(r.id)} className="w-full text-left rounded-xl bg-white dark:bg-slate-900 p-3 shadow-sm">
+                    <div className="flex justify-between"><b className="text-sm">{r.symbol}</b><Pill v={r.pnlPct} /></div>
+                    <div className="flex justify-between text-[11px] text-slate-500 mt-1"><span>{r.broker}</span><span className="tabular-nums">{money(r.value, ccy, true)}</span></div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+    if (design === 10) return (
+      <div className="max-w-4xl mx-auto bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 space-y-8" style={{ fontFamily: 'Georgia, serif' }}>
+        <div className="border-b border-slate-200 dark:border-slate-700 pb-4"><div className="text-xs uppercase tracking-[0.2em] text-slate-400">Portfolio statement</div><div className="text-4xl font-bold mt-1">{money(totals.value, ccy)}</div><p className="text-sm text-slate-500 mt-2">Across {rows.length} positions in {brokerGroups.length} accounts, you are {totals.pnl >= 0 ? 'up' : 'down'} <b className={tone(totals.pnl)}>{money(Math.abs(totals.pnl), ccy, true)} ({pct(totals.pnlPct)})</b> on {money(totals.cost, ccy, true)} invested. Today the portfolio moved <b className={tone(totals.day)}>{pct(totals.dayPct)}</b>.</p></div>
+        <div><div className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-2">By {groupBy}</div>
+          <table className="w-full text-sm"><thead><tr className="text-left text-[11px] uppercase text-slate-400 border-b border-slate-200 dark:border-slate-700"><th className="py-1.5">{groupBy}</th><th className="text-right">Value</th><th className="text-right">Share</th><th className="text-right">P&amp;L</th></tr></thead><tbody>
+            {groups.map((g) => { const items = rows.filter((r) => r[groupBy] === g.name); const pl = items.reduce((a, r) => a + r.pnl, 0); return <tr key={g.name} className="border-b border-slate-100 dark:border-slate-800"><td className="py-2 font-semibold">{g.name}</td><td className="text-right tabular-nums">{money(g.value, ccy, true)}</td><td className="text-right tabular-nums">{((g.value / Math.max(1, totals.value)) * 100).toFixed(1)}%</td><td className={`text-right tabular-nums ${tone(pl)}`}>{money(pl, ccy, true)}</td></tr>; })}
+          </tbody></table></div>
+        <div><div className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-2">Largest positions</div>
+          {topRows.slice(0, 10).map((r, i) => <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex items-baseline gap-3 py-1.5 text-sm text-left border-b border-slate-100 dark:border-slate-800"><span className="text-slate-400 w-5">{i + 1}.</span><b className="w-28">{r.symbol}</b><span className="flex-1 text-slate-500 truncate">{r.broker}</span><span className="tabular-nums">{money(r.value, ccy, true)}</span><span className={`tabular-nums w-16 text-right ${tone(r.pnl)}`}>{pct(r.pnlPct)}</span></button>)}</div>
+      </div>
+    );
+    if (design === 11) {
+      const act = drill || groups[0]?.name;
+      const items = rows.filter((r) => r[groupBy] === act).sort((a, b) => b.value - a.value);
+      return (
+        <div className="grid lg:grid-cols-[340px_1fr] gap-4 items-start">
+          <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
+            <div className="flex gap-1 mb-2 flex-wrap">{(['category', 'broker', 'currency', 'portfolio'] as GroupBy[]).map((g) => <button key={g} onClick={() => { setGroupBy(g); setDrill(null); }} className={`text-[10px] font-black px-2 py-1 rounded-full capitalize ${groupBy === g ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{g}</button>)}</div>
+            <div className="h-56 relative"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={groups} dataKey="value" nameKey="name" innerRadius={62} outerRadius={100} paddingAngle={2} onClick={(d: any) => setDrill(d.name)}>{groups.map((g, i) => <Cell key={g.name} fill={PALETTE[i % PALETTE.length]} opacity={act === g.name ? 1 : 0.35} />)}</Pie></PieChart></ResponsiveContainer><div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"><div className="text-[10px] text-slate-400 font-bold">TOTAL</div><div className="text-lg font-black">{money(totals.value, ccy, true)}</div></div></div>
+            {groups.map((g, i) => <button key={g.name} onClick={() => setDrill(g.name)} className={`w-full flex items-center gap-2 text-xs px-2 py-1.5 rounded-lg ${act === g.name ? 'bg-slate-100 dark:bg-slate-800' : ''}`}><i className="w-2.5 h-2.5 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} /><b className="flex-1 text-left truncate">{g.name}</b><span className="text-slate-500">{((g.value / Math.max(1, totals.value)) * 100).toFixed(1)}%</span></button>)}
+          </div>
+          <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+            <div className="px-4 py-3 flex justify-between items-center"><div><div className="text-lg font-black">{act}</div><div className="text-xs text-slate-500">{items.length} holdings · {money(items.reduce((a, r) => a + r.value, 0), ccy, true)}</div></div></div>
+            {items.map((r, i) => <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex items-center gap-3 px-4 py-2.5 border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 text-left"><Avatar t={r.symbol} i={i} /><div className="flex-1 min-w-0"><div className="text-sm font-black truncate">{r.symbol}</div><div className="text-[11px] text-slate-400">{r.broker}</div></div><div className="text-right"><div className="text-sm font-black tabular-nums">{money(r.value, ccy, true)}</div><Pill v={r.pnlPct} /></div></button>)}
+          </div>
+        </div>
+      );
+    }
+    if (design === 12) {
+      const top5 = topRows.slice(0, 5).reduce((a, r) => a + r.value, 0);
+      const conc = totals.value > 0 ? (top5 / totals.value) * 100 : 0;
+      const stale = rows.filter((r) => r.h.price_stale || r.h.price_lookup_failed).length;
+      const losersN = rows.filter((r) => r.pnlPct < -20).length;
+      const Ring = ({ v, label, good }: { v: number; label: string; good: boolean }) => { const c = 2 * Math.PI * 34; const val = Math.max(0, Math.min(100, v)); return (<div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 flex items-center gap-4"><svg width="84" height="84" viewBox="0 0 84 84"><circle cx="42" cy="42" r="34" fill="none" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="9" /><circle cx="42" cy="42" r="34" fill="none" stroke={good ? '#10b981' : '#f59e0b'} strokeWidth="9" strokeLinecap="round" strokeDasharray={`${(val / 100) * c} ${c}`} transform="rotate(-90 42 42)" /><text x="42" y="47" textAnchor="middle" fontSize="15" fontWeight="800" fill="currentColor">{Math.round(v)}%</text></svg><div className="text-sm font-black">{label}</div></div>); };
+      const insights: { t: string; d: string; tone: string }[] = [];
+      if (conc > 50) insights.push({ t: 'High concentration', d: `Top 5 holdings are ${conc.toFixed(0)}% of the portfolio.`, tone: 'amber' });
+      if (losersN > 0) insights.push({ t: `${losersN} positions down more than 20%`, d: 'Review whether the original thesis still holds.', tone: 'rose' });
+      if (stale > 0) insights.push({ t: `${stale} stale prices`, d: 'Run Refresh prices in Import & Sync.', tone: 'amber' });
+      if (nearStop.length > 0) insights.push({ t: `${nearStop.length} near stop-loss`, d: nearStop.map((r: any) => r.symbol).join(', '), tone: 'rose' });
+      if (nearTarget.length > 0) insights.push({ t: `${nearTarget.length} near profit target`, d: nearTarget.map((r: any) => r.symbol).join(', '), tone: 'emerald' });
+      if (insights.length === 0) insights.push({ t: 'All clear', d: 'No concentration, stop-loss or stale-price issues found.', tone: 'emerald' });
+      return (
+        <div className="space-y-4">
+          {kpiRow}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <Ring v={totals.cost > 0 ? Math.max(0, totals.pnlPct + 50) : 0} label="Return health" good={totals.pnl >= 0} />
+            <Ring v={100 - conc} label="Diversification" good={conc < 50} />
+            <Ring v={totals.value + cashTotal > 0 ? (cashTotal / (totals.value + cashTotal)) * 100 : 0} label="Cash buffer" good={cashTotal > 0} />
+            <Ring v={rows.length ? ((rows.length - stale) / rows.length) * 100 : 100} label="Fresh prices" good={stale === 0} />
+          </div>
+          <div className="grid md:grid-cols-2 gap-3">
+            {insights.map((n) => <div key={n.t} className={`rounded-2xl p-4 border ${n.tone === 'emerald' ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900' : n.tone === 'rose' ? 'bg-rose-50 border-rose-200 dark:bg-rose-950/20 dark:border-rose-900' : 'bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-900'}`}><div className="text-sm font-black">{n.t}</div><div className="text-xs text-slate-600 dark:text-slate-300 mt-1">{n.d}</div></div>)}
+          </div>
+        </div>
+      );
+    }
     // design 6: mobile-first cards
     return (
       <div className="max-w-2xl mx-auto space-y-4">
@@ -753,7 +874,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     );
   })();
 
-  const DESIGN_NAMES = ['Command', 'Brokerage', 'Heatmap', 'Terminal', 'Accounts', 'Cards'];
+  const DESIGN_NAMES = ['Command', 'Brokerage', 'Heatmap', 'Terminal', 'Accounts', 'Cards', 'Split view', 'Bento', 'Kanban', 'Statement', 'Drill-down', 'Health check'];
   const tabStyle = (active: boolean) => design === 3 ? `px-4 py-1.5 rounded-full text-xs font-black ${active ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}` : design === 4 ? `px-3 py-1 text-[11px] font-mono font-bold uppercase ${active ? 'bg-slate-900 text-emerald-400' : 'text-slate-500 hover:text-slate-800'}` : `px-4 py-2 text-sm font-black -mb-px border-b-2 ${active ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`;
   const topTabs = (
     <div className={`flex gap-1 overflow-x-auto mb-4 ${design === 3 ? '' : design === 4 ? 'bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 w-fit' : 'border-b border-slate-200 dark:border-slate-800'}`}>
