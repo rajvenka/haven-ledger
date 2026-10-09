@@ -2001,10 +2001,20 @@ export default function App() {
                   connections={portfolioBrokerConnections}
                   isLoading={portfolioDataLoading}
                   onManage={() => setTryNewUi(false)}
+                  isReadOnly={isReadOnly}
+                  importProps={{
+                    isReadOnly, baseCurrency: activeWorkspace?.baseCurrency, workspaceName: activeWorkspace?.name,
+                    portfolios, portfolioMode: activeWorkspace?.portfolioMode, portfolioHoldings, portfolioHoldingLots,
+                    portfolioCashBalances, portfolioBrokerConnections, workspaceCurrencyRates,
+                    bulkAddPortfolioHoldings, setPortfolioBrokerConnection, deletePortfolioBrokerConnection,
+                    markBrokerConnectionSynced, updatePortfolioHoldingLivePrice, markPriceLookupFailed,
+                    loadPortfolioDetails, snapshotPortfolioDailyPositions, loadPortfolioDailyPositions,
+                  }}
                 />
               </NewDesignSwitch>
 ) : activeTab === 'portfolio' ? (
               uiPulse ? (
+              <NewDesignSwitch isNew={false} onChange={setTryNewUi}>
               <PortfolioV1View
                 isReadOnly={isReadOnly}
                 isDataLoading={portfolioDataLoading}
@@ -2027,7 +2037,9 @@ export default function App() {
                 snapshotPortfolioDailyPositions={snapshotPortfolioDailyPositions}
                 loadPortfolioDailyPositions={loadPortfolioDailyPositions}
               />
+              </NewDesignSwitch>
               ) : (
+              <NewDesignSwitch isNew={false} onChange={setTryNewUi} plain>
               <PortfolioView
                 workspaceName={activeWorkspace?.name}
                 workspaceMembers={familyMembers}
@@ -2111,6 +2123,7 @@ export default function App() {
                 updatePortfolioRecurringPlan={updatePortfolioRecurringPlan}
                 deletePortfolioRecurringPlan={deletePortfolioRecurringPlan}
               />
+              </NewDesignSwitch>
               )
             ) : activeTab === 'investment_plan' ? (
                 <InvestmentPlanView

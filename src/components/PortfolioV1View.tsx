@@ -76,6 +76,10 @@ interface Props {
   loadPortfolioDailyPositions?: (fromDate: string, toDate: string, portfolioId?: string | null) => Promise<any[]>;
   markPriceLookupFailed?: (id: string) => Promise<void>;
   loadPortfolioDetails?: () => Promise<void>;
+  /** Render only the import / connect / sync dialogs (used by the new Portfolio design's Import & Sync hub). */
+  headless?: boolean;
+  bridgeRef?: React.MutableRefObject<any>;
+  onBridge?: () => void;
 }
 
 const BROKER_META: Record<
@@ -702,6 +706,9 @@ export default function PortfolioV1View({
   snapshotPortfolioDailyPositions,
   loadPortfolioDailyPositions,
   bulkAddPortfolioHoldings,
+  headless,
+  bridgeRef,
+  onBridge,
 }: Props) {
   const [portfolioFilter, setPortfolioFilter] = useState<string>('__pending__');
   // TEMPORARY debug aid for the currency-lag investigation - ref accumulates entries safely
@@ -2111,6 +2118,349 @@ export default function PortfolioV1View({
     }
   };
 
+  const modalsJsx = (
+    <>
+      {/* Connect modal */}
+      
+      
+      {syncOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-3" onClick={() => setSyncOpen(false)}>
+          <div className="w-full sm:max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 space-y-3 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h3 className="text-[14px] font-black text-slate-900 dark:text-white">Sync connections</h3>
+                <p className="text-[10px] text-slate-500">Existing brokers only — pull live prices / holdings</p>
+              </div>
+              <button type="button" onClick={() => setSyncOpen(false)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {(portfolioBrokerConnections || []).length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-700 p-4 text-center space-y-2">
+                <p className="text-[12px] text-slate-500">No connections yet.</p>
+                <button
+                  type="button"
+                  onClick={() => { setSyncOpen(false); openConnect(); }}
+                  className="text-[11px] font-bold text-indigo-600"
+                >
+                  + Connect a broker
+                </button>
+              </div>
+            ) : (
+              <ul className="space-y-2 max-h-[50vh] overflow-y-auto">
+                {(portfolioBrokerConnections || []).map((c: any) => {
+                  const busy = syncingId === c.id;
+                  const label = c.connection_label || c.broker_type || 'Broker';
+                  const book = (portfolios || []).find((p: any) => p.id === c.portfolio_id)?.name;
+                  const last = c.last_synced_at ? new Date(c.last_synced_at).toLocaleString() : 'Never';
+                  return (
+                    <li key={c.id} className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[12px] font-black truncate text-slate-900 dark:text-white">{label}</p>
+                        <p className="text-[9px] text-slate-400 truncate">
+                          {String(c.broker_type || '').toUpperCase()}
+                          {book ? ` · ${book}` : ''}
+                          {' · '}Last: {last}
+                        </p>
+                        {needsReauth(c) && (
+                          <p className="text-[9px] font-bold text-amber-600 dark:text-amber-400 truncate">Token expired today - re-authorize to sync</p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isReadOnly || busy}
+                        onClick={() => needsReauth(c) ? openConnect() : syncConnection(c)}
+                        className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold text-white disabled:opacity-50 ${needsReauth(c) ? 'bg-amber-600' : 'bg-teal-600'}`}
+                      >
+                        <RefreshCw className={`w-3 h-3 ${busy ? 'animate-spin' : ''}`} />
+                        {busy ? '…' : needsReauth(c) ? 'Re-auth' : 'Sync'}
+                      </button>
+                      {deletePortfolioBrokerConnection && (
+                        <button
+                          type="button"
+                          disabled={isReadOnly || busy}
+                          onClick={() => {
+                            if (confirm(`Remove connection "${label}"?`)) removeConnection(c.id);
+                          }}
+                          className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-rose-500"
+                          title="Remove connection"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {(connectOk || connectError) && (
+              <p className={`text-[11px] font-bold ${connectError ? 'text-rose-600' : 'text-emerald-600'}`}>
+                {connectError || connectOk}
+              </p>
+            )}
+            <p className="text-[10px] text-slate-400">
+              Need a new broker? Use <button type="button" className="font-bold text-indigo-600" onClick={() => { setSyncOpen(false); openConnect(); }}>+ Connect</button>
+              {' · '}CSV file? <button type="button" className="font-bold text-teal-600" onClick={() => { setSyncOpen(false); openImport(); }}>Import</button>
+            </p>
+          </div>
+        </div>
+      )}
+
+{importOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-3" onClick={() => !importBusy && setImportOpen(false)}>
+          <div className="w-full sm:max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 space-y-3 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-[14px] font-black text-slate-900 dark:text-white">Import holdings</h3>
+              <button type="button" onClick={() => setImportOpen(false)} className="text-slate-400 text-[12px] font-bold">Close</button>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Upload a broker export or universal CSV. Moomoo &amp; Tiger: use Symbol, Quantity, Avg Cost, Market Price, Currency columns.
+            </p>
+            {(portfolios || []).length > 0 && (
+              <div>
+                <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Portfolio book</p>
+                <select
+                  value={importPortfolioId}
+                  onChange={(e) => setImportPortfolioId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl text-[12px] bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
+                >
+                  {(portfolios || []).map((p: any) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div>
+              <p className="text-[9px] font-black uppercase text-slate-400 mb-1.5">Template</p>
+              <div className="flex flex-wrap gap-1.5">
+                {([
+                  ['universal', 'Universal'],
+                  ['stake', 'Stake'],
+                  ['zerodha', 'Zerodha'],
+                  ['groww_stocks', 'Groww'],
+                  ['groww_mf', 'Groww MF'],
+                  ['moomoo', 'Moomoo'],
+                  ['tiger', 'Tiger'],
+                ] as [BrokerTemplate, string][]).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setImportTemplate(id)}
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                      importTemplate === id
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {importTemplate === 'universal' && (
+              <button type="button" onClick={() => downloadUniversalTemplate()} className="text-[11px] font-bold text-teal-600">
+                Download universal CSV template
+              </button>
+            )}
+            <label className={`block w-full py-3 rounded-xl border-2 border-dashed text-center text-[12px] font-bold cursor-pointer ${
+              importBusy ? 'opacity-50 pointer-events-none' : 'border-teal-300 dark:border-teal-800 text-teal-700 dark:text-teal-300 hover:bg-teal-50/50 dark:hover:bg-teal-950/20'
+            }`}>
+              {importBusy ? 'Importing…' : 'Choose file (CSV / XLSX)'}
+              <input
+                type="file"
+                accept=".csv,.xlsx,.xls,.tsv,text/csv"
+                className="hidden"
+                disabled={importBusy}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = '';
+                  if (f) runPulseImport(f);
+                }}
+              />
+            </label>
+            {importMsg && <p className="text-[11px] font-bold text-emerald-600">{importMsg}</p>}
+            {importErr && <p className="text-[11px] font-bold text-rose-600">{importErr}</p>}
+            <p className="text-[10px] text-slate-400">
+              Live Sync (Connect → Refresh) updates prices for linked brokers. Full position import uses this Import flow — including Moomoo &amp; Tiger CSV.
+            </p>
+          </div>
+        </div>
+      )}
+
+{connectOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+          <div className="w-full sm:max-w-md bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-t-3xl">
+              <h3 className="text-sm font-black">
+                {connectStep === 'pick' ? 'New connection' : BROKER_META[selectedBroker!]?.label}
+              </h3>
+              <button type="button" onClick={() => setConnectOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              {connectOk && <div className="text-[11px] text-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl px-3 py-2">{connectOk}</div>}
+              {connectError && <div className="text-[11px] text-rose-700 bg-rose-50 dark:bg-rose-950/30 rounded-xl px-3 py-2">{connectError}</div>}
+              {connectStep === 'pick' && (
+                <>
+                  {(portfolioBrokerConnections || []).length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Already connected</p>
+                      {(portfolioBrokerConnections || []).map((c: any) => {
+                        const pName = c.portfolio_id ? portfolios.find((p: any) => p.id === c.portfolio_id)?.name : null;
+                        const busy = syncingId === c.id;
+                        return (
+                          <div key={c.id} className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-[12px] font-black truncate">{c.connection_label || c.broker_type}</p>
+                                <p className="text-[9px] text-slate-400">{pName || 'Workspace'}</p>
+                                {needsReauth(c) && (
+                                  <p className="text-[9px] font-bold text-amber-600 dark:text-amber-400">Token expired today - re-authorize to sync</p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                disabled={isReadOnly || busy}
+                                onClick={() => needsReauth(c) ? openConnect() : syncConnection(c)}
+                                className={`flex-1 min-h-[42px] rounded-xl text-white text-[11px] font-bold disabled:opacity-50 ${needsReauth(c) ? 'bg-amber-600' : 'bg-indigo-600'}`}
+                              >
+                                {busy ? 'Syncing…' : needsReauth(c) ? 'Re-authorize' : 'Sync now'}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isReadOnly || busy}
+                                onClick={() => removeConnection(c.id)}
+                                className="flex-1 min-h-[42px] rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 text-[11px] font-bold border border-rose-200 dark:border-rose-900 disabled:opacity-50"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <p className="text-[11px] text-slate-500">
+                    Add a new broker link — assign it to a book when you have multiple portfolios.
+                  </p>
+                  {multiPortfolio && (portfolios || []).length > 0 && (
+                    <label className="block">
+                      <span className="text-[10px] font-bold uppercase text-slate-500">Portfolio</span>
+                      <select
+                        value={connectPortfolioId}
+                        onChange={(e) => setConnectPortfolioId(e.target.value)}
+                        className="mt-1 w-full px-3 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm font-semibold text-slate-800 dark:text-slate-100 appearance-none shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+                      >
+                        <option value="">None</option>
+                        {(portfolios || []).map((p: any) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    {(Object.keys(BROKER_META) as BrokerType[]).map((key) => {
+                      const m = BROKER_META[key];
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => {
+                            setSelectedBroker(key);
+                            setCredFields({});
+                            setConnectStep('creds');
+                          }}
+                          className={`text-left rounded-2xl border border-slate-200 dark:border-slate-700 p-3 hover:ring-2 ${m.ring} ${m.bg}`}
+                        >
+                          <p className={`text-[13px] font-black ${m.color}`}>{m.label}</p>
+                          <p className="text-[9px] text-slate-500 mt-0.5">API keys</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+              {connectStep === 'creds' && selectedBroker && (
+                <>
+                  <button type="button" onClick={() => { setConnectStep('pick'); setSelectedBroker(null); }} className="text-[10px] font-bold text-indigo-600">
+                    ← Brokers
+                  </button>
+                  {BROKER_META[selectedBroker].fields.map((f) => (
+                    <label key={f.key} className="block">
+                      <span className="text-[10px] font-bold uppercase text-slate-500">{f.label}</span>
+                      <input
+                        type={f.secret ? 'password' : 'text'}
+                        value={credFields[f.key] || ''}
+                        onChange={(e) => setCredFields((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                        placeholder={f.placeholder}
+                        className="mt-1 w-full px-3 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm font-semibold text-slate-800 dark:text-slate-100 appearance-none shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+                        autoComplete="off"
+                      />
+                    </label>
+                  ))}
+                  {selectedBroker === 'zerodha' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const key = String(credFields.api_key || '').trim();
+                        if (!key) {
+                          setConnectError('Enter API Key first, then open login');
+                          return;
+                        }
+                        const secret = String(credFields.api_secret || '').trim();
+                        if (!secret) {
+                          setConnectError('Enter API Secret too - it is used to finish the login automatically');
+                          return;
+                        }
+                        const pid = connectPortfolioId || undefined;
+                        const lbl = String(credFields.connection_label || '').trim() ||
+                          (multiPortfolio && pid ? `Zerodha · ${portfolios.find((p: any) => p.id === pid)?.name || ''}`.trim() : 'Zerodha');
+                        startZerodhaLogin({ apiKey: key, apiSecret: secret, portfolioId: pid, label: lbl });
+                      }}
+                      className="w-full py-2 rounded-2xl border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-[11px] font-bold inline-flex items-center justify-center gap-1.5"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Connect with Zerodha (auto)
+                    </button>
+                  )}
+                  {selectedBroker === 'zerodha' && (
+                    <p className="text-[10px] text-slate-500">
+                      One-time setup: in your Kite app settings, set <b>Redirect URL</b> to <code className="font-mono break-all">{zerodhaRedirectUrl()}</code>. After you log in you return here and holdings refresh automatically - nothing to copy.
+                    </p>
+                  )}
+                  {selectedBroker === 'webull' && (
+                    <p className="text-[10px] text-slate-500">
+                      After Save, approve the login request in the Webull app if prompted (same as classic).
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    disabled={connectBusy || isReadOnly}
+                    onClick={saveConnection}
+                    className="w-full py-2.5 rounded-2xl bg-indigo-600 text-white text-[12px] font-black disabled:opacity-50"
+                  >
+                    {connectBusy ? 'Saving…' : 'Save connection'}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
+  if (bridgeRef) {
+    bridgeRef.current = { openImport, openConnect, syncConnection, removeConnection, refreshAllPrices, needsReauth, syncingId, refreshingPrices, priceRefreshSummary, connectOk, connectError };
+  }
+  useEffect(() => { onBridge?.(); }, [syncingId, refreshingPrices, priceRefreshSummary, connectOk, connectError, portfolioBrokerConnections]);
+  if (headless) return <>{modalsJsx}</>;
+
   return (
     <div className="w-full max-w-full min-w-0 overflow-x-hidden px-3 sm:px-4 pt-2 sm:pt-3 pb-24 sm:pb-6 space-y-3 sm:space-y-4 box-border">
       {/* Hero */}
@@ -3269,338 +3619,7 @@ export default function PortfolioV1View({
         )}
       </div>
 
-      {/* Connect modal */}
-      
-      
-      {syncOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-3" onClick={() => setSyncOpen(false)}>
-          <div className="w-full sm:max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 space-y-3 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <h3 className="text-[14px] font-black text-slate-900 dark:text-white">Sync connections</h3>
-                <p className="text-[10px] text-slate-500">Existing brokers only — pull live prices / holdings</p>
-              </div>
-              <button type="button" onClick={() => setSyncOpen(false)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            {(portfolioBrokerConnections || []).length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-700 p-4 text-center space-y-2">
-                <p className="text-[12px] text-slate-500">No connections yet.</p>
-                <button
-                  type="button"
-                  onClick={() => { setSyncOpen(false); openConnect(); }}
-                  className="text-[11px] font-bold text-indigo-600"
-                >
-                  + Connect a broker
-                </button>
-              </div>
-            ) : (
-              <ul className="space-y-2 max-h-[50vh] overflow-y-auto">
-                {(portfolioBrokerConnections || []).map((c: any) => {
-                  const busy = syncingId === c.id;
-                  const label = c.connection_label || c.broker_type || 'Broker';
-                  const book = (portfolios || []).find((p: any) => p.id === c.portfolio_id)?.name;
-                  const last = c.last_synced_at ? new Date(c.last_synced_at).toLocaleString() : 'Never';
-                  return (
-                    <li key={c.id} className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex items-center gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[12px] font-black truncate text-slate-900 dark:text-white">{label}</p>
-                        <p className="text-[9px] text-slate-400 truncate">
-                          {String(c.broker_type || '').toUpperCase()}
-                          {book ? ` · ${book}` : ''}
-                          {' · '}Last: {last}
-                        </p>
-                        {needsReauth(c) && (
-                          <p className="text-[9px] font-bold text-amber-600 dark:text-amber-400 truncate">Token expired today - re-authorize to sync</p>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        disabled={isReadOnly || busy}
-                        onClick={() => needsReauth(c) ? openConnect() : syncConnection(c)}
-                        className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold text-white disabled:opacity-50 ${needsReauth(c) ? 'bg-amber-600' : 'bg-teal-600'}`}
-                      >
-                        <RefreshCw className={`w-3 h-3 ${busy ? 'animate-spin' : ''}`} />
-                        {busy ? '…' : needsReauth(c) ? 'Re-auth' : 'Sync'}
-                      </button>
-                      {deletePortfolioBrokerConnection && (
-                        <button
-                          type="button"
-                          disabled={isReadOnly || busy}
-                          onClick={() => {
-                            if (confirm(`Remove connection "${label}"?`)) removeConnection(c.id);
-                          }}
-                          className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-rose-500"
-                          title="Remove connection"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-            {(connectOk || connectError) && (
-              <p className={`text-[11px] font-bold ${connectError ? 'text-rose-600' : 'text-emerald-600'}`}>
-                {connectError || connectOk}
-              </p>
-            )}
-            <p className="text-[10px] text-slate-400">
-              Need a new broker? Use <button type="button" className="font-bold text-indigo-600" onClick={() => { setSyncOpen(false); openConnect(); }}>+ Connect</button>
-              {' · '}CSV file? <button type="button" className="font-bold text-teal-600" onClick={() => { setSyncOpen(false); openImport(); }}>Import</button>
-            </p>
-          </div>
-        </div>
-      )}
-
-{importOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-3" onClick={() => !importBusy && setImportOpen(false)}>
-          <div className="w-full sm:max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 space-y-3 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <h3 className="text-[14px] font-black text-slate-900 dark:text-white">Import holdings</h3>
-              <button type="button" onClick={() => setImportOpen(false)} className="text-slate-400 text-[12px] font-bold">Close</button>
-            </div>
-            <p className="text-[11px] text-slate-500">
-              Upload a broker export or universal CSV. Moomoo &amp; Tiger: use Symbol, Quantity, Avg Cost, Market Price, Currency columns.
-            </p>
-            {(portfolios || []).length > 0 && (
-              <div>
-                <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Portfolio book</p>
-                <select
-                  value={importPortfolioId}
-                  onChange={(e) => setImportPortfolioId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl text-[12px] bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
-                >
-                  {(portfolios || []).map((p: any) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div>
-              <p className="text-[9px] font-black uppercase text-slate-400 mb-1.5">Template</p>
-              <div className="flex flex-wrap gap-1.5">
-                {([
-                  ['universal', 'Universal'],
-                  ['stake', 'Stake'],
-                  ['zerodha', 'Zerodha'],
-                  ['groww_stocks', 'Groww'],
-                  ['groww_mf', 'Groww MF'],
-                  ['moomoo', 'Moomoo'],
-                  ['tiger', 'Tiger'],
-                ] as [BrokerTemplate, string][]).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setImportTemplate(id)}
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                      importTemplate === id
-                        ? 'bg-teal-600 text-white'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {importTemplate === 'universal' && (
-              <button type="button" onClick={() => downloadUniversalTemplate()} className="text-[11px] font-bold text-teal-600">
-                Download universal CSV template
-              </button>
-            )}
-            <label className={`block w-full py-3 rounded-xl border-2 border-dashed text-center text-[12px] font-bold cursor-pointer ${
-              importBusy ? 'opacity-50 pointer-events-none' : 'border-teal-300 dark:border-teal-800 text-teal-700 dark:text-teal-300 hover:bg-teal-50/50 dark:hover:bg-teal-950/20'
-            }`}>
-              {importBusy ? 'Importing…' : 'Choose file (CSV / XLSX)'}
-              <input
-                type="file"
-                accept=".csv,.xlsx,.xls,.tsv,text/csv"
-                className="hidden"
-                disabled={importBusy}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  e.target.value = '';
-                  if (f) runPulseImport(f);
-                }}
-              />
-            </label>
-            {importMsg && <p className="text-[11px] font-bold text-emerald-600">{importMsg}</p>}
-            {importErr && <p className="text-[11px] font-bold text-rose-600">{importErr}</p>}
-            <p className="text-[10px] text-slate-400">
-              Live Sync (Connect → Refresh) updates prices for linked brokers. Full position import uses this Import flow — including Moomoo &amp; Tiger CSV.
-            </p>
-          </div>
-        </div>
-      )}
-
-{connectOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
-          <div className="w-full sm:max-w-md bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-t-3xl">
-              <h3 className="text-sm font-black">
-                {connectStep === 'pick' ? 'New connection' : BROKER_META[selectedBroker!]?.label}
-              </h3>
-              <button type="button" onClick={() => setConnectOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-4 space-y-3">
-              {connectOk && <div className="text-[11px] text-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl px-3 py-2">{connectOk}</div>}
-              {connectError && <div className="text-[11px] text-rose-700 bg-rose-50 dark:bg-rose-950/30 rounded-xl px-3 py-2">{connectError}</div>}
-              {connectStep === 'pick' && (
-                <>
-                  {(portfolioBrokerConnections || []).length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Already connected</p>
-                      {(portfolioBrokerConnections || []).map((c: any) => {
-                        const pName = c.portfolio_id ? portfolios.find((p: any) => p.id === c.portfolio_id)?.name : null;
-                        const busy = syncingId === c.id;
-                        return (
-                          <div key={c.id} className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="text-[12px] font-black truncate">{c.connection_label || c.broker_type}</p>
-                                <p className="text-[9px] text-slate-400">{pName || 'Workspace'}</p>
-                                {needsReauth(c) && (
-                                  <p className="text-[9px] font-bold text-amber-600 dark:text-amber-400">Token expired today - re-authorize to sync</p>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                disabled={isReadOnly || busy}
-                                onClick={() => needsReauth(c) ? openConnect() : syncConnection(c)}
-                                className={`flex-1 min-h-[42px] rounded-xl text-white text-[11px] font-bold disabled:opacity-50 ${needsReauth(c) ? 'bg-amber-600' : 'bg-indigo-600'}`}
-                              >
-                                {busy ? 'Syncing…' : needsReauth(c) ? 'Re-authorize' : 'Sync now'}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={isReadOnly || busy}
-                                onClick={() => removeConnection(c.id)}
-                                className="flex-1 min-h-[42px] rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 text-[11px] font-bold border border-rose-200 dark:border-rose-900 disabled:opacity-50"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <p className="text-[11px] text-slate-500">
-                    Add a new broker link — assign it to a book when you have multiple portfolios.
-                  </p>
-                  {multiPortfolio && (portfolios || []).length > 0 && (
-                    <label className="block">
-                      <span className="text-[10px] font-bold uppercase text-slate-500">Portfolio</span>
-                      <select
-                        value={connectPortfolioId}
-                        onChange={(e) => setConnectPortfolioId(e.target.value)}
-                        className="mt-1 w-full px-3 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm font-semibold text-slate-800 dark:text-slate-100 appearance-none shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
-                      >
-                        <option value="">None</option>
-                        {(portfolios || []).map((p: any) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
-                  <div className="grid grid-cols-2 gap-2">
-                    {(Object.keys(BROKER_META) as BrokerType[]).map((key) => {
-                      const m = BROKER_META[key];
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => {
-                            setSelectedBroker(key);
-                            setCredFields({});
-                            setConnectStep('creds');
-                          }}
-                          className={`text-left rounded-2xl border border-slate-200 dark:border-slate-700 p-3 hover:ring-2 ${m.ring} ${m.bg}`}
-                        >
-                          <p className={`text-[13px] font-black ${m.color}`}>{m.label}</p>
-                          <p className="text-[9px] text-slate-500 mt-0.5">API keys</p>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-              {connectStep === 'creds' && selectedBroker && (
-                <>
-                  <button type="button" onClick={() => { setConnectStep('pick'); setSelectedBroker(null); }} className="text-[10px] font-bold text-indigo-600">
-                    ← Brokers
-                  </button>
-                  {BROKER_META[selectedBroker].fields.map((f) => (
-                    <label key={f.key} className="block">
-                      <span className="text-[10px] font-bold uppercase text-slate-500">{f.label}</span>
-                      <input
-                        type={f.secret ? 'password' : 'text'}
-                        value={credFields[f.key] || ''}
-                        onChange={(e) => setCredFields((prev) => ({ ...prev, [f.key]: e.target.value }))}
-                        placeholder={f.placeholder}
-                        className="mt-1 w-full px-3 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm font-semibold text-slate-800 dark:text-slate-100 appearance-none shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
-                        autoComplete="off"
-                      />
-                    </label>
-                  ))}
-                  {selectedBroker === 'zerodha' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const key = String(credFields.api_key || '').trim();
-                        if (!key) {
-                          setConnectError('Enter API Key first, then open login');
-                          return;
-                        }
-                        const secret = String(credFields.api_secret || '').trim();
-                        if (!secret) {
-                          setConnectError('Enter API Secret too - it is used to finish the login automatically');
-                          return;
-                        }
-                        const pid = connectPortfolioId || undefined;
-                        const lbl = String(credFields.connection_label || '').trim() ||
-                          (multiPortfolio && pid ? `Zerodha · ${portfolios.find((p: any) => p.id === pid)?.name || ''}`.trim() : 'Zerodha');
-                        startZerodhaLogin({ apiKey: key, apiSecret: secret, portfolioId: pid, label: lbl });
-                      }}
-                      className="w-full py-2 rounded-2xl border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-[11px] font-bold inline-flex items-center justify-center gap-1.5"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      Connect with Zerodha (auto)
-                    </button>
-                  )}
-                  {selectedBroker === 'zerodha' && (
-                    <p className="text-[10px] text-slate-500">
-                      One-time setup: in your Kite app settings, set <b>Redirect URL</b> to <code className="font-mono break-all">{zerodhaRedirectUrl()}</code>. After you log in you return here and holdings refresh automatically - nothing to copy.
-                    </p>
-                  )}
-                  {selectedBroker === 'webull' && (
-                    <p className="text-[10px] text-slate-500">
-                      After Save, approve the login request in the Webull app if prompted (same as classic).
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    disabled={connectBusy || isReadOnly}
-                    onClick={saveConnection}
-                    className="w-full py-2.5 rounded-2xl bg-indigo-600 text-white text-[12px] font-black disabled:opacity-50"
-                  >
-                    {connectBusy ? 'Saving…' : 'Save connection'}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {modalsJsx}
     </div>
   );
 }
