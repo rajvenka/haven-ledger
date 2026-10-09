@@ -69,6 +69,7 @@ import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import RewardsTracker from './components/RewardsTracker';
 import PortfolioView from './components/PortfolioView';
 import PortfolioV1View from './components/PortfolioV1View';
+import PulsePortfolio from './components/PulsePortfolio';
 import InvestmentPlanView from './components/InvestmentPlanView';
 import ReportsView from './components/ReportsView';
 import IncomeView from './components/IncomeView';
@@ -1989,6 +1990,19 @@ export default function App() {
                   onDeleteGiftCard={deleteGiftCard}
                   isReadOnly={isReadOnly}
                 />
+) : activeTab === 'portfolio' && tryNewUi ? (
+              <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!uiPulse}>
+                <PulsePortfolio
+                  holdings={portfolioHoldings}
+                  lots={portfolioHoldingLots}
+                  portfolios={portfolios}
+                  rates={workspaceCurrencyRates}
+                  baseCurrency={activeWorkspace?.baseCurrency}
+                  connections={portfolioBrokerConnections}
+                  isLoading={portfolioDataLoading}
+                  onManage={() => setTryNewUi(false)}
+                />
+              </NewDesignSwitch>
 ) : activeTab === 'portfolio' ? (
               uiPulse ? (
               <PortfolioV1View
