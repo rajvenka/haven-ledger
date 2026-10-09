@@ -221,20 +221,23 @@ export default function PulseBills({
         { id: 'manual', label: 'Manual', hint: 'You pay these yourself', tone: 'violet', items: mn },
       ].filter((g) => g.items.length);
     }
+    const monthEnd = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59);
     const g = {
-      overdue: [] as Row[], week: [] as Row[], later: [] as Row[], paid: [] as Row[], paused: [] as Row[],
+      overdue: [] as Row[], week: [] as Row[], later: [] as Row[], future: [] as Row[], paid: [] as Row[], paused: [] as Row[],
     };
     visible.forEach((r) => {
       if (!r.p.active) g.paused.push(r);
       else if (r.paid) g.paid.push(r);
       else if (r.overdueDays > 0) g.overdue.push(r);
       else if (r.days <= 7) g.week.push(r);
+      else if (isOtherCycle(r.p) && r.next > monthEnd) g.future.push(r);
       else g.later.push(r);
     });
     return [
       { id: 'overdue', label: 'Overdue', hint: 'Day has passed, not marked paid', tone: 'rose', items: g.overdue },
       { id: 'week', label: 'Due in the next 7 days', hint: '', tone: 'amber', items: g.week },
-      { id: 'later', label: 'Coming up', hint: '', tone: 'slate', items: g.later },
+      { id: 'later', label: 'Later this month', hint: '', tone: 'slate', items: g.later },
+      { id: 'future', label: 'Future (yearly / multi-month / one-off)', hint: 'Due after this month', tone: 'slate', items: g.future },
       { id: 'paid', label: 'Paid this cycle', hint: '', tone: 'emerald', items: g.paid },
       { id: 'paused', label: 'Paused', hint: '', tone: 'slate', items: g.paused },
     ].filter((x) => x.items.length);

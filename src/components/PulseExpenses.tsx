@@ -82,6 +82,7 @@ export default function PulseExpenses({
   const [searchQ, setSearchQ] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'overdue' | 'today' | 'soon' | 'unpaid' | 'paid'>('all');
   const [taggedForFilter, setTaggedForFilter] = useState<string>('all');
+  const [showFuture, setShowFuture] = useState(false);
   const isPaymentReadOnly = (payment: RecurringPayment) => {
     if (!isReadOnly) return false;
     if (currentUserUid && payment.userId === currentUserUid) return false;
@@ -136,12 +137,6 @@ export default function PulseExpenses({
       return String(h.currency || '').toUpperCase() === String(activeCurrency).toUpperCase() ? sum + h.amount : sum;
     }, 0);
 
-  const dueOpen = filteredPayments.filter((p) => !isPaymentPaidForCurrentPeriod(p, history));
-  const dueTotal = dueOpen.reduce((sum, p) => {
-    if (isAll) return sum + convertCurrency(p.amount, p.currency, defaultCurrency);
-    return sum + p.amount;
-  }, 0);
-
   const displayCcy = isAll ? defaultCurrency : activeCurrency;
 
   const isMonthlyCycle = (cycle?: string) => {
@@ -154,11 +149,37 @@ export default function PulseExpenses({
     if (!isMonthlyCycle(p.billingCycle)) return 'non_monthly';
     return 'manual_monthly';
   };
-  const sortedAll = [...filteredPayments].sort((a, b) => getDaysUntilPayment(a) - getDaysUntilPayment(b));
+  // History-aware "days until due" - without history, yearly/multi-month/one-off bills ignore
+  // when they were last paid and fall back to a guess based on day-of-month.
+  const daysOf = (p: RecurringPayment) => {
+    try { return getDaysUntilPayment(p, now, history); } catch { return 0; }
+  };
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+  const paidThisMonth = (p: RecurringPayment) =>
+    history.some((h) => h.paymentId === p.id && String(h.paidDate || '').startsWith(currentMonthStr));
+  // Non-monthly (yearly / 2-6 monthly / one-off) bills whose next due date is after this
+  // month. These are kept out of "to pay" totals and the main lists, and shown in their own
+  // collapsed "Future" section instead of cluttering the current month.
+  const isFuture = (p: RecurringPayment) => {
+    if (isMonthlyCycle(p.billingCycle)) return false;
+    if (paidThisMonth(p)) return false;
+    try {
+      return getNextPaymentDate(p, now, history) > endOfMonth;
+    } catch {
+      return false;
+    }
+  };
+  const dueOpen = filteredPayments.filter((p) => !isPaymentPaidForCurrentPeriod(p, history) && !isFuture(p));
+  const dueTotal = dueOpen.reduce((sum, p) => {
+    if (isAll) return sum + convertCurrency(p.amount, p.currency, defaultCurrency);
+    return sum + p.amount;
+  }, 0);
+
+  const sortedAll = [...filteredPayments].sort((a, b) => daysOf(a) - daysOf(b));
   const q = searchQ.trim().toLowerCase();
   const passesStatusPaidTile = (p: RecurringPayment) => {
     const paid = isPaymentPaidForCurrentPeriod(p, history);
-    const days = getDaysUntilPayment(p);
+    const days = daysOf(p);
     if (tileFilter) {
       if (groupOf(p) !== tileFilter.group) return false;
       if (tileFilter.bucket === 'paid' && !paid) return false;
@@ -178,7 +199,7 @@ export default function PulseExpenses({
     // Status badge filters
     if (statusFilter === 'overdue' && (paid || days >= 0)) return false;
     if (statusFilter === 'today' && (paid || days !== 0)) return false;
-    if (statusFilter === 'soon' && (paid || days <= 0 || days > 3)) return false;
+    if (statusFilter === 'soon' && (paid || days <= 0 || days > 7)) return false;
     if (statusFilter === 'unpaid' && paid) return false;
     if (statusFilter === 'paid' && !paid) return false;
     if (!q) return true;
@@ -201,22 +222,24 @@ export default function PulseExpenses({
     }
   }, [taggedForFilter, taggedForOptions]);
 
+  const currentScope = sortedAll.filter((p) => !isFuture(p));
   const openCounts = {
-    overdue: sortedAll.filter((p) => !isPaymentPaidForCurrentPeriod(p, history) && getDaysUntilPayment(p) < 0).length,
-    today: sortedAll.filter((p) => !isPaymentPaidForCurrentPeriod(p, history) && getDaysUntilPayment(p) === 0).length,
-    soon: sortedAll.filter((p) => {
+    overdue: currentScope.filter((p) => !isPaymentPaidForCurrentPeriod(p, history) && daysOf(p) < 0).length,
+    today: currentScope.filter((p) => !isPaymentPaidForCurrentPeriod(p, history) && daysOf(p) === 0).length,
+    soon: currentScope.filter((p) => {
       if (isPaymentPaidForCurrentPeriod(p, history)) return false;
-      const d = getDaysUntilPayment(p);
-      return d > 0 && d <= 3;
+      const d = daysOf(p);
+      return d > 0 && d <= 7;
     }).length,
-    unpaid: sortedAll.filter((p) => !isPaymentPaidForCurrentPeriod(p, history)).length,
-    paid: sortedAll.filter((p) => isPaymentPaidForCurrentPeriod(p, history)).length,
+    unpaid: currentScope.filter((p) => !isPaymentPaidForCurrentPeriod(p, history)).length,
+    paid: currentScope.filter((p) => isPaymentPaidForCurrentPeriod(p, history)).length,
   };
 
   const groups = {
-    dd: sorted.filter((p) => groupOf(p) === 'dd'),
+    dd: sorted.filter((p) => groupOf(p) === 'dd' && !isFuture(p)),
     manual_monthly: sorted.filter((p) => groupOf(p) === 'manual_monthly'),
-    non_monthly: sorted.filter((p) => groupOf(p) === 'non_monthly'),
+    non_monthly: sorted.filter((p) => groupOf(p) === 'non_monthly' && !isFuture(p)),
+    future: sorted.filter((p) => isFuture(p)),
   };
 
   const amt = (payment: RecurringPayment) =>
@@ -236,7 +259,7 @@ export default function PulseExpenses({
   };
   const tileFor = (items: RecurringPayment[]) => {
     const paidItems = items.filter((payment) => isPaymentPaidForCurrentPeriod(payment, history));
-    const toPayItems = items.filter((payment) => !isPaymentPaidForCurrentPeriod(payment, history));
+    const toPayItems = items.filter((payment) => !isPaymentPaidForCurrentPeriod(payment, history) && !isFuture(payment));
     const nextItems = items.filter((payment) => isNextMonthDue(payment));
     return {
       paidSum: paidItems.reduce((s, payment) => s + amt(payment), 0),
@@ -521,7 +544,7 @@ export default function PulseExpenses({
             {([
               ['overdue', 'Overdue', openCounts.overdue, 'bg-rose-500/15 text-rose-600 ring-1 ring-rose-500/20'],
               ['today', 'Today', openCounts.today, 'bg-amber-500/15 text-amber-700 dark:text-amber-400 ring-1 ring-amber-500/20'],
-              ['soon', 'Soon', openCounts.soon, 'bg-orange-500/15 text-orange-700 dark:text-orange-400 ring-1 ring-orange-500/20'],
+              ['soon', 'Next 7 days', openCounts.soon, 'bg-orange-500/15 text-orange-700 dark:text-orange-400 ring-1 ring-orange-500/20'],
               ['unpaid', 'Open', openCounts.unpaid, 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'],
               ['paid', 'Paid', openCounts.paid, 'bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/20'],
             ] as const).map(([id, lab, count, cls]) => (
@@ -529,9 +552,11 @@ export default function PulseExpenses({
                 key={id}
                 type="button"
                 onClick={() => {
+                  // The status chip alone decides what shows - no hidden second filter flipped
+                  // behind it, so the chip and the Show toggle can't contradict each other.
                   setStatusFilter((prev) => (prev === id ? 'all' : id));
-                  if (id === 'paid') setPaidFilter('paid');
-                  else setPaidFilter('unpaid');
+                  setPaidFilter('all');
+                  setTileFilter(null);
                 }}
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer ${cls} ${
                   statusFilter === id ? 'ring-2 ring-offset-1 ring-offset-slate-50 dark:ring-offset-slate-950 ring-violet-500' : ''
@@ -576,6 +601,15 @@ export default function PulseExpenses({
 
           {/* Show: All / To be paid / Paid */}
           <div className="flex items-center gap-2 flex-wrap">
+            {(statusFilter !== 'all' || taggedForFilter !== 'all' || !!searchQ || tileFilter || paidFilter !== 'unpaid') && (
+              <button
+                type="button"
+                onClick={() => { setStatusFilter('all'); setTaggedForFilter('all'); setSearchQ(''); setTileFilter(null); setPaidFilter('unpaid'); }}
+                className="order-last ml-auto text-[10px] font-bold text-violet-600 underline"
+              >
+                Reset filters
+              </button>
+            )}
             <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 shrink-0">Show</span>
             <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
               {([
@@ -589,7 +623,7 @@ export default function PulseExpenses({
                   onClick={() => {
                     setPaidFilter(id);
                     setTileFilter(null);
-                    if (id === 'all') setStatusFilter('all');
+                    setStatusFilter('all');
                   }}
                   className={`hv-press px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
                     paidFilter === id
@@ -620,7 +654,8 @@ export default function PulseExpenses({
           [
             { key: 'dd' as const, title: 'Direct debit', items: groups.dd, accent: 'border-sky-200 dark:border-sky-900/50', head: 'text-sky-700 dark:text-sky-300' },
             { key: 'manual_monthly' as const, title: 'Manual monthly', items: groups.manual_monthly, accent: 'border-violet-200 dark:border-violet-900/50', head: 'text-violet-700 dark:text-violet-300' },
-            { key: 'non_monthly' as const, title: 'Non-monthly', items: groups.non_monthly, accent: 'border-slate-200 dark:border-slate-800', head: 'text-slate-700 dark:text-slate-300' },
+            { key: 'non_monthly' as const, title: 'Non-monthly · due this month', items: groups.non_monthly, accent: 'border-slate-200 dark:border-slate-800', head: 'text-slate-700 dark:text-slate-300' },
+            { key: 'future' as const, title: 'Non-monthly · future', items: groups.future, accent: 'border-slate-200 dark:border-slate-800', head: 'text-slate-500 dark:text-slate-400' },
           ] as const
         ).map((group) => {
           if (group.items.length === 0) return null;
@@ -634,11 +669,22 @@ export default function PulseExpenses({
                       ? 'Bank takes these automatically — tap DD done when settled'
                       : group.key === 'manual_monthly'
                         ? 'You pay these each month'
-                        : 'Other schedules'}
+                        : group.key === 'future'
+                          ? 'Yearly / multi-month / one-off bills due after this month'
+                          : 'Yearly, multi-month and one-off bills due this month'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold text-slate-400">{group.items.length}</span>
+                  {group.key === 'future' && (
+                    <button
+                      type="button"
+                      onClick={() => setShowFuture((v) => !v)}
+                      className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                    >
+                      {showFuture ? 'Hide' : 'Show'}
+                    </button>
+                  )}
                   {group.key === 'dd' && !isReadOnly && (
                     <button
                       type="button"
@@ -650,10 +696,10 @@ export default function PulseExpenses({
                   )}
                 </div>
               </div>
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+              <ul className={`divide-y divide-slate-100 dark:divide-slate-800 ${group.key === 'future' && !showFuture ? 'hidden' : ''}`}>
                 {group.items.map((p) => {
                   const paid = isPaymentPaidForCurrentPeriod(p, history);
-                  const days = getDaysUntilPayment(p);
+                  const days = daysOf(p);
                   const color = getCategoryColor(p.category);
                   const status = paid
                     ? 'paid'
@@ -661,7 +707,7 @@ export default function PulseExpenses({
                       ? 'overdue'
                       : days === 0
                         ? 'today'
-                        : days <= 3
+                        : days <= 7
                           ? 'soon'
                           : 'upcoming';
                   const statusStyle =
@@ -672,7 +718,7 @@ export default function PulseExpenses({
                         : status === 'today'
                           ? { label: 'Due today', badge: 'bg-amber-500/15 text-amber-700 ring-1 ring-amber-500/25', row: 'border-l-[3px] border-l-amber-500', dot: 'bg-amber-500' }
                           : status === 'soon'
-                            ? { label: 'Due soon', badge: 'bg-orange-500/15 text-orange-700 ring-1 ring-orange-500/25', row: 'border-l-[3px] border-l-orange-400', dot: 'bg-orange-500' }
+                            ? { label: 'Next 7 days', badge: 'bg-orange-500/15 text-orange-700 ring-1 ring-orange-500/25', row: 'border-l-[3px] border-l-orange-400', dot: 'bg-orange-500' }
                             : { label: 'Upcoming', badge: 'bg-slate-100 dark:bg-slate-800 text-slate-500', row: 'border-l-[3px] border-l-slate-300 dark:border-l-slate-600', dot: 'bg-slate-400' };
                   return (
                     <li key={p.id} className={`hv-row px-3.5 py-2.5 flex items-center gap-3 ${statusStyle.row} ${justPaidIds[p.id] ? 'hv-success-flash' : ''}`}>
