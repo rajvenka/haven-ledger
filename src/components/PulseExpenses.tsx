@@ -45,7 +45,7 @@ export default function PulseExpenses({
   isReadOnly = false,
   currentUserUid,
 }: Props) {
-  const [paidFilter, setPaidFilter] = useState<'all' | 'unpaid' | 'paid'>('unpaid');
+  const [paidFilter, setPaidFilter] = useState<'all' | 'unpaid' | 'paid'>('all');
   const [tileFilter, setTileFilter] = useState<{
     group: 'dd' | 'manual_monthly' | 'non_monthly';
     bucket: 'paid' | 'to_pay' | 'next';
@@ -201,7 +201,7 @@ export default function PulseExpenses({
     if (statusFilter === 'today' && (paid || days !== 0)) return false;
     if (statusFilter === 'soon' && (paid || days <= 0 || days > 7)) return false;
     if (statusFilter === 'unpaid' && paid) return false;
-    if (statusFilter === 'paid' && !paid) return false;
+    if (statusFilter === 'paid' && !paidThisMonth(p)) return false;
     if (!q) return true;
     const hay = [p.name, p.category, p.taggedFor, p.currency, p.paymentMethod, p.notes]
       .filter(Boolean)
@@ -232,7 +232,7 @@ export default function PulseExpenses({
       return d > 0 && d <= 7;
     }).length,
     unpaid: currentScope.filter((p) => !isPaymentPaidForCurrentPeriod(p, history)).length,
-    paid: currentScope.filter((p) => isPaymentPaidForCurrentPeriod(p, history)).length,
+    paid: currentScope.filter((p) => paidThisMonth(p)).length,
   };
 
   const groups = {
@@ -546,7 +546,7 @@ export default function PulseExpenses({
               ['today', 'Today', openCounts.today, 'bg-amber-500/15 text-amber-700 dark:text-amber-400 ring-1 ring-amber-500/20'],
               ['soon', 'Next 7 days', openCounts.soon, 'bg-orange-500/15 text-orange-700 dark:text-orange-400 ring-1 ring-orange-500/20'],
               ['unpaid', 'Open', openCounts.unpaid, 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'],
-              ['paid', 'Paid', openCounts.paid, 'bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/20'],
+              ['paid', 'Paid this month', openCounts.paid, 'bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/20'],
             ] as const).map(([id, lab, count, cls]) => (
               <button
                 key={id}
@@ -601,10 +601,10 @@ export default function PulseExpenses({
 
           {/* Show: All / To be paid / Paid */}
           <div className="flex items-center gap-2 flex-wrap">
-            {(statusFilter !== 'all' || taggedForFilter !== 'all' || !!searchQ || tileFilter || paidFilter !== 'unpaid') && (
+            {(statusFilter !== 'all' || taggedForFilter !== 'all' || !!searchQ || tileFilter || paidFilter !== 'all') && (
               <button
                 type="button"
-                onClick={() => { setStatusFilter('all'); setTaggedForFilter('all'); setSearchQ(''); setTileFilter(null); setPaidFilter('unpaid'); }}
+                onClick={() => { setStatusFilter('all'); setTaggedForFilter('all'); setSearchQ(''); setTileFilter(null); setPaidFilter('all'); }}
                 className="order-last ml-auto text-[10px] font-bold text-violet-600 underline"
               >
                 Reset filters
@@ -615,7 +615,7 @@ export default function PulseExpenses({
               {([
                 ['all', 'All'],
                 ['unpaid', 'To be paid'],
-                ['paid', 'Paid'],
+                ['paid', 'Paid this month'],
               ] as const).map(([id, lab]) => (
                 <button
                   key={id}

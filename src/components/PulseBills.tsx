@@ -50,7 +50,7 @@ const TONE: Record<string, { border: string; text: string }> = {
 };
 
 const VIEW_CHIPS: [ViewFilter, string][] = [
-  ['all', 'All'], ['due', 'Due soon'], ['unpaid', 'Unpaid'], ['paid', 'Paid'],
+  ['all', 'All'], ['due', 'Due soon'], ['unpaid', 'Unpaid'], ['paid', 'Paid this month'],
   ['dd', 'Direct debit'], ['manual', 'Manual'], ['paused', 'Paused'],
 ];
 
