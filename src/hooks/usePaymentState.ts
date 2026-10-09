@@ -285,8 +285,15 @@ export function usePaymentState() {
       const seedRows = INITIAL_COUNTRIES.map(c => ({
         name: c.name, currency: c.currency, symbol: c.symbol, flag: c.flag, rate_to_aud: c.rateToAUD, user_id: user.id, workspace_id: activeWorkspaceId,
       }));
-      const { data: seeded } = await supabase.from('countries').insert(seedRows).select();
+      const { data: seeded, error: seedErr } = await supabase.from('countries').insert(seedRows).select();
       if (seeded && seeded.length > 0) setCountries(seeded.map(rowToCountry));
+      else if (seedErr) {
+        // Another concurrent load already seeded these (unique index on workspace+user+currency
+        // rejects the duplicate batch) - just read what's there instead of seeding twice.
+        const { data: existing } = await supabase.from('countries').select('*').or(wsFilter);
+        const rows = scopeRows(existing);
+        if (rows.length > 0) setCountries(rows.map(rowToCountry));
+      }
     }
     setNotifications((notifs ?? []).map(rowToNotification));
     setRewardsPerks(scopedRewards.map(rowToReward));
