@@ -44,6 +44,9 @@ import Dashboard from './components/Dashboard';
 import PulseDashboard from './components/PulseDashboard';
 import PulseExpenses from './components/PulseExpenses';
 import PulseBills from './components/PulseBills';
+import PulseHome from './components/PulseHome';
+import PulseAccounts from './components/PulseAccounts';
+import NewDesignSwitch from './components/NewDesignSwitch';
 import PulseMembership from './components/PulseMembership';
 import PulseIncome from './components/PulseIncome';
 import PulseHistory from './components/PulseHistory';
@@ -263,6 +266,14 @@ export default function App() {
   });
 
   const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'configure' | 'account' | 'history' | 'ai' | 'income' | 'rewards' | 'portfolio' | 'portfolio_v1' | 'investment_plan' | 'quote_connections' | 'reports' | 'admin_users'>('summary');
+  const [tryNewUi, setTryNewUiState] = useState<boolean>(() => {
+    try { return localStorage.getItem('hv_try_new_ui') === 'true'; } catch { return false; }
+  });
+  const setTryNewUi = (v: boolean) => {
+    setTryNewUiState(v);
+    try { localStorage.setItem('hv_try_new_ui', String(v)); } catch { /* ignore */ }
+  };
+  const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
   const [uiPulse, setUiPulse] = useState<boolean>(() => {
     try {
       // One-time migration: bills/membership Pulse rollout enables Pulse once
@@ -1710,18 +1721,34 @@ export default function App() {
           }`}>
             {activeTab === 'summary' && hasFeature('core') ? (
               uiPulse ? (
-                <PulseDashboard
-                  payments={payments}
-                  history={history}
-                  countries={countries}
-                  summaryCurrency={summaryCurrency}
-                  onRecordPayment={handleRecordPayment}
-                  onNavigateToBills={() => setActiveTab('configure')}
-                  isReadOnly={userProfile?.role === 'view'}
-                  currentUserUid={user?.uid}
-                  monthlyIncomeEstimate={parseFloat(monthlyIncome) || 0}
-                  incomeSources={incomeSources}
-                />
+                <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi}>
+                  {tryNewUi ? (
+                    <PulseHome
+                      payments={payments}
+                      history={history}
+                      countries={countries}
+                      summaryCurrency={summaryCurrency}
+                      onRecordPayment={handleRecordPayment}
+                      onOpenAccount={(name) => { setSelectedAccount(name); setActiveTab('expenses'); }}
+                      onNavigateToBills={() => setActiveTab('configure')}
+                      isReadOnly={userProfile?.role === 'view'}
+                      monthlyIncomeEstimate={parseFloat(monthlyIncome) || 0}
+                    />
+                  ) : (
+                    <PulseDashboard
+                      payments={payments}
+                      history={history}
+                      countries={countries}
+                      summaryCurrency={summaryCurrency}
+                      onRecordPayment={handleRecordPayment}
+                      onNavigateToBills={() => setActiveTab('configure')}
+                      isReadOnly={userProfile?.role === 'view'}
+                      currentUserUid={user?.uid}
+                      monthlyIncomeEstimate={parseFloat(monthlyIncome) || 0}
+                      incomeSources={incomeSources}
+                    />
+                  )}
+                </NewDesignSwitch>
               ) : (
                 <Dashboard
                   payments={payments}
@@ -1744,7 +1771,25 @@ export default function App() {
               )
             ) : activeTab === 'expenses' && hasFeature('core') ? (
               uiPulse ? (
-                <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
+                <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi}>
+                {tryNewUi ? (
+                  <PulseAccounts
+                    payments={payments}
+                    history={history}
+                    countries={countries}
+                    summaryCurrency={summaryCurrency}
+                    onRecordPayment={handleRecordPayment}
+                    onAddBill={(name) => {
+                      setPreselectedCurrency(summaryCurrency);
+                      setEditingPayment(name ? ({ id: '', name: '', amount: 0, currency: summaryCurrency, dayOfMonth: 1, category: 'Other', active: true, reminderDaysBefore: 2, taggedFor: name, billingCycle: 'monthly', paymentMethod: 'manual', paymentType: 'fixed' } as any) : null);
+                      setIsModalOpen(true);
+                    }}
+                    onEditBill={handleOpenEditModal}
+                    isReadOnly={userProfile?.role === 'view'}
+                    selectedAccount={selectedAccount}
+                    onSelectAccount={setSelectedAccount}
+                  />
+                ) : (
                 <PulseExpenses
                   payments={payments}
                   history={history}
@@ -1758,7 +1803,8 @@ export default function App() {
                   isReadOnly={userProfile?.role === 'view'}
                   currentUserUid={user?.uid}
                 />
-                </div>
+                )}
+                </NewDesignSwitch>
               ) : (
                 <ExpensesView
                   payments={payments}
