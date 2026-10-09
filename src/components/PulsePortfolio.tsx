@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis, Treemap } from 'recharts';
 import PortfolioPnLCalendar from './PortfolioPnLCalendar';
 import PortfolioV1View from './PortfolioV1View';
 import { Search, TrendingUp, TrendingDown, X, SlidersHorizontal, Plus, Pencil, Trash2, LayoutDashboard, List, CheckCircle2, CalendarDays, Wallet, RefreshCw, AlertTriangle, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, Star, Target } from 'lucide-react';
@@ -119,6 +119,10 @@ const NAV: { k: Section; label: string; icon: React.ReactNode }[] = [
 export default function PulsePortfolio({ holdings, lots = [], portfolios = [], rates = [], baseCurrency = 'INR', connections = [], isLoading, onManage, isReadOnly, importProps, cashBalances = [], loadDailyPositions, snapshotDaily, addHolding, updateHolding, sellHolding, deleteHolding, bulkDelete, setCash, deleteCash }: Props) {
   const [section, setSectionState] = useState<Section>(() => { try { return (localStorage.getItem('hv_pp_section') as Section) || 'overview'; } catch { return 'overview'; } });
   const setSection = (k: Section) => { setSectionState(k); try { localStorage.setItem('hv_pp_section', k); } catch { /* */ } };
+  const [design, setDesignState] = useState<number>(() => { try { return Number(localStorage.getItem('hv_pp_design')) || 1; } catch { return 1; } });
+  const setDesign = (n: number) => { setDesignState(n); try { localStorage.setItem('hv_pp_design', String(n)); } catch { /* */ } };
+  const [heatBy, setHeatBy] = useState<'pnlPct' | 'dayPct'>('pnlPct');
+  const [openBrokers, setOpenBrokers] = useState<string[]>([]);
   const [defaultBook, setDefaultBook] = useState<string>(() => { try { return localStorage.getItem('hv_pp_default_book') || ''; } catch { return ''; } });
   const [book, setBook] = useState<string>('');
   const [navCollapsed, setNavCollapsed] = useState<boolean>(() => { try { return localStorage.getItem('hv_pp_nav_collapsed') === '1'; } catch { return false; } });
@@ -589,8 +593,182 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
 
   const NAV_BADGE: Record<string, number | undefined> = { holdings: rows.length, sold: soldRows.length || undefined, sync: connections.length || undefined };
 
+  const kpiRow = (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <Kpi label="Total value" value={money(totals.value, ccy, true)} sub={`Invested ${money(totals.cost, ccy, true)}`} />
+      <Kpi label="Total P&L" value={money(totals.pnl, ccy, true)} sub={pct(totals.pnlPct)} subTone={tone(totals.pnl)} />
+      <Kpi label="Today" value={money(totals.day, ccy, true)} sub={pct(totals.dayPct)} subTone={tone(totals.day)} />
+      <Kpi label="Best / worst" value={best ? `${best.symbol} ${money(best.pnl, ccy, true)}` : '—'} sub={worst ? `Worst: ${worst.symbol} ${money(worst.pnl, ccy, true)}` : ''} subTone="text-slate-500" />
+    </div>
+  );
+  const alertsBlock = (
+    <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+      <div className="text-sm font-black">Movers &amp; alerts</div>
+      {[['Top gainers', [...rows].sort((a, b) => b.pnl - a.pnl).filter((r) => r.pnl > 0).slice(0, 4)], ['Top losers', [...rows].sort((a, b) => a.pnl - b.pnl).filter((r) => r.pnl < 0).slice(0, 4)]].map(([t, list]: any) => (
+        <div key={t}>
+          <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">{t}</div>
+          {list.map((r: any) => <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex justify-between text-xs py-1 hover:bg-slate-50 dark:hover:bg-slate-800 rounded px-1"><span className="font-bold">{r.symbol}</span><span className={`tabular-nums font-bold ${tone(r.pnl)}`}>{pct(r.pnlPct)}</span></button>)}
+        </div>
+      ))}
+      {nearStop.length > 0 && <div><div className="text-[10px] font-black uppercase tracking-wider text-amber-600 mb-1">Near stop-loss</div>{nearStop.map((r: any) => <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex justify-between text-xs py-1 px-1"><span className="font-bold">{r.symbol}</span><span className="text-amber-600 font-bold">{r.stopDist.toFixed(1)}% away</span></button>)}</div>}
+      {nearTarget.length > 0 && <div><div className="text-[10px] font-black uppercase tracking-wider text-emerald-600 mb-1">Near profit target</div>{nearTarget.map((r: any) => <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex justify-between text-xs py-1 px-1"><span className="font-bold">{r.symbol}</span><span className="text-emerald-600 font-bold">{r.tgtDist <= 0 ? 'reached' : `${r.tgtDist.toFixed(1)}% to go`}</span></button>)}</div>}
+    </div>
+  );
+  const topRows = [...rows].sort((a, b) => b.value - a.value);
+  const brokerGroups = useMemo(() => {
+    const m = new Map<string, any[]>();
+    rows.forEach((r) => m.set(r.broker, [...(m.get(r.broker) || []), r]));
+    return Array.from(m.entries()).map(([name, items]) => ({ name, items: items.sort((a, b) => b.value - a.value), value: items.reduce((a, r) => a + r.value, 0), cost: items.reduce((a, r) => a + r.cost, 0), pnl: items.reduce((a, r) => a + r.pnl, 0), day: items.reduce((a, r) => a + r.day, 0) })).sort((a, b) => b.value - a.value);
+  }, [rows]);
+  const heatColor = (v: number | null) => { if (v == null) return '#334155'; const t = Math.min(1, Math.abs(v) / (heatBy === 'dayPct' ? 4 : 30)); return v >= 0 ? `rgba(16,185,129,${0.25 + t * 0.7})` : `rgba(244,63,94,${0.25 + t * 0.7})`; };
+  const HeatTile = (props: any) => {
+    const { x, y, width, height, name, pv, id } = props;
+    if (width < 4 || height < 4 || !name) return <g />;
+    return (
+      <g onClick={() => id && setSelected(id)} style={{ cursor: 'pointer' }}>
+        <rect x={x} y={y} width={width} height={height} rx={4} fill={heatColor(pv)} stroke="#0f172a" strokeWidth={2} />
+        {width > 46 && height > 30 && <text x={x + 6} y={y + 16} fill="#fff" fontSize={11} fontWeight={800}>{String(name).slice(0, Math.floor(width / 7))}</text>}
+        {width > 46 && height > 46 && pv != null && <text x={x + 6} y={y + 31} fill="#fff" fontSize={10} opacity={0.9}>{pct(pv)}</text>}
+      </g>
+    );
+  };
+  const Avatar = ({ t, i }: { t: string; i: number }) => <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[11px] font-black text-white shrink-0" style={{ background: PALETTE[i % PALETTE.length] }}>{String(t).slice(0, 2).toUpperCase()}</div>;
+  const Pill = ({ v }: { v: number }) => <span className={`text-[11px] font-black px-2 py-0.5 rounded-full ${v >= 0 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'}`}>{pct(v)}</span>;
+  const heroSpark = trend.length > 1 && (
+    <div className="h-20 -mx-2"><ResponsiveContainer width="100%" height="100%"><AreaChart data={trend}><defs><linearGradient id="hs" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#fff" stopOpacity={0.4} /><stop offset="100%" stopColor="#fff" stopOpacity={0} /></linearGradient></defs><YAxis hide domain={['auto', 'auto']} /><Area type="monotone" dataKey="value" stroke="#fff" strokeWidth={2} fill="url(#hs)" /></AreaChart></ResponsiveContainer></div>
+  );
+
+  const designOverview = (() => {
+    if (design === 2) return (
+      <div className="space-y-5">
+        <div className="rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 text-white p-6 shadow-xl shadow-indigo-600/20">
+          <div className="text-xs font-bold opacity-80">Total portfolio value</div>
+          <div className="text-4xl sm:text-5xl font-black tabular-nums mt-1">{money(totals.value, ccy, true)}</div>
+          <div className="flex flex-wrap gap-2 mt-3 text-xs font-black">
+            <span className="px-2.5 py-1 rounded-full bg-white/20">{money(totals.pnl, ccy, true)} · {pct(totals.pnlPct)} all-time</span>
+            <span className="px-2.5 py-1 rounded-full bg-white/20">{money(totals.day, ccy, true)} · {pct(totals.dayPct)} today</span>
+            <span className="px-2.5 py-1 rounded-full bg-white/20">Invested {money(totals.cost, ccy, true)}</span>
+          </div>
+          {heroSpark}
+        </div>
+        <div className="grid lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between px-4 py-3"><div className="text-sm font-black">Your holdings</div><button onClick={() => setSection('holdings')} className="text-xs font-black text-indigo-600">See all {rows.length}</button></div>
+            {topRows.slice(0, 12).map((r, i) => (
+              <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex items-center gap-3 px-4 py-2.5 border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 text-left">
+                <Avatar t={r.symbol} i={i} />
+                <div className="flex-1 min-w-0"><div className="text-sm font-black truncate">{r.symbol}</div><div className="text-[11px] text-slate-400 truncate">{r.broker} · {px(r.qty)} units</div></div>
+                <div className="text-right"><div className="text-sm font-black tabular-nums">{money(r.value, ccy, true)}</div><Pill v={r.pnlPct} /></div>
+              </button>
+            ))}
+          </div>
+          <div className="space-y-4">{alertsBlock}</div>
+        </div>
+      </div>
+    );
+    if (design === 3) return (
+      <div className="space-y-4">
+        {kpiRow}
+        <div className="rounded-2xl bg-slate-900 p-3">
+          <div className="flex items-center justify-between mb-2 px-1">
+            <div className="text-sm font-black text-white">Heatmap <span className="text-slate-400 font-bold text-xs">size = value · colour = {heatBy === 'pnlPct' ? 'total return' : 'today'}</span></div>
+            <div className="flex gap-1">{([['pnlPct', 'Return'], ['dayPct', 'Today']] as const).map(([k, l]) => <button key={k} onClick={() => setHeatBy(k)} className={`text-[10px] font-black px-2.5 py-1 rounded-full ${heatBy === k ? 'bg-white text-slate-900' : 'bg-slate-800 text-slate-400'}`}>{l}</button>)}</div>
+          </div>
+          <div className="h-[420px]"><ResponsiveContainer width="100%" height="100%"><Treemap data={topRows.slice(0, 80).filter((r) => r.value > 0).map((r) => ({ name: r.symbol, size: r.value, pv: r[heatBy], id: r.id }))} dataKey="size" content={<HeatTile />} isAnimationActive={false} /></ResponsiveContainer></div>
+        </div>
+        <div className="grid lg:grid-cols-2 gap-4">
+          <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
+            <div className="text-sm font-black mb-3">P&amp;L by {groupBy}</div>
+            {(() => { const m = new Map<string, number>(); rows.forEach((r) => m.set(r[groupBy], (m.get(r[groupBy]) || 0) + r.pnl)); const arr = Array.from(m.entries()).sort((a, b) => b[1] - a[1]); const mx = Math.max(1, ...arr.map((a) => Math.abs(a[1]))); return arr.map(([k, v]) => (<div key={k} className="flex items-center gap-2 text-xs py-1"><span className="w-28 truncate font-bold">{k}</span><div className="flex-1 h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden"><div className={`h-full ${v >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`} style={{ width: `${(Math.abs(v) / mx) * 100}%` }} /></div><span className={`w-20 text-right tabular-nums font-bold ${tone(v)}`}>{money(v, ccy, true)}</span></div>)); })()}
+          </div>
+          {alertsBlock}
+        </div>
+      </div>
+    );
+    if (design === 4) return (
+      <div className="space-y-3">
+        <div className="rounded-xl bg-slate-900 text-slate-100 font-mono text-xs px-4 py-3 flex flex-wrap gap-x-8 gap-y-1">
+          <span>VALUE <b className="text-white">{money(totals.value, ccy, true)}</b></span>
+          <span>COST <b className="text-white">{money(totals.cost, ccy, true)}</b></span>
+          <span>P&amp;L <b className={totals.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{money(totals.pnl, ccy, true)} ({pct(totals.pnlPct)})</b></span>
+          <span>DAY <b className={totals.day >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{money(totals.day, ccy, true)} ({pct(totals.dayPct)})</b></span>
+          <span>POS <b className="text-white">{rows.length}</b></span>
+          <span>CASH <b className="text-white">{money(cashTotal, ccy, true)}</b></span>
+        </div>
+        <div className="flex h-3 rounded-full overflow-hidden">{groups.map((g, i) => <button key={g.name} title={`${g.name} ${money(g.value, ccy, true)}`} onClick={() => setFilter(filter === g.name ? 'All' : g.name)} style={{ width: `${(g.value / Math.max(1, totals.value)) * 100}%`, background: PALETTE[i % PALETTE.length], opacity: filter === 'All' || filter === g.name ? 1 : 0.3 }} />)}</div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">{groups.map((g, i) => <span key={g.name} className="inline-flex items-center gap-1"><i className="w-2 h-2 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />{g.name} {((g.value / Math.max(1, totals.value)) * 100).toFixed(0)}%</span>)}</div>
+        {holdingsView}
+      </div>
+    );
+    if (design === 5) return (
+      <div className="space-y-4">
+        <div className="grid sm:grid-cols-3 gap-3">
+          <Kpi label="Net worth" value={money(totals.value + cashTotal, ccy, true)} sub={`Cash ${money(cashTotal, ccy, true)}`} />
+          <Kpi label="Invested value" value={money(totals.value, ccy, true)} sub={`${pct(totals.pnlPct)} all-time`} subTone={tone(totals.pnl)} />
+          <Kpi label="Today" value={money(totals.day, ccy, true)} sub={pct(totals.dayPct)} subTone={tone(totals.day)} />
+        </div>
+        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {brokerGroups.map((g, i) => {
+            const open = openBrokers.includes(g.name);
+            return (
+              <div key={g.name} className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
+                <button onClick={() => setOpenBrokers((o) => (open ? o.filter((x) => x !== g.name) : [...o, g.name]))} className="w-full text-left p-4">
+                  <div className="flex items-center gap-3"><Avatar t={g.name} i={i} /><div className="flex-1 min-w-0"><div className="text-sm font-black truncate">{g.name}</div><div className="text-[11px] text-slate-400">{g.items.length} holdings</div></div>{open ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}</div>
+                  <div className="flex items-end justify-between mt-3"><div className="text-2xl font-black tabular-nums">{money(g.value, ccy, true)}</div><div className="text-right"><div className={`text-xs font-black ${tone(g.pnl)}`}>{money(g.pnl, ccy, true)}</div><div className={`text-[11px] font-bold ${tone(g.pnl)}`}>{pct(g.cost > 0 ? (g.pnl / g.cost) * 100 : 0)}</div></div></div>
+                  <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 mt-3 overflow-hidden"><div className="h-full bg-indigo-500" style={{ width: `${(g.value / Math.max(1, totals.value)) * 100}%` }} /></div>
+                </button>
+                {open && <div className="border-t border-slate-100 dark:border-slate-800">{g.items.slice(0, 10).map((r) => <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex items-center justify-between px-4 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-800/50"><span className="font-black">{r.symbol}</span><span className="tabular-nums">{money(r.value, ccy, true)} <span className={`font-bold ${tone(r.pnl)}`}>{pct(r.pnlPct)}</span></span></button>)}{g.items.length > 10 && <button onClick={() => { setFilter(g.name); setGroupBy('broker'); setSection('holdings'); }} className="w-full py-2 text-[11px] font-black text-indigo-600">See all {g.items.length}</button>}</div>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+    // design 6: mobile-first cards
+    return (
+      <div className="max-w-2xl mx-auto space-y-4">
+        <div className="rounded-3xl bg-slate-900 text-white p-6 text-center">
+          <div className="text-xs font-bold text-slate-400">Portfolio value</div>
+          <div className="text-4xl font-black tabular-nums mt-1">{money(totals.value, ccy, true)}</div>
+          <div className={`text-sm font-black mt-1 ${totals.day >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{totals.day >= 0 ? '▲' : '▼'} {money(Math.abs(totals.day), ccy, true)} today ({pct(totals.dayPct)})</div>
+          <div className="grid grid-cols-3 gap-2 mt-5 text-center">
+            {[['Invested', money(totals.cost, ccy, true), ''], ['P&L', money(totals.pnl, ccy, true), totals.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'], ['Return', pct(totals.pnlPct), totals.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400']].map(([l, v, c]) => <div key={l} className="rounded-2xl bg-white/5 py-2"><div className="text-[10px] text-slate-400 font-bold">{l}</div><div className={`text-sm font-black ${c}`}>{v}</div></div>)}
+          </div>
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {['All', ...groups.map((g) => g.name)].map((n) => <button key={n} onClick={() => setFilter(n)} className={`shrink-0 text-xs font-black px-3.5 py-1.5 rounded-full ${filter === n ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{n}</button>)}
+        </div>
+        <div className="space-y-2">
+          {topRows.filter((r) => filter === 'All' || r[groupBy] === filter).slice(0, 40).map((r, i) => (
+            <button key={r.id} onClick={() => setSelected(r.id)} className="w-full text-left rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
+              <div className="flex items-center gap-3"><Avatar t={r.symbol} i={i} /><div className="flex-1 min-w-0"><div className="font-black truncate">{r.symbol}</div><div className="text-[11px] text-slate-400 truncate">{r.broker} · {r.category}</div></div><Pill v={r.pnlPct} /></div>
+              <div className="flex justify-between mt-3 text-xs"><span className="text-slate-400">Value</span><b className="tabular-nums">{money(r.value, ccy)}</b></div>
+              <div className="flex justify-between mt-1 text-xs"><span className="text-slate-400">P&amp;L</span><b className={`tabular-nums ${tone(r.pnl)}`}>{money(r.pnl, ccy)}</b></div>
+              <div className="h-1 rounded-full bg-slate-100 dark:bg-slate-800 mt-3 overflow-hidden"><div className="h-full bg-indigo-500" style={{ width: `${Math.min(100, (r.value / Math.max(1, totals.value)) * 100 * 4)}%` }} /></div>
+            </button>
+          ))}
+        </div>
+        <button onClick={() => setSection('holdings')} className="w-full py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-sm font-black">Open full table</button>
+      </div>
+    );
+  })();
+
+  const DESIGN_NAMES = ['Command', 'Brokerage', 'Heatmap', 'Terminal', 'Accounts', 'Cards'];
+  const tabStyle = (active: boolean) => design === 3 ? `px-4 py-1.5 rounded-full text-xs font-black ${active ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}` : design === 4 ? `px-3 py-1 text-[11px] font-mono font-bold uppercase ${active ? 'bg-slate-900 text-emerald-400' : 'text-slate-500 hover:text-slate-800'}` : `px-4 py-2 text-sm font-black -mb-px border-b-2 ${active ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`;
+  const topTabs = (
+    <div className={`flex gap-1 overflow-x-auto mb-4 ${design === 3 ? '' : design === 4 ? 'bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 w-fit' : 'border-b border-slate-200 dark:border-slate-800'}`}>
+      {NAV.map((n) => <button key={n.k} onClick={() => setSection(n.k)} className={`shrink-0 ${tabStyle(section === n.k)}`}>{n.label}{NAV_BADGE[n.k] ? <span className="ml-1.5 text-[10px] opacity-60">{NAV_BADGE[n.k]}</span> : null}</button>)}
+    </div>
+  );
+
   return (
     <div className="max-w-[1600px] mx-auto p-3 sm:p-6 pb-24 md:pb-6">
+      <div className="flex items-center gap-1.5 flex-wrap mb-4 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800/70 w-fit max-w-full overflow-x-auto">
+        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-2">Design</span>
+        {DESIGN_NAMES.map((nm, i) => (
+          <button key={nm} onClick={() => setDesign(i + 1)} className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-black transition-all ${design === i + 1 ? 'bg-white dark:bg-slate-900 text-indigo-600 shadow' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>Option {i + 1}<span className="hidden sm:inline font-bold opacity-60"> · {nm}</span></button>
+        ))}
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <div>
           <h1 className="text-2xl font-black text-slate-900 dark:text-white">Portfolio</h1>
@@ -618,6 +796,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       </div>
 
       <div className="md:flex md:gap-6">
+        {design === 1 && (
         <nav className={`hidden md:block shrink-0 transition-all ${navCollapsed ? 'w-14' : 'w-48'}`}>
           <div className="sticky top-2 space-y-1">
             {NAV.map((n) => (
@@ -629,8 +808,11 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
             {!navCollapsed && <button onClick={onManage} className="w-full text-[11px] font-bold text-slate-400 hover:text-slate-600 px-3 pt-1 text-left">Back to current design</button>}
           </div>
         </nav>
+        )}
         <div className="flex-1 min-w-0">
-          {section === 'overview' && (
+          {design > 1 && design !== 6 && topTabs}
+          {section === 'overview' && design !== 1 && designOverview}
+          {section === 'overview' && design === 1 && (
           <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Kpi label="Total value" value={money(totals.value, ccy, true)} sub={`Invested ${money(totals.cost, ccy, true)}`} />
@@ -721,7 +903,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         </div>
       </div>
 
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur border-t border-slate-200 dark:border-slate-800 grid grid-cols-6">
+      <nav className={`${design === 6 ? '' : 'md:hidden '}fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur border-t border-slate-200 dark:border-slate-800 grid grid-cols-6`}>
         {NAV.map((n) => (
           <button key={n.k} onClick={() => setSection(n.k)} className={`flex flex-col items-center gap-0.5 py-2 text-[9px] font-black ${section === n.k ? 'text-indigo-600' : 'text-slate-400'}`}>{n.icon}{n.label.replace('Import & Sync', 'Sync')}</button>
         ))}
