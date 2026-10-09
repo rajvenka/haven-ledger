@@ -25,6 +25,7 @@ interface Props {
   isReadOnly?: boolean;
   selectedAccount: string | null;
   onSelectAccount: (name: string | null) => void;
+  onRenameAccount?: (from: string, to: string) => Promise<void>;
 }
 
 type Tab = 'overview' | 'bills' | 'history';
@@ -45,8 +46,11 @@ function useIsDesktop() {
 
 export default function PulseAccounts({
   payments, history, countries, summaryCurrency, onRecordPayment, onAddBill, onEditBill,
-  isReadOnly = false, selectedAccount, onSelectAccount,
+  isReadOnly = false, selectedAccount, onSelectAccount, onRenameAccount,
 }: Props) {
+  const [renaming, setRenaming] = useState(false);
+  const [renameTo, setRenameTo] = useState('');
+  const [renameBusy, setRenameBusy] = useState(false);
   const isDesktop = useIsDesktop();
   const [overrides, setOverrides] = useState(loadTypeOverrides);
   const [search, setSearch] = useState('');
@@ -252,6 +256,9 @@ export default function PulseAccounts({
                 <span className="text-[10px] text-slate-400">{s.activeBills} active · {a.bills.length - s.activeBills} paused · {a.history.length} payments logged</span>
               </div>
             </div>
+            {!isReadOnly && onRenameAccount && (
+              <button type="button" onClick={() => { setRenameTo(a.name); setRenaming(true); }} className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-bold border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"><Edit2 className="w-3 h-3" />Rename / merge</button>
+            )}
             {!isReadOnly && (
               <button type="button" onClick={() => onAddBill(a.name)} className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold bg-indigo-600 text-white"><Plus className="w-3.5 h-3.5" />Add bill</button>
             )}
@@ -324,13 +331,48 @@ export default function PulseAccounts({
     );
   })() : null;
 
+  const otherNames = accounts.filter((x) => x.name !== current?.name).map((x) => x.name);
+  const mergeTarget = otherNames.find((n) => n.toLowerCase() === renameTo.trim().toLowerCase());
+  const renameDialog = renaming && current ? (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-950/60" onClick={() => !renameBusy && setRenaming(false)}>
+      <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 space-y-3" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-[14px] font-black text-slate-900 dark:text-white">Rename or merge “{current.name}”</h3>
+        <p className="text-[11px] text-slate-500">Type a new name, or pick an existing account to merge into. All {current.bills.length} bill(s) and {current.history.length} payment(s) move over.</p>
+        <input list="hv-account-names" value={renameTo} onChange={(e) => setRenameTo(e.target.value)} autoFocus
+          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-[13px] font-bold" />
+        <datalist id="hv-account-names">{otherNames.map((n) => <option key={n} value={n} />)}</datalist>
+        {renameTo.trim() && renameTo.trim() !== current.name && (
+          <p className={`text-[11px] font-bold ${mergeTarget ? 'text-amber-600' : 'text-slate-500'}`}>
+            {mergeTarget ? `Merges into the existing account “${mergeTarget}”.` : `Renames to “${renameTo.trim()}”.`}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <button type="button" disabled={renameBusy} onClick={() => setRenaming(false)} className="px-3 py-1.5 rounded-lg text-[12px] font-bold text-slate-500">Cancel</button>
+          <button type="button" disabled={renameBusy || !renameTo.trim() || renameTo.trim() === current.name}
+            onClick={async () => {
+              if (!onRenameAccount) return;
+              setRenameBusy(true);
+              try {
+                const target = mergeTarget || renameTo.trim();
+                await onRenameAccount(current.name, target);
+                onSelectAccount(target);
+                setRenaming(false);
+              } finally { setRenameBusy(false); }
+            }}
+            className="px-3 py-1.5 rounded-lg text-[12px] font-bold bg-indigo-600 text-white disabled:opacity-50">{renameBusy ? 'Saving…' : mergeTarget ? 'Merge' : 'Rename'}</button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   if (!isDesktop) {
-    return <div className="flex-1 min-h-0 flex flex-col bg-slate-50 dark:bg-slate-950 text-left">{showDetail ? detail : rail}</div>;
+    return <div className="flex-1 min-h-0 flex flex-col bg-slate-50 dark:bg-slate-950 text-left">{showDetail ? detail : rail}{renameDialog}</div>;
   }
   return (
     <div className="flex-1 min-h-0 flex bg-slate-50 dark:bg-slate-950 text-left">
       {rail}
       {detail || <div className="flex-1 flex items-center justify-center text-[13px] text-slate-400">No accounts yet - add a bill to get started.</div>}
+      {renameDialog}
     </div>
   );
 }

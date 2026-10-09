@@ -940,6 +940,31 @@ export function usePaymentState() {
     await reloadData();
   };
 
+  // Rename an account (the "Tagged for" value) - or merge it into another one - across every
+  // bill and payment-history row that uses it (matched case-insensitively, blank = "Self").
+  const renameAccount = async (from: string, to: string) => {
+    if (!user || checkReadOnly()) return;
+    const target = to.trim();
+    if (!target) return;
+    const norm = (v?: string | null) => (v || 'Self').trim().toLowerCase();
+    const f = norm(from);
+    const payIds = allPayments.filter((p) => norm(p.taggedFor) === f).map((p) => p.id);
+    const histIds = allHistory.filter((h) => norm(h.taggedFor) === f).map((h) => h.id);
+    setIsSyncing(true);
+    try {
+      if (payIds.length) {
+        const { error } = await supabase.from('recurring_payments').update({ tagged_for: target }).in('id', payIds);
+        if (error) throw error;
+      }
+      if (histIds.length) {
+        const { error } = await supabase.from('payment_history').update({ tagged_for: target }).in('id', histIds);
+        if (error) throw error;
+      }
+      await reloadData();
+      triggerNotification('Account updated', `${payIds.length} bill(s) and ${histIds.length} payment(s) are now under "${target}".`, 'info');
+    } finally { setIsSyncing(false); }
+  };
+
   const updateHistoryStatus = async (id: string, status: 'paid' | 'delayed' | 'carry') => {
     if (checkReadOnly()) return;
     await supabase.from('payment_history').update({ status }).eq('id', id);
@@ -2528,7 +2553,7 @@ export function usePaymentState() {
     rewardsPerks, addReward, updateReward, deleteReward,
     giftCards, addGiftCard, updateGiftCard, redeemGiftCard, deleteGiftCard,
     addPayment, addBulkPayments, updatePayment, deletePayment, updatePaymentsOrder, recordPayment,
-    deleteHistoryEntry, updateHistoryStatus, clearHistory, saveRate, saveSummaryCurrency,
+    deleteHistoryEntry, updateHistoryStatus, renameAccount, clearHistory, saveRate, saveSummaryCurrency,
     addCountry, updateCountry, deleteCountry,
     triggerNotification, dismissNotification, markAllNotificationsRead, clearNotifications,
     checkPaymentReminders, requestNotificationPermission, resetToDefaults, fetchAllUsersForAdmin, inviteNewUser, onboardUserWithPlan,

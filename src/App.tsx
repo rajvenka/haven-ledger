@@ -161,6 +161,7 @@ export default function App() {
     recordPayment,
     deleteHistoryEntry,
     updateHistoryStatus,
+    renameAccount,
     clearHistory,
     saveRate,
     saveSummaryCurrency,
@@ -1788,6 +1789,7 @@ export default function App() {
                     isReadOnly={userProfile?.role === 'view'}
                     selectedAccount={selectedAccount}
                     onSelectAccount={setSelectedAccount}
+                    onRenameAccount={renameAccount}
                   />
                 ) : (
                 <PulseExpenses
