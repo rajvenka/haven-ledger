@@ -11,8 +11,9 @@ import { RecurringPayment, PaymentHistory, CountryConfig, Currency, getCategoryC
 import { formatCurrencyValue } from '../utils/paymentUtils';
 import {
   Account, AccountType, ACCOUNT_TYPES, avatarClass, billState, buildAccounts, initials,
-  loadTypeOverrides, monthlyEquivalent, saveTypeOverride, toCcy,
+  loadTypeOverrides, monthCompare, monthlyEquivalent, saveTypeOverride, toCcy, cumulativeCompare,
 } from '../utils/accounts';
+import { CompareBars, CompareHeadline, CumulativeLines } from './MonthCompareCharts';
 
 interface Props {
   payments: RecurringPayment[];
@@ -323,6 +324,20 @@ export default function PulseAccounts({
               </div>
             </>
           )}
+
+          {tab === 'overview' && (() => {
+            const cmp = monthCompare(a.history, a.bills, conv, 'category', now);
+            return (
+              <section className="space-y-3">
+                <h3 className="text-[11px] font-black text-slate-700 dark:text-slate-200 px-0.5">This month vs last month</h3>
+                <CompareHeadline last={cmp.last} cur={cmp.cur} stillToPay={s.dueOpen} money={money} />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  <CumulativeLines data={cumulativeCompare(a.history, conv, now)} money={money} />
+                  <CompareBars title="By category" rows={cmp.rows} money={money} />
+                </div>
+              </section>
+            );
+          })()}
 
           {tab === 'bills' && <BillsTab bills={bills} Row={BillRow} />}
           {tab === 'history' && <HistoryTab account={a} money={money} conv={conv} />}

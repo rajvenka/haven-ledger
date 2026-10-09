@@ -437,6 +437,7 @@ export default function App() {
   const [preselectedCurrency, setPreselectedCurrency] = useState<string>('AUD');
   const [isNotifDrawerOpen, setIsNotifDrawerOpen] = useState(false);
   const [recordingTransactionPayment, setRecordingTransactionPayment] = useState<RecurringPayment | null>(null);
+  const [showMoreTxn, setShowMoreTxn] = useState(false);
   const [transactionAmount, setTransactionAmount] = useState<string>('');
   const [transactionStatus, setTransactionStatus] = useState<'paid' | 'delayed' | 'carry'>('paid');
   const [transactionTaggedFor, setTransactionTaggedFor] = useState<string>('');
@@ -547,6 +548,7 @@ export default function App() {
 
   const handleRecordPayment = async (payment: RecurringPayment, instanceDueDate?: string) => {
     setRecordingTransactionPayment(payment);
+    setShowMoreTxn(false);
     setTransactionAmount(String(payment.amount));
     setTransactionStatus('paid');
     setTransactionTaggedFor(payment.taggedFor || '');
@@ -2592,9 +2594,50 @@ export default function App() {
                     )}
 
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
-                      Confirm status, amount, and date. For direct debit, “Paid” means the bank has already taken it.
+                      How much did you actually pay, and when?
                     </p>
 
+                    {/* Amount */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                        Transaction Amount ({recordingTransactionPayment.currency})
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-semibold">
+                          {countries.find(c => String(c.currency || '').toUpperCase() === String(recordingTransactionPayment.currency || '').toUpperCase())?.symbol || '$'}
+                        </span>
+                        <input
+                          type="number"
+                          step="any"
+                          value={transactionAmount}
+                          onChange={(e) => setTransactionAmount(e.target.value)}
+                          placeholder="0.00"
+                          className="w-full pl-6 pr-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* Payment Date */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                        Payment Date / Due Date
+                      </label>
+                      <input
+                        type="date"
+                        value={transactionDate}
+                        onChange={(e) => setTransactionDate(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                        required
+                      />
+                    </div>
+
+                    <button type="button" onClick={() => setShowMoreTxn((v) => !v)} className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
+                      {showMoreTxn ? '− Fewer options' : '+ More options (status, for whom)'}
+                    </button>
+
+                    {showMoreTxn && (
+                      <div className="space-y-4">
                     {/* Status Picker - Segmented Card Style */}
                     <div>
                       <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
@@ -2642,41 +2685,6 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Amount */}
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                        Transaction Amount ({recordingTransactionPayment.currency})
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-semibold">
-                          {countries.find(c => String(c.currency || '').toUpperCase() === String(recordingTransactionPayment.currency || '').toUpperCase())?.symbol || '$'}
-                        </span>
-                        <input
-                          type="number"
-                          step="any"
-                          value={transactionAmount}
-                          onChange={(e) => setTransactionAmount(e.target.value)}
-                          placeholder="0.00"
-                          className="w-full pl-6 pr-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    {/* Payment Date */}
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                        Payment Date / Due Date
-                      </label>
-                      <input
-                        type="date"
-                        value={transactionDate}
-                        onChange={(e) => setTransactionDate(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
-                        required
-                      />
-                    </div>
-
                     {/* For Whom Tag */}
                     <div>
                       <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
@@ -2707,6 +2715,9 @@ export default function App() {
                         ))}
                       </div>
                     </div>
+
+                      </div>
+                    )}
 
                     {/* Actions */}
                     <div className="flex gap-2 pt-2 pb-4">

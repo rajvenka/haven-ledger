@@ -8,8 +8,9 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { RecurringPayment, PaymentHistory, CountryConfig, Currency } from '../types';
 import { formatCurrencyValue } from '../utils/paymentUtils';
 import {
-  AccountType, accountNameOf, avatarClass, billState, buildAccounts, initials, loadTypeOverrides, monthlyEquivalent, toCcy,
+  AccountType, accountNameOf, avatarClass, billState, buildAccounts, cumulativeCompare, initials, loadTypeOverrides, monthCompare, monthlyEquivalent, toCcy,
 } from '../utils/accounts';
+import { CompareBars, CompareHeadline, CumulativeLines } from './MonthCompareCharts';
 
 interface Props {
   payments: RecurringPayment[];
@@ -63,7 +64,10 @@ export default function PulseHome({
     }
     history.forEach((h) => { const t = trend.find((x) => String(h.paidDate).startsWith(x.key)); if (t) t.total += conv(h.amount, h.currency); });
     const recent = [...history].sort((a, b) => String(b.paidDate).localeCompare(String(a.paidDate))).slice(0, 8);
-    return { attention, monthly, dueOpen, dueCount, overdueCount, next7, paidMonth, cards, trend, recent };
+    const byCat = monthCompare(history, payments, conv, 'category', now);
+    const byAcct = monthCompare(history, payments, conv, 'account', now);
+    const pace = cumulativeCompare(history, conv, now);
+    return { attention, monthly, dueOpen, dueCount, overdueCount, next7, paidMonth, cards, trend, recent, byCat, byAcct, pace };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payments, history, countries, summaryCurrency]);
 
@@ -154,6 +158,16 @@ export default function PulseHome({
             </div>
           </section>
         </div>
+
+        <section className="space-y-3">
+          <h2 className="text-[11px] font-black text-slate-700 dark:text-slate-200 px-0.5">This month vs last month</h2>
+          <CompareHeadline last={data.byCat.last} cur={data.byCat.cur} stillToPay={data.dueOpen} money={money} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <CumulativeLines data={data.pace} money={money} />
+            <CompareBars title="By category" rows={data.byCat.rows} money={money} />
+          </div>
+          <CompareBars title="By account" rows={data.byAcct.rows} money={money} />
+        </section>
 
         <section>
           <div className="flex items-center justify-between mb-2 px-0.5">

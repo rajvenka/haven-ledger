@@ -128,3 +128,65 @@ export function avatarClass(name: string) {
   for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
   return AVATARS[Math.abs(h) % AVATARS.length];
 }
+
+/* ------------------------- month-over-month comparison ------------------------- */
+const mkey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+export interface CompareRow { name: string; last: number; cur: number }
+
+/** Paid totals for last month vs this month, grouped by category or account. */
+export function monthCompare(
+  history: PaymentHistory[],
+  payments: RecurringPayment[],
+  conv: (n: number, ccy: string) => number,
+  group: 'category' | 'account',
+  now: Date = new Date()
+): { rows: CompareRow[]; last: number; cur: number } {
+  const curKey = mkey(now);
+  const lastKey = mkey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+  const catOf = new Map(payments.map((p) => [p.id, p.category || 'Other']));
+  const map = new Map<string, CompareRow>();
+  let last = 0, cur = 0;
+  history.forEach((h) => {
+    const k = String(h.paidDate || '').slice(0, 7);
+    if (k !== curKey && k !== lastKey) return;
+    const name = group === 'account' ? accountNameOf(h.taggedFor) : (catOf.get(h.paymentId) || 'Other');
+    const v = conv(h.amount, h.currency);
+    if (!map.has(name)) map.set(name, { name, last: 0, cur: 0 });
+    const r = map.get(name)!;
+    if (k === curKey) { r.cur += v; cur += v; } else { r.last += v; last += v; }
+  });
+  const rows = Array.from(map.values()).sort((a, b) => (b.cur + b.last) - (a.cur + a.last));
+  return { rows, last, cur };
+}
+
+/** Cumulative paid by day of month, this month vs last month. */
+export function cumulativeCompare(
+  history: PaymentHistory[],
+  conv: (n: number, ccy: string) => number,
+  now: Date = new Date()
+): { day: number; last: number; cur: number | null }[] {
+  const curKey = mkey(now);
+  const lastKey = mkey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+  const daysLast = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+  const daysCur = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const n = Math.max(daysLast, daysCur);
+  const curDay = new Array(n + 1).fill(0);
+  const lastDay = new Array(n + 1).fill(0);
+  history.forEach((h) => {
+    const s = String(h.paidDate || '');
+    const k = s.slice(0, 7);
+    const d = parseInt(s.slice(8, 10), 10);
+    if (!d || d > n) return;
+    const v = conv(h.amount, h.currency);
+    if (k === curKey) curDay[d] += v;
+    else if (k === lastKey) lastDay[d] += v;
+  });
+  const out: { day: number; last: number; cur: number | null }[] = [];
+  let cl = 0, cc = 0;
+  for (let d = 1; d <= n; d++) {
+    cl += lastDay[d]; cc += curDay[d];
+    out.push({ day: d, last: Math.round(cl * 100) / 100, cur: d <= now.getDate() ? Math.round(cc * 100) / 100 : null });
+  }
+  return out;
+}
