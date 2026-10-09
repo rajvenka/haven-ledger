@@ -91,6 +91,11 @@ export default function PulseExpenses({
   const [activeTabCountryId, setActiveTabCountryId] = useState<string>('ALL');
   const isAll = activeTabCountryId === 'ALL';
   const activeCountry = countries.find((c) => c.id === activeTabCountryId) || countries[0];
+  // The countries list can contain several rows for the same currency (duplicate configs) -
+  // show one chip per currency so the filter doesn't repeat AUD/INR/USD over and over.
+  const uniqueCcyCountries = countries.filter(
+    (c, i, arr) => arr.findIndex((x) => String(x.currency || '').toUpperCase() === String(c.currency || '').toUpperCase()) === i
+  );
   const activeCurrency = isAll ? defaultCurrency : activeCountry?.currency || defaultCurrency;
 
   const convertCurrency = (amount: number, fromCurr: string, toCurr: string) => {
@@ -296,13 +301,13 @@ export default function PulseExpenses({
             >
               All
             </button>
-            {countries.map((c) => (
+            {uniqueCcyCountries.map((c) => (
               <button
-                key={c.id}
+                key={c.currency}
                 type="button"
                 onClick={() => setActiveTabCountryId(c.id)}
                 className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
-                  activeTabCountryId === c.id
+                  !isAll && String(activeCountry?.currency || '').toUpperCase() === String(c.currency || '').toUpperCase()
                     ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
                     : 'text-emerald-800/70 dark:text-emerald-300/70'
                 }`}
