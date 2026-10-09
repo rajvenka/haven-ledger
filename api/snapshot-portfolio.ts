@@ -28,7 +28,12 @@ export default async function handler(req: any, res: any) {
 
   const auth = req.headers.authorization || "";
   const secret = process.env.CRON_SECRET || "";
-  if (!secret || auth !== `Bearer ${secret}`) {
+  const refreshToken = process.env.PRICE_REFRESH_TOKEN || "";
+  const mode = String(req.query?.mode || "");
+  // PRICE_REFRESH_TOKEN is only valid for mode=refresh (called every 30 min by Supabase pg_cron,
+  // because Vercel Hobby crons can only run once a day). Everything else needs CRON_SECRET.
+  const okAuth = (secret && auth === `Bearer ${secret}`) || (mode === "refresh" && refreshToken && auth === `Bearer ${refreshToken}`);
+  if (!okAuth) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
@@ -36,7 +41,7 @@ export default async function handler(req: any, res: any) {
   const currenciesParam = String(req.query?.currencies || "");
   const timezone = String(req.query?.tz || "UTC");
   const currencies = currenciesParam.split(",").map((c) => c.trim().toUpperCase()).filter(Boolean);
-  if (currencies.length === 0) {
+  if (currencies.length === 0 && mode !== "refresh") {
     res.status(400).json({ error: "Provide ?currencies=USD,AUD&tz=Area/City" });
     return;
   }
@@ -48,12 +53,13 @@ export default async function handler(req: any, res: any) {
     // every workspace (matching the previous pg_cron jobs' p_workspace_id = null scope).
     // Mutual funds and options excluded from refresh entirely - same exclusion already
     // established elsewhere this session, since Yahoo has no reliable way to price them.
-    const { data: holdings, error: fetchErr } = await sb
+    let holdingsQuery = sb
       .from("portfolio_holdings")
       .select("id, symbol, ticker, exchange, currency, holding_type")
-      .in("currency", currencies)
       .eq("status", "active")
       .not("holding_type", "in", "(mutual_fund,options)");
+    if (currencies.length > 0) holdingsQuery = holdingsQuery.in("currency", currencies);
+    const { data: holdings, error: fetchErr } = await holdingsQuery;
     if (fetchErr) throw fetchErr;
 
     let refreshed = 0;
@@ -90,6 +96,7 @@ export default async function handler(req: any, res: any) {
             live_price: result.price,
             previous_close: result.previousClose,
             price_stale: false,
+            live_price_updated_at: new Date().toISOString(),
           })
           .eq("id", h.id);
         if (!updateErr) refreshed++;
@@ -104,6 +111,11 @@ export default async function handler(req: any, res: any) {
         if (!staleErr) staleKept++;
       }
     });
+
+    if (mode === "refresh") {
+      res.status(200).json({ ok: true, mode, holdingsConsidered: (holdings || []).length, refreshed, staleKept, skippedNoTicker });
+      return;
+    }
 
     // Step 2: snapshot the now-refreshed positions - same RPC the pg_cron jobs called,
     // just guaranteed to run after prices are fresh instead of before.
