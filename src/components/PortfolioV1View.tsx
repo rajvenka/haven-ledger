@@ -1,3 +1,4 @@
+import { startZerodhaLogin, zerodhaRedirectUrl, ZERODHA_AUTOSYNC_KEY } from '../utils/zerodhaAuth';
 import PortfolioPnLCalendar from './PortfolioPnLCalendar';
 import { parseBrokerFile, BrokerTemplate, downloadUniversalTemplate } from '../utils/brokerImport';
 /**
@@ -2031,6 +2032,26 @@ export default function PortfolioV1View({
     }
   };
 
+  // After the Zerodha one-click login (handled in App) lands back here, refresh that connection.
+  const zerodhaAutoSynced = React.useRef(false);
+  React.useEffect(() => {
+    if (zerodhaAutoSynced.current) return;
+    let flag: any = null;
+    try { flag = JSON.parse(sessionStorage.getItem(ZERODHA_AUTOSYNC_KEY) || 'null'); } catch { /* ignore */ }
+    if (!flag || Date.now() - Number(flag.ts || 0) > 10 * 60 * 1000) return;
+    const conn = (portfolioBrokerConnections || []).find((cn: any) =>
+      String(cn.broker_type).toLowerCase() === 'zerodha' &&
+      !needsReauth(cn) &&
+      (!flag.label || String(cn.connection_label || '') === flag.label) &&
+      String(cn.portfolio_id || '') === String(flag.portfolioId || '')
+    );
+    if (!conn) return;
+    zerodhaAutoSynced.current = true;
+    try { sessionStorage.removeItem(ZERODHA_AUTOSYNC_KEY); } catch { /* ignore */ }
+    syncConnection(conn);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portfolioBrokerConnections]);
+
   const removeConnection = async (id: string) => {
     if (!deletePortfolioBrokerConnection || isReadOnly) return;
     if (!window.confirm('Remove this broker connection?')) return;
@@ -3540,17 +3561,26 @@ export default function PortfolioV1View({
                           setConnectError('Enter API Key first, then open login');
                           return;
                         }
-                        window.open(
-                          `https://kite.zerodha.com/connect/login?v=3&api_key=${encodeURIComponent(key)}`,
-                          '_blank',
-                          'noopener,noreferrer'
-                        );
+                        const secret = String(credFields.api_secret || '').trim();
+                        if (!secret) {
+                          setConnectError('Enter API Secret too - it is used to finish the login automatically');
+                          return;
+                        }
+                        const pid = connectPortfolioId || undefined;
+                        const lbl = String(credFields.connection_label || '').trim() ||
+                          (multiPortfolio && pid ? `Zerodha · ${portfolios.find((p: any) => p.id === pid)?.name || ''}`.trim() : 'Zerodha');
+                        startZerodhaLogin({ apiKey: key, apiSecret: secret, portfolioId: pid, label: lbl });
                       }}
                       className="w-full py-2 rounded-2xl border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-[11px] font-bold inline-flex items-center justify-center gap-1.5"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
-                      Open Zerodha login (get request token)
+                      Connect with Zerodha (auto)
                     </button>
+                  )}
+                  {selectedBroker === 'zerodha' && (
+                    <p className="text-[10px] text-slate-500">
+                      One-time setup: in your Kite app settings, set <b>Redirect URL</b> to <code className="font-mono break-all">{zerodhaRedirectUrl()}</code>. After you log in you return here and holdings refresh automatically - nothing to copy.
+                    </p>
                   )}
                   {selectedBroker === 'webull' && (
                     <p className="text-[10px] text-slate-500">

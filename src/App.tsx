@@ -45,6 +45,7 @@ import PulseDashboard from './components/PulseDashboard';
 import PulseExpenses from './components/PulseExpenses';
 import PulseBills from './components/PulseBills';
 import PulseHome from './components/PulseHome';
+import { clearZerodhaPending, readZerodhaCallback, readZerodhaPending, stripZerodhaCallbackFromUrl, ZERODHA_AUTOSYNC_KEY } from './utils/zerodhaAuth';
 import PulseAccounts from './components/PulseAccounts';
 import NewDesignSwitch from './components/NewDesignSwitch';
 import PulseMembership from './components/PulseMembership';
@@ -275,6 +276,7 @@ export default function App() {
     try { localStorage.setItem('hv_try_new_ui', String(v)); } catch { /* ignore */ }
   };
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
+  const zerodhaCallbackHandled = React.useRef(false);
   const [uiPulse, setUiPulse] = useState<boolean>(() => {
     try {
       // One-time migration: bills/membership Pulse rollout enables Pulse once
@@ -395,6 +397,40 @@ export default function App() {
     if (isLimitedAccess && activeTab === 'admin_users') setActiveTab('summary');
     if (!hasFeature('team') && incomingInvitations.length === 0 && activeTab === 'account' && settingsSubTab === 'members') setSettingsSubTab('preferences');
   }, [activeWorkspace, activeTab, settingsSubTab]);
+
+  // Zerodha one-click login: Kite redirects back here with ?request_token=... - exchange it for
+  // the daily access token, save the connection, then hand off to the portfolio page to refresh.
+  React.useEffect(() => {
+    if (!isLoaded || !user || !activeWorkspaceId || zerodhaCallbackHandled.current) return;
+    const cb = readZerodhaCallback();
+    if (!cb) return;
+    zerodhaCallbackHandled.current = true;
+    stripZerodhaCallbackFromUrl(); // single-use token - never leave it in the address bar
+    (async () => {
+      const pending = readZerodhaPending();
+      if (cb.failed || !pending) {
+        triggerNotification('Zerodha login', cb.failed ? 'Zerodha reported a failed login - please try Connect again.' : 'Could not match this login to a pending connection - start Connect again from the portfolio page.', 'warning');
+        return;
+      }
+      try {
+        triggerNotification('Zerodha', 'Finishing connection…', 'info');
+        const resp = await fetch('/api/portfolio-broker-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ broker: 'zerodha', action: 'exchange', apiKey: pending.apiKey, apiSecret: pending.apiSecret, requestToken: cb.requestToken }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.accessToken) throw new Error(data.error || 'Token exchange failed');
+        await setPortfolioBrokerConnection('zerodha', { api_key: pending.apiKey, api_secret: pending.apiSecret, access_token: data.accessToken }, pending.portfolioId || undefined, pending.label || undefined);
+        clearZerodhaPending();
+        try { sessionStorage.setItem(ZERODHA_AUTOSYNC_KEY, JSON.stringify({ portfolioId: pending.portfolioId || '', label: pending.label || '', ts: Date.now() })); } catch { /* ignore */ }
+        setActiveTab('portfolio');
+        triggerNotification('Zerodha connected', 'Refreshing your holdings…', 'info');
+      } catch (e: any) {
+        triggerNotification('Zerodha connection failed', e?.message || 'Please try again.', 'warning');
+      }
+    })();
+  }, [isLoaded, user, activeWorkspaceId]);
 
   // Portfolio V1 is Pulse mode — no separate nav item
   React.useEffect(() => {
