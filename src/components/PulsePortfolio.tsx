@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis, Treemap } from 'recharts';
 import PortfolioPnLCalendar from './PortfolioPnLCalendar';
 import PortfolioV1View from './PortfolioV1View';
+import DesignVoting from './DesignVoting';
 import { Search, TrendingUp, TrendingDown, X, SlidersHorizontal, Plus, Pencil, Trash2, LayoutDashboard, List, CheckCircle2, CalendarDays, Wallet, RefreshCw, AlertTriangle, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, Star, Target } from 'lucide-react';
 
 type GroupBy = 'category' | 'broker' | 'currency' | 'portfolio';
@@ -884,12 +885,13 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
 
   return (
     <div className="max-w-[1600px] mx-auto p-3 sm:p-6 pb-24 md:pb-6">
-      <div className="flex items-center gap-1.5 flex-wrap mb-4 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800/70 w-fit max-w-full overflow-x-auto">
+      <div className="flex items-center gap-1.5 flex-wrap mb-3 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800/70 w-fit max-w-full overflow-x-auto">
         <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-2">Design</span>
         {DESIGN_NAMES.map((nm, i) => (
           <button key={nm} onClick={() => setDesign(i + 1)} className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-black transition-all ${design === i + 1 ? 'bg-white dark:bg-slate-900 text-indigo-600 shadow' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>Option {i + 1}<span className="hidden sm:inline font-bold opacity-60"> · {nm}</span></button>
         ))}
       </div>
+      <DesignVoting page="portfolio" design={design} designNames={DESIGN_NAMES} section={section} sections={NAV.map((n) => ({ k: n.k, label: n.label }))} />
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <div>
           <h1 className="text-2xl font-black text-slate-900 dark:text-white">Portfolio</h1>
