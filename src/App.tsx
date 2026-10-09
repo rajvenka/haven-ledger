@@ -1754,12 +1754,12 @@ export default function App() {
 
           {/* Dynamic page content body */}
           <main className={`flex-1 min-w-0 max-w-full overflow-x-hidden flex flex-col min-h-0 ${
-            uiPulse && (activeTab === 'expenses' || activeTab === 'summary' || activeTab === 'configure' || activeTab === 'rewards' || activeTab === 'income' || activeTab === 'history' || activeTab === 'reports' || activeTab === 'investment_plan')
+            ((uiPulse && (activeTab === 'expenses' || activeTab === 'summary' || activeTab === 'configure' || activeTab === 'rewards' || activeTab === 'income' || activeTab === 'history' || activeTab === 'reports' || activeTab === 'investment_plan')) || (!uiPulse && tryNewUi && (activeTab === 'expenses' || activeTab === 'summary')))
               ? 'overflow-hidden'
               : 'overflow-y-auto'
           }`}>
             {activeTab === 'summary' && hasFeature('core') ? (
-              uiPulse ? (
+              (uiPulse || tryNewUi) ? (
                 <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi}>
                   {tryNewUi ? (
                     <PulseHome
@@ -1789,6 +1789,7 @@ export default function App() {
                   )}
                 </NewDesignSwitch>
               ) : (
+                <NewDesignSwitch isNew={false} onChange={setTryNewUi} plain>
                 <Dashboard
                   payments={payments}
                   history={history}
@@ -1807,9 +1808,10 @@ export default function App() {
                   giftCards={giftCards}
                   rewardsPerks={rewardsPerks}
                 />
+                </NewDesignSwitch>
               )
             ) : activeTab === 'expenses' && hasFeature('core') ? (
-              uiPulse ? (
+              (uiPulse || tryNewUi) ? (
                 <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi}>
                 {tryNewUi ? (
                   <PulseAccounts
@@ -1846,6 +1848,7 @@ export default function App() {
                 )}
                 </NewDesignSwitch>
               ) : (
+                <NewDesignSwitch isNew={false} onChange={setTryNewUi} plain>
                 <ExpensesView
                   payments={payments}
                   history={history}
@@ -1859,6 +1862,7 @@ export default function App() {
                   isReadOnly={userProfile?.role === 'view'}
                   currentUserUid={user?.uid}
                 />
+                </NewDesignSwitch>
               )
             ) : activeTab === 'configure' && hasFeature('core') ? (
               uiPulse ? (
