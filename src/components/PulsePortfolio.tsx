@@ -3,7 +3,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { Search, TrendingUp, TrendingDown, X, SlidersHorizontal, Settings2 } from 'lucide-react';
 
 type GroupBy = 'category' | 'broker' | 'currency' | 'portfolio';
-type SortKey = 'value' | 'pnl' | 'pnlPct' | 'day' | 'name';
+type SortKey = 'symbol' | 'broker' | 'category' | 'portfolio' | 'qty' | 'buy' | 'price' | 'dayPct' | 'day' | 'cost' | 'value' | 'pnl' | 'pnlPct' | 'weight' | 'buyDate' | 'heldDays' | 'leverage' | 'stop' | 'target' | 'updated';
 
 const PALETTE = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#0ea5e9', '#8b5cf6', '#14b8a6', '#f97316', '#64748b', '#84cc16'];
 
@@ -51,6 +51,32 @@ const px = (n: number) => (Number.isFinite(n) ? n.toLocaleString(undefined, { ma
 const pct = (n: number) => (Number.isFinite(n) ? `${n > 0 ? '+' : ''}${n.toFixed(1)}%` : '—');
 const tone = (n: number) => (n > 0 ? 'text-emerald-600 dark:text-emerald-400' : n < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500');
 
+interface Col { k: string; label: string; left?: boolean; tone?: (r: any) => number; cell: (r: any, total: number, ccy: string) => React.ReactNode; csv?: (r: any, total: number) => any }
+const COLS: Col[] = [
+  { k: 'symbol', label: 'Holding', left: true, cell: (r) => (<div><div className="font-black text-slate-900 dark:text-white">{r.symbol}</div><div className="text-[10px] text-slate-400 truncate max-w-[160px]">{r.name !== r.symbol ? r.name : r.category}</div></div>), csv: (r) => r.symbol },
+  { k: 'broker', label: 'Broker', cell: (r) => <span className="text-slate-600 dark:text-slate-300">{r.broker}</span>, csv: (r) => r.broker },
+  { k: 'portfolio', label: 'Portfolio', cell: (r) => <span className="text-slate-600 dark:text-slate-300">{r.portfolio}</span>, csv: (r) => r.portfolio },
+  { k: 'category', label: 'Category', cell: (r) => <span className="px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-bold">{r.category}</span>, csv: (r) => r.category },
+  { k: 'qty', label: 'Qty', cell: (r) => px(r.qty), csv: (r) => r.qty },
+  { k: 'buy', label: 'Avg cost', cell: (r) => <>{px(r.buy)} <span className="text-[10px] text-slate-400">{r.native}</span></>, csv: (r) => r.buy },
+  { k: 'price', label: 'Last price', cell: (r) => <>{px(r.price)} <span className="text-[10px] text-slate-400">{r.native}</span></>, csv: (r) => r.price },
+  { k: 'dayPct', label: 'Day %', tone: (r) => r.dayPct ?? 0, cell: (r) => (r.dayPct == null ? '—' : pct(r.dayPct)), csv: (r) => r.dayPct },
+  { k: 'day', label: 'Day P&L', tone: (r) => r.day, cell: (r, _t, c) => (r.day ? money(r.day, c, true) : '—'), csv: (r) => r.day },
+  { k: 'cost', label: 'Invested', cell: (r, _t, c) => money(r.cost, c, true), csv: (r) => r.cost },
+  { k: 'value', label: 'Value', cell: (r, _t, c) => <span className="font-bold">{money(r.value, c, true)}</span>, csv: (r) => r.value },
+  { k: 'pnl', label: 'P&L', tone: (r) => r.pnl, cell: (r, _t, c) => <span className="font-bold">{money(r.pnl, c, true)}</span>, csv: (r) => r.pnl },
+  { k: 'pnlPct', label: 'P&L %', tone: (r) => r.pnl, cell: (r) => pct(r.pnlPct), csv: (r) => r.pnlPct },
+  { k: 'weight', label: 'Weight', cell: (r, t) => (<div className="flex items-center justify-end gap-1.5"><div className="w-10 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden"><div className="h-full bg-indigo-500" style={{ width: `${Math.min(100, t > 0 ? (r.value / t) * 100 : 0)}%` }} /></div>{t > 0 ? ((r.value / t) * 100).toFixed(1) : 0}%</div>), csv: (r, t) => (t > 0 ? (r.value / t) * 100 : 0) },
+  { k: 'buyDate', label: 'Bought', cell: (r) => r.buyDate || '—', csv: (r) => r.buyDate },
+  { k: 'heldDays', label: 'Held (d)', cell: (r) => (r.heldDays == null ? '—' : r.heldDays), csv: (r) => r.heldDays },
+  { k: 'leverage', label: 'Lev.', cell: (r) => (r.leverage ? `${r.leverage}x` : '—'), csv: (r) => r.leverage },
+  { k: 'stop', label: 'Stop loss', cell: (r) => (r.stop ? px(r.stop) : '—'), csv: (r) => r.stop },
+  { k: 'target', label: 'Target', cell: (r) => (r.target ? px(r.target) : '—'), csv: (r) => r.target },
+  { k: 'updated', label: 'Price updated', cell: (r) => (r.updated ? new Date(r.updated).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '—'), csv: (r) => r.updated },
+  { k: 'isin', label: 'ISIN', cell: (r) => r.isin || '—', csv: (r) => r.isin },
+  { k: 'exchange', label: 'Exchange', cell: (r) => r.exchange || '—', csv: (r) => r.exchange },
+];
+
 interface Props {
   holdings: any[];
   lots?: any[];
@@ -72,6 +98,12 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const [groupBy, setGroupBy] = useState<GroupBy>('category');
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<SortKey>('value');
+  const [dir, setDir] = useState<1 | -1>(-1);
+  const [group, setGroup] = useState(false);
+  const [colsOpen, setColsOpen] = useState(false);
+  const [hidden, setHidden] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('hv_pp_hidden') || 'null') || ['isin', 'exchange', 'updated', 'leverage', 'stop', 'target']; } catch { return []; } });
+  const toggleCol = (k: string) => setHidden((h) => { const n = h.includes(k) ? h.filter((x) => x !== k) : [...h, k]; try { localStorage.setItem('hv_pp_hidden', JSON.stringify(n)); } catch { /* */ } return n; });
+  const clickSort = (k: SortKey) => { if (sort === k) setDir((d) => (d === 1 ? -1 : 1)); else { setSort(k); setDir(['symbol', 'broker', 'category', 'portfolio'].includes(k) ? 1 : -1); } };
   const [filter, setFilter] = useState<string>('All');
   const [view, setView] = useState<'all' | 'gainers' | 'losers'>('all');
   const [selected, setSelected] = useState<string | null>(null);
@@ -97,6 +129,16 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           native, qty, price, buy: Number(h.buy_price || 0),
           value: fx(mvN, native, ccy), cost: fx(cost, native, ccy), pnl: fx(mvN - cost, native, ccy), day: fx(dayN, native, ccy),
           category: categoryOf(h), broker: String(h.broker || 'Manual'), currency: native, portfolio,
+          dayPct: prev > 0 && live > 0 && live / prev < 20 && live / prev > 0.05 ? ((live - prev) / prev) * 100 : null as number | null,
+          pnlPct: cost > 0 ? ((mvN - cost) / cost) * 100 : 0,
+          invNative: cost, valNative: mvN,
+          buyDate: h.buy_date ? String(h.buy_date) : '',
+          heldDays: h.buy_date ? Math.max(0, Math.floor((Date.now() - new Date(h.buy_date).getTime()) / 86400000)) : null as number | null,
+          leverage: Number(h.leverage || 0) > 1 ? Number(h.leverage) : null as number | null,
+          stop: Number(h.stop_loss_rate) > 0 ? Number(h.stop_loss_rate) : null as number | null,
+          target: Number(h.take_profit_rate) > 0 ? Number(h.take_profit_rate) : Number(h.target_price) > 0 ? Number(h.target_price) : null as number | null,
+          updated: h.live_price_updated_at || h.current_price_updated_at || '',
+          isin: String(h.isin || ''), exchange: String(h.exchange || ''),
         };
       });
   }, [holdings, portfolios, fx, ccy, baseCurrency]);
@@ -120,12 +162,30 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       (!needle || r.symbol.toLowerCase().includes(needle) || r.name.toLowerCase().includes(needle) || r.broker.toLowerCase().includes(needle)));
     if (view === 'gainers') l = l.filter((r) => r.pnl > 0);
     if (view === 'losers') l = l.filter((r) => r.pnl < 0);
-    const key: Record<SortKey, (r: any) => number | string> = {
-      value: (r) => -r.value, pnl: (r) => -r.pnl, pnlPct: (r) => -(r.cost > 0 ? r.pnl / r.cost : 0), day: (r) => -r.day, name: (r) => r.symbol,
+    const get = (r: any): number | string => {
+      switch (sort) {
+        case 'weight': return r.value;
+        case 'buyDate': return r.buyDate || '';
+        case 'updated': return String(r.updated || '');
+        case 'symbol': case 'broker': case 'category': case 'portfolio': return String(r[sort]).toLowerCase();
+        default: return r[sort] ?? -Infinity;
+      }
     };
-    return [...l].sort((a, b) => { const x = key[sort](a), y = key[sort](b); return x < y ? -1 : x > y ? 1 : 0; });
-  }, [rows, q, filter, groupBy, view, sort]);
+    return [...l].sort((a, b) => { const x = get(a), y = get(b); return (x < y ? -1 : x > y ? 1 : 0) * dir; });
+  }, [rows, q, filter, groupBy, view, sort, dir]);
 
+  const grouped = useMemo(() => {
+    const m = new Map<string, any[]>();
+    visible.forEach((r) => { const k = r[groupBy]; m.set(k, [...(m.get(k) || []), r]); });
+    return Array.from(m.entries()).map(([name, items]) => ({ name, items }));
+  }, [visible, groupBy]);
+  const exportCsv = () => {
+    const cols = COLS.filter((c) => !hidden.includes(c.k));
+    const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lines = [cols.map((c) => esc(c.label)).join(',')].concat(visible.map((r) => cols.map((c) => esc(c.csv ? c.csv(r, totals.value) : '')).join(',')));
+    const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
+    const a = document.createElement('a'); a.href = url; a.download = 'portfolio.csv'; a.click(); URL.revokeObjectURL(url);
+  };
   const best = useMemo(() => [...rows].sort((a, b) => b.pnl - a.pnl)[0], [rows]);
   const worst = useMemo(() => [...rows].sort((a, b) => a.pnl - b.pnl)[0], [rows]);
   const sel = selected ? rows.find((r) => r.id === selected) : null;
@@ -142,7 +202,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   );
 
   return (
-    <div className="max-w-7xl mx-auto p-3 sm:p-6 space-y-4">
+    <div className="max-w-[1600px] mx-auto p-3 sm:p-6 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-black text-slate-900 dark:text-white">Portfolio</h1>
@@ -165,7 +225,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         <Kpi label="Best / worst" value={best ? best.symbol : '—'} sub={worst ? `Worst: ${worst.symbol} ${money(worst.pnl, ccy, true)}` : ''} subTone="text-slate-500" />
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-4">
+      <div className="grid gap-4">
         <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="text-sm font-black text-slate-800 dark:text-slate-100">Allocation</div>
@@ -175,6 +235,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
               ))}
             </div>
           </div>
+          <div className="md:grid md:grid-cols-[260px_1fr] md:gap-6 md:items-center">
           <div className="h-44">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -185,7 +246,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
               </PieChart>
             </ResponsiveContainer>
           </div>
-          <div className="space-y-1 mt-2">
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-x-4 gap-y-0.5 mt-2 md:mt-0">
             {groups.map((g, i) => (
               <button key={g.name} onClick={() => setFilter(filter === g.name ? 'All' : g.name)} className={`w-full flex items-center gap-2 text-xs px-2 py-1 rounded-lg ${filter === g.name ? 'bg-slate-100 dark:bg-slate-800' : ''}`}>
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PALETTE[i % PALETTE.length] }} />
@@ -195,9 +256,10 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
               </button>
             ))}
           </div>
+          </div>
         </div>
 
-        <div className="lg:col-span-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
+        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
           <div className="p-3 flex flex-wrap items-center gap-2 border-b border-slate-100 dark:border-slate-800">
             <div className="relative flex-1 min-w-[140px]">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
@@ -206,35 +268,72 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
             {(['all', 'gainers', 'losers'] as const).map((v) => (
               <button key={v} onClick={() => setView(v)} className={`text-[11px] font-black px-2.5 py-1.5 rounded-full capitalize ${view === v ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{v}</button>
             ))}
-            <label className="inline-flex items-center gap-1 text-[11px] text-slate-500"><SlidersHorizontal className="w-3 h-3" />
-              <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="bg-transparent font-bold">
-                <option value="value">Value</option><option value="pnl">P&L</option><option value="pnlPct">P&L %</option><option value="day">Today</option><option value="name">Name</option>
-              </select>
-            </label>
+            <button onClick={() => setGroup((g) => !g)} className={`text-[11px] font-black px-2.5 py-1.5 rounded-full ${group ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>Group by {groupBy}</button>
+            <div className="relative">
+              <button onClick={() => setColsOpen((o) => !o)} className="text-[11px] font-black px-2.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 inline-flex items-center gap-1"><SlidersHorizontal className="w-3 h-3" /> Columns</button>
+              {colsOpen && (
+                <div className="absolute right-0 mt-1 z-20 w-48 max-h-72 overflow-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl p-2">
+                  {COLS.filter((c) => !c.left).map((c) => (
+                    <label key={c.k} className="flex items-center gap-2 text-xs py-1 px-1 cursor-pointer">
+                      <input type="checkbox" checked={!hidden.includes(c.k)} onChange={() => toggleCol(c.k)} /> {c.label}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button onClick={exportCsv} className="text-[11px] font-black px-2.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">CSV</button>
             {filter !== 'All' && <button onClick={() => setFilter('All')} className="text-[11px] font-black text-indigo-600 inline-flex items-center gap-0.5">{filter} <X className="w-3 h-3" /></button>}
           </div>
-          <div className="max-h-[520px] overflow-auto">
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-slate-50 dark:bg-slate-800 text-[10px] uppercase text-slate-400">
-                <tr><th className="text-left p-2.5">Holding</th><th className="text-right p-2.5 hidden sm:table-cell">Qty</th><th className="text-right p-2.5">Value</th><th className="text-right p-2.5">P&L</th><th className="text-right p-2.5 hidden sm:table-cell">Today</th></tr>
+          <div className="max-h-[70vh] overflow-auto">
+            <table className="w-full text-xs whitespace-nowrap">
+              <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800 text-[10px] uppercase text-slate-400">
+                <tr>
+                  {COLS.filter((c) => !hidden.includes(c.k)).map((c) => (
+                    <th key={c.k} onClick={() => clickSort(c.k as SortKey)} className={`p-2.5 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200 ${c.left ? 'text-left sticky left-0 bg-slate-50 dark:bg-slate-800' : 'text-right'}`}>
+                      {c.label}{sort === c.k ? (dir === 1 ? ' ▲' : ' ▼') : ''}
+                    </th>
+                  ))}
+                </tr>
               </thead>
               <tbody>
-                {visible.map((r) => (
-                  <tr key={r.id} onClick={() => setSelected(r.id)} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer">
-                    <td className="p-2.5">
-                      <div className="font-black text-slate-900 dark:text-white">{r.symbol}</div>
-                      <div className="text-[10px] text-slate-400 truncate max-w-[180px]">{r.broker} · {r.category}</div>
-                    </td>
-                    <td className="p-2.5 text-right tabular-nums hidden sm:table-cell">{px(r.qty)}</td>
-                    <td className="p-2.5 text-right tabular-nums font-bold">{money(r.value, ccy, true)}</td>
-                    <td className={`p-2.5 text-right tabular-nums font-bold ${tone(r.pnl)}`}>
-                      {money(r.pnl, ccy, true)}<div className="text-[10px]">{pct(r.cost > 0 ? (r.pnl / r.cost) * 100 : 0)}</div>
-                    </td>
-                    <td className={`p-2.5 text-right tabular-nums hidden sm:table-cell ${tone(r.day)}`}>{r.day ? money(r.day, ccy, true) : '—'}</td>
-                  </tr>
+                {(group ? grouped : [{ name: '', items: visible }]).map((g) => (
+                  <React.Fragment key={g.name || 'all'}>
+                    {group && (
+                      <tr className="bg-slate-100/70 dark:bg-slate-800/60">
+                        <td colSpan={99} className="p-2 text-[11px] font-black text-slate-700 dark:text-slate-200">
+                          {g.name} <span className="text-slate-400 font-bold">· {g.items.length} · {money(g.items.reduce((a: number, r: any) => a + r.value, 0), ccy, true)} · <span className={tone(g.items.reduce((a: number, r: any) => a + r.pnl, 0))}>{money(g.items.reduce((a: number, r: any) => a + r.pnl, 0), ccy, true)}</span></span>
+                        </td>
+                      </tr>
+                    )}
+                    {g.items.map((r: any) => (
+                      <tr key={r.id} onClick={() => setSelected(r.id)} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer">
+                        {COLS.filter((c) => !hidden.includes(c.k)).map((c) => (
+                          <td key={c.k} className={`p-2.5 ${c.left ? 'text-left sticky left-0 bg-white dark:bg-slate-900' : 'text-right tabular-nums'} ${c.tone ? tone(c.tone(r)) : ''}`}>{c.cell(r, totals.value, ccy)}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </React.Fragment>
                 ))}
-                {visible.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-slate-400">No holdings match.</td></tr>}
+                {visible.length === 0 && <tr><td colSpan={99} className="p-8 text-center text-slate-400">No holdings match.</td></tr>}
               </tbody>
+              {visible.length > 0 && (
+                <tfoot className="sticky bottom-0 bg-slate-50 dark:bg-slate-800 font-black">
+                  <tr>
+                    {COLS.filter((c) => !hidden.includes(c.k)).map((c, i) => {
+                      const sum = (f: string) => visible.reduce((a, r: any) => a + (r[f] || 0), 0);
+                      let t: React.ReactNode = '';
+                      if (i === 0) t = `Total · ${visible.length}`;
+                      else if (c.k === 'cost') t = money(sum('cost'), ccy, true);
+                      else if (c.k === 'value') t = money(sum('value'), ccy, true);
+                      else if (c.k === 'pnl') t = <span className={tone(sum('pnl'))}>{money(sum('pnl'), ccy, true)}</span>;
+                      else if (c.k === 'pnlPct') { const co = sum('cost'); t = <span className={tone(sum('pnl'))}>{co > 0 ? pct((sum('pnl') / co) * 100) : '—'}</span>; }
+                      else if (c.k === 'day') t = <span className={tone(sum('day'))}>{money(sum('day'), ccy, true)}</span>;
+                      else if (c.k === 'weight') t = totals.value > 0 ? `${((sum('value') / totals.value) * 100).toFixed(1)}%` : '';
+                      return <td key={c.k} className={`p-2.5 ${c.left ? 'text-left sticky left-0 bg-slate-50 dark:bg-slate-800' : 'text-right tabular-nums'}`}>{t}</td>;
+                    })}
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </div>
