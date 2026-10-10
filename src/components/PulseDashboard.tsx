@@ -182,8 +182,11 @@ export default function PulseDashboard({
 
   const monthLabel = now.toLocaleString(undefined, { month: 'long', year: 'numeric' });
 
-  const upcomingList = [...dueNextWeek, ...overdue]
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  // Show everything still open this month (not just the next 7 days) so quarterly /
+  // non-monthly bills like RATE PAYMENT are visible; dedupe by instance id.
+  const upcomingList = Array.from(
+    new Map([...dueCurrentMonth, ...overdue].map((ins) => [ins.id, ins])).values()
+  ).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
   const isMonthlyCycle = (cycle?: string) => {
     const c = String(cycle || 'monthly').toLowerCase();

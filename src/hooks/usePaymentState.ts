@@ -809,7 +809,7 @@ export function usePaymentState() {
   const loadBackups = useCallback(async () => {
     if (!user) return;
     const wsFilter = activeWorkspaceId ? `workspace_id.eq.${activeWorkspaceId}` : `user_id.eq.${user.id},workspace_id.is.null`;
-    const { data } = await supabase.from('workspace_backups').select('id, created_at, snapshot').or(wsFilter).order('created_at', { ascending: false }).limit(14);
+    const { data } = await supabase.from('workspace_backups').select('id, created_at').or(wsFilter).order('created_at', { ascending: false }).limit(14);
     setWorkspaceBackups(data ?? []);
   }, [user, activeWorkspaceId]);
 
@@ -835,8 +835,12 @@ export function usePaymentState() {
   }, [isLoaded, user, activeWorkspaceId]);
 
   const restoreFromBackup = async (backupId: string) => {
-    const backup = workspaceBackups.find(b => b.id === backupId);
-    if (!backup) throw new Error('Backup not found.');
+    const meta = workspaceBackups.find(b => b.id === backupId);
+    if (!meta) throw new Error('Backup not found.');
+    // List only loads id + date (egress); fetch the heavy snapshot on demand here.
+    const { data: full, error: fullErr } = await supabase.from('workspace_backups').select('id, created_at, snapshot').eq('id', backupId).maybeSingle();
+    if (fullErr || !full) throw new Error('Backup not found.');
+    const backup = full;
     setIsSyncing(true);
     try {
       const snap = backup.snapshot;
@@ -1304,7 +1308,7 @@ export function usePaymentState() {
       (async () => {
         const all: any[] = []; let from = 0;
         for (;;) {
-          const { data, error } = await supabase.from('portfolio_price_history').select('*').eq('workspace_id', wsId).order('recorded_date', { ascending: false }).range(from, from + 999);
+          const { data, error } = await supabase.from('portfolio_price_history').select('holding_id, price, recorded_date, workspace_id').eq('workspace_id', wsId).order('recorded_date', { ascending: false }).range(from, from + 999);
           if (error || !data) return { data: all.length ? all : null };
           all.push(...data);
           if (data.length < 1000 || all.length >= 100000) break;
