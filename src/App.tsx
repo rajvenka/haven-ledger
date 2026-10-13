@@ -1950,8 +1950,9 @@ export default function App() {
                 </NewDesignSwitch>
               )
             ) : activeTab === 'configure' && hasFeature('core') ? (
-              uiPulse ? (
-                <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
+              <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!uiPulse}>
+                {tryNewUi ? (
+                  <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
                   <PulseBills
                     payments={payments}
                     history={history}
@@ -1967,8 +1968,8 @@ export default function App() {
                     currentUserUid={user?.uid}
                   />
                 </div>
-              ) : (
-                <ConfigurePayments
+                ) : (
+                  <ConfigurePayments
                   payments={payments}
                   history={history}
                   showFrequencyPatterns={showFrequencyPatterns}
@@ -1982,7 +1983,8 @@ export default function App() {
                   isReadOnly={userProfile?.role === 'view'}
                   currentUserUid={user?.uid}
                 />
-              )
+                )}
+              </NewDesignSwitch>
             ) : activeTab === 'account' ? (
               <AccountInfo 
                 payments={payments}
@@ -2061,6 +2063,21 @@ export default function App() {
                 summaryCurrency={summaryCurrency}
               />
             ) : activeTab === 'rewards' ? (
+                <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!uiPulse}>
+                {tryNewUi ? (
+                  <PulseMembership
+                  rewardsPerks={rewardsPerks}
+                  onAddReward={addReward}
+                  onUpdateReward={updateReward}
+                  onDeleteReward={deleteReward}
+                  giftCards={giftCards}
+                  onAddGiftCard={addGiftCard}
+                  onUpdateGiftCard={updateGiftCard}
+                  onRedeemGiftCard={redeemGiftCard}
+                  onDeleteGiftCard={deleteGiftCard}
+                  isReadOnly={isReadOnly}
+                  />
+                ) : (
                 <RewardsTracker
                   pulseMode={uiPulse}
                   rewardsPerks={rewardsPerks}
@@ -2074,6 +2091,8 @@ export default function App() {
                   onDeleteGiftCard={deleteGiftCard}
                   isReadOnly={isReadOnly}
                 />
+                )}
+              </NewDesignSwitch>
 ) : activeTab === 'portfolio_alt' && userProfile?.isSuperAdmin ? (
               <div className="flex-1 min-h-0 overflow-auto">
                 <PulsePortfolio
@@ -2423,6 +2442,23 @@ export default function App() {
                 loadMfHoldingsCache={loadMfHoldingsCache}
                               />
 ) : activeTab === 'income' ? (
+                <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!uiPulse}>
+                {tryNewUi ? (
+                  <PulseIncome
+                    incomeSources={incomeSources}
+                    incomeMode={incomeMode}
+                    monthlyIncome={monthlyIncome}
+                    summaryCurrency={summaryCurrency}
+                    countries={countries}
+                    payments={payments}
+                    history={history}
+                    addIncomeSource={addIncomeSource}
+                    deleteIncomeSource={deleteIncomeSource}
+                    updateIncomeMode={updateIncomeMode}
+                    updateMonthlyIncome={updateMonthlyIncome}
+                    isReadOnly={isReadOnly}
+                  />
+                ) : (
                 <IncomeView
                     pulseMode={uiPulse}
                     incomeSources={incomeSources}
@@ -2438,6 +2474,8 @@ export default function App() {
                     updateMonthlyIncome={updateMonthlyIncome}
                     isReadOnly={isReadOnly}
                 />
+                )}
+              </NewDesignSwitch>
 ) : activeTab === 'admin_users' && userProfile?.isSuperAdmin ? (
               <AdminUsersView
                 fetchAllUsersForAdmin={fetchAllUsersForAdmin}
@@ -2455,6 +2493,18 @@ export default function App() {
                 pulseMode={uiPulse}
               />
             ) : activeTab === 'history' && hasFeature('core') ? (
+              <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!uiPulse}>
+                {tryNewUi ? (
+                  <PulseHistory
+                    history={history}
+                    onDeleteHistoryEntry={deleteHistoryEntry}
+                    onUpdateHistoryStatus={updateHistoryStatus}
+                    onClearHistory={clearHistory}
+                    summaryCurrency={summaryCurrency}
+                    countries={countries}
+                    isReadOnly={isReadOnly}
+                  />
+                ) : (
                 <PaymentHistoryView
                     pulseMode={uiPulse}
                     history={history}
@@ -2465,6 +2515,8 @@ export default function App() {
                     summaryCurrency={summaryCurrency}
                     countries={countries}
                 />
+                )}
+              </NewDesignSwitch>
 ) : (
               <div className="flex-1 flex items-center justify-center p-8 text-center">
                 <p className="text-sm text-slate-400">This page isn't available on your current plan.</p>
