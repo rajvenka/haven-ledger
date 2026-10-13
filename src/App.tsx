@@ -1847,6 +1847,7 @@ export default function App() {
                 <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi}>
                   {tryNewUi ? (
                     <PulseHome
+                      isSuperAdmin={!!userProfile?.isSuperAdmin}
                       payments={payments}
                       history={history}
                       countries={countries}

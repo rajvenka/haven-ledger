@@ -2,6 +2,7 @@
  * Pulse v2 Home - CRM-style overview: KPIs, needs-attention queue, account cards, trend,
  * recent activity. Clicking an account opens its record in the Accounts page.
  */
+import DatabaseHealth from './DatabaseHealth';
 import React, { useMemo } from 'react';
 import { AlertTriangle, Clock, Check, ChevronRight, Home, User, Landmark } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -22,6 +23,7 @@ interface Props {
   onNavigateToBills?: () => void;
   isReadOnly?: boolean;
   monthlyIncomeEstimate?: number;
+  isSuperAdmin?: boolean;
 }
 
 const TypeIcon = ({ type, className }: { type: AccountType; className?: string }) =>
@@ -29,7 +31,7 @@ const TypeIcon = ({ type, className }: { type: AccountType; className?: string }
 
 export default function PulseHome({
   payments, history, countries, summaryCurrency, onRecordPayment, onOpenAccount, onNavigateToBills,
-  isReadOnly = false, monthlyIncomeEstimate = 0,
+  isReadOnly = false, monthlyIncomeEstimate = 0, isSuperAdmin = false,
 }: Props) {
   const now = useMemo(() => new Date(), []);
   const money = (n: number, ccy: string = summaryCurrency) => formatCurrencyValue(n, ccy, countries);
@@ -219,6 +221,7 @@ export default function PulseHome({
           )}
         </section>
       </div>
+      {isSuperAdmin && <DatabaseHealth />}
     </div>
   );
 }
