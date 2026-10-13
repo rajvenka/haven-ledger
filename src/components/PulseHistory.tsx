@@ -220,7 +220,7 @@ export default function PulseHistory({
   );
 
   return (
-    <div className="flex-1 min-h-0 h-full overflow-y-auto overscroll-contain bg-slate-50 dark:bg-slate-950 text-left w-full max-w-full">
+    <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-slate-50 dark:bg-slate-950 text-left w-full max-w-full">
       <div className="px-3 sm:px-4 pt-2 pb-28 md:pb-8 space-y-3 max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between gap-2">

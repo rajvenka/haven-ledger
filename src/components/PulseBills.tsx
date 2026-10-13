@@ -425,7 +425,8 @@ export default function PulseBills({
   };
 
   return (
-    <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-left w-full max-w-full">
+    <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-slate-50 dark:bg-slate-950 text-left w-full max-w-full" style={{ WebkitOverflowScrolling: 'touch' }}>
+<div className="max-w-5xl mx-auto w-full flex flex-col">
       <div className="shrink-0 px-3 sm:px-4 pt-2 pb-2 space-y-2.5">
         <div className="flex items-center justify-between gap-2">
           <div>
@@ -491,7 +492,7 @@ export default function PulseBills({
       </div>
 
       {mode === 'bulk' ? (
-        <div className="flex-1 overflow-y-auto px-3 sm:px-4 pb-24 space-y-3">
+        <div className="flex-1 px-3 sm:px-4 pb-28 space-y-3">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 space-y-2 text-[11px] text-slate-500">
             <p className="font-bold text-slate-700 dark:text-slate-200">Bulk import</p>
             <p>
@@ -533,7 +534,7 @@ export default function PulseBills({
           </button>
         </div>
       ) : (
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+        <div className="flex-1">
           <div className="sticky top-0 z-30 px-3 sm:px-4 py-2 space-y-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-xl">
             <div className="flex items-center gap-2">
               <div className="relative flex-1 min-w-0">
@@ -765,6 +766,7 @@ export default function PulseBills({
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }

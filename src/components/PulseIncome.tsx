@@ -116,7 +116,7 @@ export default function PulseIncome({
   const field = 'w-full px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[14px] font-medium';
 
   return (
-    <div className="flex-1 min-h-0 h-full overflow-y-auto overscroll-contain bg-slate-50 dark:bg-slate-950 text-left w-full max-w-full">
+    <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-slate-50 dark:bg-slate-950 text-left w-full max-w-full">
       <div className="px-3 sm:px-4 pt-2 pb-32 md:pb-8 space-y-3 max-w-3xl mx-auto">
         <div className="flex items-center justify-between gap-2">
           <div>
