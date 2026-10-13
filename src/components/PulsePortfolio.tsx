@@ -147,7 +147,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const [moversMode, setMoversMode] = useState<'total' | 'day'>('total');
   const [cfdReal, setCfdReal] = useState(false);
   const [prevLoad, setPrevLoad] = useState<number | null>(null);
-  const [alertOpen, setAlertOpen] = useState<string[]>(['stop', 'target']);
+  const [alertOpen, setAlertOpen] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<string>('All');
   const [focusId, setFocusId] = useState<string | null>(null);
   const [drill, setDrill] = useState<string | null>(null);
