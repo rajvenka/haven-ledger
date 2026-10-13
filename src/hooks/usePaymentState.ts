@@ -1281,7 +1281,17 @@ export function usePaymentState() {
 
     const [{ data: holdings }, { data: priceHistory }, { data: splits }, { data: contributions }, { data: withdrawals }, { data: dividends }, { data: fees }, { data: plans }, { data: planSkips }, { data: cashBalances }, { data: portfoliosData }, { data: currencyRatesData }, { data: bookedPlBaselinesData }, { data: bookedPlHistoryData }, { data: bankBalanceHistoryData }, { data: projectedBankBalancesData }, { data: brokerConnectionsData }, { data: holdingLotsData }, { data: employeeGrantsData }] = await Promise.all([
       supabase.from('portfolio_holdings').select('*').eq('workspace_id', wsId).order('buy_date', { ascending: false }),
-      supabase.from('portfolio_price_history').select('*').eq('workspace_id', wsId).order('recorded_date', { ascending: false }),
+      (async () => {
+        const all: any[] = []; let from = 0;
+        for (;;) {
+          const { data, error } = await supabase.from('portfolio_price_history').select('*').eq('workspace_id', wsId).order('recorded_date', { ascending: false }).range(from, from + 999);
+          if (error || !data) return { data: all.length ? all : null };
+          all.push(...data);
+          if (data.length < 1000 || all.length >= 100000) break;
+          from += 1000;
+        }
+        return { data: all };
+      })(),
       supabase.from('portfolio_splits').select('*').eq('workspace_id', wsId).order('effective_from'),
       supabase.from('portfolio_contributions').select('*').eq('workspace_id', wsId).order('contribution_date', { ascending: false }),
       supabase.from('portfolio_withdrawals').select('*').eq('workspace_id', wsId).order('withdrawal_date', { ascending: false }),

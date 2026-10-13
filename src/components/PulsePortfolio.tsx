@@ -4,6 +4,7 @@ import PortfolioPnLCalendar from './PortfolioPnLCalendar';
 import PortfolioV1View from './PortfolioV1View';
 import DesignVoting from './DesignVoting';
 import StockGains from './StockGains';
+import HighLowPanel from './HighLowPanel';
 import SyncWizard from './SyncWizard';
 import { Search, TrendingUp, TrendingDown, X, SlidersHorizontal, Plus, Pencil, Trash2, LayoutDashboard, List, CheckCircle2, CalendarDays, Wallet, RefreshCw, AlertTriangle, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, Star, Target } from 'lucide-react';
 
@@ -877,6 +878,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           </div>
           {alertPanel('stop')}
           {alertPanel('target')}
+          <HighLowPanel rows={rows} priceHistory={priceHistory} onSelect={setSelected} />
         </div>
       );
   })();
@@ -1265,6 +1267,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
 
             {alertPanel('stop')}
             {alertPanel('target')}
+            <HighLowPanel rows={rows} priceHistory={priceHistory} onSelect={setSelected} />
             <div className="grid lg:grid-cols-3 gap-4">
               <div className={`lg:col-span-2 self-start rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4`}>
                 <div className="flex items-center justify-between mb-2">
