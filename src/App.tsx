@@ -2027,6 +2027,7 @@ export default function App() {
                   bulkDelete={bulkDeletePortfolioHoldings}
                   setCash={setPortfolioCashBalance}
                   deleteCash={deletePortfolioCashBalance}
+                  priceHistory={portfolioPriceHistory}
                   contributions={portfolioContributions}
                   withdrawals={portfolioWithdrawals}
                   bookedBaselines={portfolioBookedPlBaselines}

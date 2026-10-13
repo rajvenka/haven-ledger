@@ -3,6 +3,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, AreaChart, Area, XAx
 import PortfolioPnLCalendar from './PortfolioPnLCalendar';
 import PortfolioV1View from './PortfolioV1View';
 import DesignVoting from './DesignVoting';
+import StockGains from './StockGains';
 import { Search, TrendingUp, TrendingDown, X, SlidersHorizontal, Plus, Pencil, Trash2, LayoutDashboard, List, CheckCircle2, CalendarDays, Wallet, RefreshCw, AlertTriangle, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, Star, Target } from 'lucide-react';
 
 type GroupBy = 'category' | 'broker' | 'currency' | 'portfolio';
@@ -105,6 +106,7 @@ interface Props {
   bulkDelete?: (ids: string[]) => Promise<any>;
   setCash?: (location: any, amount: number, asOf?: string, notes?: string, portfolioId?: string) => Promise<any>;
   deleteCash?: (id: string) => Promise<any>;
+  priceHistory?: any[];
   contributions?: any[];
   withdrawals?: any[];
   bookedBaselines?: any[];
@@ -120,7 +122,7 @@ const NAV: { k: Section; label: string; icon: React.ReactNode }[] = [
   { k: 'sync', label: 'Import & Sync', icon: <RefreshCw className="w-4 h-4" /> },
 ];
 
-export default function PulsePortfolio({ holdings, lots = [], portfolios = [], rates = [], baseCurrency = 'INR', connections = [], isLoading, onManage, isReadOnly, importProps, cashBalances = [], loadDailyPositions, snapshotDaily, addHolding, updateHolding, sellHolding, deleteHolding, bulkDelete, setCash, deleteCash, contributions = [], withdrawals = [], bookedBaselines = [] }: Props) {
+export default function PulsePortfolio({ holdings, lots = [], portfolios = [], rates = [], baseCurrency = 'INR', connections = [], isLoading, onManage, isReadOnly, importProps, cashBalances = [], loadDailyPositions, snapshotDaily, addHolding, updateHolding, sellHolding, deleteHolding, bulkDelete, setCash, deleteCash, priceHistory = [], contributions = [], withdrawals = [], bookedBaselines = [] }: Props) {
   const [section, setSectionState] = useState<Section>(() => { try { return (localStorage.getItem('hv_pp_section') as Section) || 'overview'; } catch { return 'overview'; } });
   const setSection = (k: Section) => { setSectionState(k); try { localStorage.setItem('hv_pp_section', k); } catch { /* */ } };
   const [design, setDesignState] = useState<number>(() => { try { return Number(localStorage.getItem('hv_pp_design')) || 1; } catch { return 1; } });
@@ -770,6 +772,18 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
                 {[['P&L', money(f.pnl, ccy, true)], ['Invested', money(f.cost, ccy, true)], ['Quantity', px(f.qty)], ['Avg cost', `${px(f.buy)} ${f.native}`], ['Last price', `${px(f.price)} ${f.native}`], ['Today', f.day ? money(f.day, ccy, true) : '—'], ['Weight', `${totals.value > 0 ? ((f.value / totals.value) * 100).toFixed(2) : 0}%`], ['Held', f.heldDays != null ? `${f.heldDays} days` : '—'], ['Target', f.target ? px(f.target) : '—'], ['Stop loss', f.stop ? px(f.stop) : '—'], ['Bought', f.buyDate || '—'], ['Price updated', f.updated ? new Date(f.updated).toLocaleDateString() : '—']].map(([k, v]) => <div key={k} className="rounded-xl bg-slate-50 dark:bg-slate-800 p-3"><div className="text-[10px] uppercase font-black text-slate-400">{k}</div><div className="font-bold mt-0.5">{v}</div></div>)}
               </div>
               {!isReadOnly && <div className="flex gap-2"><button onClick={() => { setErr(null); openEdit(f.h); }} className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-black">Edit</button><button onClick={() => { setErr(null); setSellFor({ id: f.id, symbol: f.symbol, max: f.qty, qty: String(f.qty), price: String(f.price), date: new Date().toISOString().slice(0, 10) }); }} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-black">Sell</button></div>}
+              <React.Fragment key={f.id}><StockGains
+                history={priceHistory.filter((h: any) => String(h.holding_id) === f.id).map((h: any) => ({ date: String(h.recorded_date).slice(0, 10), price: Number(h.price) }))}
+                livePrice={f.price}
+                qty={f.qty}
+                buyPrice={f.buy}
+                buyDate={f.buyDate}
+                native={f.native}
+                convert={(n) => fx(n, f.native, ccy)}
+                fmt={(n) => money(n, ccy, true)}
+                pctFmt={pct}
+                toneCls={tone}
+              /></React.Fragment>
             </div>
           ) : <div className="text-sm text-slate-400 p-8">No holdings.</div>}
         </div>
