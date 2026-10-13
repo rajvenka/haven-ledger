@@ -4,6 +4,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Pause, Play, Copy, Trash2,
   Search, Plus, ChevronLeft, Check, Edit2, Home, User, Landmark, AlertTriangle, Clock, X,
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -27,6 +28,11 @@ interface Props {
   selectedAccount: string | null;
   onSelectAccount: (name: string | null) => void;
   onRenameAccount?: (from: string, to: string) => Promise<void>;
+  /** Manage Bills mode: opens on the Bills tab and adds pause / clone / delete. */
+  manageMode?: boolean;
+  onCloneBill?: (payment: RecurringPayment) => void;
+  onDeleteBill?: (id: string) => void;
+  onToggleActive?: (payment: RecurringPayment) => void;
 }
 
 type Tab = 'overview' | 'bills' | 'history';
@@ -48,6 +54,7 @@ function useIsDesktop() {
 export default function PulseAccounts({
   payments, history, countries, summaryCurrency, onRecordPayment, onAddBill, onEditBill,
   isReadOnly = false, selectedAccount, onSelectAccount, onRenameAccount,
+  manageMode = false, onCloneBill, onDeleteBill, onToggleActive,
 }: Props) {
   const [renaming, setRenaming] = useState(false);
   const [renameTo, setRenameTo] = useState('');
@@ -56,7 +63,7 @@ export default function PulseAccounts({
   const [overrides, setOverrides] = useState(loadTypeOverrides);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
-  const [tab, setTab] = useState<Tab>('overview');
+  const [tab, setTab] = useState<Tab>(manageMode ? 'bills' : 'overview');
 
   const now = useMemo(() => new Date(), []);
   const money = (n: number, ccy: string = summaryCurrency) => formatCurrencyValue(n, ccy, countries);
@@ -105,8 +112,8 @@ export default function PulseAccounts({
       <div className="p-3 space-y-2 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">Accounts</h1>
-            <p className="text-[10px] text-slate-400 font-bold">{accounts.length} people &amp; properties · monthly cost in {summaryCurrency}</p>
+            <h1 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">{manageMode ? 'Bills' : 'Accounts'}</h1>
+            <p className="text-[10px] text-slate-400 font-bold">{manageMode ? 'Pick an account to view & manage its bills' : `${accounts.length} people & properties · monthly cost in ${summaryCurrency}`}</p>
           </div>
           {!isReadOnly && (
             <button type="button" onClick={() => onAddBill('')} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold bg-indigo-600 text-white shadow-md shadow-indigo-600/25">
@@ -137,7 +144,7 @@ export default function PulseAccounts({
           const active = current?.name === a.name && (isDesktop || selectedAccount === a.name);
           return (
             <li key={a.name}>
-              <button type="button" onClick={() => { onSelectAccount(a.name); setTab('overview'); }}
+              <button type="button" onClick={() => { onSelectAccount(a.name); setTab(manageMode ? 'bills' : 'overview'); }}
                 className={`w-full flex items-center gap-3 px-3 py-3 text-left transition-colors ${active ? 'bg-violet-50 dark:bg-violet-950/30' : 'hover:bg-slate-50 dark:hover:bg-slate-900/60'}`}>
                 <div className={`w-10 h-10 rounded-xl ${avatarClass(a.name)} text-white flex items-center justify-center text-[12px] font-black shrink-0`}>{initials(a.name)}</div>
                 <div className="min-w-0 flex-1">
@@ -220,6 +227,13 @@ export default function PulseAccounts({
                 <button type="button" onClick={() => onRecordPayment(b)} className="inline-flex items-center gap-0.5 px-2 py-1 rounded-lg text-[10px] font-bold bg-emerald-600 text-white"><Check className="w-3 h-3" />Pay</button>
               )}
               <button type="button" onClick={() => onEditBill(b)} className="inline-flex items-center justify-center px-2 py-1 rounded-lg text-[10px] font-bold border border-slate-200 dark:border-slate-800 text-slate-500"><Edit2 className="w-3 h-3" /></button>
+              {manageMode && (
+                <div className="flex gap-1 justify-end">
+                  {onToggleActive && <button type="button" aria-label={b.active ? 'Pause' : 'Resume'} onClick={() => onToggleActive(b)} className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-500">{b.active ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}</button>}
+                  {onCloneBill && <button type="button" aria-label="Clone" onClick={() => onCloneBill(b)} className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-500"><Copy className="w-3 h-3" /></button>}
+                  {onDeleteBill && <button type="button" aria-label="Delete" onClick={() => { if (confirm(`Delete "${b.name}"?`)) onDeleteBill(b.id); }} className="p-1.5 rounded-lg border border-rose-200 dark:border-rose-900/50 text-rose-500"><Trash2 className="w-3 h-3" /></button>}
+                </div>
+              )}
             </div>
           )}
         </li>

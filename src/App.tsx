@@ -289,6 +289,7 @@ export default function App() {
     try { localStorage.setItem('hv_try_new_ui', String(v)); } catch { /* ignore */ }
   };
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
+  const [billsAccount, setBillsAccount] = useState<string | null>(null);
   const zerodhaCallbackHandled = React.useRef(false);
   const [uiPulse, setUiPulse] = useState<boolean>(() => {
     try {
@@ -1950,24 +1951,29 @@ export default function App() {
                 </NewDesignSwitch>
               )
             ) : activeTab === 'configure' && hasFeature('core') ? (
-              <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!uiPulse}>
+              <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
                 {tryNewUi ? (
-                  <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
-                  <PulseBills
+                  <PulseAccounts
+                    manageMode
                     payments={payments}
                     history={history}
-                    showFrequencyPatterns={showFrequencyPatterns}
-                    onAddClick={handleOpenAddModal}
-                    onEditClick={handleOpenEditModal}
-                    onCloneClick={handleCloneClick}
-                    onDeleteClick={deletePayment}
-                    onUpdatePayment={updatePayment}
-                    onAddBulkPayments={addBulkPayments}
-                    onUpdatePaymentsOrder={updatePaymentsOrder}
+                    countries={countries}
+                    summaryCurrency={summaryCurrency}
+                    onRecordPayment={handleRecordPayment}
+                    onAddBill={(name) => {
+                      setPreselectedCurrency(summaryCurrency);
+                      setEditingPayment(name ? ({ id: '', name: '', amount: 0, currency: summaryCurrency, dayOfMonth: 1, category: 'Other', active: true, reminderDaysBefore: 2, taggedFor: name, billingCycle: 'monthly', paymentMethod: 'manual', paymentType: 'fixed' } as any) : null);
+                      setIsModalOpen(true);
+                    }}
+                    onEditBill={handleOpenEditModal}
+                    onCloneBill={handleCloneClick}
+                    onDeleteBill={deletePayment}
+                    onToggleActive={(p) => updatePayment({ ...p, active: !p.active })}
                     isReadOnly={userProfile?.role === 'view'}
-                    currentUserUid={user?.uid}
+                    selectedAccount={billsAccount}
+                    onSelectAccount={setBillsAccount}
+                    onRenameAccount={renameAccount}
                   />
-                </div>
                 ) : (
                   <ConfigurePayments
                   payments={payments}
@@ -2063,7 +2069,7 @@ export default function App() {
                 summaryCurrency={summaryCurrency}
               />
             ) : activeTab === 'rewards' ? (
-                <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!uiPulse}>
+                <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
                 {tryNewUi ? (
                   <PulseMembership
                   rewardsPerks={rewardsPerks}
@@ -2138,7 +2144,7 @@ export default function App() {
                 />
               </div>
 ) : activeTab === 'portfolio' && tryNewUi ? (
-              <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!uiPulse}>
+              <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
                 <PulsePortfolio
                   mode="main"
                   holdings={portfolioHoldings}
@@ -2442,7 +2448,7 @@ export default function App() {
                 loadMfHoldingsCache={loadMfHoldingsCache}
                               />
 ) : activeTab === 'income' ? (
-                <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!uiPulse}>
+                <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
                 {tryNewUi ? (
                   <PulseIncome
                     incomeSources={incomeSources}
@@ -2493,7 +2499,7 @@ export default function App() {
                 pulseMode={uiPulse}
               />
             ) : activeTab === 'history' && hasFeature('core') ? (
-              <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!uiPulse}>
+              <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
                 {tryNewUi ? (
                   <PulseHistory
                     history={history}
