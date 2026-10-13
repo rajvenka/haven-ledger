@@ -34,7 +34,8 @@ import {
   Shield,
   Layers,
   MessageSquare,
-  UserPlus
+  UserPlus,
+  PanelLeftClose, PanelLeftOpen, LogOut,
 } from 'lucide-react';
 import { usePaymentState } from './hooks/usePaymentState';
 import IPhoneFrame from './components/IPhoneFrame';
@@ -269,6 +270,8 @@ export default function App() {
   });
 
   const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'configure' | 'account' | 'history' | 'ai' | 'income' | 'rewards' | 'portfolio' | 'portfolio_v1' | 'investment_plan' | 'quote_connections' | 'reports' | 'admin_users'>('summary');
+  const [mainNavCollapsed, setMainNavCollapsed] = useState<boolean>(() => { try { return localStorage.getItem('hv_main_nav_collapsed') === '1'; } catch { return false; } });
+  const toggleMainNav = () => setMainNavCollapsed((v) => { try { localStorage.setItem('hv_main_nav_collapsed', v ? '0' : '1'); } catch { /* ignore */ } return !v; });
   const [tryNewUi, setTryNewUiState] = useState<boolean>(() => {
     try { return localStorage.getItem('hv_try_new_ui') === 'true'; } catch { return false; }
   });
@@ -705,7 +708,7 @@ export default function App() {
       <div className="flex-1 flex flex-row h-full bg-slate-50 dark:bg-slate-900 relative overflow-hidden text-left">
         
         {/* Persistent Desktop Sidebar Navigation (Hidden on Mobile) */}
-        <aside className="hidden md:flex flex-col w-56 h-dvh bg-white dark:bg-slate-950 border-r border-slate-150/80 dark:border-slate-900 shrink-0 z-20 select-none p-4">
+        <aside className={`hidden md:flex flex-col h-dvh bg-white dark:bg-slate-950 border-r border-slate-150/80 dark:border-slate-900 shrink-0 z-20 select-none transition-all duration-200 ${mainNavCollapsed ? 'w-[72px] p-2 [&_span]:hidden [&_p]:hidden [&_h1]:hidden [&_nav>button]:justify-center [&_nav>button>div]:justify-center' : 'w-56 p-4'}`}>
           <div className="flex-1 min-h-0 overflow-y-auto space-y-4">
             {/* Elegant Header with Logo & Status */}
             <div className="flex items-center gap-3">
@@ -713,7 +716,7 @@ export default function App() {
                 <span className="text-base tracking-tighter">H</span>
                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-white dark:border-slate-950 rounded-full" />
               </div>
-              <div className="text-left">
+              <div className={`text-left ${mainNavCollapsed ? 'hidden' : ''}`}>
                 <h1 className="text-sm font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
                   Haven Vault
                 </h1>
@@ -724,6 +727,16 @@ export default function App() {
               </div>
             </div>
 
+            <button
+              type="button"
+              onClick={toggleMainNav}
+              title={mainNavCollapsed ? 'Expand menu' : 'Collapse menu'}
+              className="w-full flex items-center justify-center gap-2 py-1.5 rounded-xl text-[11px] font-black text-slate-400 hover:text-indigo-600 hover:bg-slate-50 dark:hover:bg-slate-900 cursor-pointer"
+            >
+              {mainNavCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <><PanelLeftClose className="w-4 h-4" /><span>Collapse menu</span></>}
+            </button>
+
+            {!mainNavCollapsed && (
             <WorkspaceSwitcher
               workspaces={workspaces}
               activeWorkspace={activeWorkspace}
@@ -733,11 +746,12 @@ export default function App() {
               onDelete={deleteWorkspace}
               canCreateBusiness={userProfile?.isSuperAdmin || userProfile?.canCreateBusiness}
             />
+            )}
 
             {/* Theme toggle, guided tour, and notifications - desktop equivalent of the
                 mobile header's action row, which lives in a md:hidden block and so was
                 never reachable at all from the desktop sidebar layout. */}
-            <div className="flex items-center gap-1">
+            <div className={`flex items-center gap-1 ${mainNavCollapsed ? 'flex-col' : ''}`}>
               <button
                 type="button"
                 onClick={togglePulse}
@@ -1148,7 +1162,7 @@ export default function App() {
               )}
             </div>
             
-            <div className="flex gap-2">
+            <div className={`flex gap-2 ${mainNavCollapsed ? 'flex-col' : ''}`}>
               <button
                 type="button"
                 onClick={togglePulse}
@@ -1177,9 +1191,10 @@ export default function App() {
               </button>
               <button
                 onClick={logOut}
+                title="Sign out"
                 className="flex-1 py-2 flex items-center justify-center bg-slate-50 dark:bg-slate-900 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/20 dark:hover:text-rose-400 border border-slate-100 dark:border-slate-800/60 rounded-xl text-slate-500 dark:text-slate-400 cursor-pointer transition-all duration-200 text-[10px] font-black uppercase tracking-wider"
               >
-                Sign Out
+                {mainNavCollapsed ? <LogOut className="w-4 h-4" /> : 'Sign Out'}
               </button>
             </div>
           </div>
