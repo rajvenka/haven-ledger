@@ -123,6 +123,8 @@ interface Props {
   priceHistory?: any[];
   syncProps?: any;
   portfolioMode?: string;
+  /** 'main' = the production design (Option 7); 'alt' = admin-only gallery of every option with voting. */
+  mode?: 'main' | 'alt';
   contributions?: any[];
   withdrawals?: any[];
   bookedBaselines?: any[];
@@ -138,10 +140,11 @@ const NAV: { k: Section; label: string; icon: React.ReactNode }[] = [
   { k: 'sync', label: 'Import & Sync', icon: <RefreshCw className="w-4 h-4" /> },
 ];
 
-export default function PulsePortfolio({ holdings, lots = [], portfolios = [], rates = [], baseCurrency = 'INR', connections = [], isLoading, onManage, isReadOnly, importProps, cashBalances = [], loadDailyPositions, snapshotDaily, addHolding, updateHolding, sellHolding, deleteHolding, bulkDelete, setCash, deleteCash, syncProps, portfolioMode, priceHistory = [], contributions = [], withdrawals = [], bookedBaselines = [] }: Props) {
+export default function PulsePortfolio({ holdings, lots = [], portfolios = [], rates = [], baseCurrency = 'INR', connections = [], isLoading, onManage, isReadOnly, importProps, cashBalances = [], loadDailyPositions, snapshotDaily, addHolding, updateHolding, sellHolding, deleteHolding, bulkDelete, setCash, deleteCash, syncProps, portfolioMode, mode = 'main', priceHistory = [], contributions = [], withdrawals = [], bookedBaselines = [] }: Props) {
   const [section, setSectionState] = useState<Section>(() => { try { return (localStorage.getItem('hv_pp_section') as Section) || 'overview'; } catch { return 'overview'; } });
   const setSection = (k: Section) => { setSectionState(k); try { localStorage.setItem('hv_pp_section', k); } catch { /* */ } };
-  const [design, setDesignState] = useState<number>(() => { try { return Number(localStorage.getItem('hv_pp_design')) || 1; } catch { return 1; } });
+  const [designState, setDesignState] = useState<number>(() => { try { return Number(localStorage.getItem('hv_pp_design')) || 1; } catch { return 1; } });
+  const design = mode === 'alt' ? designState : 7;
   const setDesign = (n: number) => { setDesignState(n); try { localStorage.setItem('hv_pp_design', String(n)); } catch { /* */ } };
   const [wizard, setWizard] = useState<{ mode?: 'file' | 'connection'; connectionId?: string } | null>(null);
   const [moversMode, setMoversMode] = useState<'total' | 'day'>('total');
@@ -1099,6 +1102,8 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
 
   return (
     <div className="max-w-[1600px] mx-auto p-3 sm:p-6 pb-24 md:pb-6">
+      {mode === 'alt' && (<>
+      <div className="mb-2 text-[11px] font-black uppercase tracking-wider text-violet-600">Admin · alternative portfolio designs</div>
       <div className="flex items-center gap-1.5 flex-wrap mb-3 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800/70 w-full">
         <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-2">Design</span>
         {DESIGN_NAMES.map((nm, i) => (
@@ -1106,6 +1111,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         ))}
       </div>
       <DesignVoting page="portfolio" design={design} designNames={DESIGN_NAMES} section={section} sections={NAV.map((n) => ({ k: n.k, label: n.label }))} />
+      </>)}
       {headerBlock}
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <div>

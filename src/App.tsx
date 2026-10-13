@@ -269,7 +269,7 @@ export default function App() {
     return hash.includes('type=invite') || hash.includes('type=recovery');
   });
 
-  const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'configure' | 'account' | 'history' | 'ai' | 'income' | 'rewards' | 'portfolio' | 'portfolio_v1' | 'investment_plan' | 'quote_connections' | 'reports' | 'admin_users'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'configure' | 'account' | 'history' | 'ai' | 'income' | 'rewards' | 'portfolio' | 'portfolio_alt' | 'portfolio_v1' | 'investment_plan' | 'quote_connections' | 'reports' | 'admin_users'>('summary');
   const [mainNavCollapsed, setMainNavCollapsed] = useState<boolean>(() => { try { return localStorage.getItem('hv_main_nav_collapsed') === '1'; } catch { return false; } });
   const toggleMainNav = () => setMainNavCollapsed((v) => { try { localStorage.setItem('hv_main_nav_collapsed', v ? '0' : '1'); } catch { /* ignore */ } return !v; });
   const [tryNewUi, setTryNewUiState] = useState<boolean>(() => {
@@ -399,6 +399,7 @@ export default function App() {
     if (!hasFeature('rewards') && activeTab === 'rewards') setActiveTab('summary');
     if (!hasFeature('ai') && activeTab === 'ai') setActiveTab('summary');
     if (isLimitedAccess && activeTab === 'admin_users') setActiveTab('summary');
+    if (activeTab === 'portfolio_alt' && userProfile && !userProfile.isSuperAdmin) setActiveTab('portfolio');
     if (!hasFeature('team') && incomingInvitations.length === 0 && activeTab === 'account' && settingsSubTab === 'members') setSettingsSubTab('preferences');
   }, [activeWorkspace, activeTab, settingsSubTab]);
 
@@ -1025,6 +1026,25 @@ export default function App() {
                     )}
                   </button>
 
+                  {userProfile?.isSuperAdmin && (
+                  <button
+                    onClick={() => setActiveTab('portfolio_alt')}
+                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                      activeTab === 'portfolio_alt'
+                        ? 'bg-violet-50/80 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 border border-violet-100/20 dark:border-violet-900/20 shadow-sm'
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Sparkles className="w-4 h-4 shrink-0 opacity-80" />
+                      <span>Portfolio – Alternatives</span>
+                    </div>
+                    {activeTab === 'portfolio_alt' && (
+                      <span className="w-1 h-3.5 bg-violet-600 dark:bg-violet-400 rounded-full" />
+                    )}
+                  </button>
+                  )}
+
                   <button
                     id="tour-tab-investment_plan-desktop"
                     onClick={() => setActiveTab('investment_plan')}
@@ -1466,6 +1486,22 @@ export default function App() {
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                         )}
                       </button>
+
+                      {userProfile?.isSuperAdmin && (
+                      <button
+                        onClick={() => { setActiveTab('portfolio_alt'); setIsMobileMenuOpen(false); }}
+                        className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                          activeTab === 'portfolio_alt'
+                            ? 'bg-violet-50/80 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 shadow-sm'
+                            : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Sparkles className="w-4.5 h-4.5 shrink-0 opacity-80" />
+                          <span>Portfolio – Alternatives</span>
+                        </div>
+                      </button>
+                      )}
 
 
                       <button
@@ -2028,9 +2064,53 @@ export default function App() {
                   onDeleteGiftCard={deleteGiftCard}
                   isReadOnly={isReadOnly}
                 />
+) : activeTab === 'portfolio_alt' && userProfile?.isSuperAdmin ? (
+              <div className="flex-1 min-h-0 overflow-auto">
+                <PulsePortfolio
+                  mode="alt"
+                  holdings={portfolioHoldings}
+                  lots={portfolioHoldingLots}
+                  portfolios={portfolios}
+                  rates={workspaceCurrencyRates}
+                  baseCurrency={activeWorkspace?.baseCurrency}
+                  connections={portfolioBrokerConnections}
+                  isLoading={portfolioDataLoading}
+                  onManage={() => setTryNewUi(false)}
+                  isReadOnly={isReadOnly}
+                  cashBalances={portfolioCashBalances}
+                  loadDailyPositions={loadPortfolioDailyPositions}
+                  snapshotDaily={snapshotPortfolioDailyPositions}
+                  addHolding={addPortfolioHolding}
+                  updateHolding={updatePortfolioHolding}
+                  sellHolding={sellPortfolioHolding}
+                  deleteHolding={deletePortfolioHolding}
+                  bulkDelete={bulkDeletePortfolioHoldings}
+                  setCash={setPortfolioCashBalance}
+                  deleteCash={deletePortfolioCashBalance}
+                  priceHistory={portfolioPriceHistory}
+                  portfolioMode={activeWorkspace?.portfolioMode}
+                  syncProps={{
+                    bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, updatePortfolioHolding,
+                    markPortfolioHoldingSoldFromImport, syncEtoroHoldingLots, syncEtoroLivePrices,
+                    markBrokerConnectionSynced, setPortfolioBrokerConnection, loadPortfolioDetails,
+                  }}
+                  contributions={portfolioContributions}
+                  withdrawals={portfolioWithdrawals}
+                  bookedBaselines={portfolioBookedPlBaselines}
+                  importProps={{
+                    isReadOnly, baseCurrency: activeWorkspace?.baseCurrency, workspaceName: activeWorkspace?.name,
+                    portfolios, portfolioMode: activeWorkspace?.portfolioMode, portfolioHoldings, portfolioHoldingLots,
+                    portfolioCashBalances, portfolioBrokerConnections, workspaceCurrencyRates,
+                    bulkAddPortfolioHoldings, setPortfolioBrokerConnection, deletePortfolioBrokerConnection,
+                    markBrokerConnectionSynced, updatePortfolioHoldingLivePrice, markPriceLookupFailed,
+                    loadPortfolioDetails, snapshotPortfolioDailyPositions, loadPortfolioDailyPositions,
+                  }}
+                />
+              </div>
 ) : activeTab === 'portfolio' && tryNewUi ? (
               <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!uiPulse}>
                 <PulsePortfolio
+                  mode="main"
                   holdings={portfolioHoldings}
                   lots={portfolioHoldingLots}
                   portfolios={portfolios}
