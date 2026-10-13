@@ -58,6 +58,21 @@ const px = (n: number) => (Number.isFinite(n) ? n.toLocaleString(undefined, { ma
 const pct = (n: number) => (Number.isFinite(n) ? `${n > 0 ? '+' : ''}${n.toFixed(1)}%` : '—');
 const tone = (n: number) => (n > 0 ? 'text-emerald-600 dark:text-emerald-400' : n < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500');
 
+const INDEX_RE = /^(NSDQ100|NAS100|NDX|SPX500|SPX|US500|US30|US100|DJ30|DJI|UK100|GER40|GER30|DAX|FRA40|JPN225|NIKKEI|AUS200|HK50|CHN50|ESP35|EU50|RUT|VIX|NIFTY.*|BANKNIFTY|FINNIFTY|SENSEX)$/i;
+const CRYPTO_RE = /^(BTC|ETH|XRP|SOL|ADA|DOGE|LTC|BNC|DOT|AVAX|MATIC|LINK|BCH|XLM)(USD|USDT)?$/i;
+function typeOf(h: any): string {
+  const t = String(h.holding_type || '').toLowerCase();
+  const sym = String(h.ticker || h.symbol || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const src = String(h.source || '').toLowerCase();
+  if (t.startsWith('option')) return 'Options';
+  if (t === 'mutual_fund' || h.exchange === 'MF') return 'Mutual funds';
+  if (COMMODITY.test(String(h.symbol || h.ticker || '')) || /^(XAUUSD|XAGUSD|XAU|XAG|GOLD|SILVER|OIL|USOIL|UKOIL|NATGAS|COPPER)$/i.test(sym)) return 'Commodities';
+  if (INDEX_RE.test(sym)) return 'Index';
+  if (CRYPTO_RE.test(sym) || src.includes('crypto')) return 'Crypto';
+  if (/\bETF\b|\bETN\b/i.test(String(h.symbol || '') + ' ' + String(h.name || '')) || String(h.holding_type || '').toLowerCase() === 'etf') return 'ETFs';
+  return 'Stocks';
+}
+
 interface Col { k: string; label: string; left?: boolean; tone?: (r: any) => number; cell: (r: any, total: number, ccy: string) => React.ReactNode; csv?: (r: any, total: number) => any }
 const COLS: Col[] = [
   { k: 'symbol', label: 'Holding', left: true, cell: (r) => (<div><div className="font-black text-slate-900 dark:text-white">{r.symbol}</div><div className="text-[10px] text-slate-400 truncate max-w-[160px]">{r.name !== r.symbol ? r.name : r.category}</div></div>), csv: (r) => r.symbol },
@@ -132,6 +147,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const [moversMode, setMoversMode] = useState<'total' | 'day'>('total');
   const [cfdReal, setCfdReal] = useState(false);
   const [prevLoad, setPrevLoad] = useState<number | null>(null);
+  const [typeFilter, setTypeFilter] = useState<string>('All');
   const [focusId, setFocusId] = useState<string | null>(null);
   const [drill, setDrill] = useState<string | null>(null);
   const [heatBy, setHeatBy] = useState<'pnlPct' | 'dayPct'>('pnlPct');
@@ -795,14 +811,18 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     );
 
     if (design === 7) {
-      const list = topRows.filter((r) => !q.trim() || r.symbol.toLowerCase().includes(q.trim().toLowerCase()) || r.broker.toLowerCase().includes(q.trim().toLowerCase()));
+      const typeCounts = new Map<string, number>();
+      topRows.forEach((r) => { const t = typeOf(r.h); typeCounts.set(t, (typeCounts.get(t) || 0) + 1); });
+      const typeChips = ['All', ...Array.from(typeCounts.keys()).sort((a, b) => (typeCounts.get(b) || 0) - (typeCounts.get(a) || 0))];
+      const list = topRows.filter((r) => (typeFilter === 'All' || typeOf(r.h) === typeFilter) && (!q.trim() || r.symbol.toLowerCase().includes(q.trim().toLowerCase()) || r.broker.toLowerCase().includes(q.trim().toLowerCase())));
       const f = (focusId && rows.find((r) => r.id === focusId)) || list[0];
       return (
         <div className="space-y-5">
         {healthJsx}
         <div className="grid lg:grid-cols-[360px_1fr] gap-4 items-start">
           <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
-            <div className="p-3 border-b border-slate-100 dark:border-slate-800"><div className="relative"><Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${rows.length} holdings`} className="w-full pl-8 pr-2 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 outline-none" /></div></div>
+            <div className="px-3 pt-3 flex flex-wrap gap-1.5">{typeChips.map((t) => <button key={t} onClick={() => setTypeFilter(t)} className={`text-[11px] font-black px-2.5 py-1 rounded-full ${typeFilter === t ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{t}{t !== 'All' ? <span className="ml-1 opacity-60">{typeCounts.get(t)}</span> : <span className="ml-1 opacity-60">{topRows.length}</span>}</button>)}</div>
+            <div className="p-3 border-b border-slate-100 dark:border-slate-800"><div className="relative"><Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${list.length} ${typeFilter === 'All' ? 'holdings' : typeFilter.toLowerCase()}`} className="w-full pl-8 pr-2 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 outline-none" /></div></div>
             <div className="max-h-[70vh] overflow-auto">
               {list.map((r, i) => (
                 <button key={r.id} onClick={() => setFocusId(r.id)} className={`w-full flex items-center gap-3 px-3 py-2.5 border-t border-slate-100 dark:border-slate-800 text-left ${f?.id === r.id ? 'bg-indigo-50 dark:bg-indigo-950/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
