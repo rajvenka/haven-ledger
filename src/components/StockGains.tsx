@@ -94,8 +94,8 @@ export default function StockGains({ history, livePrice, qty, buyPrice, buyDate,
       {chart.length > 1 && (
         <div className="h-28"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chart}><defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#6366f1" stopOpacity={0.3} /><stop offset="100%" stopColor="#6366f1" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="date" tick={{ fontSize: 9 }} minTickGap={40} /><YAxis hide domain={['auto', 'auto']} /><Tooltip formatter={(v: any) => `${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${native}`} /><Area type="monotone" dataKey="price" stroke="#6366f1" strokeWidth={2} fill="url(#sg)" /></AreaChart></ResponsiveContainer></div>
       )}
-      <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-        <table className="w-full text-xs">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
+        <table className="w-full min-w-[420px] text-xs whitespace-nowrap">
           <thead className="bg-slate-50 dark:bg-slate-800 text-[10px] uppercase text-slate-400"><tr><th className="text-left p-2">Period</th><th className="text-right p-2">From</th><th className="text-right p-2">To</th><th className="text-right p-2">Change</th><th className="text-right p-2">Gain / loss</th></tr></thead>
           <tbody>
             {rows.map((r) => (
