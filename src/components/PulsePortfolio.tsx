@@ -679,6 +679,35 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     <div className="h-20 -mx-2"><ResponsiveContainer width="100%" height="100%"><AreaChart data={trend}><defs><linearGradient id="hs" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#fff" stopOpacity={0.4} /><stop offset="100%" stopColor="#fff" stopOpacity={0} /></linearGradient></defs><YAxis hide domain={['auto', 'auto']} /><Area type="monotone" dataKey="value" stroke="#fff" strokeWidth={2} fill="url(#hs)" /></AreaChart></ResponsiveContainer></div>
   );
 
+  const healthJsx = (() => {
+      const top5 = topRows.slice(0, 5).reduce((a, r) => a + r.value, 0);
+      const conc = totals.value > 0 ? (top5 / totals.value) * 100 : 0;
+      const stale = rows.filter((r) => r.h.price_stale || r.h.price_lookup_failed).length;
+      const losersN = rows.filter((r) => r.pnlPct < -20).length;
+      const Ring = ({ v, label, good }: { v: number; label: string; good: boolean }) => { const c = 2 * Math.PI * 34; const val = Math.max(0, Math.min(100, v)); return (<div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 flex items-center gap-4"><svg width="84" height="84" viewBox="0 0 84 84"><circle cx="42" cy="42" r="34" fill="none" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="9" /><circle cx="42" cy="42" r="34" fill="none" stroke={good ? '#10b981' : '#f59e0b'} strokeWidth="9" strokeLinecap="round" strokeDasharray={`${(val / 100) * c} ${c}`} transform="rotate(-90 42 42)" /><text x="42" y="47" textAnchor="middle" fontSize="15" fontWeight="800" fill="currentColor">{Math.round(v)}%</text></svg><div className="text-sm font-black">{label}</div></div>); };
+      const insights: { t: string; d: string; tone: string }[] = [];
+      if (conc > 50) insights.push({ t: 'High concentration', d: `Top 5 holdings are ${conc.toFixed(0)}% of the portfolio.`, tone: 'amber' });
+      if (losersN > 0) insights.push({ t: `${losersN} positions down more than 20%`, d: 'Review whether the original thesis still holds.', tone: 'rose' });
+      if (stale > 0) insights.push({ t: `${stale} stale prices`, d: 'Run Refresh prices in Import & Sync.', tone: 'amber' });
+      if (nearStop.length > 0) insights.push({ t: `${nearStop.length} near stop-loss`, d: nearStop.map((r: any) => r.symbol).join(', '), tone: 'rose' });
+      if (nearTarget.length > 0) insights.push({ t: `${nearTarget.length} near profit target`, d: nearTarget.map((r: any) => r.symbol).join(', '), tone: 'emerald' });
+      if (insights.length === 0) insights.push({ t: 'All clear', d: 'No concentration, stop-loss or stale-price issues found.', tone: 'emerald' });
+      return (
+        <div className="space-y-4">
+          {kpiRow}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <Ring v={totals.cost > 0 ? Math.max(0, totals.pnlPct + 50) : 0} label="Return health" good={totals.pnl >= 0} />
+            <Ring v={100 - conc} label="Diversification" good={conc < 50} />
+            <Ring v={totals.value + cashTotal > 0 ? (cashTotal / (totals.value + cashTotal)) * 100 : 0} label="Cash buffer" good={cashTotal > 0} />
+            <Ring v={rows.length ? ((rows.length - stale) / rows.length) * 100 : 100} label="Fresh prices" good={stale === 0} />
+          </div>
+          <div className="grid md:grid-cols-2 gap-3">
+            {insights.map((n) => <div key={n.t} className={`rounded-2xl p-4 border ${n.tone === 'emerald' ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900' : n.tone === 'rose' ? 'bg-rose-50 border-rose-200 dark:bg-rose-950/20 dark:border-rose-900' : 'bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-900'}`}><div className="text-sm font-black">{n.t}</div><div className="text-xs text-slate-600 dark:text-slate-300 mt-1">{n.d}</div></div>)}
+          </div>
+        </div>
+      );
+  })();
+
   const designOverview = (() => {
     if (design === 2) return (
       <div className="space-y-5">
@@ -770,6 +799,8 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       const list = topRows.filter((r) => !q.trim() || r.symbol.toLowerCase().includes(q.trim().toLowerCase()) || r.broker.toLowerCase().includes(q.trim().toLowerCase()));
       const f = (focusId && rows.find((r) => r.id === focusId)) || list[0];
       return (
+        <div className="space-y-5">
+        {healthJsx}
         <div className="grid lg:grid-cols-[360px_1fr] gap-4 items-start">
           <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
             <div className="p-3 border-b border-slate-100 dark:border-slate-800"><div className="relative"><Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${rows.length} holdings`} className="w-full pl-8 pr-2 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 outline-none" /></div></div>
@@ -805,6 +836,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
               /></React.Fragment>
             </div>
           ) : <div className="text-sm text-slate-400 p-8">No holdings.</div>}
+        </div>
         </div>
       );
     }
@@ -868,34 +900,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         </div>
       );
     }
-    if (design === 12) {
-      const top5 = topRows.slice(0, 5).reduce((a, r) => a + r.value, 0);
-      const conc = totals.value > 0 ? (top5 / totals.value) * 100 : 0;
-      const stale = rows.filter((r) => r.h.price_stale || r.h.price_lookup_failed).length;
-      const losersN = rows.filter((r) => r.pnlPct < -20).length;
-      const Ring = ({ v, label, good }: { v: number; label: string; good: boolean }) => { const c = 2 * Math.PI * 34; const val = Math.max(0, Math.min(100, v)); return (<div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 flex items-center gap-4"><svg width="84" height="84" viewBox="0 0 84 84"><circle cx="42" cy="42" r="34" fill="none" stroke="currentColor" className="text-slate-100 dark:text-slate-800" strokeWidth="9" /><circle cx="42" cy="42" r="34" fill="none" stroke={good ? '#10b981' : '#f59e0b'} strokeWidth="9" strokeLinecap="round" strokeDasharray={`${(val / 100) * c} ${c}`} transform="rotate(-90 42 42)" /><text x="42" y="47" textAnchor="middle" fontSize="15" fontWeight="800" fill="currentColor">{Math.round(v)}%</text></svg><div className="text-sm font-black">{label}</div></div>); };
-      const insights: { t: string; d: string; tone: string }[] = [];
-      if (conc > 50) insights.push({ t: 'High concentration', d: `Top 5 holdings are ${conc.toFixed(0)}% of the portfolio.`, tone: 'amber' });
-      if (losersN > 0) insights.push({ t: `${losersN} positions down more than 20%`, d: 'Review whether the original thesis still holds.', tone: 'rose' });
-      if (stale > 0) insights.push({ t: `${stale} stale prices`, d: 'Run Refresh prices in Import & Sync.', tone: 'amber' });
-      if (nearStop.length > 0) insights.push({ t: `${nearStop.length} near stop-loss`, d: nearStop.map((r: any) => r.symbol).join(', '), tone: 'rose' });
-      if (nearTarget.length > 0) insights.push({ t: `${nearTarget.length} near profit target`, d: nearTarget.map((r: any) => r.symbol).join(', '), tone: 'emerald' });
-      if (insights.length === 0) insights.push({ t: 'All clear', d: 'No concentration, stop-loss or stale-price issues found.', tone: 'emerald' });
-      return (
-        <div className="space-y-4">
-          {kpiRow}
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <Ring v={totals.cost > 0 ? Math.max(0, totals.pnlPct + 50) : 0} label="Return health" good={totals.pnl >= 0} />
-            <Ring v={100 - conc} label="Diversification" good={conc < 50} />
-            <Ring v={totals.value + cashTotal > 0 ? (cashTotal / (totals.value + cashTotal)) * 100 : 0} label="Cash buffer" good={cashTotal > 0} />
-            <Ring v={rows.length ? ((rows.length - stale) / rows.length) * 100 : 100} label="Fresh prices" good={stale === 0} />
-          </div>
-          <div className="grid md:grid-cols-2 gap-3">
-            {insights.map((n) => <div key={n.t} className={`rounded-2xl p-4 border ${n.tone === 'emerald' ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900' : n.tone === 'rose' ? 'bg-rose-50 border-rose-200 dark:bg-rose-950/20 dark:border-rose-900' : 'bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-900'}`}><div className="text-sm font-black">{n.t}</div><div className="text-xs text-slate-600 dark:text-slate-300 mt-1">{n.d}</div></div>)}
-          </div>
-        </div>
-      );
-    }
+    if (design === 12) return healthJsx;
     // design 6: mobile-first cards
     return (
       <div className="max-w-2xl mx-auto space-y-4">
@@ -1006,7 +1011,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     </div>
   );
 
-  const DESIGN_NAMES = ['Command', 'Brokerage', 'Heatmap', 'Terminal', 'Accounts', 'Cards', 'Split view', 'Bento', 'Kanban', 'Statement', 'Drill-down', 'Health check'];
+  const DESIGN_NAMES = ['Command', 'Brokerage', 'Heatmap', 'Terminal', 'Accounts', 'Cards', 'Split view + Health', 'Bento', 'Kanban', 'Statement', 'Drill-down', 'Health check'];
   const tabStyle = (active: boolean) => design === 3 ? `px-4 py-1.5 rounded-full text-xs font-black ${active ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}` : design === 4 ? `px-3 py-1 text-[11px] font-mono font-bold uppercase ${active ? 'bg-slate-900 text-emerald-400' : 'text-slate-500 hover:text-slate-800'}` : `px-4 py-2 text-sm font-black -mb-px border-b-2 ${active ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`;
   const topTabs = (
     <div className={`flex gap-1 overflow-x-auto mb-4 ${design === 3 ? '' : design === 4 ? 'bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 w-fit' : 'border-b border-slate-200 dark:border-slate-800'}`}>
