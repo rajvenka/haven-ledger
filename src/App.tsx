@@ -48,6 +48,7 @@ import PulseBills from './components/PulseBills';
 import PulseHome from './components/PulseHome';
 import { clearZerodhaPending, readZerodhaCallback, readZerodhaPending, stripZerodhaCallbackFromUrl, ZERODHA_AUTOSYNC_KEY } from './utils/zerodhaAuth';
 import PulseAccounts from './components/PulseAccounts';
+import PagePane from './components/PagePane';
 import NewDesignSwitch from './components/NewDesignSwitch';
 import PulseMembership from './components/PulseMembership';
 import PulseIncome from './components/PulseIncome';
@@ -1840,7 +1841,7 @@ export default function App() {
 
           {/* Dynamic page content body */}
           <main className={`flex-1 min-w-0 max-w-full overflow-x-hidden flex flex-col min-h-0 ${
-            ((uiPulse && (activeTab === 'expenses' || activeTab === 'summary' || activeTab === 'configure' || activeTab === 'rewards' || activeTab === 'income' || activeTab === 'history' || activeTab === 'reports' || activeTab === 'investment_plan')) || (!uiPulse && tryNewUi && (activeTab === 'expenses' || activeTab === 'summary' || activeTab === 'configure' || activeTab === 'history' || activeTab === 'income' || activeTab === 'rewards')))
+            ((uiPulse && (activeTab === 'expenses' || activeTab === 'summary' || activeTab === 'configure' || activeTab === 'rewards' || activeTab === 'income' || activeTab === 'history' || activeTab === 'reports' || activeTab === 'investment_plan')) || (!uiPulse && tryNewUi && (activeTab === 'expenses' || activeTab === 'summary' || activeTab === 'configure' || activeTab === 'history' || activeTab === 'income' || activeTab === 'rewards' || activeTab === 'reports' || activeTab === 'investment_plan' || activeTab === 'account' || activeTab === 'admin_users')))
               ? 'overflow-hidden'
               : 'overflow-y-auto'
           }`}>
@@ -1993,7 +1994,9 @@ export default function App() {
                 )}
               </NewDesignSwitch>
             ) : activeTab === 'account' ? (
-              <AccountInfo 
+<NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
+<PagePane>
+<AccountInfo 
                 payments={payments}
                 userProfile={userProfile}
                 familyMembers={familyMembers}
@@ -2059,9 +2062,11 @@ export default function App() {
                 setViewMode={setViewMode}
                 activeSubTab={settingsSubTab}
                 onActiveSubTabChange={setSettingsSubTab}
-                pulseMode={uiPulse}
+                pulseMode={uiPulse || tryNewUi}
               />
-            ) : activeTab === 'ai' ? (
+</PagePane>
+</NewDesignSwitch>
+) : activeTab === 'ai' ? (
               <AiInsights 
                 payments={payments}
                 history={history}
@@ -2306,8 +2311,10 @@ export default function App() {
               </NewDesignSwitch>
               )
             ) : activeTab === 'investment_plan' ? (
-                <InvestmentPlanView
-                pulseMode={uiPulse}
+<NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
+<PagePane>
+<InvestmentPlanView
+                pulseMode={uiPulse || tryNewUi}
 
                 workspaceName={activeWorkspace?.name}
                 workspaceMembers={contributorMembers}
@@ -2344,6 +2351,8 @@ export default function App() {
                 updatePortfolioRecurringPlan={updatePortfolioRecurringPlan}
                 deletePortfolioRecurringPlan={deletePortfolioRecurringPlan}
                               />
+</PagePane>
+</NewDesignSwitch>
 ) : activeTab === 'quote_connections' ? (
                 <PortfolioView
                 initialHoldingsTab="quote_connections"
@@ -2420,8 +2429,10 @@ export default function App() {
                 deletePortfolioFee={deletePortfolioFee}
               />
 ) : activeTab === 'reports' ? (
-                <ReportsView
-                pulseMode={uiPulse}
+<NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
+<PagePane>
+<ReportsView
+                pulseMode={uiPulse || tryNewUi}
 
                 workspaceName={activeWorkspace?.name}
                 workspaceMembers={contributorMembers}
@@ -2448,6 +2459,8 @@ export default function App() {
                 mfHoldingsCache={mfHoldingsCache}
                 loadMfHoldingsCache={loadMfHoldingsCache}
                               />
+</PagePane>
+</NewDesignSwitch>
 ) : activeTab === 'income' ? (
                 <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
                 {tryNewUi ? (
@@ -2484,7 +2497,9 @@ export default function App() {
                 )}
               </NewDesignSwitch>
 ) : activeTab === 'admin_users' && userProfile?.isSuperAdmin ? (
-              <AdminUsersView
+<NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
+<PagePane>
+<AdminUsersView
                 fetchAllUsersForAdmin={fetchAllUsersForAdmin}
                 inviteNewUser={inviteNewUser}
                 onOnboardUserWithPlan={onboardUserWithPlan}
@@ -2497,9 +2512,11 @@ export default function App() {
                 onSetUserPlan={adminSetUserPlan}
                 onSetSuperAdmin={setSuperAdminStatus}
                 currentUserId={user?.id}
-                pulseMode={uiPulse}
+                pulseMode={uiPulse || tryNewUi}
               />
-            ) : activeTab === 'history' && hasFeature('core') ? (
+</PagePane>
+</NewDesignSwitch>
+) : activeTab === 'history' && hasFeature('core') ? (
               <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
                 {tryNewUi ? (
                   <PulseAccounts
