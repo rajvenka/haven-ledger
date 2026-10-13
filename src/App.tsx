@@ -273,7 +273,16 @@ export default function App() {
   const [mainNavCollapsed, setMainNavCollapsed] = useState<boolean>(() => { try { return localStorage.getItem('hv_main_nav_collapsed') === '1'; } catch { return false; } });
   const toggleMainNav = () => setMainNavCollapsed((v) => { try { localStorage.setItem('hv_main_nav_collapsed', v ? '0' : '1'); } catch { /* ignore */ } return !v; });
   const [tryNewUi, setTryNewUiState] = useState<boolean>(() => {
-    try { return localStorage.getItem('hv_try_new_ui') === 'true'; } catch { return false; }
+    try {
+      // New design is the default everywhere. One-time reset so people who previously flipped back
+      // to the old design get the new one; after that their own choice (toggle) is respected.
+      if (localStorage.getItem('hv_new_ui_default_v1') !== '1') {
+        localStorage.setItem('hv_new_ui_default_v1', '1');
+        localStorage.setItem('hv_try_new_ui', 'true');
+        return true;
+      }
+      return localStorage.getItem('hv_try_new_ui') !== 'false';
+    } catch { return true; }
   });
   const setTryNewUi = (v: boolean) => {
     setTryNewUiState(v);
