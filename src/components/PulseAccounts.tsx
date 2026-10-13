@@ -30,6 +30,10 @@ interface Props {
   onRenameAccount?: (from: string, to: string) => Promise<void>;
   /** Manage Bills mode: opens on the Bills tab and adds pause / clone / delete. */
   manageMode?: boolean;
+  /** Payment History mode: opens on the History tab with status change / delete. */
+  historyMode?: boolean;
+  onUpdateHistoryStatus?: (id: string, status: 'paid' | 'delayed' | 'carry') => void;
+  onDeleteHistory?: (id: string) => void;
   onCloneBill?: (payment: RecurringPayment) => void;
   onDeleteBill?: (id: string) => void;
   onToggleActive?: (payment: RecurringPayment) => void;
@@ -54,7 +58,7 @@ function useIsDesktop() {
 export default function PulseAccounts({
   payments, history, countries, summaryCurrency, onRecordPayment, onAddBill, onEditBill,
   isReadOnly = false, selectedAccount, onSelectAccount, onRenameAccount,
-  manageMode = false, onCloneBill, onDeleteBill, onToggleActive,
+  manageMode = false, historyMode = false, onUpdateHistoryStatus, onDeleteHistory, onCloneBill, onDeleteBill, onToggleActive,
 }: Props) {
   const [renaming, setRenaming] = useState(false);
   const [renameTo, setRenameTo] = useState('');
@@ -63,7 +67,7 @@ export default function PulseAccounts({
   const [overrides, setOverrides] = useState(loadTypeOverrides);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
-  const [tab, setTab] = useState<Tab>(manageMode ? 'bills' : 'overview');
+  const [tab, setTab] = useState<Tab>(historyMode ? 'history' : manageMode ? 'bills' : 'overview');
 
   const now = useMemo(() => new Date(), []);
   const money = (n: number, ccy: string = summaryCurrency) => formatCurrencyValue(n, ccy, countries);
@@ -112,8 +116,8 @@ export default function PulseAccounts({
       <div className="p-3 space-y-2 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">{manageMode ? 'Bills' : 'Accounts'}</h1>
-            <p className="text-[10px] text-slate-400 font-bold">{manageMode ? 'Pick an account to view & manage its bills' : `${accounts.length} people & properties · monthly cost in ${summaryCurrency}`}</p>
+            <h1 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">{historyMode ? 'Payment history' : manageMode ? 'Bills' : 'Accounts'}</h1>
+            <p className="text-[10px] text-slate-400 font-bold">{historyMode ? 'Pick an account to see what was paid' : manageMode ? 'Pick an account to view & manage its bills' : `${accounts.length} people & properties · monthly cost in ${summaryCurrency}`}</p>
           </div>
           {!isReadOnly && (
             <button type="button" onClick={() => onAddBill('')} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold bg-indigo-600 text-white shadow-md shadow-indigo-600/25">
@@ -144,7 +148,7 @@ export default function PulseAccounts({
           const active = current?.name === a.name && (isDesktop || selectedAccount === a.name);
           return (
             <li key={a.name}>
-              <button type="button" onClick={() => { onSelectAccount(a.name); setTab(manageMode ? 'bills' : 'overview'); }}
+              <button type="button" onClick={() => { onSelectAccount(a.name); setTab(historyMode ? 'history' : manageMode ? 'bills' : 'overview'); }}
                 className={`w-full flex items-center gap-3 px-3 py-3 text-left transition-colors ${active ? 'bg-violet-50 dark:bg-violet-950/30' : 'hover:bg-slate-50 dark:hover:bg-slate-900/60'}`}>
                 <div className={`w-10 h-10 rounded-xl ${avatarClass(a.name)} text-white flex items-center justify-center text-[12px] font-black shrink-0`}>{initials(a.name)}</div>
                 <div className="min-w-0 flex-1">
@@ -354,7 +358,7 @@ export default function PulseAccounts({
           })()}
 
           {tab === 'bills' && <BillsTab bills={bills} Row={BillRow} />}
-          {tab === 'history' && <HistoryTab account={a} money={money} conv={conv} />}
+          {tab === 'history' && <HistoryTab account={a} money={money} conv={conv} readOnly={isReadOnly} onStatus={onUpdateHistoryStatus} onDelete={onDeleteHistory} />}
         </div>
       </div>
     );
@@ -454,7 +458,7 @@ function BillsTab({ bills, Row }: { bills: { b: RecurringPayment; st: ReturnType
 }
 
 /* -------------------------------- History tab -------------------------------- */
-function HistoryTab({ account, money, conv }: { account: Account; money: (n: number, c?: string) => string; conv: (n: number, f: string) => number }) {
+function HistoryTab({ account, money, conv, readOnly, onStatus, onDelete }: { account: Account; money: (n: number, c?: string) => string; conv: (n: number, f: string) => number; readOnly?: boolean; onStatus?: (id: string, s: 'paid' | 'delayed' | 'carry') => void; onDelete?: (id: string) => void }) {
   const years = Array.from(new Set(account.history.map((h) => String(h.paidDate).slice(0, 4)))).sort().reverse();
   const [year, setYear] = useState<string>('all');
   const [q, setQ] = useState('');
@@ -491,6 +495,14 @@ function HistoryTab({ account, money, conv }: { account: Account; money: (n: num
                 <p className="text-[13px] font-bold text-slate-900 dark:text-white truncate flex-1">{h.paymentName}</p>
                 {h.status && h.status !== 'paid' && <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 capitalize">{h.status}</span>}
                 <span className="text-[12px] font-black tabular-nums text-slate-900 dark:text-white">{money(h.amount, h.currency)}</span>
+                {!readOnly && onStatus && (
+                  <select value={h.status || 'paid'} onChange={(e) => onStatus(h.id, e.target.value as any)} className="text-[10px] font-bold rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-1 py-1">
+                    <option value="paid">Paid</option><option value="delayed">Delayed</option><option value="carry">Carry</option>
+                  </select>
+                )}
+                {!readOnly && onDelete && (
+                  <button type="button" aria-label="Delete" onClick={() => { if (confirm('Delete this log?')) onDelete(h.id); }} className="p-1.5 text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                )}
               </li>
             ))}
           </ul>

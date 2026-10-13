@@ -290,6 +290,7 @@ export default function App() {
   };
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
   const [billsAccount, setBillsAccount] = useState<string | null>(null);
+  const [historyAccount, setHistoryAccount] = useState<string | null>(null);
   const zerodhaCallbackHandled = React.useRef(false);
   const [uiPulse, setUiPulse] = useState<boolean>(() => {
     try {
@@ -2501,14 +2502,25 @@ export default function App() {
             ) : activeTab === 'history' && hasFeature('core') ? (
               <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
                 {tryNewUi ? (
-                  <PulseHistory
+                  <PulseAccounts
+                    historyMode
+                    payments={payments}
                     history={history}
-                    onDeleteHistoryEntry={deleteHistoryEntry}
-                    onUpdateHistoryStatus={updateHistoryStatus}
-                    onClearHistory={clearHistory}
-                    summaryCurrency={summaryCurrency}
                     countries={countries}
-                    isReadOnly={isReadOnly}
+                    summaryCurrency={summaryCurrency}
+                    onRecordPayment={handleRecordPayment}
+                    onAddBill={(name) => {
+                      setPreselectedCurrency(summaryCurrency);
+                      setEditingPayment(name ? ({ id: '', name: '', amount: 0, currency: summaryCurrency, dayOfMonth: 1, category: 'Other', active: true, reminderDaysBefore: 2, taggedFor: name, billingCycle: 'monthly', paymentMethod: 'manual', paymentType: 'fixed' } as any) : null);
+                      setIsModalOpen(true);
+                    }}
+                    onEditBill={handleOpenEditModal}
+                    onUpdateHistoryStatus={updateHistoryStatus}
+                    onDeleteHistory={deleteHistoryEntry}
+                    isReadOnly={userProfile?.role === 'view'}
+                    selectedAccount={historyAccount}
+                    onSelectAccount={setHistoryAccount}
+                    onRenameAccount={renameAccount}
                   />
                 ) : (
                 <PaymentHistoryView
