@@ -468,7 +468,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const Kpi = ({ label, value, sub, subTone }: { label: string; value: string; sub?: string; subTone?: string }) => (
     <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
       <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</div>
-      <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1 tabular-nums">{value}</div>
+      <div className="text-base sm:text-2xl font-black text-slate-900 dark:text-white mt-1 tabular-nums break-words">{value}</div>
       {sub && <div className={`text-xs font-bold mt-0.5 ${subTone || 'text-slate-500'}`}>{sub}</div>}
     </div>
   );
@@ -896,9 +896,9 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
             </div>
           </div>
           {f ? (
-            <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 space-y-5 lg:sticky lg:top-2">
-              <div className="flex items-start justify-between gap-3"><div><div className="text-3xl font-black">{f.symbol}</div><div className="text-xs text-slate-500">{f.name !== f.symbol ? f.name + ' · ' : ''}{f.broker} · {f.portfolio} · {f.category}</div></div><Pill v={f.pnlPct} /></div>
-              <div className="text-4xl font-black tabular-nums">{money(f.value, ccy)}</div>
+            <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 space-y-5 lg:sticky lg:top-2 min-w-0">
+              <div className="flex items-start justify-between gap-3"><div><div className="text-2xl sm:text-3xl font-black break-words">{f.symbol}</div><div className="text-xs text-slate-500">{f.name !== f.symbol ? f.name + ' · ' : ''}{f.broker} · {f.portfolio} · {f.category}</div></div><Pill v={f.pnlPct} /></div>
+              <div className="text-2xl sm:text-4xl font-black tabular-nums break-words">{money(f.value, ccy)}</div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                 {[['P&L', money(f.pnl, ccy, true)], ['Invested', money(f.cost, ccy, true)], ['Quantity', px(f.qty)], ['Avg cost', `${px(f.buy)} ${f.native}`], ['Last price', `${px(f.price)} ${f.native}`], ['Today', f.day ? money(f.day, ccy, true) : '—'], ['Weight', `${totals.value > 0 ? ((f.value / totals.value) * 100).toFixed(2) : 0}%`], ['Held', f.heldDays != null ? `${f.heldDays} days` : '—'], ['Target', f.target ? px(f.target) : '—'], ['Stop loss', f.stop ? px(f.stop) : '—'], ['Bought', f.buyDate || '—'], ['Price updated', f.updated ? new Date(f.updated).toLocaleDateString() : '—']].map(([k, v]) => <div key={k} className="rounded-xl bg-slate-50 dark:bg-slate-800 p-3"><div className="text-[10px] uppercase font-black text-slate-400">{k}</div><div className="font-bold mt-0.5">{v}</div></div>)}
               </div>
@@ -1044,7 +1044,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const Stat = ({ label, value, sub, t, hint }: { label: string; value: string; sub?: string; t?: number; hint?: string }) => (
     <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 px-3 py-2.5" title={hint}>
       <div className="text-[9px] font-black uppercase tracking-wider text-slate-400 leading-tight">{label}</div>
-      <div className={`text-sm sm:text-base font-black tabular-nums mt-0.5 ${t != null ? tone(t) : 'text-slate-900 dark:text-white'}`}>{value}</div>
+      <div className={`text-sm sm:text-base font-black tabular-nums mt-0.5 break-words ${t != null ? tone(t) : 'text-slate-900 dark:text-white'}`}>{value}</div>
       {sub && <div className={`text-[10px] font-bold ${t != null ? tone(t) : 'text-slate-400'}`}>{sub}</div>}
     </div>
   );
@@ -1101,7 +1101,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   );
 
   return (
-    <div className="max-w-[1600px] mx-auto p-3 sm:p-6 pb-24 md:pb-6">
+    <div className="w-full max-w-[1600px] min-w-0 mx-auto p-3 sm:p-6 pb-24 md:pb-6 overflow-x-auto [&_.grid>*]:min-w-0 [-webkit-overflow-scrolling:touch]">
       {mode === 'alt' && (<>
       <div className="mb-2 text-[11px] font-black uppercase tracking-wider text-violet-600">Admin · alternative portfolio designs</div>
       <div className="flex items-center gap-1.5 flex-wrap mb-3 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800/70 w-full">
