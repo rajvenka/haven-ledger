@@ -562,6 +562,43 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (<label className="block"><span className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</span><div className="mt-1">{children}</div></label>);
   const setF = (k: string, v: string) => setForm((f: any) => ({ ...f, [k]: v }));
 
+  const filterLabel = [...tagFilter, ...(filter !== 'All' ? [filter] : [])].join(' + ');
+  const filterSummary = (() => {
+    if (!filterLabel || visible.length === 0) return null;
+    const inv = visible.reduce((a, r) => a + r.cost, 0);
+    const cur = visible.reduce((a, r) => a + r.value, 0);
+    const gain = cur - inv;
+    const gp = inv > 0 ? (gain / inv) * 100 : 0;
+    const dEl = visible.filter((r) => r.h.live_price != null && r.h.previous_close != null);
+    const dayCh = dEl.reduce((a, r) => a + r.day, 0);
+    const lEl = visible.filter((r) => r.h.live_price != null);
+    const loadCh = lEl.reduce((a, r) => a + fx((Number(r.h.live_price) - Number(r.h.current_price ?? r.h.buy_price)) * r.qty, r.native, ccy), 0);
+    const Card = ({ l, v, t }: { l: string; v: string; t?: number }) => (
+      <div className="rounded-2xl p-3 bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/30">
+        <div className="text-[9px] font-black text-indigo-400 uppercase tracking-wider leading-tight">“{filterLabel}” {l}</div>
+        <div className={`text-sm font-black tabular-nums mt-0.5 break-words ${t != null ? tone(t) : 'text-slate-900 dark:text-white'}`}>{v}</div>
+      </div>
+    );
+    return (
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+        <Card l="Invested" v={money(inv, ccy, true)} />
+        <Card l="Current value" v={money(cur, ccy, true)} />
+        <Card l="Net gain" v={`${gain >= 0 ? '+' : ''}${money(gain, ccy, true)}`} t={gain} />
+        <Card l="% change" v={pct(gp)} t={gp} />
+        <Card l="Daily change" v={dEl.length ? `${dayCh >= 0 ? '+' : ''}${money(dayCh, ccy, true)}` : '—'} t={dEl.length ? dayCh : undefined} />
+        <Card l="Since previous load" v={lEl.length ? `${loadCh >= 0 ? '+' : ''}${money(loadCh, ccy, true)}` : '—'} t={lEl.length ? loadCh : undefined} />
+      </div>
+    );
+  })();
+
+  const soldFiltered = soldRows.filter((r) => tagFilter.length === 0 || tagFilter.includes(r.tag));
+  const soldSummary = tagFilter.length > 0 && soldFiltered.length > 0 ? (() => {
+    const cost = soldFiltered.reduce((a, r) => a + r.cost, 0); const proc = soldFiltered.reduce((a, r) => a + r.proceeds, 0); const g = proc - cost;
+    const lab = tagFilter.join(' + ');
+    const Card = ({ l, v, t }: { l: string; v: string; t?: number }) => (<div className="rounded-2xl p-3 bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/30"><div className="text-[9px] font-black text-indigo-400 uppercase tracking-wider leading-tight">“{lab}” {l}</div><div className={`text-sm font-black tabular-nums mt-0.5 break-words ${t != null ? tone(t) : ''}`}>{v}</div></div>);
+    return (<div className="grid grid-cols-2 lg:grid-cols-4 gap-3"><Card l="Bought for" v={money(cost, ccy, true)} /><Card l="Sold for" v={money(proc, ccy, true)} /><Card l="Realized gain" v={`${g >= 0 ? '+' : ''}${money(g, ccy, true)}`} t={g} /><Card l="% change" v={pct(cost > 0 ? (g / cost) * 100 : 0)} t={g} /></div>);
+  })() : null;
+
   const tagBar = (list: { tag: string }[]) => {
     const m = new Map<string, number>();
     list.forEach((r) => m.set(r.tag, (m.get(r.tag) || 0) + 1));
@@ -579,6 +616,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const soldView = (
     <div className="space-y-4">
       {tagBar(soldRows)}
+      {soldSummary}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Kpi label="Realized P&L" value={money(soldTotals.pnl, ccy, true)} subTone={tone(soldTotals.pnl)} sub={`${soldRows.length} sales`} />
         <Kpi label="Proceeds" value={money(soldTotals.proceeds, ccy, true)} />
@@ -668,6 +706,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         {err && !form && <span className="text-xs font-bold text-rose-600">{err}</span>}
       </div>
       {tagBar(rows)}
+      {filterSummary}
       <div className="grid gap-4">
         <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
           <div className="p-3 flex flex-wrap items-center gap-2 border-b border-slate-100 dark:border-slate-800">
