@@ -46,15 +46,13 @@ function fxFactory(rates: any[], base: string) {
   };
 }
 
-const money = (n: number, ccy: string, compact = false) => {
+// Always the full amount (no K / M / Lakh / Crore shortening). `compact` is kept for call-site compatibility.
+const money = (n: number, ccy: string, _compact = false) => {
   if (!Number.isFinite(n)) return '—';
-  if (compact && String(ccy).toUpperCase() === 'INR' && Math.abs(n) >= 1e5) {
-    const a = Math.abs(n); const sign = n < 0 ? '-' : '';
-    return a >= 1e7 ? `${sign}₹${(a / 1e7).toFixed(2)} Cr` : `${sign}₹${(a / 1e5).toFixed(2)} L`;
-  }
+  const c = String(ccy || 'USD').toUpperCase();
   try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: ccy || 'USD', maximumFractionDigits: compact ? 1 : 0, notation: compact && Math.abs(n) >= 1e5 ? 'compact' : 'standard' }).format(n);
-  } catch { return `${Math.round(n)} ${ccy}`; }
+    return new Intl.NumberFormat(c === 'INR' ? 'en-IN' : undefined, { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n);
+  } catch { return `${Math.round(n).toLocaleString()} ${c}`; }
 };
 const px = (n: number) => (Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—');
 const pct = (n: number) => (Number.isFinite(n) ? `${n > 0 ? '+' : ''}${n.toFixed(1)}%` : '—');
