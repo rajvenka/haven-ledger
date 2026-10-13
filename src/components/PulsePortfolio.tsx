@@ -382,8 +382,20 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       const to = new Date(); const from = new Date(to.getFullYear() - 1, to.getMonth(), to.getDate());
       const d = await loadDailyPositions(from.toISOString().slice(0, 10), to.toISOString().slice(0, 10), calBook === 'all' ? null : calBook);
       setCalRows(d || []);
+      const set = Array.from(new Set((d || []).map((r: any) => String(r.currency || '').toUpperCase()).filter(Boolean)));
+      if (set.length && !set.includes(calCcy)) setCalCcy(set[0] as string);
     } finally { setCalLoading(false); }
   };
+  // Follow the page's portfolio / currency filters when opening the calendar
+  React.useEffect(() => {
+    if (section !== 'calendar') return;
+    if (book && book !== 'All') {
+      setCalBook(book);
+      const pc = String(portfolios.find((x: any) => x.id === book)?.currency || '').toUpperCase();
+      if (pc) setCalCcy(pc);
+    } else { setCalBook('all'); setCalCcy(ccy); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section, book]);
   React.useEffect(() => { if (section === 'calendar') reloadCal(); /* eslint-disable-next-line */ }, [section, calBook]);
 
   const run = async (fn: () => Promise<any>, done?: () => void) => {

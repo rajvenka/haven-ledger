@@ -1846,20 +1846,30 @@ export function usePaymentState() {
 
   const loadPortfolioDailyPositions = async (fromDate: string, toDate: string, portfolioId?: string | null) => {
     if (!activeWorkspaceId) return [] as any[];
-    let q = supabase
-      .from('portfolio_daily_positions')
-      .select('*')
-      .eq('workspace_id', activeWorkspaceId)
-      .gte('snapshot_date', fromDate)
-      .lte('snapshot_date', toDate)
-      .order('snapshot_date', { ascending: true });
-    if (portfolioId) q = q.eq('portfolio_id', portfolioId);
-    const { data, error } = await q;
-    if (error) {
-      console.error('loadPortfolioDailyPositions', error);
-      throw error;
+    // PostgREST caps a single response at 1000 rows, and a year of daily positions is many thousands -
+    // page through the full range so the calendar / trend never silently show only the oldest rows.
+    const PAGE = 1000;
+    const all: any[] = [];
+    for (let from = 0; from < 200000; from += PAGE) {
+      let q = supabase
+        .from('portfolio_daily_positions')
+        .select('*')
+        .eq('workspace_id', activeWorkspaceId)
+        .gte('snapshot_date', fromDate)
+        .lte('snapshot_date', toDate)
+        .order('snapshot_date', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (portfolioId) q = q.eq('portfolio_id', portfolioId);
+      const { data, error } = await q;
+      if (error) {
+        console.error('loadPortfolioDailyPositions', error);
+        throw error;
+      }
+      all.push(...(data || []));
+      if (!data || data.length < PAGE) break;
     }
-    return data || [];
+    return all;
   };
 
   const takePortfolioSnapshot = async (date: string, groups: { label: string; invested: number; current: number }[]) => {
