@@ -2027,6 +2027,9 @@ export default function App() {
                   bulkDelete={bulkDeletePortfolioHoldings}
                   setCash={setPortfolioCashBalance}
                   deleteCash={deletePortfolioCashBalance}
+                  contributions={portfolioContributions}
+                  withdrawals={portfolioWithdrawals}
+                  bookedBaselines={portfolioBookedPlBaselines}
                   importProps={{
                     isReadOnly, baseCurrency: activeWorkspace?.baseCurrency, workspaceName: activeWorkspace?.name,
                     portfolios, portfolioMode: activeWorkspace?.portfolioMode, portfolioHoldings, portfolioHoldingLots,

@@ -105,6 +105,9 @@ interface Props {
   bulkDelete?: (ids: string[]) => Promise<any>;
   setCash?: (location: any, amount: number, asOf?: string, notes?: string, portfolioId?: string) => Promise<any>;
   deleteCash?: (id: string) => Promise<any>;
+  contributions?: any[];
+  withdrawals?: any[];
+  bookedBaselines?: any[];
 }
 
 type Section = 'overview' | 'holdings' | 'sold' | 'calendar' | 'cash' | 'sync';
@@ -117,11 +120,14 @@ const NAV: { k: Section; label: string; icon: React.ReactNode }[] = [
   { k: 'sync', label: 'Import & Sync', icon: <RefreshCw className="w-4 h-4" /> },
 ];
 
-export default function PulsePortfolio({ holdings, lots = [], portfolios = [], rates = [], baseCurrency = 'INR', connections = [], isLoading, onManage, isReadOnly, importProps, cashBalances = [], loadDailyPositions, snapshotDaily, addHolding, updateHolding, sellHolding, deleteHolding, bulkDelete, setCash, deleteCash }: Props) {
+export default function PulsePortfolio({ holdings, lots = [], portfolios = [], rates = [], baseCurrency = 'INR', connections = [], isLoading, onManage, isReadOnly, importProps, cashBalances = [], loadDailyPositions, snapshotDaily, addHolding, updateHolding, sellHolding, deleteHolding, bulkDelete, setCash, deleteCash, contributions = [], withdrawals = [], bookedBaselines = [] }: Props) {
   const [section, setSectionState] = useState<Section>(() => { try { return (localStorage.getItem('hv_pp_section') as Section) || 'overview'; } catch { return 'overview'; } });
   const setSection = (k: Section) => { setSectionState(k); try { localStorage.setItem('hv_pp_section', k); } catch { /* */ } };
   const [design, setDesignState] = useState<number>(() => { try { return Number(localStorage.getItem('hv_pp_design')) || 1; } catch { return 1; } });
   const setDesign = (n: number) => { setDesignState(n); try { localStorage.setItem('hv_pp_design', String(n)); } catch { /* */ } };
+  const [moversMode, setMoversMode] = useState<'total' | 'day'>('total');
+  const [cfdReal, setCfdReal] = useState(false);
+  const [prevLoad, setPrevLoad] = useState<number | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [drill, setDrill] = useState<string | null>(null);
   const [heatBy, setHeatBy] = useState<'pnlPct' | 'dayPct'>('pnlPct');
@@ -223,6 +229,17 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     const day = rows.reduce((a, r) => a + r.day, 0);
     return { value, cost, pnl: value - cost, pnlPct: cost > 0 ? ((value - cost) / cost) * 100 : 0, day, dayPct: value - day > 0 ? (day / (value - day)) * 100 : 0 };
   }, [rows]);
+
+  React.useEffect(() => {
+    if (!book || rows.length === 0) return;
+    const key = `hv_pp_last_${book}_${ccy}`;
+    try {
+      const old = JSON.parse(localStorage.getItem(key) || 'null');
+      setPrevLoad(old && Number.isFinite(old.v) ? old.v : null);
+      localStorage.setItem(key, JSON.stringify({ v: Math.round(totals.value), t: Date.now() }));
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book, ccy, rows.length > 0]);
 
   const groups = useMemo(() => {
     const m = new Map<string, number>();
@@ -875,6 +892,87 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     );
   })();
 
+
+  // ---- Portfolio header (summary tiles carried over from the current design) ----
+  const adj = (r: any) => { const lev = r.leverage || 0; if (cfdReal && lev > 1) { const c = r.cost / lev; return { cost: c, value: c + r.pnl }; } return { cost: r.cost, value: r.value }; };
+  const hs = (() => {
+    let hv = 0, hc = 0, unreal = 0, day = 0;
+    rows.forEach((r) => { const a = adj(r); hv += a.value; hc += a.cost; unreal += r.pnl; day += r.day; });
+    const pid = book === 'All' || !book ? null : book;
+    const base = bookedBaselines.find((b: any) => (b.portfolio_id ?? null) === pid);
+    const baseAmt = base ? fx(Number(base.baseline_amount || 0), String(portfolios.find((p: any) => p.id === pid)?.currency || baseCurrency).toUpperCase(), ccy) : 0;
+    const cutoff = base ? String(base.baseline_date || '1900-01-01').slice(0, 10) : '1900-01-01';
+    const bookedSales = soldRows.filter((r) => String(r.soldDate) > cutoff).reduce((a, r) => a + r.pnl, 0);
+    const booked = baseAmt + bookedSales;
+    const cc = (c: any) => String(c.currency || portfolios.find((p: any) => p.id === (c.portfolio_id ?? null))?.currency || baseCurrency).toUpperCase();
+    const inBook = (c: any) => !pid || c.portfolio_id === pid;
+    const contrib = contributions.filter(inBook).reduce((a, c) => a + fx(Number(c.amount || 0), cc(c), ccy), 0);
+    const withdr = withdrawals.filter(inBook).reduce((a, c) => a + fx(Number(c.amount || 0), cc(c), ccy), 0);
+    const netInv = contrib - withdr;
+    const total = hv + cashTotal;
+    return { hv, hc, unreal, day, booked, netInv, hasNetInv: contributions.length > 0, total, ret: hc > 0 ? (unreal / hc) * 100 : 0, dayPct: hv - day > 0 ? (day / (hv - day)) * 100 : 0, net: booked + unreal };
+  })();
+  const hasLev = rows.some((r) => (r.leverage || 0) > 1);
+  const catTiles = (() => {
+    const m = new Map<string, any[]>();
+    rows.forEach((r) => m.set(r.category, [...(m.get(r.category) || []), r]));
+    return Array.from(m.entries()).map(([name, items]) => {
+      let v = 0, c = 0, up = 0, down = 0, upN = 0, dnN = 0;
+      items.forEach((r) => { const a = adj(r); v += a.value; c += a.cost; const x = moversMode === 'day' ? r.day : r.pnl; if (x > 0) { up += x; upN++; } else if (x < 0) { down += x; dnN++; } });
+      return { name, n: items.length, v, ret: c > 0 ? ((v - c) / c) * 100 : 0, up, down, upN, dnN };
+    }).sort((a, b) => b.v - a.v);
+  })();
+  const Stat = ({ label, value, sub, t, hint }: { label: string; value: string; sub?: string; t?: number; hint?: string }) => (
+    <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 px-3 py-2.5" title={hint}>
+      <div className="text-[9px] font-black uppercase tracking-wider text-slate-400 leading-tight">{label}</div>
+      <div className={`text-sm sm:text-base font-black tabular-nums mt-0.5 ${t != null ? tone(t) : 'text-slate-900 dark:text-white'}`}>{value}</div>
+      {sub && <div className={`text-[10px] font-bold ${t != null ? tone(t) : 'text-slate-400'}`}>{sub}</div>}
+    </div>
+  );
+  const sinceLoad = prevLoad != null ? hs.total - cashTotal - prevLoad : null;
+  const headerBlock = (
+    <div className="mb-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <button onClick={() => toggleBlock('hdr')} className="flex items-center gap-1 text-sm font-black">{chev('hdr')} Portfolio summary <span className="text-[11px] font-bold text-slate-400">· {rows.length} positions</span></button>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {([['total', 'Total P&L'], ['day', 'Today']] as const).map(([k, l]) => <button key={k} onClick={() => setMoversMode(k)} className={`text-[10px] font-black px-2.5 py-1 rounded-full ${moversMode === k ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{l}</button>)}
+          {hasLev && ([[false, 'CFD exposure'], [true, 'CFD cash at risk']] as const).map(([k, l]) => <button key={l} onClick={() => setCfdReal(k)} title="Leveraged positions: full exposure vs cash actually committed" className={`text-[10px] font-black px-2.5 py-1 rounded-full ${cfdReal === k ? 'bg-teal-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{l}</button>)}
+        </div>
+      </div>
+      {isOpen('hdr') && (
+        <div className="mt-3 space-y-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+            <Stat label="Total investment" value={hs.hasNetInv ? money(hs.netInv, ccy, true) : '—'} sub={hs.hasNetInv ? 'contributions − withdrawals' : 'no contributions recorded'} hint="Net money put into the portfolio" />
+            <Stat label="Balance cash" value={money(cashTotal, ccy, true)} sub={`${cashRows.length} account${cashRows.length === 1 ? '' : 's'}`} />
+            <Stat label="Booked profit / loss" value={money(hs.booked, ccy, true)} t={hs.booked} sub="from sales" hint="Baseline + realized P&L on sales after the baseline date" />
+            <Stat label="Stock investment" value={money(hs.hc, ccy, true)} sub={cfdReal && hasLev ? 'cash at risk' : 'cost of open positions'} />
+            <Stat label="Current holdings value" value={money(hs.hv, ccy, true)} />
+            <Stat label="Return %" value={pct(hs.ret)} t={hs.ret} />
+            <Stat label="Unrealized gain" value={money(hs.unreal, ccy, true)} t={hs.unreal} />
+            <Stat label="Net gain (all-in)" value={money(hs.net, ccy, true)} t={hs.net} sub="booked + unrealized" />
+            <Stat label="Total portfolio value" value={money(hs.total, ccy, true)} sub="holdings + cash" />
+            <Stat label="Daily change" value={money(hs.day, ccy, true)} t={hs.day} sub={pct(hs.dayPct)} />
+            <Stat label="Since previous load" value={sinceLoad == null ? '—' : money(sinceLoad, ccy, true)} t={sinceLoad ?? undefined} sub={sinceLoad == null ? 'first visit' : 'holdings value'} />
+            <Stat label="vs total investment" value={hs.hasNetInv && hs.netInv > 0 ? pct(((hs.total - hs.netInv) / hs.netInv) * 100) : '—'} t={hs.hasNetInv ? hs.total - hs.netInv : undefined} sub="total value vs money in" />
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+            {catTiles.map((c, i) => {
+              const active = filter === c.name && groupBy === 'category';
+              return (
+                <button key={c.name} onClick={() => { if (active) { setFilter('All'); } else { setGroupBy('category'); setFilter(c.name); setSection('holdings'); } }} className={`text-left rounded-xl border p-2.5 transition-all ${active ? 'border-indigo-500 ring-2 ring-indigo-300/50' : 'border-slate-200 dark:border-slate-800 hover:border-indigo-300'}`}>
+                  <div className="flex items-center justify-between gap-1"><div className="flex items-center gap-1.5 min-w-0"><i className="w-2 h-2 rounded-full shrink-0" style={{ background: PALETTE[i % PALETTE.length] }} /><span className="text-[11px] font-black truncate">{c.name}</span></div><span className="text-[10px] text-slate-400 font-bold">{c.n}</span></div>
+                  <div className="text-sm font-black tabular-nums mt-1">{money(c.v, ccy, true)}</div>
+                  <div className={`text-[10px] font-bold ${tone(c.ret)}`}>{pct(c.ret)} {moversMode === 'day' ? '' : 'return'}</div>
+                  <div className="flex justify-between text-[10px] font-bold mt-1"><span className="text-emerald-600">▲ {money(c.up, ccy, true)} ({c.upN})</span><span className="text-rose-600">▼ {money(c.down, ccy, true)} ({c.dnN})</span></div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   const DESIGN_NAMES = ['Command', 'Brokerage', 'Heatmap', 'Terminal', 'Accounts', 'Cards', 'Split view', 'Bento', 'Kanban', 'Statement', 'Drill-down', 'Health check'];
   const tabStyle = (active: boolean) => design === 3 ? `px-4 py-1.5 rounded-full text-xs font-black ${active ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}` : design === 4 ? `px-3 py-1 text-[11px] font-mono font-bold uppercase ${active ? 'bg-slate-900 text-emerald-400' : 'text-slate-500 hover:text-slate-800'}` : `px-4 py-2 text-sm font-black -mb-px border-b-2 ${active ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`;
   const topTabs = (
@@ -892,6 +990,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         ))}
       </div>
       <DesignVoting page="portfolio" design={design} designNames={DESIGN_NAMES} section={section} sections={NAV.map((n) => ({ k: n.k, label: n.label }))} />
+      {headerBlock}
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <div>
           <h1 className="text-2xl font-black text-slate-900 dark:text-white">Portfolio</h1>
