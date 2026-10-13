@@ -876,6 +876,12 @@ export default function PortfolioV1View({
   const needsReauth = (c: any) => {
     const type = String(c?.broker_type || '').toLowerCase();
     if (type !== 'zerodha' && type !== 'groww') return false;
+    if (type === 'groww') {
+      // Groww mints a fresh token from key + secret automatically - no manual re-authorization.
+      let cr: any = c?.credentials ?? {};
+      if (typeof cr === 'string') { try { cr = JSON.parse(cr); } catch { cr = {}; } }
+      if (cr.api_key && cr.api_secret) return false;
+    }
     if (!c?.updated_at) return true;
     const d = new Date(c.updated_at);
     const now = new Date();
@@ -1930,6 +1936,11 @@ export default function PortfolioV1View({
           return `${ex}_${sym}`;
         });
         if (instruments.length === 0) throw new Error('No Groww holdings to price in this book.');
+        if (cred.api_key && cred.api_secret) {
+          const ex = await fetch('/api/portfolio-broker-sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broker: 'groww', action: 'exchange', apiKey: cred.api_key, apiSecret: cred.api_secret }) });
+          const exData = await ex.json().catch(() => ({}));
+          if (ex.ok && exData.accessToken) { cred = { ...cred, access_token: exData.accessToken }; try { await setPortfolioBrokerConnection?.('groww', cred, connection.portfolio_id || undefined, connection.connection_label || undefined); } catch { /* non-fatal */ } }
+        }
         const resp = await fetch('/api/portfolio-broker-sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

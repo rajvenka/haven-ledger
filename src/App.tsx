@@ -402,6 +402,29 @@ export default function App() {
     if (!hasFeature('team') && incomingInvitations.length === 0 && activeTab === 'account' && settingsSubTab === 'members') setSettingsSubTab('preferences');
   }, [activeWorkspace, activeTab, settingsSubTab]);
 
+  // Groww needs no browser login: its API key + secret can mint a fresh daily access token at any time.
+  // Do that silently once a day per connection so Sync never asks the user to "re-authorize".
+  const growwRefreshed = React.useRef<Set<string>>(new Set());
+  React.useEffect(() => {
+    if (!isLoaded || !user || !activeWorkspaceId) return;
+    (portfolioBrokerConnections || []).forEach(async (c: any) => {
+      if (String(c.broker_type || '').toLowerCase() !== 'groww' || growwRefreshed.current.has(c.id)) return;
+      let cred: any = c.credentials ?? {};
+      if (typeof cred === 'string') { try { cred = JSON.parse(cred); } catch { cred = {}; } }
+      if (!cred.api_key || !cred.api_secret) return;
+      if (c.updated_at && new Date(c.updated_at).toDateString() === new Date().toDateString()) return;
+      growwRefreshed.current.add(c.id);
+      try {
+        const resp = await fetch('/api/portfolio-broker-sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broker: 'groww', action: 'exchange', apiKey: cred.api_key, apiSecret: cred.api_secret }) });
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok && data.accessToken) {
+          await setPortfolioBrokerConnection('groww', { ...cred, access_token: data.accessToken }, c.portfolio_id || undefined, c.connection_label || undefined);
+        }
+      } catch { /* silent - Sync will surface any real problem */ }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, user, activeWorkspaceId, portfolioBrokerConnections]);
+
   // Zerodha one-click login: Kite redirects back here with ?request_token=... - exchange it for
   // the daily access token, save the connection, then hand off to the portfolio page to refresh.
   React.useEffect(() => {

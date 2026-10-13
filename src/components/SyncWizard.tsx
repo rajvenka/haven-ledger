@@ -103,7 +103,6 @@ export default function SyncWizard(p: SyncWizardProps) {
       return { holdings: (data.holdings || []).map((h: any) => ({ ...h, buyDate: todayStr() })) };
     }
     if (type === 'groww') {
-      if (!isTokenToday(c)) { setReauth(c); throw new Error('Groww login expired (tokens last one day).'); }
       const { resp, data } = await post({ broker: 'groww', action: 'sync', apiKey: cred.api_key, apiSecret: cred.api_secret, accessToken: cred.access_token });
       if (!resp.ok) throw new Error(data?.error || `Groww sync failed (${resp.status})`);
       if (data.accessToken && data.accessToken !== cred.access_token) { try { await p.setPortfolioBrokerConnection?.('groww', { ...cred, access_token: data.accessToken }, c.portfolio_id || undefined, c.connection_label || undefined); } catch { /* non-fatal */ } }
@@ -282,7 +281,7 @@ export default function SyncWizard(p: SyncWizardProps) {
               <p className="text-sm text-slate-500">Where do you want to bring positions in from?</p>
               <div className="grid sm:grid-cols-2 gap-3">
                 {p.connections.map((c) => {
-                  const type = String(c.broker_type || '').toLowerCase(); const live = LIVE.includes(type); const stale = (type === 'zerodha' || type === 'groww') && !isTokenToday(c);
+                  const type = String(c.broker_type || '').toLowerCase(); const live = LIVE.includes(type); const stale = type === 'zerodha' && !isTokenToday(c);
                   return (
                     <button key={c.id} disabled={!live || p.isReadOnly} onClick={() => pickConnection(c)} className="text-left rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-indigo-400 p-4 disabled:opacity-50">
                       <div className="flex items-center gap-2"><Plug className="w-4 h-4 text-indigo-500" /><span className="text-sm font-black truncate">{c.connection_label || c.broker_type}</span></div>
