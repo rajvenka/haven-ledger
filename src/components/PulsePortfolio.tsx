@@ -1155,6 +1155,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         )}
         <div className="flex-1 min-w-0">
           {design > 1 && design !== 6 && topTabs}
+          {design === 1 && <div className="md:hidden">{topTabs}</div>}
           {section === 'overview' && design !== 1 && designOverview}
           {section === 'overview' && design === 1 && (
           <div className="space-y-4">
@@ -1249,11 +1250,13 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         </div>
       </div>
 
+      {design === 6 && (
       <nav className={`${design === 6 ? '' : 'md:hidden '}fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur border-t border-slate-200 dark:border-slate-800 grid grid-cols-6`}>
         {NAV.map((n) => (
           <button key={n.k} onClick={() => setSection(n.k)} className={`flex flex-col items-center gap-0.5 py-2 text-[9px] font-black ${section === n.k ? 'text-indigo-600' : 'text-slate-400'}`}>{n.icon}{n.label.replace('Import & Sync', 'Sync')}</button>
         ))}
       </nav>
+      )}
 
       {syncProps && <SyncWizard open={!!wizard} initial={wizard} onClose={() => setWizard(null)} connections={connections} portfolios={portfolios} holdings={holdings} portfolioMode={portfolioMode} isReadOnly={isReadOnly} onConnectNew={() => { setSection('sync'); b?.openConnect?.(); }} {...syncProps} />}
 
