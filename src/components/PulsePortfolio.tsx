@@ -4,6 +4,7 @@ import PortfolioPnLCalendar from './PortfolioPnLCalendar';
 import PortfolioV1View from './PortfolioV1View';
 import DesignVoting from './DesignVoting';
 import StockGains from './StockGains';
+import SyncWizard from './SyncWizard';
 import { Search, TrendingUp, TrendingDown, X, SlidersHorizontal, Plus, Pencil, Trash2, LayoutDashboard, List, CheckCircle2, CalendarDays, Wallet, RefreshCw, AlertTriangle, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, Star, Target } from 'lucide-react';
 
 type GroupBy = 'category' | 'broker' | 'currency' | 'portfolio';
@@ -107,6 +108,8 @@ interface Props {
   setCash?: (location: any, amount: number, asOf?: string, notes?: string, portfolioId?: string) => Promise<any>;
   deleteCash?: (id: string) => Promise<any>;
   priceHistory?: any[];
+  syncProps?: any;
+  portfolioMode?: string;
   contributions?: any[];
   withdrawals?: any[];
   bookedBaselines?: any[];
@@ -122,11 +125,12 @@ const NAV: { k: Section; label: string; icon: React.ReactNode }[] = [
   { k: 'sync', label: 'Import & Sync', icon: <RefreshCw className="w-4 h-4" /> },
 ];
 
-export default function PulsePortfolio({ holdings, lots = [], portfolios = [], rates = [], baseCurrency = 'INR', connections = [], isLoading, onManage, isReadOnly, importProps, cashBalances = [], loadDailyPositions, snapshotDaily, addHolding, updateHolding, sellHolding, deleteHolding, bulkDelete, setCash, deleteCash, priceHistory = [], contributions = [], withdrawals = [], bookedBaselines = [] }: Props) {
+export default function PulsePortfolio({ holdings, lots = [], portfolios = [], rates = [], baseCurrency = 'INR', connections = [], isLoading, onManage, isReadOnly, importProps, cashBalances = [], loadDailyPositions, snapshotDaily, addHolding, updateHolding, sellHolding, deleteHolding, bulkDelete, setCash, deleteCash, syncProps, portfolioMode, priceHistory = [], contributions = [], withdrawals = [], bookedBaselines = [] }: Props) {
   const [section, setSectionState] = useState<Section>(() => { try { return (localStorage.getItem('hv_pp_section') as Section) || 'overview'; } catch { return 'overview'; } });
   const setSection = (k: Section) => { setSectionState(k); try { localStorage.setItem('hv_pp_section', k); } catch { /* */ } };
   const [design, setDesignState] = useState<number>(() => { try { return Number(localStorage.getItem('hv_pp_design')) || 1; } catch { return 1; } });
   const setDesign = (n: number) => { setDesignState(n); try { localStorage.setItem('hv_pp_design', String(n)); } catch { /* */ } };
+  const [wizard, setWizard] = useState<{ mode?: 'file' | 'connection'; connectionId?: string } | null>(null);
   const [moversMode, setMoversMode] = useState<'total' | 'day'>('total');
   const [cfdReal, setCfdReal] = useState(false);
   const [prevLoad, setPrevLoad] = useState<number | null>(null);
@@ -155,6 +159,21 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const [calBook, setCalBook] = useState('all');
   const [cashForm, setCashForm] = useState<{ location: string; amount: string; portfolioId: string }>({ location: 'Bank', amount: '', portfolioId: '' });
   const bridge = React.useRef<any>(null);
+  // After the Zerodha one-click login returns, open the wizard on that connection (full reconcile, not just prices).
+  const zAuto = React.useRef(false);
+  React.useEffect(() => {
+    if (zAuto.current || !syncProps) return;
+    let flag: any = null;
+    try { flag = JSON.parse(sessionStorage.getItem('hv_zerodha_autosync') || 'null'); } catch { /* ignore */ }
+    if (!flag || Date.now() - Number(flag.ts || 0) > 10 * 60 * 1000) return;
+    const c = connections.find((cn: any) => String(cn.broker_type).toLowerCase() === 'zerodha' && cn.updated_at && new Date(cn.updated_at).toDateString() === new Date().toDateString() && (!flag.label || String(cn.connection_label || '') === flag.label) && String(cn.portfolio_id || '') === String(flag.portfolioId || ''));
+    if (!c) return;
+    zAuto.current = true;
+    try { sessionStorage.removeItem('hv_zerodha_autosync'); } catch { /* ignore */ }
+    setSectionState('sync');
+    setWizard({ mode: 'connection', connectionId: c.id });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connections]);
   const [, bump] = useState(0);
   const [syncAllBusy, setSyncAllBusy] = useState(false);
   const currencies = useMemo(() => {
@@ -377,10 +396,10 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { t: 'Sync all brokers', d: `${connections.length} linked`, onClick: syncAll, busy: syncAllBusy, primary: true, off: connections.length === 0 },
-          { t: 'Refresh prices', d: lastPrice ? `Last ${ago(new Date(lastPrice).toISOString())}` : 'No prices yet', onClick: () => b?.refreshAllPrices?.(), busy: b?.refreshingPrices },
-          { t: 'Import file', d: 'CSV / XLSX from any broker', onClick: () => b?.openImport?.() },
-          { t: 'Connect broker', d: 'Zerodha, Groww, eToro, IG…', onClick: () => b?.openConnect?.() },
+          { t: 'Sync / import wizard', d: 'Step by step: pick source, review, apply', onClick: () => setWizard({}), primary: true },
+          { t: 'Quick price refresh', d: lastPrice ? `Last ${ago(new Date(lastPrice).toISOString())}` : 'No prices yet', onClick: () => b?.refreshAllPrices?.(), busy: b?.refreshingPrices },
+          { t: 'Quick sync (prices only)', d: `${connections.length} linked broker${connections.length === 1 ? '' : 's'}`, onClick: syncAll, busy: syncAllBusy, off: connections.length === 0 },
+          { t: 'Connect broker', d: 'Zerodha, Groww, eToro, Webull…', onClick: () => b?.openConnect?.() },
         ].map((a) => (
           <button key={a.t} disabled={isReadOnly || a.off || a.busy} onClick={a.onClick} className={`text-left rounded-2xl p-4 border transition-all disabled:opacity-50 ${a.primary ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-600/20' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-indigo-400'}`}>
             <div className="text-sm font-black">{a.busy ? 'Working…' : a.t}</div>
@@ -407,7 +426,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
                 <div className="text-[11px] text-slate-500">{pName || 'Workspace'} · last sync {ago(c.last_synced_at)}</div>
               </div>
               <span className={`text-[10px] font-black px-2 py-1 rounded-full ${st.cls}`}>{st.label}</span>
-              <button disabled={isReadOnly || busy} onClick={() => (b?.needsReauth?.(c) ? b.openConnect() : b?.syncConnection?.(c))} className={`text-xs font-black px-3 py-2 rounded-xl text-white disabled:opacity-50 ${b?.needsReauth?.(c) ? 'bg-amber-600' : 'bg-indigo-600'}`}>{busy ? 'Syncing…' : b?.needsReauth?.(c) ? 'Re-authorize' : 'Sync now'}</button>
+              <button disabled={isReadOnly || busy} onClick={() => setWizard({ mode: 'connection', connectionId: c.id })} className={`text-xs font-black px-3 py-2 rounded-xl text-white disabled:opacity-50 ${b?.needsReauth?.(c) ? 'bg-amber-600' : 'bg-indigo-600'}`}>{busy ? 'Syncing…' : b?.needsReauth?.(c) ? 'Re-authorize' : 'Sync now'}</button>
               <button disabled={isReadOnly || busy} onClick={() => { if (window.confirm('Delete this connection? Holdings stay.')) b?.removeConnection?.(c.id); }} className="text-xs font-black px-3 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 disabled:opacity-50">Delete</button>
             </div>
           );
@@ -419,7 +438,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         <div className="flex flex-wrap gap-1.5 mb-3">
           {['Universal CSV', 'Zerodha', 'Groww stocks', 'Groww MF', 'Stake', 'Moomoo', 'Tiger'].map((t) => <span key={t} className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">{t}</span>)}
         </div>
-        <button disabled={isReadOnly} onClick={() => b?.openImport?.()} className="w-full py-8 rounded-2xl border-2 border-dashed border-indigo-300 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-sm font-black hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 disabled:opacity-50">Choose broker, pick portfolio book, upload file</button>
+        <button disabled={isReadOnly} onClick={() => setWizard({ mode: 'file' })} className="w-full py-8 rounded-2xl border-2 border-dashed border-indigo-300 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-sm font-black hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 disabled:opacity-50">Choose broker, pick portfolio book, upload file</button>
         <p className="text-[11px] text-slate-500 mt-2">Live sync keeps prices and positions current for linked brokers. File import is for brokers without an API (Moomoo, Tiger, Stake…).</p>
       </div>
     </div>
@@ -1135,7 +1154,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           {section === 'calendar' && calendarView}
           {section === 'cash' && cashView}
           {section === 'sync' && syncHub}
-          {importProps && <PortfolioV1View {...importProps} headless bridgeRef={bridge} onBridge={() => bump((n) => n + 1)} />}
+          {importProps && <PortfolioV1View {...importProps} headless skipAutoSync={!!syncProps} bridgeRef={bridge} onBridge={() => bump((n) => n + 1)} />}
         </div>
       </div>
 
@@ -1144,6 +1163,8 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           <button key={n.k} onClick={() => setSection(n.k)} className={`flex flex-col items-center gap-0.5 py-2 text-[9px] font-black ${section === n.k ? 'text-indigo-600' : 'text-slate-400'}`}>{n.icon}{n.label.replace('Import & Sync', 'Sync')}</button>
         ))}
       </nav>
+
+      {syncProps && <SyncWizard open={!!wizard} initial={wizard} onClose={() => setWizard(null)} connections={connections} portfolios={portfolios} holdings={holdings} portfolioMode={portfolioMode} isReadOnly={isReadOnly} onConnectNew={() => { setSection('sync'); b?.openConnect?.(); }} {...syncProps} />}
 
       {form && (
         <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40 p-3" onClick={() => !busy && setForm(null)}>

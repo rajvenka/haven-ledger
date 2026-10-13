@@ -2028,6 +2028,12 @@ export default function App() {
                   setCash={setPortfolioCashBalance}
                   deleteCash={deletePortfolioCashBalance}
                   priceHistory={portfolioPriceHistory}
+                  portfolioMode={activeWorkspace?.portfolioMode}
+                  syncProps={{
+                    bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, updatePortfolioHolding,
+                    markPortfolioHoldingSoldFromImport, syncEtoroHoldingLots, syncEtoroLivePrices,
+                    markBrokerConnectionSynced, setPortfolioBrokerConnection, loadPortfolioDetails,
+                  }}
                   contributions={portfolioContributions}
                   withdrawals={portfolioWithdrawals}
                   bookedBaselines={portfolioBookedPlBaselines}
@@ -2045,6 +2051,11 @@ export default function App() {
               uiPulse ? (
               <NewDesignSwitch isNew={false} onChange={setTryNewUi}>
               <PortfolioV1View
+                syncProps={{
+                  bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, updatePortfolioHolding,
+                  markPortfolioHoldingSoldFromImport, syncEtoroHoldingLots, syncEtoroLivePrices,
+                  markBrokerConnectionSynced, setPortfolioBrokerConnection, loadPortfolioDetails,
+                }}
                 isReadOnly={isReadOnly}
                 isDataLoading={portfolioDataLoading}
                 baseCurrency={activeWorkspace?.baseCurrency}

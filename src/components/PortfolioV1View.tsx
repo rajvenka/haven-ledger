@@ -1,5 +1,6 @@
 import { startZerodhaLogin, zerodhaRedirectUrl, ZERODHA_AUTOSYNC_KEY } from '../utils/zerodhaAuth';
 import PortfolioPnLCalendar from './PortfolioPnLCalendar';
+import SyncWizard from './SyncWizard';
 import { parseBrokerFile, BrokerTemplate, downloadUniversalTemplate } from '../utils/brokerImport';
 /**
  * Portfolio_V1 — ultimate summary-first redesign.
@@ -78,6 +79,9 @@ interface Props {
   loadPortfolioDetails?: () => Promise<void>;
   /** Render only the import / connect / sync dialogs (used by the new Portfolio design's Import & Sync hub). */
   headless?: boolean;
+  /** When set, Sync/Import open the step-by-step wizard (full reconcile) instead of price-only sync. */
+  syncProps?: any;
+  skipAutoSync?: boolean;
   bridgeRef?: React.MutableRefObject<any>;
   onBridge?: () => void;
 }
@@ -707,6 +711,8 @@ export default function PortfolioV1View({
   loadPortfolioDailyPositions,
   bulkAddPortfolioHoldings,
   headless,
+  syncProps,
+  skipAutoSync,
   bridgeRef,
   onBridge,
 }: Props) {
@@ -878,6 +884,7 @@ export default function PortfolioV1View({
   const [refreshingPrices, setRefreshingPrices] = useState(false);
   const [priceRefreshSummary, setPriceRefreshSummary] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [wizard, setWizard] = useState<{ mode?: 'file' | 'connection'; connectionId?: string } | null>(null);
   const [syncOpen, setSyncOpen] = useState(false);
   const [importTemplate, setImportTemplate] = useState<BrokerTemplate>('universal');
   const [importPortfolioId, setImportPortfolioId] = useState('');
@@ -1694,6 +1701,7 @@ export default function PortfolioV1View({
   };
 
   const openImport = () => {
+    if (syncProps) { setWizard({ mode: 'file' }); return; }
     setImportOpen(true);
     setImportMsg(null);
     setImportErr(null);
@@ -1738,6 +1746,7 @@ export default function PortfolioV1View({
   };
 
   const openSync = () => {
+    if (syncProps) { setWizard({ mode: 'connection' }); return; }
     setSyncOpen(true);
     setConnectError(null);
     setConnectOk(null);
@@ -2042,7 +2051,7 @@ export default function PortfolioV1View({
   // After the Zerodha one-click login (handled in App) lands back here, refresh that connection.
   const zerodhaAutoSynced = React.useRef(false);
   React.useEffect(() => {
-    if (zerodhaAutoSynced.current) return;
+    if (skipAutoSync || zerodhaAutoSynced.current) return;
     let flag: any = null;
     try { flag = JSON.parse(sessionStorage.getItem(ZERODHA_AUTOSYNC_KEY) || 'null'); } catch { /* ignore */ }
     if (!flag || Date.now() - Number(flag.ts || 0) > 10 * 60 * 1000) return;
@@ -2120,6 +2129,9 @@ export default function PortfolioV1View({
 
   const modalsJsx = (
     <>
+      {!headless && syncProps && (
+        <SyncWizard open={!!wizard} initial={wizard} onClose={() => setWizard(null)} connections={portfolioBrokerConnections || []} portfolios={portfolios || []} holdings={portfolioHoldings || []} portfolioMode={portfolioMode} isReadOnly={isReadOnly} onConnectNew={openConnect} {...syncProps} />
+      )}
       {/* Connect modal */}
       
       
