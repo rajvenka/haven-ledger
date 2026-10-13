@@ -3,6 +3,7 @@
  * a collapsible multi-select filter panel, active-filter chips, and groups by "when due".
  */
 import React, { useMemo, useState } from 'react';
+import { LayoutList as VLayoutList, GitCommitVertical as VTimeline, Table2 as VTable } from 'lucide-react';
 import {
   Plus, Search, X, Edit2, Trash2, Copy, ChevronDown, ChevronRight, ClipboardList,
   FileSpreadsheet, CheckCircle, AlertCircle, Layers, ArrowUp, ArrowDown,
@@ -106,6 +107,11 @@ export default function PulseBills({
   customizedTags = ['Bank', 'Home', 'Father', 'Mother', 'Self'],
 }: Props) {
   const [mode, setMode] = useState<Mode>('list');
+  const [variant, setVariantState] = useState<'cards' | 'timeline' | 'table'>(() => {
+    try { const v = localStorage.getItem('hv_bills_variant'); if (v === 'timeline' || v === 'table') return v; } catch { /* */ }
+    return 'cards';
+  });
+  const setVariant = (v: 'cards' | 'timeline' | 'table') => { setVariantState(v); try { localStorage.setItem('hv_bills_variant', v); } catch { /* */ } };
   const [search, setSearch] = useState('');
   const [view, setView] = useState<ViewFilter>('all');
   const [cats, setCats] = useState<string[]>([]);
@@ -449,6 +455,17 @@ export default function PulseBills({
         </div>
 
         {mode === 'list' && (
+          <div className="inline-flex p-0.5 rounded-full bg-slate-200/70 dark:bg-slate-800 w-full sm:w-auto">
+            {([['cards', 'Cards', VLayoutList], ['timeline', 'Timeline', VTimeline], ['table', 'Table', VTable]] as const).map(([k, l, I]) => (
+              <button key={k} type="button" onClick={() => setVariant(k)}
+                className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold ${variant === k ? 'bg-white dark:bg-slate-950 shadow text-slate-900 dark:text-white' : 'text-slate-500'}`}>
+                <I className="w-3.5 h-3.5" /> {l}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {mode === 'list' && (
           <div className="grid grid-cols-3 gap-2">
             <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2.5 py-2 min-w-0">
               <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Monthly cost</p>
@@ -624,6 +641,44 @@ export default function PulseBills({
                     <Plus className="w-3.5 h-3.5" /> Add bill
                   </button>
                 )}
+              </div>
+            ) : variant === 'timeline' ? (
+              <div className="relative pl-5">
+                <div className="absolute left-[7px] top-2 bottom-2 w-0.5 bg-slate-200 dark:bg-slate-800" />
+                {Array.from(visible.reduce((m: Map<string, any[]>, r: any) => { const k = r.next.toISOString().slice(0, 10); if (!m.has(k)) m.set(k, []); m.get(k)!.push(r); return m; }, new Map<string, any[]>()).entries()).map(([day, items]: any) => (
+                  <div key={day} className="relative mb-4">
+                    <span className="absolute -left-5 top-1 w-4 h-4 rounded-full bg-white dark:bg-slate-950 border-2 border-indigo-500" />
+                    <h3 className="text-[12px] font-black text-slate-800 dark:text-slate-100 mb-1.5">{new Date(day + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}</h3>
+                    <div className="space-y-1.5">
+                      {items.map((r: any) => (
+                        <button key={r.p.id} type="button" onClick={() => onEditClick(r.p)} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-left ${!r.p.active ? 'opacity-60' : ''}`}>
+                          <span className="min-w-0 flex-1"><span className="block text-[13px] font-bold truncate">{r.p.name}</span><span className="block text-[10px] text-slate-400 truncate">{[r.p.taggedFor, r.p.category].filter(Boolean).join(' · ')}</span></span>
+                          <span className="text-right shrink-0"><span className="block text-[13px] font-black tabular-nums">{formatCurrencyValue(r.p.amount, r.p.currency)}</span>{statusPill(r)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : variant === 'table' ? (
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-x-auto">
+                <table className="w-full text-[12px] min-w-[540px]">
+                  <thead className="bg-slate-50 dark:bg-slate-950 text-[10px] uppercase tracking-wider text-slate-400 text-left">
+                    <tr><th className="px-3 py-2">Due</th><th className="px-2">Bill</th><th className="px-2">Account</th><th className="px-2">Cycle</th><th className="px-2">Status</th><th className="px-3 text-right">Amount</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {visible.map((r: any) => (
+                      <tr key={r.p.id} onClick={() => onEditClick(r.p)} className={`cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 ${!r.p.active ? 'opacity-60' : ''}`}>
+                        <td className="px-3 py-2.5 whitespace-nowrap text-slate-500">{r.next.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</td>
+                        <td className="px-2 font-bold">{r.p.name}</td>
+                        <td className="px-2 text-slate-500">{r.p.taggedFor || '—'}</td>
+                        <td className="px-2 text-slate-500 capitalize">{r.p.billingCycle || 'monthly'}</td>
+                        <td className="px-2">{statusPill(r)}</td>
+                        <td className="px-3 text-right tabular-nums font-black whitespace-nowrap">{formatCurrencyValue(r.p.amount, r.p.currency)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             ) : (
               groups.map(({ id, label, hint, tone, items }) => (

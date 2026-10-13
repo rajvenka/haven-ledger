@@ -1838,7 +1838,7 @@ export default function App() {
 
           {/* Dynamic page content body */}
           <main className={`flex-1 min-w-0 max-w-full overflow-x-hidden flex flex-col min-h-0 ${
-            ((uiPulse && (activeTab === 'expenses' || activeTab === 'summary' || activeTab === 'configure' || activeTab === 'rewards' || activeTab === 'income' || activeTab === 'history' || activeTab === 'reports' || activeTab === 'investment_plan')) || (!uiPulse && tryNewUi && (activeTab === 'expenses' || activeTab === 'summary')))
+            ((uiPulse && (activeTab === 'expenses' || activeTab === 'summary' || activeTab === 'configure' || activeTab === 'rewards' || activeTab === 'income' || activeTab === 'history' || activeTab === 'reports' || activeTab === 'investment_plan')) || (!uiPulse && tryNewUi && (activeTab === 'expenses' || activeTab === 'summary' || activeTab === 'configure' || activeTab === 'history' || activeTab === 'income' || activeTab === 'rewards')))
               ? 'overflow-hidden'
               : 'overflow-y-auto'
           }`}>
