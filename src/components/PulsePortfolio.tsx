@@ -147,6 +147,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const [moversMode, setMoversMode] = useState<'total' | 'day'>('total');
   const [cfdReal, setCfdReal] = useState(false);
   const [prevLoad, setPrevLoad] = useState<number | null>(null);
+  const [alertOpen, setAlertOpen] = useState<string[]>(['stop', 'target']);
   const [typeFilter, setTypeFilter] = useState<string>('All');
   const [focusId, setFocusId] = useState<string | null>(null);
   const [drill, setDrill] = useState<string | null>(null);
@@ -469,9 +470,67 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     </div>
   );
 
-  const nearStop = rows.map((r) => ({ ...r, stopDist: r.stop && r.price > 0 ? ((r.price - r.stop) / r.price) * 100 : null as number | null })).filter((r) => r.stopDist != null && r.stopDist >= 0 && r.stopDist < 8).sort((a, b) => (a.stopDist as number) - (b.stopDist as number)).slice(0, 5) as any[];
-
-  const nearTarget = rows.map((r) => ({ ...r, tgtDist: r.target && r.price > 0 ? ((r.target - r.price) / r.price) * 100 : null as number | null })).filter((r) => r.tgtDist != null && r.tgtDist < 8).sort((a, b) => (a.tgtDist as number) - (b.tgtDist as number)).slice(0, 5) as any[];
+  const stopLines: any[] = (() => {
+    const out: any[] = [];
+    rows.forEach((r) => {
+      const ls = lots.filter((l: any) => String(l.holding_id) === r.id && Number(l.stop_loss_rate) > 0).map((l: any) => ({ at: Number(l.stop_loss_rate), qty: Number(l.quantity) || 0, price: Number(l.current_price) > 0 ? Number(l.current_price) : r.price, lot: true }));
+      const list = ls.length ? ls : (r.stop ? [{ at: r.stop, qty: r.qty, price: r.price, lot: false }] : []);
+      list.forEach((x) => { if (!(x.price > 0)) return; const dist = ((x.price - x.at) / x.price) * 100; if (dist < 8) out.push({ ...r, stopDist: dist, lAt: x.at, lQty: x.qty, lPrice: x.price, lLot: x.lot, impact: fx((x.price - x.at) * x.qty, r.native, ccy) }); });
+    });
+    return out.sort((a, b) => a.stopDist - b.stopDist);
+  })();
+  const nearStop = stopLines;
+  const targetLines: any[] = (() => {
+    const out: any[] = [];
+    rows.forEach((r) => {
+      const ls = lots.filter((l: any) => String(l.holding_id) === r.id && Number(l.take_profit_rate) > 0).map((l: any) => ({ at: Number(l.take_profit_rate), qty: Number(l.quantity) || 0, price: Number(l.current_price) > 0 ? Number(l.current_price) : r.price, lot: true }));
+      const list = ls.length ? ls : (r.target ? [{ at: r.target, qty: r.qty, price: r.price, lot: false }] : []);
+      list.forEach((x) => { if (!(x.price > 0)) return; const dist = ((x.at - x.price) / x.price) * 100; if (dist < 8) out.push({ ...r, tgtDist: dist, lAt: x.at, lQty: x.qty, lPrice: x.price, lLot: x.lot, impact: fx((x.at - x.price) * x.qty, r.native, ccy) }); });
+    });
+    return out.sort((a, b) => a.tgtDist - b.tgtDist);
+  })();
+  const nearTarget = targetLines;
+  const alertPanel = (kind: 'stop' | 'target') => {
+    const list = kind === 'stop' ? stopLines : targetLines;
+    if (list.length === 0) return null;
+    const open = alertOpen.includes(kind);
+    const uniq = Array.from(new Set(list.map((l) => l.symbol)));
+    const stop = kind === 'stop';
+    return (
+      <div className={`rounded-2xl border ${stop ? 'border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20' : 'border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20'}`}>
+        <button onClick={() => setAlertOpen((o) => (o.includes(kind) ? o.filter((x) => x !== kind) : [...o, kind]))} className="w-full flex items-center gap-2 px-4 py-3 text-left">
+          {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          <span className={`text-sm font-black ${stop ? 'text-amber-800 dark:text-amber-300' : 'text-emerald-800 dark:text-emerald-300'}`}>{list.length} near {stop ? 'stop-loss' : 'profit target'}</span>
+          {!open && <span className="text-xs text-slate-500 truncate">{uniq.slice(0, 6).join(', ')}{uniq.length > 6 ? ` +${uniq.length - 6}` : ''}</span>}
+        </button>
+        {open && (
+          <div className="overflow-auto px-2 pb-3">
+            <table className="w-full text-xs whitespace-nowrap">
+              <thead className="text-[10px] uppercase text-slate-400"><tr><th className="text-left p-2">Holding</th><th className="text-left p-2">Portfolio</th><th className="text-left p-2">Broker</th><th className="text-right p-2">Qty</th><th className="text-right p-2">Price</th><th className="text-right p-2">{stop ? 'Stop-loss' : 'Target'}</th><th className="text-right p-2">{stop ? 'Distance' : 'To go'}</th><th className="text-right p-2">{stop ? 'Loss if hit' : 'Gain if hit'}</th></tr></thead>
+              <tbody>
+                {list.map((l, i) => {
+                  const d = stop ? l.stopDist : l.tgtDist;
+                  const hit = d <= 0;
+                  return (
+                    <tr key={`${l.id}-${i}`} onClick={() => setSelected(l.id)} className="border-t border-black/5 dark:border-white/10 cursor-pointer hover:bg-white/60 dark:hover:bg-white/5">
+                      <td className="p-2 font-black">{l.symbol}{l.lLot ? <span className="ml-1 text-[9px] font-bold text-slate-400">lot</span> : null}</td>
+                      <td className="p-2 text-indigo-600 dark:text-indigo-400 font-bold">{l.portfolio}</td>
+                      <td className="p-2 text-slate-500">{l.broker}</td>
+                      <td className="p-2 text-right tabular-nums">{px(l.lQty)}</td>
+                      <td className="p-2 text-right tabular-nums">{px(l.lPrice)}</td>
+                      <td className="p-2 text-right tabular-nums font-bold">{px(l.lAt)}</td>
+                      <td className={`p-2 text-right tabular-nums font-black ${hit ? (stop ? 'text-rose-600' : 'text-emerald-600') : stop ? 'text-amber-600' : 'text-emerald-600'}`}>{hit ? (stop ? 'Past SL' : 'Reached') : `${d.toFixed(1)}%`}</td>
+                      <td className={`p-2 text-right tabular-nums font-bold ${stop ? 'text-rose-600' : 'text-emerald-600'}`}>{money(stop ? -Math.abs(l.impact) : Math.abs(l.impact), ccy, true)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const inputCls = 'w-full px-3 py-2 rounded-xl text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none focus:border-indigo-400';
   const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (<label className="block"><span className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</span><div className="mt-1">{children}</div></label>);
@@ -666,8 +725,8 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           {list.map((r: any) => <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex justify-between text-xs py-1 hover:bg-slate-50 dark:hover:bg-slate-800 rounded px-1"><span className="font-bold">{r.symbol}</span><span className={`tabular-nums font-bold ${tone(r.pnl)}`}>{pct(r.pnlPct)}</span></button>)}
         </div>
       ))}
-      {nearStop.length > 0 && <div><div className="text-[10px] font-black uppercase tracking-wider text-amber-600 mb-1">Near stop-loss</div>{nearStop.map((r: any) => <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex justify-between text-xs py-1 px-1"><span className="font-bold">{r.symbol}</span><span className="text-amber-600 font-bold">{r.stopDist.toFixed(1)}% away</span></button>)}</div>}
-      {nearTarget.length > 0 && <div><div className="text-[10px] font-black uppercase tracking-wider text-emerald-600 mb-1">Near profit target</div>{nearTarget.map((r: any) => <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex justify-between text-xs py-1 px-1"><span className="font-bold">{r.symbol}</span><span className="text-emerald-600 font-bold">{r.tgtDist <= 0 ? 'reached' : `${r.tgtDist.toFixed(1)}% to go`}</span></button>)}</div>}
+      {nearStop.length > 0 && <div><div className="text-[10px] font-black uppercase tracking-wider text-amber-600 mb-1">Near stop-loss</div>{nearStop.slice(0, 5).map((r: any) => <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex justify-between text-xs py-1 px-1"><span className="font-bold">{r.symbol}</span><span className="text-amber-600 font-bold">{r.stopDist.toFixed(1)}% away</span></button>)}</div>}
+      {nearTarget.length > 0 && <div><div className="text-[10px] font-black uppercase tracking-wider text-emerald-600 mb-1">Near profit target</div>{nearTarget.slice(0, 5).map((r: any) => <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex justify-between text-xs py-1 px-1"><span className="font-bold">{r.symbol}</span><span className="text-emerald-600 font-bold">{r.tgtDist <= 0 ? 'reached' : `${r.tgtDist.toFixed(1)}% to go`}</span></button>)}</div>}
     </div>
   );
   const topRows = [...rows].sort((a, b) => b.value - a.value);
@@ -704,9 +763,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       if (conc > 50) insights.push({ t: 'High concentration', d: `Top 5 holdings are ${conc.toFixed(0)}% of the portfolio.`, tone: 'amber' });
       if (losersN > 0) insights.push({ t: `${losersN} positions down more than 20%`, d: 'Review whether the original thesis still holds.', tone: 'rose' });
       if (stale > 0) insights.push({ t: `${stale} stale prices`, d: 'Run Refresh prices in Import & Sync.', tone: 'amber' });
-      if (nearStop.length > 0) insights.push({ t: `${nearStop.length} near stop-loss`, d: nearStop.map((r: any) => r.symbol).join(', '), tone: 'rose' });
-      if (nearTarget.length > 0) insights.push({ t: `${nearTarget.length} near profit target`, d: nearTarget.map((r: any) => r.symbol).join(', '), tone: 'emerald' });
-      if (insights.length === 0) insights.push({ t: 'All clear', d: 'No concentration, stop-loss or stale-price issues found.', tone: 'emerald' });
+      if (insights.length === 0 && stopLines.length === 0 && targetLines.length === 0) insights.push({ t: 'All clear', d: 'No concentration, stop-loss or stale-price issues found.', tone: 'emerald' });
       return (
         <div className="space-y-4">
           {kpiRow}
@@ -719,6 +776,8 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           <div className="grid md:grid-cols-2 gap-3">
             {insights.map((n) => <div key={n.t} className={`rounded-2xl p-4 border ${n.tone === 'emerald' ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900' : n.tone === 'rose' ? 'bg-rose-50 border-rose-200 dark:bg-rose-950/20 dark:border-rose-900' : 'bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-900'}`}><div className="text-sm font-black">{n.t}</div><div className="text-xs text-slate-600 dark:text-slate-300 mt-1">{n.d}</div></div>)}
           </div>
+          {alertPanel('stop')}
+          {alertPanel('target')}
         </div>
       );
   })();
@@ -1101,6 +1160,8 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       </div>
 
 
+            {alertPanel('stop')}
+            {alertPanel('target')}
             <div className="grid lg:grid-cols-3 gap-4">
               <div className={`lg:col-span-2 self-start rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4`}>
                 <div className="flex items-center justify-between mb-2">
@@ -1124,13 +1185,13 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
                 {nearStop.length > 0 && (
                   <div>
                     <div className="text-[10px] font-black uppercase tracking-wider text-amber-600 mb-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Near stop-loss</div>
-                    {nearStop.map((r: any) => <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex justify-between text-xs py-1 hover:bg-slate-50 dark:hover:bg-slate-800 rounded px-1"><span className="font-bold">{r.symbol}</span><span className="text-amber-600 font-bold">{r.stopDist.toFixed(1)}% away</span></button>)}
+                    {nearStop.slice(0, 5).map((r: any) => <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex justify-between text-xs py-1 hover:bg-slate-50 dark:hover:bg-slate-800 rounded px-1"><span className="font-bold">{r.symbol}</span><span className="text-amber-600 font-bold">{r.stopDist.toFixed(1)}% away</span></button>)}
                   </div>
                 )}
                 {nearTarget.length > 0 && (
                   <div>
                     <div className="text-[10px] font-black uppercase tracking-wider text-emerald-600 mb-1 flex items-center gap-1"><Target className="w-3 h-3" /> Near profit target</div>
-                    {nearTarget.map((r: any) => <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex justify-between text-xs py-1 hover:bg-slate-50 dark:hover:bg-slate-800 rounded px-1"><span className="font-bold">{r.symbol}</span><span className="text-emerald-600 font-bold">{r.tgtDist <= 0 ? 'target reached' : `${r.tgtDist.toFixed(1)}% to go`}</span></button>)}
+                    {nearTarget.slice(0, 5).map((r: any) => <button key={r.id} onClick={() => setSelected(r.id)} className="w-full flex justify-between text-xs py-1 hover:bg-slate-50 dark:hover:bg-slate-800 rounded px-1"><span className="font-bold">{r.symbol}</span><span className="text-emerald-600 font-bold">{r.tgtDist <= 0 ? 'target reached' : `${r.tgtDist.toFixed(1)}% to go`}</span></button>)}
                   </div>
                 )}
                 </>}
