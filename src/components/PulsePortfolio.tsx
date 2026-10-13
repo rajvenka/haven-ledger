@@ -649,8 +649,8 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
             <button onClick={exportCsv} className="text-[11px] font-black px-2.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">CSV</button>
             {filter !== 'All' && <button onClick={() => setFilter('All')} className="text-[11px] font-black text-indigo-600 inline-flex items-center gap-0.5">{filter} <X className="w-3 h-3" /></button>}
           </div>
-          <div className="max-h-[70vh] overflow-auto">
-            <table className="w-full text-xs whitespace-nowrap">
+          <div className="max-h-[70vh] overflow-auto overscroll-x-contain" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}>
+            <table className="w-max min-w-full text-xs whitespace-nowrap">
               <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800 text-[10px] uppercase text-slate-400">
                 <tr>
                   <th className="p-2.5 w-8 sticky left-0 bg-slate-50 dark:bg-slate-800"><input type="checkbox" checked={visible.length > 0 && checked.length === visible.length} onChange={(e) => setChecked(e.target.checked ? visible.map((r) => r.id) : [])} /></th>
@@ -1101,7 +1101,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   );
 
   return (
-    <div className="w-full max-w-[1600px] min-w-0 mx-auto p-3 sm:p-6 pb-24 md:pb-6 overflow-x-auto [&_.grid>*]:min-w-0 [-webkit-overflow-scrolling:touch]">
+    <div className="w-full max-w-[1600px] min-w-0 mx-auto p-3 sm:p-6 pb-24 md:pb-6 [&_.grid>*]:min-w-0">
       {mode === 'alt' && (<>
       <div className="mb-2 text-[11px] font-black uppercase tracking-wider text-violet-600">Admin · alternative portfolio designs</div>
       <div className="flex items-center gap-1.5 flex-wrap mb-3 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800/70 w-full">
