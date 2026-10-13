@@ -7,8 +7,8 @@ import StockGains from './StockGains';
 import SyncWizard from './SyncWizard';
 import { Search, TrendingUp, TrendingDown, X, SlidersHorizontal, Plus, Pencil, Trash2, LayoutDashboard, List, CheckCircle2, CalendarDays, Wallet, RefreshCw, AlertTriangle, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, Star, Target } from 'lucide-react';
 
-type GroupBy = 'category' | 'broker' | 'currency' | 'portfolio';
-type SortKey = 'symbol' | 'broker' | 'category' | 'portfolio' | 'qty' | 'buy' | 'price' | 'dayPct' | 'day' | 'cost' | 'value' | 'pnl' | 'pnlPct' | 'weight' | 'buyDate' | 'heldDays' | 'leverage' | 'stop' | 'target' | 'updated';
+type GroupBy = 'category' | 'broker' | 'currency' | 'portfolio' | 'tag';
+type SortKey = 'type' | 'tag' | 'symbol' | 'broker' | 'category' | 'portfolio' | 'qty' | 'buy' | 'price' | 'dayPct' | 'day' | 'cost' | 'value' | 'pnl' | 'pnlPct' | 'weight' | 'buyDate' | 'heldDays' | 'leverage' | 'stop' | 'target' | 'updated';
 
 const PALETTE = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#0ea5e9', '#8b5cf6', '#14b8a6', '#f97316', '#64748b', '#84cc16'];
 
@@ -58,6 +58,23 @@ const px = (n: number) => (Number.isFinite(n) ? n.toLocaleString(undefined, { ma
 const pct = (n: number) => (Number.isFinite(n) ? `${n > 0 ? '+' : ''}${n.toFixed(1)}%` : '—');
 const tone = (n: number) => (n > 0 ? 'text-emerald-600 dark:text-emerald-400' : n < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500');
 
+function normalizeSourceTag(raw: string | null | undefined, h?: any): string {
+  if (h && String(h.holding_type || '').toLowerCase().startsWith('option')) return 'Options';
+  if (!raw || !String(raw).trim()) return '—';
+  const t = String(raw).trim(); const l = t.toLowerCase();
+  if (l.includes('option')) return 'Options';
+  if (l.includes('cfd') || l.includes('leveraged')) return 'CFD';
+  if (l.includes('real asset') || l.includes('real ass')) return 'Real Asset';
+  if (l.includes('crypto')) return 'Crypto';
+  if (l.includes('future')) return 'Futures';
+  if (l.includes('zerodha')) return 'Zerodha';
+  if (l.includes('groww')) return 'Groww';
+  if (l.includes('stake')) return 'Stake';
+  if (l.startsWith('webull')) return 'Webull';
+  if (l.startsWith('etoro')) return l.includes('cfd') ? 'CFD' : l.includes('real') ? 'Real Asset' : 'eToro';
+  const cleaned = t.replace(/\s*·\s*[A-Z0-9]{4,}$/i, '').trim();
+  return /option/i.test(cleaned) ? 'Options' : cleaned || '—';
+}
 const INDEX_RE = /^(NSDQ100|NAS100|NDX|SPX500|SPX|US500|US30|US100|DJ30|DJI|UK100|GER40|GER30|DAX|FRA40|JPN225|NIKKEI|AUS200|HK50|CHN50|ESP35|EU50|RUT|VIX|NIFTY.*|BANKNIFTY|FINNIFTY|SENSEX)$/i;
 const CRYPTO_RE = /^(BTC|ETH|XRP|SOL|ADA|DOGE|LTC|BNC|DOT|AVAX|MATIC|LINK|BCH|XLM)(USD|USDT)?$/i;
 function typeOf(h: any): string {
@@ -79,6 +96,8 @@ const COLS: Col[] = [
   { k: 'broker', label: 'Broker', cell: (r) => <span className="text-slate-600 dark:text-slate-300">{r.broker}</span>, csv: (r) => r.broker },
   { k: 'portfolio', label: 'Portfolio', cell: (r) => <span className="text-slate-600 dark:text-slate-300">{r.portfolio}</span>, csv: (r) => r.portfolio },
   { k: 'category', label: 'Category', cell: (r) => <span className="px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-bold">{r.category}</span>, csv: (r) => r.category },
+  { k: 'type', label: 'Type', cell: (r) => <span className="px-1.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold">{r.type}</span>, csv: (r) => r.type },
+  { k: 'tag', label: 'Tag', cell: (r) => (r.tag && r.tag !== '—' ? <span className="px-1.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold">{r.tag}</span> : <span className="text-slate-300">—</span>), csv: (r) => r.tag },
   { k: 'qty', label: 'Qty', cell: (r) => px(r.qty), csv: (r) => r.qty },
   { k: 'buy', label: 'Avg cost', cell: (r) => <>{px(r.buy)} <span className="text-[10px] text-slate-400">{r.native}</span></>, csv: (r) => r.buy },
   { k: 'price', label: 'Last price', cell: (r) => <>{px(r.price)} <span className="text-[10px] text-slate-400">{r.native}</span></>, csv: (r) => r.price },
@@ -222,7 +241,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const [colsOpen, setColsOpen] = useState(false);
   const [hidden, setHidden] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('hv_pp_hidden') || 'null') || ['isin', 'exchange', 'updated', 'leverage', 'stop', 'target']; } catch { return []; } });
   const toggleCol = (k: string) => setHidden((h) => { const n = h.includes(k) ? h.filter((x) => x !== k) : [...h, k]; try { localStorage.setItem('hv_pp_hidden', JSON.stringify(n)); } catch { /* */ } return n; });
-  const clickSort = (k: SortKey) => { if (sort === k) setDir((d) => (d === 1 ? -1 : 1)); else { setSort(k); setDir(['symbol', 'broker', 'category', 'portfolio'].includes(k) ? 1 : -1); } };
+  const clickSort = (k: SortKey) => { if (sort === k) setDir((d) => (d === 1 ? -1 : 1)); else { setSort(k); setDir(['symbol', 'broker', 'category', 'portfolio', 'type', 'tag'].includes(k) ? 1 : -1); } };
   const [filter, setFilter] = useState<string>('All');
   const [view, setView] = useState<'all' | 'gainers' | 'losers'>('all');
   const [selected, setSelected] = useState<string | null>(null);
@@ -258,6 +277,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           target: Number(h.take_profit_rate) > 0 ? Number(h.take_profit_rate) : Number(h.target_price) > 0 ? Number(h.target_price) : (h.target_type === 'percent' && Number(h.target_percent) > 0 ? Number(h.buy_price) * (1 + Number(h.target_percent) / 100) : null) as number | null,
           updated: h.live_price_updated_at || h.current_price_updated_at || '',
           isin: String(h.isin || ''), exchange: String(h.exchange || ''),
+          type: typeOf(h), tag: normalizeSourceTag(h.source, h),
         };
       });
   }, [holdings, portfolios, fx, ccy, baseCurrency, book]);
@@ -297,7 +317,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         case 'weight': return r.value;
         case 'buyDate': return r.buyDate || '';
         case 'updated': return String(r.updated || '');
-        case 'symbol': case 'broker': case 'category': case 'portfolio': return String(r[sort]).toLowerCase();
+        case 'symbol': case 'broker': case 'category': case 'portfolio': case 'type': case 'tag': return String(r[sort]).toLowerCase();
         default: return r[sort] ?? -Infinity;
       }
     };
@@ -324,7 +344,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       const qty = Number(h.quantity || 0);
       const cost = Number(h.buy_price || 0) * qty;
       const proceeds = Number(h.sold_price || 0) * qty;
-      return { id: String(h.id), symbol: String(h.ticker || h.symbol || '—'), broker: String(h.broker || ''), qty, native,
+      return { id: String(h.id), symbol: String(h.ticker || h.symbol || '—'), broker: String(h.broker || ''), type: typeOf(h), tag: normalizeSourceTag(h.source, h), qty, native,
         buy: Number(h.buy_price || 0), sell: Number(h.sold_price || 0), buyDate: h.buy_date || '', soldDate: h.sold_date || '',
         cost: fx(cost, native, ccy), proceeds: fx(proceeds, native, ccy), pnl: fx(proceeds - cost, native, ccy), pnlPct: cost > 0 ? ((proceeds - cost) / cost) * 100 : 0 };
     })
@@ -549,11 +569,11 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       </div>
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-auto max-h-[70vh]">
         <table className="w-full text-xs whitespace-nowrap">
-          <thead className="sticky top-0 bg-slate-50 dark:bg-slate-800 text-[10px] uppercase text-slate-400"><tr>{['Holding', 'Broker', 'Qty', 'Buy', 'Sell', 'Bought', 'Sold', 'Proceeds', 'P&L', 'P&L %'].map((h, i) => <th key={h} className={`p-2.5 ${i < 2 ? 'text-left' : 'text-right'}`}>{h}</th>)}<th /></tr></thead>
+          <thead className="sticky top-0 bg-slate-50 dark:bg-slate-800 text-[10px] uppercase text-slate-400"><tr>{['Holding', 'Broker', 'Type', 'Tag', 'Qty', 'Buy', 'Sell', 'Bought', 'Sold', 'Proceeds', 'P&L', 'P&L %'].map((h, i) => <th key={h} className={`p-2.5 ${i < 4 ? 'text-left' : 'text-right'}`}>{h}</th>)}<th /></tr></thead>
           <tbody>
             {soldRows.map((r) => (
               <tr key={r.id} className="border-t border-slate-100 dark:border-slate-800">
-                <td className="p-2.5 font-black">{r.symbol}</td><td className="p-2.5 text-slate-500">{r.broker}</td>
+                <td className="p-2.5 font-black">{r.symbol}</td><td className="p-2.5 text-slate-500">{r.broker}</td><td className="p-2.5"><span className="px-1.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold">{r.type}</span></td><td className="p-2.5">{r.tag !== '—' ? <span className="px-1.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold">{r.tag}</span> : <span className="text-slate-300">—</span>}</td>
                 <td className="p-2.5 text-right tabular-nums">{px(r.qty)}</td><td className="p-2.5 text-right tabular-nums">{px(r.buy)}</td><td className="p-2.5 text-right tabular-nums">{px(r.sell)}</td>
                 <td className="p-2.5 text-right">{r.buyDate || '—'}</td><td className="p-2.5 text-right">{r.soldDate || '—'}</td>
                 <td className="p-2.5 text-right tabular-nums">{money(r.proceeds, ccy, true)}</td>
@@ -561,7 +581,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
                 <td className="p-2.5 text-right">{!isReadOnly && <button onClick={() => { if (window.confirm('Delete this sale record?')) run(() => deleteHolding!(r.id)); }} className="text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>}</td>
               </tr>
             ))}
-            {soldRows.length === 0 && <tr><td colSpan={11} className="p-8 text-center text-slate-400">No sold positions yet. Use Sell on any holding.</td></tr>}
+            {soldRows.length === 0 && <tr><td colSpan={13} className="p-8 text-center text-slate-400">No sold positions yet. Use Sell on any holding.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -970,7 +990,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       return (
         <div className="grid lg:grid-cols-[340px_1fr] gap-4 items-start">
           <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
-            <div className="flex gap-1 mb-2 flex-wrap">{(['category', 'broker', 'currency', 'portfolio'] as GroupBy[]).map((g) => <button key={g} onClick={() => { setGroupBy(g); setDrill(null); }} className={`text-[10px] font-black px-2 py-1 rounded-full capitalize ${groupBy === g ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{g}</button>)}</div>
+            <div className="flex gap-1 mb-2 flex-wrap">{(['category', 'broker', 'currency', 'portfolio', 'tag'] as GroupBy[]).map((g) => <button key={g} onClick={() => { setGroupBy(g); setDrill(null); }} className={`text-[10px] font-black px-2 py-1 rounded-full capitalize ${groupBy === g ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{g}</button>)}</div>
             <div className="h-56 relative"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={groups} dataKey="value" nameKey="name" innerRadius={62} outerRadius={100} paddingAngle={2} onClick={(d: any) => setDrill(d.name)}>{groups.map((g, i) => <Cell key={g.name} fill={PALETTE[i % PALETTE.length]} opacity={act === g.name ? 1 : 0.35} />)}</Pie></PieChart></ResponsiveContainer><div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"><div className="text-[10px] text-slate-400 font-bold">TOTAL</div><div className="text-lg font-black">{money(totals.value, ccy, true)}</div></div></div>
             {groups.map((g, i) => <button key={g.name} onClick={() => setDrill(g.name)} className={`w-full flex items-center gap-2 text-xs px-2 py-1.5 rounded-lg ${act === g.name ? 'bg-slate-100 dark:bg-slate-800' : ''}`}><i className="w-2.5 h-2.5 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} /><b className="flex-1 text-left truncate">{g.name}</b><span className="text-slate-500">{((g.value / Math.max(1, totals.value)) * 100).toFixed(1)}%</span></button>)}
           </div>
@@ -1209,7 +1229,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           <div className="flex items-center justify-between mb-2">
             <button onClick={() => toggleBlock('alloc')} className="flex items-center gap-1 text-sm font-black text-slate-800 dark:text-slate-100">{chev('alloc')} Allocation</button>
             {isOpen('alloc') && <div className="flex gap-1">
-              {(['category', 'broker', 'currency', 'portfolio'] as GroupBy[]).map((g) => (
+              {(['category', 'broker', 'currency', 'portfolio', 'tag'] as GroupBy[]).map((g) => (
                 <button key={g} onClick={() => { setGroupBy(g); setFilter('All'); }} className={`text-[10px] font-black px-2 py-1 rounded-full capitalize ${groupBy === g ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{g}</button>
               ))}
             </div>}
