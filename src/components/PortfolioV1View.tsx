@@ -2323,7 +2323,7 @@ export default function PortfolioV1View({
             </div>
             <div className="p-4 space-y-3">
               {connectOk && <div className="text-[11px] text-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl px-3 py-2">{connectOk}</div>}
-              {connectError && <div className="text-[11px] text-rose-700 bg-rose-50 dark:bg-rose-950/30 rounded-xl px-3 py-2">{connectError}</div>}
+              {connectError && <div className="text-[11px] text-rose-700 bg-rose-50 dark:bg-rose-950/30 rounded-xl px-3 py-2">{connectError}{/groww/i.test(connectError) && <> <a href="https://groww.in/trade-api/api-keys" target="_blank" rel="noopener noreferrer" className="font-black underline">Open Groww API keys ↗</a></>}</div>}
               {connectStep === 'pick' && (
                 <>
                   {(portfolioBrokerConnections || []).length > 0 && (

@@ -325,6 +325,7 @@ export default function SyncWizard(p: SyncWizardProps) {
                     <button onClick={() => startZerodhaLogin({ apiKey: reauth.credentials.api_key, apiSecret: reauth.credentials.api_secret, portfolioId: reauth.portfolio_id || undefined, label: reauth.connection_label || 'Zerodha' })} className="px-4 py-2 rounded-xl bg-amber-600 text-white text-sm font-black">Log in to Zerodha now</button>
                   )}
                   {reauth && String(reauth.broker_type).toLowerCase() === 'groww' && p.onConnectNew && <button onClick={() => { p.onClose(); p.onConnectNew!(); }} className="px-4 py-2 rounded-xl bg-amber-600 text-white text-sm font-black">Re-authorize Groww</button>}
+                  {String(conn.broker_type).toLowerCase() === 'groww' && (<div className="space-y-1"><div className="text-xs text-slate-500">Check or regenerate your API key and secret on Groww, then update the connection.</div><a href="https://groww.in/trade-api/api-keys" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-black">Open Groww API keys ↗</a></div>)}
                   <div><button onClick={() => pickConnection(conn)} className="inline-flex items-center gap-1 text-xs font-black text-indigo-600"><RefreshCw className="w-3 h-3" /> Try again</button></div>
                 </>
               )}

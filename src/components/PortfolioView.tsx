@@ -3522,7 +3522,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                   {growwExisting.length > 0 ? '✓ Groww' : '+ Groww'}
                 </button>
               )}
-              {growwSyncError && <p className="text-[10px] text-rose-500">{growwSyncError}</p>}
+              {growwSyncError && <p className="text-[10px] text-rose-500">{growwSyncError} <a href="https://groww.in/trade-api/api-keys" target="_blank" rel="noopener noreferrer" className="ml-1 font-black underline">Open Groww API keys ↗</a></p>}
               {growwDebug && !growwEditing && (
                 <div className="text-[9px] text-slate-500 break-all bg-slate-50 dark:bg-slate-900 rounded p-2 space-y-1">
                   <div className="flex items-center justify-between">
@@ -4820,7 +4820,7 @@ export default function PortfolioView(props: PortfolioViewProps) {
                           </button>
                         ))}
                         {(etoroSyncError || webullSyncError || zerodhaSyncError || growwSyncError) && (
-                          <p className="text-[10px] text-rose-500">{etoroSyncError || webullSyncError || zerodhaSyncError || growwSyncError}</p>
+                          <p className="text-[10px] text-rose-500">{etoroSyncError || webullSyncError || zerodhaSyncError || growwSyncError}{growwSyncError && !(etoroSyncError || webullSyncError || zerodhaSyncError) ? <> <a href="https://groww.in/trade-api/api-keys" target="_blank" rel="noopener noreferrer" className="ml-1 font-black underline">Open Groww API keys ↗</a></> : null}</p>
                         )}
                       </div>
                     )}

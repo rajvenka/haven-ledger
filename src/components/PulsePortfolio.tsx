@@ -407,6 +407,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       </div>
       {b?.priceRefreshSummary && <p className="text-xs font-bold text-emerald-600">{b.priceRefreshSummary}</p>}
       {(b?.connectOk || b?.connectError) && <p className={`text-xs font-bold ${b.connectError ? 'text-rose-600' : 'text-emerald-600'}`}>{b.connectError || b.connectOk}</p>}
+      {/groww/i.test(b?.connectError || '') && <a href="https://groww.in/trade-api/api-keys" target="_blank" rel="noopener noreferrer" className="inline-block text-xs font-black text-emerald-600 underline">Open Groww API keys ↗</a>}
       {failedPrices > 0 && <p className="text-xs font-bold text-amber-600">{failedPrices} holding{failedPrices === 1 ? '' : 's'} have no fresh price - run "Refresh prices".</p>}
 
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
