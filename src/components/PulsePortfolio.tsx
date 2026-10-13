@@ -140,6 +140,7 @@ interface Props {
   setCash?: (location: any, amount: number, asOf?: string, notes?: string, portfolioId?: string) => Promise<any>;
   deleteCash?: (id: string) => Promise<any>;
   priceHistory?: any[];
+  bulkTag?: (ids: string[], tag: string) => Promise<any>;
   syncProps?: any;
   portfolioMode?: string;
   /** 'main' = the production design (Option 7); 'alt' = admin-only gallery of every option with voting. */
@@ -159,7 +160,7 @@ const NAV: { k: Section; label: string; icon: React.ReactNode }[] = [
   { k: 'sync', label: 'Import & Sync', icon: <RefreshCw className="w-4 h-4" /> },
 ];
 
-export default function PulsePortfolio({ holdings, lots = [], portfolios = [], rates = [], baseCurrency = 'INR', connections = [], isLoading, onManage, isReadOnly, importProps, cashBalances = [], loadDailyPositions, snapshotDaily, addHolding, updateHolding, sellHolding, deleteHolding, bulkDelete, setCash, deleteCash, syncProps, portfolioMode, mode = 'main', priceHistory = [], contributions = [], withdrawals = [], bookedBaselines = [] }: Props) {
+export default function PulsePortfolio({ holdings, lots = [], portfolios = [], rates = [], baseCurrency = 'INR', connections = [], isLoading, onManage, isReadOnly, importProps, cashBalances = [], loadDailyPositions, snapshotDaily, addHolding, updateHolding, sellHolding, deleteHolding, bulkDelete, setCash, deleteCash, syncProps, portfolioMode, bulkTag, mode = 'main', priceHistory = [], contributions = [], withdrawals = [], bookedBaselines = [] }: Props) {
   const [section, setSectionState] = useState<Section>(() => { try { return (localStorage.getItem('hv_pp_section') as Section) || 'overview'; } catch { return 'overview'; } });
   const setSection = (k: Section) => { setSectionState(k); try { localStorage.setItem('hv_pp_section', k); } catch { /* */ } };
   const [designState, setDesignState] = useState<number>(() => { try { return Number(localStorage.getItem('hv_pp_design')) || 1; } catch { return 1; } });
@@ -169,6 +170,8 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const [moversMode, setMoversMode] = useState<'total' | 'day'>('total');
   const [cfdReal, setCfdReal] = useState(false);
   const [prevLoad, setPrevLoad] = useState<number | null>(null);
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
   const [alertOpen, setAlertOpen] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<string>('All');
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -308,7 +311,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
 
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    let l = rows.filter((r) => (filter === 'All' || r[groupBy] === filter) &&
+    let l = rows.filter((r) => (filter === 'All' || r[groupBy] === filter) && (tagFilter.length === 0 || tagFilter.includes(r.tag)) &&
       (!needle || r.symbol.toLowerCase().includes(needle) || r.name.toLowerCase().includes(needle) || r.broker.toLowerCase().includes(needle)));
     if (view === 'gainers') l = l.filter((r) => r.pnl > 0);
     if (view === 'losers') l = l.filter((r) => r.pnl < 0);
@@ -322,7 +325,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       }
     };
     return [...l].sort((a, b) => { const x = get(a), y = get(b); return (x < y ? -1 : x > y ? 1 : 0) * dir; });
-  }, [rows, q, filter, groupBy, view, sort, dir]);
+  }, [rows, q, filter, groupBy, view, sort, dir, tagFilter]);
 
   const grouped = useMemo(() => {
     const m = new Map<string, any[]>();
@@ -559,8 +562,23 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (<label className="block"><span className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</span><div className="mt-1">{children}</div></label>);
   const setF = (k: string, v: string) => setForm((f: any) => ({ ...f, [k]: v }));
 
+  const tagBar = (list: { tag: string }[]) => {
+    const m = new Map<string, number>();
+    list.forEach((r) => m.set(r.tag, (m.get(r.tag) || 0) + 1));
+    const tags = Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
+    if (tags.length <= 1) return null;
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1">Tag</span>
+        <button onClick={() => setTagFilter([])} className={`text-[11px] font-black px-2.5 py-1 rounded-full ${tagFilter.length === 0 ? 'bg-amber-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>All</button>
+        {tags.map(([t, n]) => <button key={t} onClick={() => setTagFilter((f) => (f.includes(t) ? f.filter((x) => x !== t) : [...f, t]))} className={`text-[11px] font-black px-2.5 py-1 rounded-full ${tagFilter.includes(t) ? 'bg-amber-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{t === '—' ? 'Untagged' : t}<span className="ml-1 opacity-60">{n}</span></button>)}
+      </div>
+    );
+  };
+
   const soldView = (
     <div className="space-y-4">
+      {tagBar(soldRows)}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Kpi label="Realized P&L" value={money(soldTotals.pnl, ccy, true)} subTone={tone(soldTotals.pnl)} sub={`${soldRows.length} sales`} />
         <Kpi label="Proceeds" value={money(soldTotals.proceeds, ccy, true)} />
@@ -571,7 +589,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         <table className="w-full text-xs whitespace-nowrap">
           <thead className="sticky top-0 bg-slate-50 dark:bg-slate-800 text-[10px] uppercase text-slate-400"><tr>{['Holding', 'Broker', 'Type', 'Tag', 'Qty', 'Buy', 'Sell', 'Bought', 'Sold', 'Proceeds', 'P&L', 'P&L %'].map((h, i) => <th key={h} className={`p-2.5 ${i < 4 ? 'text-left' : 'text-right'}`}>{h}</th>)}<th /></tr></thead>
           <tbody>
-            {soldRows.map((r) => (
+            {soldRows.filter((r) => tagFilter.length === 0 || tagFilter.includes(r.tag)).map((r) => (
               <tr key={r.id} className="border-t border-slate-100 dark:border-slate-800">
                 <td className="p-2.5 font-black">{r.symbol}</td><td className="p-2.5 text-slate-500">{r.broker}</td><td className="p-2.5"><span className="px-1.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold">{r.type}</span></td><td className="p-2.5">{r.tag !== '—' ? <span className="px-1.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold">{r.tag}</span> : <span className="text-slate-300">—</span>}</td>
                 <td className="p-2.5 text-right tabular-nums">{px(r.qty)}</td><td className="p-2.5 text-right tabular-nums">{px(r.buy)}</td><td className="p-2.5 text-right tabular-nums">{px(r.sell)}</td>
@@ -640,9 +658,16 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         {!isReadOnly && <button onClick={() => { setErr(null); setForm({ ...emptyForm }); }} className="inline-flex items-center gap-1 text-xs font-black px-3 py-2 rounded-xl bg-indigo-600 text-white"><Plus className="w-3.5 h-3.5" /> Add holding</button>}
+        {!isReadOnly && checked.length > 0 && bulkTag && (
+          <span className="inline-flex items-center gap-1.5">
+            <input value={tagInput} onChange={(e) => setTagInput(e.target.value)} placeholder="Tag as e.g. Rajavel Stock SME" className="text-xs px-2.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none w-52" />
+            <button disabled={busy || !tagInput.trim()} onClick={() => run(() => bulkTag(checked, tagInput.trim()), () => { setChecked([]); setTagInput(''); })} className="text-xs font-black px-3 py-2 rounded-xl bg-amber-500 text-white disabled:opacity-40">Tag {checked.length}</button>
+          </span>
+        )}
         {!isReadOnly && checked.length > 0 && <button disabled={busy} onClick={() => { if (window.confirm(`Delete ${checked.length} holding(s)? This cannot be undone.`)) run(() => bulkDelete!(checked), () => setChecked([])); }} className="inline-flex items-center gap-1 text-xs font-black px-3 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600"><Trash2 className="w-3.5 h-3.5" /> Delete {checked.length}</button>}
         {err && !form && <span className="text-xs font-bold text-rose-600">{err}</span>}
       </div>
+      {tagBar(rows)}
       <div className="grid gap-4">
         <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
           <div className="p-3 flex flex-wrap items-center gap-2 border-b border-slate-100 dark:border-slate-800">
@@ -917,7 +942,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           </div>
           {f ? (
             <div id="pp-split-detail" className="scroll-mt-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 space-y-5 lg:sticky lg:top-2 min-w-0">
-              <div className="flex items-start justify-between gap-3"><div><div className="text-2xl sm:text-3xl font-black break-words">{f.symbol}</div><div className="text-xs text-slate-500">{f.name !== f.symbol ? f.name + ' · ' : ''}{f.broker} · {f.portfolio} · {f.category}</div></div><Pill v={f.pnlPct} /></div>
+              <div className="flex items-start justify-between gap-3"><div><div className="text-2xl sm:text-3xl font-black break-words">{f.symbol}</div><div className="text-xs text-slate-500">{f.name !== f.symbol ? f.name + ' · ' : ''}{f.broker} · {f.portfolio} · {f.category}{f.tag !== '—' ? ` · ${f.tag}` : ''}</div></div><Pill v={f.pnlPct} /></div>
               <div className="text-2xl sm:text-4xl font-black tabular-nums break-words">{money(f.value, ccy)}</div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                 {[['P&L', money(f.pnl, ccy, true)], ['Invested', money(f.cost, ccy, true)], ['Quantity', px(f.qty)], ['Avg cost', `${px(f.buy)} ${f.native}`], ['Last price', `${px(f.price)} ${f.native}`], ['Today', f.day ? money(f.day, ccy, true) : '—'], ['Weight', `${totals.value > 0 ? ((f.value / totals.value) * 100).toFixed(2) : 0}%`], ['Held', f.heldDays != null ? `${f.heldDays} days` : '—'], ['Target', f.target ? px(f.target) : '—'], ['Stop loss', f.stop ? px(f.stop) : '—'], ['Bought', f.buyDate || '—'], ['Price updated', f.updated ? new Date(f.updated).toLocaleDateString() : '—']].map(([k, v]) => <div key={k} className="rounded-xl bg-slate-50 dark:bg-slate-800 p-3"><div className="text-[10px] uppercase font-black text-slate-400">{k}</div><div className="font-bold mt-0.5">{v}</div></div>)}

@@ -2088,6 +2088,7 @@ export default function App() {
                   setCash={setPortfolioCashBalance}
                   deleteCash={deletePortfolioCashBalance}
                   priceHistory={portfolioPriceHistory}
+                  bulkTag={bulkTagPortfolioHoldings}
                   portfolioMode={activeWorkspace?.portfolioMode}
                   syncProps={{
                     bulkAddPortfolioHoldings, reconcilePortfolioHoldingQuantity, updatePortfolioHolding,
