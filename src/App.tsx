@@ -1026,25 +1026,6 @@ export default function App() {
                     )}
                   </button>
 
-                  {userProfile?.isSuperAdmin && (
-                  <button
-                    onClick={() => setActiveTab('portfolio_alt')}
-                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
-                      activeTab === 'portfolio_alt'
-                        ? 'bg-violet-50/80 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 border border-violet-100/20 dark:border-violet-900/20 shadow-sm'
-                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Sparkles className="w-4 h-4 shrink-0 opacity-80" />
-                      <span>Portfolio – Alternatives</span>
-                    </div>
-                    {activeTab === 'portfolio_alt' && (
-                      <span className="w-1 h-3.5 bg-violet-600 dark:bg-violet-400 rounded-full" />
-                    )}
-                  </button>
-                  )}
-
                   <button
                     id="tour-tab-investment_plan-desktop"
                     onClick={() => setActiveTab('investment_plan')}
@@ -1151,6 +1132,25 @@ export default function App() {
                       <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                     )}
                   </button>
+
+                  {userProfile?.isSuperAdmin && (
+                  <button
+                    onClick={() => setActiveTab('portfolio_alt')}
+                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                      activeTab === 'portfolio_alt'
+                        ? 'bg-violet-50/80 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 border border-violet-100/20 dark:border-violet-900/20 shadow-sm'
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-850 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Sparkles className="w-4 h-4 shrink-0 opacity-80" />
+                      <span>Portfolio – Alternatives</span>
+                    </div>
+                    {activeTab === 'portfolio_alt' && (
+                      <span className="w-1 h-3.5 bg-violet-600 dark:bg-violet-400 rounded-full" />
+                    )}
+                  </button>
+                  )}
 
                   {userProfile?.isSuperAdmin && (
                     <button
@@ -1487,22 +1487,6 @@ export default function App() {
                         )}
                       </button>
 
-                      {userProfile?.isSuperAdmin && (
-                      <button
-                        onClick={() => { setActiveTab('portfolio_alt'); setIsMobileMenuOpen(false); }}
-                        className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
-                          activeTab === 'portfolio_alt'
-                            ? 'bg-violet-50/80 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 shadow-sm'
-                            : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <Sparkles className="w-4.5 h-4.5 shrink-0 opacity-80" />
-                          <span>Portfolio – Alternatives</span>
-                        </div>
-                      </button>
-                      )}
-
 
                       <button
                         id="tour-tab-investment_plan-mobile"
@@ -1613,6 +1597,22 @@ export default function App() {
                           <span className="w-1 h-3.5 bg-indigo-600 dark:bg-indigo-400 rounded-full" />
                         )}
                       </button>
+
+                      {userProfile?.isSuperAdmin && (
+                      <button
+                        onClick={() => { setActiveTab('portfolio_alt'); setIsMobileMenuOpen(false); }}
+                        className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                          activeTab === 'portfolio_alt'
+                            ? 'bg-violet-50/80 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 shadow-sm'
+                            : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Sparkles className="w-4.5 h-4.5 shrink-0 opacity-80" />
+                          <span>Portfolio – Alternatives</span>
+                        </div>
+                      </button>
+                      )}
 
                       {userProfile?.isSuperAdmin && (
                         <button
