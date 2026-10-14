@@ -304,6 +304,23 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       });
   }, [holdings, portfolios, fx, ccy, baseCurrency, book]);
 
+  // Value of each portfolio (in the selected currency) for the compact mobile picker.
+  const bookValues = useMemo(() => {
+    const m = new Map<string, number>();
+    holdings.filter((h) => (h.status || 'active') === 'active').forEach((h) => {
+      const native = String(h.currency || baseCurrency).toUpperCase();
+      const qty = Number(h.quantity || 0);
+      const price = Number(h.live_price ?? h.current_price ?? h.buy_price ?? 0);
+      const exp = price * qty;
+      let v = exp;
+      if (Number(h.leverage || 0) > 1 && h.etoro_net_value_amount != null) v = Number(h.etoro_net_value_amount);
+      const k = String(h.portfolio_id || '');
+      m.set(k, (m.get(k) || 0) + fx(v, native, ccy));
+      m.set('All', (m.get('All') || 0) + fx(v, native, ccy));
+    });
+    return m;
+  }, [holdings, fx, ccy, baseCurrency]);
+
   const totals = useMemo(() => {
     const value = rows.reduce((a, r) => a + r.value, 0);
     const cost = rows.reduce((a, r) => a + r.cost, 0);
@@ -1247,7 +1264,16 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         </div>
       </div>
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 space-y-2.5 mb-4">
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="md:hidden flex items-center gap-2">
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 w-16 shrink-0">Portfolio</span>
+          <select value={book} onChange={(e) => chooseBook(e.target.value)} className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-bold capitalize">
+            {[...portfolios, { id: 'All', name: 'All portfolios' }].map((p: any) => (
+              <option key={p.id} value={p.id}>{p.name} · {money(bookValues.get(String(p.id)) || 0, ccy, true)}</option>
+            ))}
+          </select>
+          {book !== 'All' && <button type="button" title={defaultBook === book ? 'Default portfolio' : 'Make this my default portfolio'} onClick={() => makeDefault(book)} className={`p-1.5 rounded-full ${defaultBook === book ? 'text-amber-500' : 'text-slate-300'}`}><Star className={`w-4 h-4 ${defaultBook === book ? 'fill-current' : ''}`} /></button>}
+        </div>
+        <div className="hidden md:flex items-center gap-2 flex-wrap">
           <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 w-16 shrink-0">Portfolio</span>
           {[...portfolios, { id: 'All', name: 'All' }].map((p: any) => (
             <span key={p.id} className="inline-flex items-center">
