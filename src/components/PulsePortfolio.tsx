@@ -253,7 +253,43 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const [view, setView] = useState<'all' | 'gainers' | 'losers'>('all');
   const [selected, setSelected] = useState<string | null>(null);
 
-  const fx = useMemo(() => fxFactory(rates, baseCurrency), [rates, baseCurrency]);
+  // Holdings in a currency with no saved rate (e.g. JPN225 priced in JPY) were silently shown unconverted.
+  // Fall back to a live daily rate (cached per day); a rate saved in Settings always takes priority.
+  const [autoRates, setAutoRates] = useState<any[]>([]);
+  const missingCcys = useMemo(() => {
+    const b = String(baseCurrency || 'INR').toUpperCase();
+    const have = new Set(rates.map((r: any) => String(r.currency || '').toUpperCase()));
+    const need = new Set<string>();
+    holdings.forEach((h) => { const c = String(h.currency || '').toUpperCase(); if (c && c !== b && !have.has(c)) need.add(c); });
+    cashBalances.forEach((c: any) => { const k = String(c.currency || '').toUpperCase(); if (k && k !== b && !have.has(k)) need.add(k); });
+    return Array.from(need).sort().join(',');
+  }, [holdings, cashBalances, rates, baseCurrency]);
+  React.useEffect(() => {
+    if (!missingCcys) { setAutoRates([]); return; }
+    const b = String(baseCurrency || 'INR').toUpperCase();
+    const day = new Date().toISOString().slice(0, 10);
+    let alive = true;
+    (async () => {
+      const out: any[] = [];
+      for (const c of missingCcys.split(',')) {
+        const key = `hv_fx_${c}_${b}_${day}`;
+        let v = 0;
+        try { v = Number(localStorage.getItem(key)) || 0; } catch { /* */ }
+        if (!(v > 0)) {
+          try {
+            const r = await fetch(`https://api.frankfurter.app/latest?from=${c}&to=${b}`);
+            const j = await r.json();
+            v = Number(j?.rates?.[b]) || 0;
+            if (v > 0) { try { localStorage.setItem(key, String(v)); } catch { /* */ } }
+          } catch { /* offline / unsupported currency: leave unconverted */ }
+        }
+        if (v > 0) out.push({ currency: c, rate_to_base: v, auto: true });
+      }
+      if (alive) setAutoRates(out);
+    })();
+    return () => { alive = false; };
+  }, [missingCcys, baseCurrency]);
+  const fx = useMemo(() => fxFactory([...rates, ...autoRates], baseCurrency), [rates, autoRates, baseCurrency]);
 
   const rows = useMemo(() => {
     return holdings
