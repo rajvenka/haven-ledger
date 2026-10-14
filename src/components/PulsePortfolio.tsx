@@ -277,8 +277,10 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
             realMv = (isShort ? (stopR - entry) * qty : (entry - stopR) * qty) + margin * 0.5;
           }
         }
-        const mvN = realMv;
-        const cost = realMv - (expMv - expCost);
+        // Safety net: if the cash basis is implausible (net value stale/missing so cost <= 0), use full exposure for that row.
+        const basisOk = realMv >= 0 && realMv - (expMv - expCost) > 0;
+        const mvN = basisOk ? realMv : expMv;
+        const cost = basisOk ? realMv - (expMv - expCost) : expCost;
         const prev = Number(h.previous_close);
         const live = Number(h.live_price);
         let dayN = 0;
