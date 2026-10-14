@@ -163,18 +163,23 @@ const NAV: { k: Section; label: string; icon: React.ReactNode }[] = [
 ];
 
 function TagEditor({ id, current, options, onSave, disabled }: { id: string; current: string; options: string[]; onSave: (tag: string) => Promise<any>; disabled?: boolean }) {
-  const [val, setVal] = React.useState(current === '—' ? '' : current);
+  const [val, setVal] = React.useState('');
   const [saving, setSaving] = React.useState(false);
   const [msg, setMsg] = React.useState<string | null>(null);
-  React.useEffect(() => { setVal(current === '—' ? '' : current); setMsg(null); }, [id, current]);
-  const dirty = val.trim() !== (current === '—' ? '' : current);
-  const save = async (v: string) => { setSaving(true); setMsg(null); try { await onSave(v.trim()); } catch (e: any) { setMsg(e?.message || 'Failed'); } finally { setSaving(false); } };
+  React.useEffect(() => { setVal(''); setMsg(null); }, [id, current]);
+  const save = async (v: string) => { setSaving(true); setMsg(null); try { await onSave(v.trim()); setVal(''); } catch (e: any) { setMsg(e?.message || 'Failed'); } finally { setSaving(false); } };
+  const has = current && current !== '—';
   return (
-    <span className="inline-flex items-center gap-1.5 min-w-0">
-      <input list={`tag-opts-${id}`} value={val} onChange={(e) => { setVal(e.target.value); setMsg(null); }} disabled={disabled} placeholder="Tag" className="w-28 sm:w-36 text-xs px-2.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none" />
+    <span className="inline-flex flex-wrap items-center gap-1.5 min-w-0">
+      {has && (
+        <span className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-xs font-bold">
+          {current}
+          <button disabled={disabled || saving} onClick={() => save('')} title="Remove tag" className="w-5 h-5 rounded-full hover:bg-amber-200/60 dark:hover:bg-amber-800/50 text-[11px] font-black leading-none disabled:opacity-40">✕</button>
+        </span>
+      )}
+      <input list={`tag-opts-${id}`} value={val} onChange={(e) => { setVal(e.target.value); setMsg(null); }} onKeyDown={(e) => { if (e.key === 'Enter' && val.trim()) save(val); }} disabled={disabled} placeholder="New tag" className="w-24 sm:w-32 text-xs px-2.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none" />
       <datalist id={`tag-opts-${id}`}>{options.map((o) => <option key={o} value={o} />)}</datalist>
-      {dirty && val.trim() && <button disabled={disabled || saving} onClick={() => save(val)} className="px-3 py-2 rounded-xl bg-amber-500 text-white text-sm font-black disabled:opacity-40">{saving ? '…' : 'Add tag'}</button>}
-      {!dirty && current !== '—' && <button disabled={disabled || saving} onClick={() => { setVal(''); save(''); }} title="Remove tag" className="px-2.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 text-sm font-black disabled:opacity-40">✕</button>}
+      <button disabled={disabled || saving || !val.trim()} onClick={() => save(val)} className="px-3 py-2 rounded-xl bg-amber-500 text-white text-sm font-black disabled:opacity-40">{saving ? '…' : 'Save'}</button>
       {msg && <span className="text-[11px] font-bold text-rose-500">{msg}</span>}
     </span>
   );
