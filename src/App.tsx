@@ -274,10 +274,22 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'configure' | 'account' | 'history' | 'ai' | 'income' | 'rewards' | 'portfolio' | 'portfolio_alt' | 'portfolio_v1' | 'investment_plan' | 'quote_connections' | 'reports' | 'admin_users'>('summary');
   const [mainNavCollapsed, setMainNavCollapsed] = useState<boolean>(() => { try { return localStorage.getItem('hv_main_nav_collapsed') === '1'; } catch { return false; } });
   const toggleMainNav = () => setMainNavCollapsed((v) => { try { localStorage.setItem('hv_main_nav_collapsed', v ? '0' : '1'); } catch { /* ignore */ } return !v; });
-  // New design is fixed across all pages (no old/new toggle). Only the Portfolio "Manage" link can open the classic portfolio screen.
-  const tryNewUi = true;
+  // New (Pulse) design vs Classic - user choice, persisted. Default: new.
+  const [tryNewUi, setTryNewUiState] = useState<boolean>(() => {
+    try {
+      if (localStorage.getItem('hv_new_ui_default_v2') !== '1') {
+        localStorage.setItem('hv_new_ui_default_v2', '1');
+        localStorage.setItem('hv_try_new_ui', 'true');
+        return true;
+      }
+      return localStorage.getItem('hv_try_new_ui') !== 'false';
+    } catch { return true; }
+  });
+  const setTryNewUi = (v: boolean) => {
+    setTryNewUiState(v);
+    try { localStorage.setItem('hv_try_new_ui', String(v)); } catch { /* ignore */ }
+  };
   const [portfolioClassic, setPortfolioClassic] = useState(false);
-  const setTryNewUi = (_v: boolean) => { /* design is fixed */ };
   useEffect(() => { if (activeTab !== 'portfolio') setPortfolioClassic(false); }, [activeTab]);
   // Opening Settings from the sidebar (Preferences / Security / Team) must open that section directly (on phones the list would otherwise show instead of the page).
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
@@ -1789,6 +1801,15 @@ export default function App() {
                 )}
               </button>
 
+              <button
+                type="button"
+                onClick={() => setTryNewUi(!tryNewUi)}
+                title={tryNewUi ? 'New design is on - tap for Classic' : 'Classic design - tap for New'}
+                className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-black tracking-wide cursor-pointer transition-all ${tryNewUi ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-md shadow-violet-600/30' : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${tryNewUi ? 'bg-white' : 'bg-slate-400'}`} />
+                {tryNewUi ? 'New' : 'Classic'}
+              </button>
               {/* Header Action: Agent/Chat - same toggles as the floating capsule, kept here
                   too since that capsule can end up covered by or covering page content when
                   scrolled down on longer pages, making it unreliable as the only entry point. */}
@@ -1994,7 +2015,9 @@ export default function App() {
               </NewDesignSwitch>
             ) : activeTab === 'account' ? (
 <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
+{tryNewUi ? (
 <SplitPage
+  noScroll
   title="Settings"
   subtitle="Preferences, security, team"
   selected={settingsPicked}
@@ -2076,6 +2099,79 @@ export default function App() {
               />
 
 </SplitPage>
+) : (
+
+<AccountInfo 
+                payments={payments}
+                userProfile={userProfile}
+                familyMembers={familyMembers}
+                familyRole={familyRole}
+                isReadOnly={isReadOnly}
+                onAddFamilyMember={addFamilyMember}
+                onAddBulkPayments={addBulkPayments}
+                portfolios={portfolios}
+                onSwitchToMultiPortfolio={switchToMultiPortfolio}
+                onCreatePortfolio={createPortfolio}
+                onUpdatePortfolio={updatePortfolio}
+                onReorderPortfolio={reorderPortfolio}
+                onDeletePortfolio={deletePortfolio}
+                workspaceCurrencyRates={workspaceCurrencyRates}
+                onUpsertCurrencyRate={upsertCurrencyRate}
+                workspaceBackups={workspaceBackups}
+                onRestoreFromBackup={restoreFromBackup}
+                onStartWhatsAppVerification={startWhatsAppVerification}
+                onUpdateDisplayName={updateDisplayName}
+                currentLandingTab={activeWorkspace?.landingTab}
+                onUpdateLandingTab={updateWorkspaceLandingTab}
+                hasFeature={hasFeature}
+                accessPlans={accessPlans}
+                myUpgradeRequest={myUpgradeRequest}
+                onRequestUpgrade={requestUpgrade}
+                onDisconnectWhatsApp={disconnectWhatsApp}
+                onUpdateDigestPrefs={updateDigestPrefs}
+                onCreateFamily={async () => { await createWorkspace(activeWorkspace?.type === 'business' ? 'My Business' : 'My Family', activeWorkspace?.type || 'family'); }}
+                activeWorkspace={activeWorkspace}
+                onRenameWorkspace={renameWorkspace}
+                onUpdateWorkspaceBaseCurrency={updateWorkspaceBaseCurrency}
+                onDeleteWorkspace={deleteWorkspace}
+                onJoinFamilyGroup={joinFamilyGroup}
+                onLeaveFamilyGroup={leaveFamilyGroup}
+                incomingInvitations={incomingInvitations}
+                onApproveInvitation={approveInvitation}
+                onDeclineInvitation={declineInvitation}
+                onUpdateMemberRole={updateMemberRole}
+                onUpdateMemberPortfolioContributor={updateMemberPortfolioContributor}
+                onRemoveFamilyMember={removeFamilyMember}
+                outgoingInvitations={outgoingInvitations}
+                onCancelInvitation={cancelInvitation}
+                inviteCode={inviteCode}
+                onRegenerateInviteCode={regenerateInviteCode}
+                onLogOut={logOut}
+                theme={theme}
+                onThemeChange={setTheme}
+                countries={countries}
+                rate={rate}
+                onSaveRate={saveRate}
+                summaryCurrency={summaryCurrency}
+                onSaveSummaryCurrency={saveSummaryCurrency}
+                onRequestNotifications={requestNotificationPermission}
+                onTriggerTestNotif={handleTriggerTestReminder}
+                customizedTags={customizedTags}
+                onSaveCustomizedTags={saveCustomizedTags}
+                appNotificationsEnabled={appNotificationsEnabled}
+                mobileNotificationsEnabled={mobileNotificationsEnabled}
+                onSaveNotificationSettings={saveNotificationSettings}
+                showFrequencyPatterns={showFrequencyPatterns}
+                onToggleFrequencyPatterns={handleToggleFrequencyPatterns}
+                viewMode={viewMode}
+                setViewMode={setViewMode}
+                activeSubTab={settingsSubTab}
+                onActiveSubTabChange={setSettingsSubTab}
+                pulseMode={uiPulse}
+              />
+
+
+)}
 </NewDesignSwitch>
 ) : activeTab === 'ai' ? (
               <AiInsights 
@@ -2086,7 +2182,8 @@ export default function App() {
                 summaryCurrency={summaryCurrency}
               />
             ) : activeTab === 'rewards' ? (
-                <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={false}>
+                <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
+{tryNewUi ? (
 <SplitPage
   noScroll
   title="Membership"
@@ -2112,6 +2209,21 @@ export default function App() {
                   isReadOnly={isReadOnly}
 />
 </SplitPage>
+) : (
+<RewardsTracker
+                  pulseMode={uiPulse}
+                  rewardsPerks={rewardsPerks}
+                  onAddReward={addReward}
+                  onUpdateReward={updateReward}
+                  onDeleteReward={deleteReward}
+                  giftCards={giftCards}
+                  onAddGiftCard={addGiftCard}
+                  onUpdateGiftCard={updateGiftCard}
+                  onRedeemGiftCard={redeemGiftCard}
+                  onDeleteGiftCard={deleteGiftCard}
+                  isReadOnly={isReadOnly}
+                />
+)}
 </NewDesignSwitch>
 ) : activeTab === 'portfolio_alt' && userProfile?.isSuperAdmin ? (
               <div className="flex-1 min-h-0 overflow-auto">
@@ -2157,7 +2269,7 @@ export default function App() {
                   }}
                 />
               </div>
-) : activeTab === 'portfolio' && !portfolioClassic ? (
+) : activeTab === 'portfolio' && tryNewUi && !portfolioClassic ? (
               <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
                 <PulsePortfolio
                   mode="main"
@@ -2320,7 +2432,9 @@ export default function App() {
               )
             ) : activeTab === 'investment_plan' ? (
 <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
+{tryNewUi ? (
 <SplitPage
+  noScroll
   title="Investment plan"
   subtitle="Contributions & planning"
   selected={planSection}
@@ -2387,6 +2501,49 @@ export default function App() {
                               />
 
 </SplitPage>
+) : (
+
+<InvestmentPlanView
+                pulseMode={uiPulse}
+
+                workspaceName={activeWorkspace?.name}
+                workspaceMembers={contributorMembers}
+                isReadOnly={isReadOnly}
+                currentUserId={user?.id}
+                portfolios={portfolios}
+                portfolioMode={activeWorkspace?.portfolioMode}
+                workspaceCurrencyRates={workspaceCurrencyRates}
+                baseCurrency={activeWorkspace?.baseCurrency}
+                dismissedReminderKey={activeWorkspace?.dismissedReminderKey}
+                onDismissContributionReminder={dismissContributionReminder}
+                portfolioSplits={portfolioSplits}
+                addPortfolioSplit={addPortfolioSplit}
+                deletePortfolioSplit={deletePortfolioSplit}
+                portfolioContributions={portfolioContributions}
+                addPortfolioContribution={addPortfolioContribution}
+                updatePortfolioContribution={updatePortfolioContribution}
+                deletePortfolioContribution={deletePortfolioContribution}
+                portfolioWithdrawals={portfolioWithdrawals}
+                addPortfolioWithdrawal={addPortfolioWithdrawal}
+                deletePortfolioWithdrawal={deletePortfolioWithdrawal}
+                portfolioCashBalances={portfolioCashBalances}
+                setPortfolioCashBalance={setPortfolioCashBalance}
+                deletePortfolioCashBalance={deletePortfolioCashBalance}
+                portfolioBookedPlBaselines={portfolioBookedPlBaselines}
+                setBookedPlBaseline={setBookedPlBaseline}
+                portfolioProjectedBankBalances={portfolioProjectedBankBalances}
+                setProjectedBankBalance={setProjectedBankBalance}
+                portfolioRecurringPlans={portfolioRecurringPlans}
+                portfolioRecurringPlanSkips={portfolioRecurringPlanSkips}
+                skipRecurringPeriod={skipRecurringPeriod}
+                unskipRecurringPeriod={unskipRecurringPeriod}
+                addPortfolioRecurringPlan={addPortfolioRecurringPlan}
+                updatePortfolioRecurringPlan={updatePortfolioRecurringPlan}
+                deletePortfolioRecurringPlan={deletePortfolioRecurringPlan}
+                              />
+
+
+)}
 </NewDesignSwitch>
 ) : activeTab === 'quote_connections' ? (
                 <PortfolioView
@@ -2465,7 +2622,9 @@ export default function App() {
               />
 ) : activeTab === 'reports' ? (
 <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
+{tryNewUi ? (
 <SplitPage
+  noScroll
   title="Reports"
   subtitle="Pick a report"
   selected={reportSection}
@@ -2526,6 +2685,39 @@ export default function App() {
                               />
 
 </SplitPage>
+) : (
+
+<ReportsView
+                pulseMode={uiPulse}
+
+                workspaceName={activeWorkspace?.name}
+                workspaceMembers={contributorMembers}
+                isReadOnly={isReadOnly}
+                portfolios={portfolios}
+                portfolioMode={activeWorkspace?.portfolioMode}
+                workspaceCurrencyRates={workspaceCurrencyRates}
+                baseCurrency={activeWorkspace?.baseCurrency}
+                portfolioHoldings={portfolioHoldings}
+                portfolioPriceHistory={portfolioPriceHistory}
+                portfolioContributions={portfolioContributions}
+                portfolioWithdrawals={portfolioWithdrawals}
+                portfolioDividends={portfolioDividends}
+                addPortfolioDividend={addPortfolioDividend}
+                deletePortfolioDividend={deletePortfolioDividend}
+                portfolioFees={portfolioFees}
+                addPortfolioFee={addPortfolioFee}
+                deletePortfolioFee={deletePortfolioFee}
+                portfolioSplits={portfolioSplits}
+                portfolioCashBalances={portfolioCashBalances}
+                portfolioSnapshots={portfolioSnapshots}
+                takePortfolioSnapshot={takePortfolioSnapshot}
+                deletePortfolioSnapshotBatch={deletePortfolioSnapshotBatch}
+                mfHoldingsCache={mfHoldingsCache}
+                loadMfHoldingsCache={loadMfHoldingsCache}
+                              />
+
+
+)}
 </NewDesignSwitch>
 ) : activeTab === 'income' ? (
                 <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
@@ -2564,7 +2756,9 @@ export default function App() {
               </NewDesignSwitch>
 ) : activeTab === 'admin_users' && userProfile?.isSuperAdmin ? (
 <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
+{tryNewUi ? (
 <SplitPage
+  noScroll
   title="App & License"
   subtitle="Admin only"
   selected={adminSection}
@@ -2595,6 +2789,26 @@ export default function App() {
               />
 
 </SplitPage>
+) : (
+
+<AdminUsersView
+                fetchAllUsersForAdmin={fetchAllUsersForAdmin}
+                inviteNewUser={inviteNewUser}
+                onOnboardUserWithPlan={onboardUserWithPlan}
+                accessPlans={accessPlans}
+                onCreatePlan={createAccessPlan}
+                onUpdatePlan={updateAccessPlan}
+                onDeletePlan={deleteAccessPlan}
+                fetchPendingUpgradeRequests={fetchPendingUpgradeRequests}
+                onResolveUpgradeRequest={resolveUpgradeRequest}
+                onSetUserPlan={adminSetUserPlan}
+                onSetSuperAdmin={setSuperAdminStatus}
+                currentUserId={user?.id}
+                pulseMode={uiPulse}
+              />
+
+
+)}
 </NewDesignSwitch>
 ) : activeTab === 'history' && hasFeature('core') ? (
               <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>

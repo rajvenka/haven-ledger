@@ -25,14 +25,14 @@ export default function NewDesignSwitch({
               : 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-md shadow-violet-600/30'
           }`}
         >
-          {isNew ? <><Undo2 className="w-3 h-3" /> Back to current design</> : <><Sparkles className="w-3 h-3" /> Try new design</>}
+          {isNew ? <><Undo2 className="w-3 h-3" /> Old design</> : <><Sparkles className="w-3 h-3" /> Switch to Pulse</>}
         </button>
       </div>
   );
-  void bar; // toggle removed: new design is fixed
-  if (plain) return <>{children}</>;
+  if (plain) return <>{bar}{children}</>;
   return (
     <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
+      {bar}
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">{children}</div>
     </div>
   );
