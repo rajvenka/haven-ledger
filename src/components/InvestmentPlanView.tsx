@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Trash2, Users, Wallet, Edit2, CheckCircle2, X, ClipboardList, Banknote, AlertTriangle, TrendingUp } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
@@ -11,6 +11,9 @@ interface WorkspaceMemberLite {
 interface InvestmentPlanViewProps {
   /** When true, Portfolio-level Pulse chrome; features identical to classic */
   pulseMode?: boolean;
+  section?: string;
+  hideTabs?: boolean;
+  hideHeader?: boolean;
   workspaceName?: string;
   workspaceMembers: WorkspaceMemberLite[];
   isReadOnly?: boolean;
@@ -85,6 +88,9 @@ type PlanTab = 'overview' | 'contributions';
 export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const {
     pulseMode = false,
+    section,
+    hideTabs = false,
+    hideHeader = false,
     workspaceName, workspaceMembers, isReadOnly, currentUserId, dismissedReminderKey, onDismissContributionReminder,
     portfolios: allPortfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
@@ -116,7 +122,8 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
   const portfolioCashBalances = selectedPlanPortfolioIds ? allPortfolioCashBalances.filter((c: any) => selectedPlanPortfolioIds.includes(c.portfolio_id)) : allPortfolioCashBalances;
   const portfolioRecurringPlans = selectedPlanPortfolioIds ? allPortfolioRecurringPlans.filter((p: any) => selectedPlanPortfolioIds.includes(p.portfolio_id)) : allPortfolioRecurringPlans;
 
-  const [planTab, setPlanTab] = useState<PlanTab>('contributions');
+  const [planTab, setPlanTab] = useState<PlanTab>((section as PlanTab) || 'contributions');
+  useEffect(() => { if (section) setPlanTab(section as PlanTab); }, [section]);
   const [formError, setFormError] = useState<string | null>(null);
   const runAction = async (fn: () => Promise<any>) => {
     setFormError(null);
@@ -486,7 +493,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
         );
       })()}
 
-      {pulseMode ? (
+      {hideTabs ? null : pulseMode ? (
         <div className="flex gap-1 p-1 rounded-2xl bg-slate-100/90 dark:bg-slate-900/80 border border-slate-200/70 dark:border-slate-800">
           {TABS.map(tab => (
             <button

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Trash2, Gift, Receipt, FileBarChart, ChevronLeft, TrendingUp, TrendingDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ComposedChart, Line } from 'recharts';
 
@@ -11,6 +11,12 @@ interface WorkspaceMemberLite {
 interface ReportsViewProps {
   /** When true, Portfolio-level Pulse chrome; features identical to classic */
   pulseMode?: boolean;
+  section?: string;
+  hideTabs?: boolean;
+  hideHeader?: boolean;
+  hideBookBar?: boolean;
+  bookSelection?: Set<string>;
+  onBookSelectionChange?: (next: Set<string>) => void;
   workspaceName?: string;
   workspaceMembers: WorkspaceMemberLite[];
   isReadOnly?: boolean;
@@ -130,6 +136,12 @@ function DetailBucket({ label, count, totalLabel, isOpen, onToggle, children }: 
 export default function ReportsView(props: ReportsViewProps) {
   const {
     pulseMode = false,
+    section,
+    hideTabs = false,
+    hideHeader = false,
+    hideBookBar = false,
+    bookSelection,
+    onBookSelectionChange,
     workspaceName, workspaceMembers, isReadOnly,
     portfolios: allPortfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     portfolioHoldings: allPortfolioHoldings, portfolioPriceHistory, portfolioContributions: allPortfolioContributions, portfolioWithdrawals: allPortfolioWithdrawals,
@@ -139,7 +151,8 @@ export default function ReportsView(props: ReportsViewProps) {
     mfHoldingsCache = [], loadMfHoldingsCache,
   } = props;
 
-  const [reportTab, setReportTab] = useState<ReportTab>('overview');
+  const [reportTab, setReportTab] = useState<ReportTab>((section as ReportTab) || 'overview');
+  useEffect(() => { if (section) setReportTab(section as ReportTab); }, [section]);
   const [insightsSubTab, setInsightsSubTab] = useState<'all' | 'stock' | 'mutual_fund' | 'mf-holdings' | 'mf-stock'>('all');
   const [mfReportDrillStock, setMfReportDrillStock] = useState<string | null>(null);
   const [mfFundsDetailOpen, setMfFundsDetailOpen] = useState(false);
@@ -182,7 +195,12 @@ export default function ReportsView(props: ReportsViewProps) {
     }
   };
 
-  const [selectedReportPortfolios, setSelectedReportPortfolios] = useState<Set<string>>(new Set());
+  const [localBooks, setLocalBooks] = useState<Set<string>>(new Set());
+  const selectedReportPortfolios: Set<string> = bookSelection ?? localBooks;
+  const setSelectedReportPortfolios = (u: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+    const next = typeof u === 'function' ? u(selectedReportPortfolios) : u;
+    if (onBookSelectionChange) onBookSelectionChange(next); else setLocalBooks(next);
+  };
   const reportPortfolioNames = useMemo(() => {
     if (portfolioMode !== 'multiple') return [];
     const names = new Set<string>();
@@ -237,7 +255,7 @@ export default function ReportsView(props: ReportsViewProps) {
 
   return (
     <div className={`flex-1 flex flex-col overflow-y-auto px-3 sm:px-5 pt-3 sm:pt-4 pb-24 md:pb-4 space-y-4 text-left ${pulseMode ? 'bg-slate-50 dark:bg-slate-950' : 'bg-slate-50 dark:bg-slate-900'}`}>
-      {pulseMode ? (
+      {hideHeader ? null : pulseMode ? (
         <div className="flex items-center gap-2.5 px-0.5">
           <FileBarChart className="w-5 h-5 text-violet-500/80 dark:text-violet-400/80 shrink-0" />
           <div className="min-w-0">
@@ -258,7 +276,7 @@ export default function ReportsView(props: ReportsViewProps) {
         <div className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 rounded-xl text-[11px] text-rose-600 dark:text-rose-400 font-semibold">{formError}</div>
       )}
 
-      {portfolioMode === 'multiple' && reportPortfolioNames.length > 1 && (
+      {!hideBookBar && portfolioMode === 'multiple' && reportPortfolioNames.length > 1 && (
         pulseMode ? (
           <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
             <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-violet-500/80 dark:text-violet-400/80 w-10">Book</span>
@@ -279,7 +297,7 @@ export default function ReportsView(props: ReportsViewProps) {
         )
       )}
 
-      {pulseMode ? (
+      {hideTabs ? null : pulseMode ? (
         <div className="flex gap-1 p-1 rounded-2xl bg-slate-100/90 dark:bg-slate-900/80 border border-slate-200/70 dark:border-slate-800 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {TABS.map(tab => (
             <button

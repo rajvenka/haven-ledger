@@ -48,6 +48,7 @@ import PulseBills from './components/PulseBills';
 import PulseHome from './components/PulseHome';
 import { clearZerodhaPending, readZerodhaCallback, readZerodhaPending, stripZerodhaCallbackFromUrl, ZERODHA_AUTOSYNC_KEY } from './utils/zerodhaAuth';
 import PulseAccounts from './components/PulseAccounts';
+import SplitPage from './components/SplitPage';
 import PagePane from './components/PagePane';
 import NewDesignSwitch from './components/NewDesignSwitch';
 import PulseMembership from './components/PulseMembership';
@@ -326,6 +327,10 @@ export default function App() {
   };
   const lastLandingWorkspaceId = React.useRef<string | null>(null);
   const [settingsSubTab, setSettingsSubTab] = useState<'preferences' | 'team'>('preferences');
+  const [settingsPicked, setSettingsPicked] = useState<string | null>(null);
+  const [reportSection, setReportSection] = useState<string | null>(null);
+  const [reportBooks, setReportBooks] = useState<Set<string>>(new Set());
+  const [planSection, setPlanSection] = useState<string | null>(null);
   const [isAgentOpen, setIsAgentOpen] = useState(false);
   // Carefully narrowed portfolio summary for the Agent - explicit field allowlist, built only
   // from portfolio_holdings (a table with no credential fields at all - verified directly
@@ -1995,7 +2000,18 @@ export default function App() {
               </NewDesignSwitch>
             ) : activeTab === 'account' ? (
 <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
-<PagePane>
+<SplitPage
+  title="Settings"
+  subtitle="Preferences, security, team"
+  selected={settingsPicked}
+  onSelect={(id) => { setSettingsPicked(id); if (id) setSettingsSubTab(id as any); }}
+  items={[
+    { id: 'preferences', label: 'Preferences', sub: 'Workspace, currency, display', icon: <span className="text-[13px] font-black">Pr</span> },
+    { id: 'security', label: 'Security', sub: 'Account security & data', icon: <span className="text-[13px] font-black">Se</span> },
+    { id: 'members', label: 'Team', sub: 'Members & invites', icon: <span className="text-[13px] font-black">Tm</span> },
+  ]}
+>
+
 <AccountInfo 
                 payments={payments}
                 userProfile={userProfile}
@@ -2064,7 +2080,8 @@ export default function App() {
                 onActiveSubTabChange={setSettingsSubTab}
                 pulseMode={uiPulse || tryNewUi}
               />
-</PagePane>
+
+</SplitPage>
 </NewDesignSwitch>
 ) : activeTab === 'ai' ? (
               <AiInsights 
@@ -2312,9 +2329,21 @@ export default function App() {
               )
             ) : activeTab === 'investment_plan' ? (
 <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
-<PagePane>
+<SplitPage
+  title="Investment plan"
+  subtitle="Contributions & planning"
+  selected={planSection}
+  onSelect={setPlanSection}
+  items={[
+    { id: 'contributions', label: 'Contribution log', sub: 'Contributions, withdrawals, recurring', icon: <span className="text-[13px] font-black">Lg</span> },
+    { id: 'overview', label: 'Chart', sub: 'Contribution trend', icon: <span className="text-[13px] font-black">Ch</span> },
+  ]}
+>
+
 <InvestmentPlanView
                 pulseMode={uiPulse || tryNewUi}
+                section={planSection || 'contributions'}
+                hideTabs
 
                 workspaceName={activeWorkspace?.name}
                 workspaceMembers={contributorMembers}
@@ -2351,7 +2380,8 @@ export default function App() {
                 updatePortfolioRecurringPlan={updatePortfolioRecurringPlan}
                 deletePortfolioRecurringPlan={deletePortfolioRecurringPlan}
                               />
-</PagePane>
+
+</SplitPage>
 </NewDesignSwitch>
 ) : activeTab === 'quote_connections' ? (
                 <PortfolioView
@@ -2430,9 +2460,39 @@ export default function App() {
               />
 ) : activeTab === 'reports' ? (
 <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
-<PagePane>
+<SplitPage
+  title="Reports"
+  subtitle="Pick a report"
+  selected={reportSection}
+  onSelect={setReportSection}
+  items={[
+    { id: 'overview', label: 'Overview', sub: 'Value, P&L and allocation', icon: <span className="text-[13px] font-black">Ov</span> },
+    { id: 'insights', label: 'Insights', sub: 'Winners, losers, categories', icon: <span className="text-[13px] font-black">In</span> },
+    { id: 'activity', label: 'Activity', sub: 'Dividends, fees, transactions', icon: <span className="text-[13px] font-black">Ac</span> },
+    { id: 'movement', label: 'Movement', sub: 'Compare two dates', icon: <span className="text-[13px] font-black">Mv</span> },
+    { id: 'summary', label: 'Summary', sub: 'Snapshots and totals', icon: <span className="text-[13px] font-black">Su</span> },
+  ]}
+  railTop={activeWorkspace?.portfolioMode === 'multiple' && portfolios.length > 1 ? (
+    <div className="mt-2">
+      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Book</p>
+      <div className="flex flex-wrap gap-1.5">
+        <button type="button" onClick={() => setReportBooks(new Set())} className={`px-2.5 py-1.5 rounded-full text-[10px] font-bold ${reportBooks.size === 0 ? 'bg-violet-600 text-white' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'}`}>All</button>
+        {portfolios.map((pf: any) => (
+          <button key={pf.id} type="button" onClick={() => setReportBooks((prev) => { const n = new Set(prev); if (n.has(pf.name)) n.delete(pf.name); else n.add(pf.name); return n; })} className={`px-2.5 py-1.5 rounded-full text-[10px] font-bold ${reportBooks.has(pf.name) ? 'bg-violet-600 text-white' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'}`}>{pf.name}</button>
+        ))}
+      </div>
+    </div>
+  ) : null}
+>
+
 <ReportsView
                 pulseMode={uiPulse || tryNewUi}
+                section={reportSection || 'overview'}
+                hideTabs
+                hideHeader
+                hideBookBar
+                bookSelection={reportBooks}
+                onBookSelectionChange={setReportBooks}
 
                 workspaceName={activeWorkspace?.name}
                 workspaceMembers={contributorMembers}
@@ -2459,7 +2519,8 @@ export default function App() {
                 mfHoldingsCache={mfHoldingsCache}
                 loadMfHoldingsCache={loadMfHoldingsCache}
                               />
-</PagePane>
+
+</SplitPage>
 </NewDesignSwitch>
 ) : activeTab === 'income' ? (
                 <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
