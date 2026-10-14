@@ -29,10 +29,10 @@ export default function NewDesignSwitch({
         </button>
       </div>
   );
-  if (plain) return <>{bar}{children}</>;
+  void bar; // toggle removed: new design is fixed
+  if (plain) return <>{children}</>;
   return (
     <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
-      {bar}
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">{children}</div>
     </div>
   );

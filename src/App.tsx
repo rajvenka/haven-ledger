@@ -274,22 +274,11 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'configure' | 'account' | 'history' | 'ai' | 'income' | 'rewards' | 'portfolio' | 'portfolio_alt' | 'portfolio_v1' | 'investment_plan' | 'quote_connections' | 'reports' | 'admin_users'>('summary');
   const [mainNavCollapsed, setMainNavCollapsed] = useState<boolean>(() => { try { return localStorage.getItem('hv_main_nav_collapsed') === '1'; } catch { return false; } });
   const toggleMainNav = () => setMainNavCollapsed((v) => { try { localStorage.setItem('hv_main_nav_collapsed', v ? '0' : '1'); } catch { /* ignore */ } return !v; });
-  const [tryNewUi, setTryNewUiState] = useState<boolean>(() => {
-    try {
-      // New design is the default everywhere. One-time reset so people who previously flipped back
-      // to the old design get the new one; after that their own choice (toggle) is respected.
-      if (localStorage.getItem('hv_new_ui_default_v1') !== '1') {
-        localStorage.setItem('hv_new_ui_default_v1', '1');
-        localStorage.setItem('hv_try_new_ui', 'true');
-        return true;
-      }
-      return localStorage.getItem('hv_try_new_ui') !== 'false';
-    } catch { return true; }
-  });
-  const setTryNewUi = (v: boolean) => {
-    setTryNewUiState(v);
-    try { localStorage.setItem('hv_try_new_ui', String(v)); } catch { /* ignore */ }
-  };
+  // New design is fixed across all pages (no old/new toggle). Only the Portfolio "Manage" link can open the classic portfolio screen.
+  const tryNewUi = true;
+  const [portfolioClassic, setPortfolioClassic] = useState(false);
+  const setTryNewUi = (_v: boolean) => { /* design is fixed */ };
+  useEffect(() => { if (activeTab !== 'portfolio') setPortfolioClassic(false); }, [activeTab]);
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
   const [billsAccount, setBillsAccount] = useState<string | null>(null);
   const [historyAccount, setHistoryAccount] = useState<string | null>(null);
@@ -1848,7 +1837,7 @@ export default function App() {
 
           {/* Dynamic page content body */}
           <main className={`flex-1 min-w-0 max-w-full overflow-x-hidden flex flex-col min-h-0 ${
-            ((uiPulse && (activeTab === 'expenses' || activeTab === 'summary' || activeTab === 'configure' || activeTab === 'rewards' || activeTab === 'income' || activeTab === 'history' || activeTab === 'reports' || activeTab === 'investment_plan')) || (!uiPulse && tryNewUi && (activeTab === 'expenses' || activeTab === 'summary' || activeTab === 'configure' || activeTab === 'history' || activeTab === 'income' || activeTab === 'rewards' || activeTab === 'reports' || activeTab === 'investment_plan' || activeTab === 'account' || activeTab === 'admin_users')))
+            ((['account', 'admin_users', 'reports', 'investment_plan'].includes(activeTab)) || (uiPulse && (activeTab === 'expenses' || activeTab === 'summary' || activeTab === 'configure' || activeTab === 'rewards' || activeTab === 'income' || activeTab === 'history' || activeTab === 'reports' || activeTab === 'investment_plan')) || (!uiPulse && tryNewUi && (activeTab === 'expenses' || activeTab === 'summary' || activeTab === 'configure' || activeTab === 'history' || activeTab === 'income' || activeTab === 'rewards' || activeTab === 'reports' || activeTab === 'investment_plan' || activeTab === 'account' || activeTab === 'admin_users')))
               ? 'overflow-hidden'
               : 'overflow-y-auto'
           }`}>
@@ -2135,7 +2124,7 @@ export default function App() {
                   baseCurrency={activeWorkspace?.baseCurrency}
                   connections={portfolioBrokerConnections}
                   isLoading={portfolioDataLoading}
-                  onManage={() => setTryNewUi(false)}
+                  onManage={() => setPortfolioClassic(true)}
                   isReadOnly={isReadOnly}
                   cashBalances={portfolioCashBalances}
                   loadDailyPositions={loadPortfolioDailyPositions}
@@ -2168,7 +2157,7 @@ export default function App() {
                   }}
                 />
               </div>
-) : activeTab === 'portfolio' && tryNewUi ? (
+) : activeTab === 'portfolio' && !portfolioClassic ? (
               <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
                 <PulsePortfolio
                   mode="main"
@@ -2179,7 +2168,7 @@ export default function App() {
                   baseCurrency={activeWorkspace?.baseCurrency}
                   connections={portfolioBrokerConnections}
                   isLoading={portfolioDataLoading}
-                  onManage={() => setTryNewUi(false)}
+                  onManage={() => setPortfolioClassic(true)}
                   isReadOnly={isReadOnly}
                   cashBalances={portfolioCashBalances}
                   loadDailyPositions={loadPortfolioDailyPositions}
