@@ -1254,6 +1254,22 @@ export function usePaymentState() {
   // them when the active workspace actually changes (not on every routine refresh).
   const portfolioStateWsRef = useRef<string | null>(null);
 
+  // Lightweight refresh of just the holdings rows (live price / previous close / etc.) so P&L and
+  // Today follow the 30-minute price job without a full reload. Pages the 1000-row API cap.
+  const refreshPortfolioHoldingsQuick = useCallback(async () => {
+    const wsId = activeWorkspaceId;
+    if (!wsId) return;
+    const all: any[] = [];
+    for (let from = 0; from < 20000; from += 1000) {
+      const { data, error } = await supabase.from('portfolio_holdings').select('*').eq('workspace_id', wsId).order('buy_date', { ascending: false }).range(from, from + 999);
+      if (error || !data) return;
+      all.push(...data);
+      if (data.length < 1000) break;
+    }
+    if (portfolioStateWsRef.current && portfolioStateWsRef.current !== wsId) return;
+    setPortfolioHoldings(all.filter((r: any) => !r.workspace_id || r.workspace_id === wsId));
+  }, [activeWorkspaceId]);
+
   const loadPortfolioDetails = useCallback(async (overrideWsId?: string | null) => {
     // overrideWsId is required when called from switchWorkspace: setActiveWorkspaceId is
     // async, so the closure still holds the *previous* workspace id until the next render.
@@ -2603,7 +2619,7 @@ export function usePaymentState() {
     portfolioBookedPlBaselines, portfolioBookedPlHistory, setBookedPlBaseline,
     portfolioBankBalanceHistory,
     portfolioProjectedBankBalances, setProjectedBankBalance, recalculateProjectedBankBalance,
-    portfolioBrokerConnections, setPortfolioBrokerConnection, renamePortfolioBrokerConnection, deletePortfolioBrokerConnection, markBrokerConnectionSynced,
+    portfolioBrokerConnections, refreshPortfolioHoldingsQuick, setPortfolioBrokerConnection, renamePortfolioBrokerConnection, deletePortfolioBrokerConnection, markBrokerConnectionSynced,
     portfolioHoldingLots,
     upsertPortfolioHoldingLots, loadPortfolioHoldingLots, syncEtoroHoldingLots, syncEtoroLivePrices,
     portfolioEmployeeGrants, upsertAmundiSarGrants, loadEmployeeGrants,

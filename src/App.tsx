@@ -243,6 +243,7 @@ export default function App() {
     setPortfolioBrokerConnection,
     deletePortfolioBrokerConnection,
     renamePortfolioBrokerConnection,
+    refreshPortfolioHoldingsQuick,
     markBrokerConnectionSynced,
     syncEtoroHoldingLots,
     syncEtoroLivePrices,
@@ -405,6 +406,17 @@ export default function App() {
     setActiveTab(preferred as any);
   }, [activeWorkspaceId, activeWorkspace?.landingTab]);
 
+  // Keep portfolio numbers (Total P&L, Today) current: re-read holdings every 2 min and whenever the tab/app regains focus.
+  useEffect(() => {
+    if (!isLoaded || !user || !activeWorkspaceId) return;
+    if (!['summary', 'portfolio', 'portfolio_alt', 'reports', 'investment_plan'].includes(activeTab)) return;
+    const run = () => { if (document.visibilityState === 'visible') refreshPortfolioHoldingsQuick(); };
+    const id = window.setInterval(run, 120000);
+    document.addEventListener('visibilitychange', run);
+    window.addEventListener('focus', run);
+    run();
+    return () => { window.clearInterval(id); document.removeEventListener('visibilitychange', run); window.removeEventListener('focus', run); };
+  }, [isLoaded, user, activeWorkspaceId, activeTab, refreshPortfolioHoldingsQuick]);
   // Hard enforcement: even if activeTab somehow points at a gated tab (stale state, direct
   // manipulation), bounce back to the dashboard rather than just hiding the nav link.
   React.useEffect(() => {

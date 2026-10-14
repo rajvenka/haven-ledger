@@ -262,8 +262,23 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         const native = String(h.currency || baseCurrency).toUpperCase();
         const qty = Number(h.quantity || 0);
         const price = Number(h.live_price ?? h.current_price ?? h.buy_price ?? 0);
-        const cost = Number(h.buy_price || 0) * qty;
-        const mvN = price * qty;
+        const expCost = Number(h.buy_price || 0) * qty;
+        const expMv = price * qty;
+        // Same basis as the Classic portfolio: for leveraged (eToro CFD) positions use the real cash
+        // committed (eToro net value) instead of full exposure; the $ P&L is identical either way.
+        const lev = Number(h.leverage || 0) > 1;
+        let realMv = expMv;
+        if (lev) {
+          if (h.etoro_net_value_amount != null) realMv = Number(h.etoro_net_value_amount);
+          else if (h.stop_loss_rate != null) {
+            const entry = Number(h.buy_price), stopR = Number(h.stop_loss_rate);
+            const margin = (entry * qty) / Number(h.leverage);
+            const isShort = String(h.source || '').toLowerCase().includes('short');
+            realMv = (isShort ? (stopR - entry) * qty : (entry - stopR) * qty) + margin * 0.5;
+          }
+        }
+        const mvN = realMv;
+        const cost = realMv - (expMv - expCost);
         const prev = Number(h.previous_close);
         const live = Number(h.live_price);
         let dayN = 0;
@@ -272,10 +287,10 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         return {
           h, id: String(h.id), symbol: String(h.ticker || h.symbol || '—'), name: String(h.name || h.symbol || ''),
           native, qty, price, buy: Number(h.buy_price || 0),
-          value: fx(mvN, native, ccy), cost: fx(cost, native, ccy), pnl: fx(mvN - cost, native, ccy), day: fx(dayN, native, ccy),
+          value: fx(mvN, native, ccy), cost: fx(cost, native, ccy), pnl: fx(expMv - expCost, native, ccy), day: fx(dayN, native, ccy),
           category: categoryOf(h), broker: String(h.broker || 'Manual'), currency: native, portfolio,
           dayPct: prev > 0 && live > 0 && live / prev < 20 && live / prev > 0.05 ? ((live - prev) / prev) * 100 : null as number | null,
-          pnlPct: cost > 0 ? ((mvN - cost) / cost) * 100 : 0,
+          pnlPct: cost > 0 ? ((expMv - expCost) / cost) * 100 : 0,
           invNative: cost, valNative: mvN,
           buyDate: h.buy_date ? String(h.buy_date) : '',
           heldDays: h.buy_date ? Math.max(0, Math.floor((Date.now() - new Date(h.buy_date).getTime()) / 86400000)) : null as number | null,
