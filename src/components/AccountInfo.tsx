@@ -811,8 +811,8 @@ export default function AccountInfo({
                     const btn = 'w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 flex items-center justify-center text-slate-600 dark:text-slate-300 enabled:hover:bg-indigo-50 enabled:hover:text-indigo-600 enabled:cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed';
                     return (
                       <div className="flex flex-col justify-center gap-1.5 shrink-0" title="Select a portfolio, then move it">
-                        <button type="button" disabled={!can || selIdx === 0} onClick={() => onReorderPortfolio?.(orderSelId!, 'up')} className={btn} aria-label="Move selected portfolio up"><ChevronUp className="w-5 h-5" /></button>
-                        <button type="button" disabled={!can || selIdx === portfolios.length - 1} onClick={() => onReorderPortfolio?.(orderSelId!, 'down')} className={btn} aria-label="Move selected portfolio down"><ChevronDown className="w-5 h-5" /></button>
+                        <button type="button" disabled={!can || selIdx === 0} onClick={async () => { try { await onReorderPortfolio?.(orderSelId!, 'up'); } catch (err: any) { setPortfolioError(err?.message || 'Could not reorder'); } }} className={btn} aria-label="Move selected portfolio up"><ChevronUp className="w-5 h-5" /></button>
+                        <button type="button" disabled={!can || selIdx === portfolios.length - 1} onClick={async () => { try { await onReorderPortfolio?.(orderSelId!, 'down'); } catch (err: any) { setPortfolioError(err?.message || 'Could not reorder'); } }} className={btn} aria-label="Move selected portfolio down"><ChevronDown className="w-5 h-5" /></button>
                       </div>
                     );
                   })()}

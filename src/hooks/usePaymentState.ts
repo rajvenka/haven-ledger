@@ -407,17 +407,21 @@ export function usePaymentState() {
   // an intermediate state.
   const reorderPortfolio = async (portfolioId: string, direction: 'up' | 'down') => {
     if (!activeWorkspaceId) return;
-    const { data } = await supabase.from('portfolios').select('id, display_order').eq('workspace_id', activeWorkspaceId).order('display_order', { ascending: true });
+    // Same ordering the list uses (display_order, then created_at) so ties/NULLs can't hide a move.
+    const { data, error: selErr } = await supabase.from('portfolios').select('id, display_order').eq('workspace_id', activeWorkspaceId).order('display_order', { ascending: true, nullsFirst: false }).order('created_at');
+    if (selErr) throw selErr;
     if (!data) return;
     const idx = data.findIndex((p: any) => p.id === portfolioId);
     const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
     if (idx === -1 || swapIdx < 0 || swapIdx >= data.length) return;
-    const a = data[idx];
-    const b = data[swapIdx];
-    await Promise.all([
-      supabase.from('portfolios').update({ display_order: b.display_order }).eq('id', a.id),
-      supabase.from('portfolios').update({ display_order: a.display_order }).eq('id', b.id),
-    ]);
+    const ordered = data.map((p: any) => ({ id: p.id, display_order: p.display_order as number | null }));
+    [ordered[idx], ordered[swapIdx]] = [ordered[swapIdx], ordered[idx]];
+    // Renumber 0..n-1 so equal/NULL display_order values (which made the old swap a no-op) get distinct positions.
+    const results = await Promise.all(
+      ordered.map((p, i) => (p.display_order === i ? Promise.resolve({ error: null } as any) : supabase.from('portfolios').update({ display_order: i }).eq('id', p.id)))
+    );
+    const failed = results.find((r: any) => r?.error);
+    if (failed) throw failed.error;
     await loadPortfolioDetails();
   };
 
