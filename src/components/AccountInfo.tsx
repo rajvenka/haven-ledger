@@ -178,6 +178,7 @@ export default function AccountInfo({
   onActiveSubTabChange,
   pulseMode = false,
 }: AccountInfoProps) {
+  const [orderSelId, setOrderSelId] = useState<string | null>(null);
   const [localActiveSubTab, setLocalActiveSubTab] = useState<'preferences' | 'security' | 'members' | 'groups' | 'chat' | 'invite'>('preferences');
   const [digestPreview, setDigestPreview] = useState<{ loading: boolean; text: string | null; error: string | null }>({ loading: false, text: null, error: null });
   const currentSubTab = activeSubTab !== undefined ? activeSubTab : localActiveSubTab;
@@ -735,9 +736,10 @@ export default function AccountInfo({
               ) : (
                 <>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">Multiple Portfolio - manage separate portfolios below (e.g. one per currency). Tap the edit icon to change a portfolio's name or currency together - changing currency only relabels the portfolio, it doesn't convert or recalculate any existing holdings.</p>
-                  <div className="space-y-1.5">
+                  <div className="flex items-stretch gap-2">
+                  <div className="space-y-1.5 flex-1 min-w-0">
                     {portfolios.map((p, pIndex) => (
-                      <div key={p.id} className="flex items-center justify-between px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 rounded-lg text-xs">
+                      <div key={p.id} onClick={() => renamingPortfolioId !== p.id && setOrderSelId(p.id)} className={`flex items-center justify-between px-2.5 py-2 rounded-lg text-xs cursor-pointer border transition-colors ${orderSelId === p.id ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700' : 'bg-slate-50 dark:bg-slate-900 border-transparent hover:border-slate-200 dark:hover:border-slate-700'}`}>
                         {renamingPortfolioId === p.id ? (
                           <div className="flex items-center gap-1.5 flex-1">
                             <input
@@ -770,22 +772,6 @@ export default function AccountInfo({
                           </div>
                         ) : (
                           <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                            {familyRole === 'host' && (
-                              <div className="flex flex-col shrink-0">
-                                <button
-                                  onClick={() => onReorderPortfolio?.(p.id, 'up')}
-                                  disabled={pIndex === 0}
-                                  className="text-slate-300 hover:text-indigo-500 disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer leading-none"
-                                  title="Move up"
-                                ><ChevronUp className="w-3 h-3" /></button>
-                                <button
-                                  onClick={() => onReorderPortfolio?.(p.id, 'down')}
-                                  disabled={pIndex === portfolios.length - 1}
-                                  className="text-slate-300 hover:text-indigo-500 disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer leading-none"
-                                  title="Move down"
-                                ><ChevronDown className="w-3 h-3" /></button>
-                              </div>
-                            )}
                             <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                               {p.name}{' '}
                               <span className="text-[9px] text-slate-400 font-bold">{p.currency}</span>
@@ -819,6 +805,21 @@ export default function AccountInfo({
                       </div>
                     ))}
                   </div>
+                  {familyRole === 'host' && portfolios.length > 1 && (() => {
+                    const selIdx = portfolios.findIndex((x) => x.id === orderSelId);
+                    const can = selIdx >= 0;
+                    const btn = 'w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 flex items-center justify-center text-slate-600 dark:text-slate-300 enabled:hover:bg-indigo-50 enabled:hover:text-indigo-600 enabled:cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed';
+                    return (
+                      <div className="flex flex-col justify-center gap-1.5 shrink-0" title="Select a portfolio, then move it">
+                        <button type="button" disabled={!can || selIdx === 0} onClick={() => onReorderPortfolio?.(orderSelId!, 'up')} className={btn} aria-label="Move selected portfolio up"><ChevronUp className="w-5 h-5" /></button>
+                        <button type="button" disabled={!can || selIdx === portfolios.length - 1} onClick={() => onReorderPortfolio?.(orderSelId!, 'down')} className={btn} aria-label="Move selected portfolio down"><ChevronDown className="w-5 h-5" /></button>
+                      </div>
+                    );
+                  })()}
+                  </div>
+                  {familyRole === 'host' && portfolios.length > 1 && (
+                    <p className="text-[10px] text-slate-400 -mt-1">Tap a portfolio to select it, then use the arrows to change its order.</p>
+                  )}
                   {familyRole === 'host' && (
                     <div className="flex gap-1.5">
                       <input
