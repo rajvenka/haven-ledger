@@ -2131,6 +2131,14 @@ export function usePaymentState() {
     await loadPortfolioDetails();
   };
 
+  const renamePortfolioBrokerConnection = async (id: string, label: string) => {
+    const clean = label.trim();
+    if (!clean) throw new Error('Name cannot be empty');
+    const { error } = await supabase.from('portfolio_broker_connections').update({ connection_label: clean, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) throw error;
+    await loadPortfolioDetails();
+  };
+
   const deletePortfolioBrokerConnection = async (id: string) => {
     const { error } = await supabase.from('portfolio_broker_connections').delete().eq('id', id);
     if (error) throw error;
@@ -2591,7 +2599,7 @@ export function usePaymentState() {
     portfolioBookedPlBaselines, portfolioBookedPlHistory, setBookedPlBaseline,
     portfolioBankBalanceHistory,
     portfolioProjectedBankBalances, setProjectedBankBalance, recalculateProjectedBankBalance,
-    portfolioBrokerConnections, setPortfolioBrokerConnection, deletePortfolioBrokerConnection, markBrokerConnectionSynced,
+    portfolioBrokerConnections, setPortfolioBrokerConnection, renamePortfolioBrokerConnection, deletePortfolioBrokerConnection, markBrokerConnectionSynced,
     portfolioHoldingLots,
     upsertPortfolioHoldingLots, loadPortfolioHoldingLots, syncEtoroHoldingLots, syncEtoroLivePrices,
     portfolioEmployeeGrants, upsertAmundiSarGrants, loadEmployeeGrants,

@@ -141,6 +141,7 @@ interface Props {
   setCash?: (location: any, amount: number, asOf?: string, notes?: string, portfolioId?: string) => Promise<any>;
   deleteCash?: (id: string) => Promise<any>;
   priceHistory?: any[];
+  renameConnection?: (id: string, label: string) => Promise<void>;
   bulkTag?: (ids: string[], tag: string) => Promise<any>;
   syncProps?: any;
   portfolioMode?: string;
@@ -161,7 +162,7 @@ const NAV: { k: Section; label: string; icon: React.ReactNode }[] = [
   { k: 'sync', label: 'Import & Sync', icon: <RefreshCw className="w-4 h-4" /> },
 ];
 
-export default function PulsePortfolio({ holdings, lots = [], portfolios = [], rates = [], baseCurrency = 'INR', connections = [], isLoading, onManage, isReadOnly, importProps, cashBalances = [], loadDailyPositions, snapshotDaily, addHolding, updateHolding, sellHolding, deleteHolding, bulkDelete, setCash, deleteCash, syncProps, portfolioMode, bulkTag, mode = 'main', priceHistory = [], contributions = [], withdrawals = [], bookedBaselines = [] }: Props) {
+export default function PulsePortfolio({ holdings, lots = [], portfolios = [], rates = [], baseCurrency = 'INR', connections = [], isLoading, onManage, isReadOnly, importProps, cashBalances = [], loadDailyPositions, snapshotDaily, addHolding, updateHolding, sellHolding, deleteHolding, bulkDelete, setCash, deleteCash, syncProps, portfolioMode, bulkTag, mode = 'main', priceHistory = [], contributions = [], withdrawals = [], bookedBaselines = [], renameConnection }: Props) {
   const [section, setSectionState] = useState<Section>(() => { try { return (localStorage.getItem('hv_pp_section') as Section) || 'overview'; } catch { return 'overview'; } });
   const setSection = (k: Section) => { setSectionState(k); try { localStorage.setItem('hv_pp_section', k); } catch { /* */ } };
   const [designState, setDesignState] = useState<number>(() => { try { return Number(localStorage.getItem('hv_pp_design')) || 1; } catch { return 1; } });
@@ -192,6 +193,8 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const [sellFor, setSellFor] = useState<any | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [renamingConn, setRenamingConn] = useState<string | null>(null);
+  const [renameVal, setRenameVal] = useState('');
   const [trendRows, setTrendRows] = useState<any[]>([]);
   const [trendDays, setTrendDays] = useState(90);
   const [calRows, setCalRows] = useState<any[]>([]);
@@ -477,7 +480,20 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
             <div key={c.id} className="flex flex-wrap items-center gap-3 px-4 py-3 border-t border-slate-100 dark:border-slate-800 first:border-t-0">
               <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-xs font-black uppercase">{String(c.broker_type || '?').slice(0, 2)}</div>
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-black text-slate-900 dark:text-white truncate">{c.connection_label || c.broker_type}</div>
+                {renamingConn === c.id ? (
+                  <form className="flex items-center gap-1.5" onSubmit={async (e) => { e.preventDefault(); try { await renameConnection?.(c.id, renameVal); setRenamingConn(null); } catch (er: any) { setErr(er?.message || 'Could not rename'); } }}>
+                    <input autoFocus value={renameVal} onChange={(e) => setRenameVal(e.target.value)} className="min-w-0 flex-1 px-2 py-1.5 rounded-lg border border-indigo-300 bg-white dark:bg-slate-950 text-sm font-bold" />
+                    <button type="submit" className="px-2.5 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-black">Save</button>
+                    <button type="button" onClick={() => setRenamingConn(null)} className="px-2 py-1.5 text-xs font-bold text-slate-500">Cancel</button>
+                  </form>
+                ) : (
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <div className="text-sm font-black text-slate-900 dark:text-white truncate">{c.connection_label || c.broker_type}</div>
+                    {renameConnection && !isReadOnly && (
+                      <button type="button" title="Rename connection" onClick={() => { setRenamingConn(c.id); setRenameVal(c.connection_label || c.broker_type || ''); }} className="shrink-0 p-1 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800"><Pencil className="w-3.5 h-3.5" /></button>
+                    )}
+                  </div>
+                )}
                 <div className="text-[11px] text-slate-500">{pName || 'Workspace'} · last sync {ago(c.last_synced_at)}</div>
               </div>
               <span className={`text-[10px] font-black px-2 py-1 rounded-full ${st.cls}`}>{st.label}</span>

@@ -242,6 +242,7 @@ export default function App() {
     portfolioBrokerConnections,
     setPortfolioBrokerConnection,
     deletePortfolioBrokerConnection,
+    renamePortfolioBrokerConnection,
     markBrokerConnectionSynced,
     syncEtoroHoldingLots,
     syncEtoroLivePrices,
@@ -2240,6 +2241,7 @@ export default function App() {
                   contributions={portfolioContributions}
                   withdrawals={portfolioWithdrawals}
                   bookedBaselines={portfolioBookedPlBaselines}
+                  renameConnection={renamePortfolioBrokerConnection}
                   importProps={{
                     isReadOnly, baseCurrency: activeWorkspace?.baseCurrency, workspaceName: activeWorkspace?.name,
                     portfolios, portfolioMode: activeWorkspace?.portfolioMode, portfolioHoldings, portfolioHoldingLots,
@@ -2283,6 +2285,7 @@ export default function App() {
                   contributions={portfolioContributions}
                   withdrawals={portfolioWithdrawals}
                   bookedBaselines={portfolioBookedPlBaselines}
+                  renameConnection={renamePortfolioBrokerConnection}
                   importProps={{
                     isReadOnly, baseCurrency: activeWorkspace?.baseCurrency, workspaceName: activeWorkspace?.name,
                     portfolios, portfolioMode: activeWorkspace?.portfolioMode, portfolioHoldings, portfolioHoldingLots,
