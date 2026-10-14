@@ -1246,12 +1246,12 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           <p className="text-xs text-slate-500">{rows.length} positions · {connections.length} broker connection{connections.length === 1 ? '' : 's'}</p>
         </div>
       </div>
-      <div className="space-y-2 mb-4">
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 space-y-2.5 mb-4">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 w-16 shrink-0">Portfolio</span>
           {[...portfolios, { id: 'All', name: 'All' }].map((p: any) => (
             <span key={p.id} className="inline-flex items-center">
-              <button onClick={() => chooseBook(p.id)} className={`text-xs font-black px-3.5 py-1.5 rounded-full transition-all ${book === p.id ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>{p.name}{p.currency ? <span className="ml-1 opacity-60 font-bold">{String(p.currency).toUpperCase()}</span> : null}</button>
+              <button onClick={() => chooseBook(p.id)} className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition-all lowercase first-letter:uppercase ${book === p.id ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 shadow-sm' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:border-indigo-300'}`}>{p.id !== 'All' && <i className={`w-2 h-2 rounded-full shrink-0 ${book === p.id ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'}`} />}<span className="capitalize">{p.name}</span>{p.currency ? <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-black uppercase tracking-wide">{String(p.currency).toUpperCase()}</span> : null}</button>
               {p.id !== 'All' && book === p.id && (
                 <button title={defaultBook === p.id ? 'Default portfolio' : 'Make this my default portfolio'} onClick={() => makeDefault(p.id)} className={`ml-1 p-1 rounded-full ${defaultBook === p.id ? 'text-amber-500' : 'text-slate-300 hover:text-amber-500'}`}><Star className={`w-3.5 h-3.5 ${defaultBook === p.id ? 'fill-current' : ''}`} /></button>
               )}
@@ -1260,9 +1260,11 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 w-16 shrink-0">Currency</span>
+          <div className="inline-flex p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800">
           {currencies.map((c) => (
-            <button key={c} onClick={() => setCcy(c)} className={`text-xs font-black px-3.5 py-1.5 rounded-full transition-all ${ccy === c ? 'bg-indigo-600 text-white shadow' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>{c}</button>
+            <button key={c} onClick={() => setCcy(c)} className={`text-xs font-black px-3.5 py-1.5 rounded-md transition-all ${ccy === c ? 'bg-white dark:bg-slate-950 text-indigo-600 dark:text-indigo-300 shadow' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}>{c}</button>
           ))}
+          </div>
         </div>
       </div>
 
