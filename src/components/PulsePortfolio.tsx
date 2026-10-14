@@ -342,6 +342,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       });
   }, [holdings, portfolios, fx, ccy, baseCurrency, book]);
 
+  const lotCounts = useMemo(() => { const m = new Map<string, number>(); (lots || []).forEach((l: any) => m.set(String(l.holding_id), (m.get(String(l.holding_id)) || 0) + 1)); return m; }, [lots]);
   // Value of each portfolio (in the selected currency) for the compact mobile picker.
   const bookValues = useMemo(() => {
     const m = new Map<string, number>();
@@ -1071,7 +1072,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
               {list.map((r, i) => (
                 <button key={r.id} onClick={() => { setFocusId(r.id); setTimeout(() => document.getElementById('pp-split-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60); }} className={`w-full flex items-center gap-3 px-3 py-2.5 border-t border-slate-100 dark:border-slate-800 text-left ${f?.id === r.id ? 'bg-indigo-50 dark:bg-indigo-950/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
                   <Avatar t={r.symbol} i={i} />
-                  <div className="flex-1 min-w-0"><div className="text-sm font-black truncate">{r.symbol}</div><div className="text-[11px] text-slate-400 truncate">{r.broker}</div></div>
+                  <div className="flex-1 min-w-0"><div className="text-sm font-black truncate flex items-center gap-1.5">{r.symbol}{(lotCounts.get(r.id) || 0) > 1 && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-300 font-black">{lotCounts.get(r.id)} orders</span>}</div><div className="text-[11px] text-slate-400 truncate">{r.broker}</div></div>
                   <div className="text-right"><div className="text-xs font-black tabular-nums">{money(r.value, ccy, true)}</div><div className={`text-[11px] font-bold ${tone(r.pnl)}`}>{pct(r.pnlPct)}</div></div>
                 </button>
               ))}
