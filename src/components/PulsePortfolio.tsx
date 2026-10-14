@@ -1176,7 +1176,6 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button onClick={() => toggleBlock('hdr')} className="flex items-center gap-1 text-sm font-black">{chev('hdr')} Portfolio summary <span className="text-[11px] font-bold text-slate-400">· {rows.length} positions</span></button>
         <div className="flex flex-wrap items-center gap-1.5">
-          {([['total', 'Total P&L'], ['day', 'Today']] as const).map(([k, l]) => <button key={k} onClick={() => setMoversMode(k)} className={`text-[10px] font-black px-2.5 py-1 rounded-full ${moversMode === k ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{l}</button>)}
           {hasLev && ([[false, 'CFD exposure'], [true, 'CFD cash at risk']] as const).map(([k, l]) => <button key={l} onClick={() => setCfdReal(k)} title="Leveraged positions: full exposure vs cash actually committed" className={`text-[10px] font-black px-2.5 py-1 rounded-full ${cfdReal === k ? 'bg-teal-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{l}</button>)}
         </div>
       </div>
@@ -1195,6 +1194,12 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
             <Stat label="Daily change" value={money(hs.day, ccy, true)} t={hs.day} sub={pct(hs.dayPct)} />
             <Stat label="Since previous load" value={sinceLoad == null ? '—' : money(sinceLoad, ccy, true)} t={sinceLoad ?? undefined} sub={sinceLoad == null ? 'first visit' : 'holdings value'} />
             <Stat label="vs total investment" value={hs.hasNetInv && hs.netInv > 0 ? pct(((hs.total - hs.netInv) / hs.netInv) * 100) : '—'} t={hs.hasNetInv ? hs.total - hs.netInv : undefined} sub="total value vs money in" />
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 -mb-1">
+            <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">By category <span className="normal-case font-bold">· show</span></div>
+            <div className="flex items-center gap-1.5">
+              {([['total', 'Total P&L'], ['day', 'Today']] as const).map(([k, l]) => <button key={k} onClick={() => setMoversMode(k)} className={`text-[10px] font-black px-2.5 py-1 rounded-full ${moversMode === k ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{l}</button>)}
+            </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
             {catTiles.map((c, i) => {
