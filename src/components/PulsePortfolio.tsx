@@ -396,13 +396,18 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const cashTotal = cashRows.reduce((a, c) => a + c.conv, 0);
 
   // Value-over-time (from daily snapshots)
+  // The loader prop is a new function on every App render; depending on it re-ran (and cancelled) this fetch
+  // on each re-render, so the trend could stay empty until a manual refresh. Keep it in a ref instead.
+  const loadDailyRef = React.useRef(loadDailyPositions);
+  loadDailyRef.current = loadDailyPositions;
   React.useEffect(() => {
-    if (section !== 'overview' || !loadDailyPositions) return;
+    const loader = loadDailyRef.current;
+    if (section !== 'overview' || !loader) return;
     let alive = true;
     const to = new Date(); const from = new Date(Date.now() - trendDays * 86400000);
-    loadDailyPositions(from.toISOString().slice(0, 10), to.toISOString().slice(0, 10), book === 'All' || !book ? null : book).then((d) => { if (alive) setTrendRows(d || []); }).catch(() => {});
+    loader(from.toISOString().slice(0, 10), to.toISOString().slice(0, 10), book === 'All' || !book ? null : book).then((d) => { if (alive) setTrendRows(d || []); }).catch(() => {});
     return () => { alive = false; };
-  }, [section, trendDays, book, loadDailyPositions]);
+  }, [section, trendDays, book]);
   const trend = useMemo(() => {
     const m: Record<string, number> = {}; const n: Record<string, number> = {};
     trendRows.forEach((r: any) => { const c = String(r.currency || '').toUpperCase(); m[r.snapshot_date] = (m[r.snapshot_date] || 0) + fx(Number(r.market_value || 0), c, ccy); n[r.snapshot_date] = (n[r.snapshot_date] || 0) + 1; });
