@@ -437,14 +437,20 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   // Value-over-time (from daily snapshots)
   // The loader prop is a new function on every App render; depending on it re-ran (and cancelled) this fetch
   // on each re-render, so the trend could stay empty until a manual refresh. Keep it in a ref instead.
+  const withRetry = async <T,>(fn: () => Promise<T>, tries = 3): Promise<T> => {
+    let last: any;
+    for (let i = 0; i < tries; i++) { try { return await fn(); } catch (e) { last = e; await new Promise((r) => setTimeout(r, 600 * (i + 1))); } }
+    throw last;
+  };
   const loadDailyRef = React.useRef(loadDailyPositions);
   loadDailyRef.current = loadDailyPositions;
   React.useEffect(() => {
     const loader = loadDailyRef.current;
     if (section !== 'overview' || !loader) return;
     let alive = true;
+    setTrendRows([]);
     const to = new Date(); const from = new Date(Date.now() - trendDays * 86400000);
-    loader(from.toISOString().slice(0, 10), to.toISOString().slice(0, 10), book === 'All' || !book ? null : book).then((d) => { if (alive) setTrendRows(d || []); }).catch(() => {});
+    withRetry(() => loader(from.toISOString().slice(0, 10), to.toISOString().slice(0, 10), book === 'All' || !book ? null : book)).then((d) => { if (alive) setTrendRows(d || []); }).catch(() => {});
     return () => { alive = false; };
   }, [section, trendDays, book]);
   const trend = useMemo(() => {
@@ -460,11 +466,11 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     setCalLoading(true);
     try {
       const to = new Date(); const from = new Date(to.getFullYear() - 1, to.getMonth(), to.getDate());
-      const d = await loadDailyPositions(from.toISOString().slice(0, 10), to.toISOString().slice(0, 10), calBook === 'all' ? null : calBook);
+      const d = await withRetry(() => loadDailyPositions(from.toISOString().slice(0, 10), to.toISOString().slice(0, 10), calBook === 'all' ? null : calBook));
       setCalRows(d || []);
       const set = Array.from(new Set((d || []).map((r: any) => String(r.currency || '').toUpperCase()).filter(Boolean)));
       if (set.length && !set.includes(calCcy)) setCalCcy(set[0] as string);
-    } finally { setCalLoading(false); }
+    } catch { /* leave previous rows; user can switch tab to retry */ } finally { setCalLoading(false); }
   };
   // Follow the page's portfolio / currency filters when opening the calendar
   React.useEffect(() => {

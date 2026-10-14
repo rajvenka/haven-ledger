@@ -20,6 +20,7 @@ import {
   Bot,
   Smartphone,
   ChevronRight,
+  ChevronLeft,
   ShieldAlert,
   Globe,
   Sun,
@@ -757,7 +758,7 @@ export default function App() {
       <div className="flex-1 flex flex-row h-full bg-slate-50 dark:bg-slate-900 relative overflow-hidden text-left">
         
         {/* Persistent Desktop Sidebar Navigation (Hidden on Mobile) */}
-        <aside className={`hidden md:flex flex-col h-dvh bg-white dark:bg-slate-950 border-r border-slate-150/80 dark:border-slate-900 shrink-0 z-20 select-none transition-all duration-200 ${mainNavCollapsed ? 'w-[72px] p-2 [&_span]:hidden [&_p]:hidden [&_h1]:hidden [&_nav>button]:justify-center [&_nav>button>div]:justify-center' : 'w-56 p-4'}`}>
+        <aside className={`relative hidden md:flex flex-col h-dvh bg-white dark:bg-slate-950 border-r border-slate-150/80 dark:border-slate-900 shrink-0 z-20 select-none transition-all duration-200 ${mainNavCollapsed ? 'w-[72px] p-2 [&_span]:hidden [&_p]:hidden [&_h1]:hidden [&_nav>button]:justify-center [&_nav>button>div]:justify-center' : 'w-56 p-4'}`}>
           <div className="flex-1 min-h-0 overflow-y-auto space-y-4">
             {/* Elegant Header with Logo & Status */}
             <div className="flex items-center gap-3">
@@ -775,15 +776,6 @@ export default function App() {
                 </div>
               </div>
             </div>
-
-            <button
-              type="button"
-              onClick={toggleMainNav}
-              title={mainNavCollapsed ? 'Expand menu' : 'Collapse menu'}
-              className="w-full flex items-center justify-center gap-2 py-1.5 rounded-xl text-[11px] font-black text-slate-400 hover:text-indigo-600 hover:bg-slate-50 dark:hover:bg-slate-900 cursor-pointer"
-            >
-              {mainNavCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <><PanelLeftClose className="w-4 h-4" /><span>Collapse menu</span></>}
-            </button>
 
             {!mainNavCollapsed && (
             <WorkspaceSwitcher
@@ -1266,6 +1258,16 @@ export default function App() {
               </button>
             </div>
           </div>
+          {/* Collapse / expand handle sitting on the sidebar's right border */}
+          <button
+            type="button"
+            onClick={toggleMainNav}
+            title={mainNavCollapsed ? 'Expand menu' : 'Collapse menu'}
+            aria-label={mainNavCollapsed ? 'Expand menu' : 'Collapse menu'}
+            className="absolute top-20 -right-3 z-30 w-6 h-6 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-300 cursor-pointer"
+          >
+            {mainNavCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+          </button>
         </aside>
 
         {/* Full-space Mobile Side Menu Drawer (AnimatePresence) */}
