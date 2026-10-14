@@ -162,6 +162,28 @@ const NAV: { k: Section; label: string; icon: React.ReactNode }[] = [
   { k: 'sync', label: 'Import & Sync', icon: <RefreshCw className="w-4 h-4" /> },
 ];
 
+function TagEditor({ id, current, options, onSave, disabled }: { id: string; current: string; options: string[]; onSave: (tag: string) => Promise<any>; disabled?: boolean }) {
+  const [val, setVal] = React.useState(current === '—' ? '' : current);
+  const [saving, setSaving] = React.useState(false);
+  const [msg, setMsg] = React.useState<string | null>(null);
+  React.useEffect(() => { setVal(current === '—' ? '' : current); setMsg(null); }, [id, current]);
+  const dirty = val.trim() !== (current === '—' ? '' : current);
+  const save = async (v: string) => { setSaving(true); setMsg(null); try { await onSave(v.trim()); setMsg('Saved'); } catch (e: any) { setMsg(e?.message || 'Failed'); } finally { setSaving(false); } };
+  return (
+    <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-2">
+      <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Tag</div>
+      <div className="flex flex-wrap gap-2 items-center">
+        <input list={`tag-opts-${id}`} value={val} onChange={(e) => { setVal(e.target.value); setMsg(null); }} disabled={disabled} placeholder="e.g. Rajavel Stock SME" className="flex-1 min-w-[10rem] text-xs px-2.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none" />
+        <datalist id={`tag-opts-${id}`}>{options.map((o) => <option key={o} value={o} />)}</datalist>
+        <button disabled={disabled || saving || !dirty || !val.trim()} onClick={() => save(val)} className="text-xs font-black px-3 py-2 rounded-xl bg-amber-500 text-white disabled:opacity-40">{saving ? 'Saving…' : 'Save tag'}</button>
+        {current !== '—' && <button disabled={disabled || saving} onClick={() => { setVal(''); save(''); }} className="text-xs font-black px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 disabled:opacity-40">Clear</button>}
+      </div>
+      {options.length > 0 && <div className="flex flex-wrap gap-1">{options.slice(0, 8).map((o) => <button key={o} disabled={disabled} onClick={() => setVal(o)} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">{o}</button>)}</div>}
+      {msg && <div className={`text-[11px] font-bold ${msg === 'Saved' ? 'text-emerald-600' : 'text-rose-500'}`}>{msg}</div>}
+    </div>
+  );
+}
+
 export default function PulsePortfolio({ holdings, lots = [], portfolios = [], rates = [], baseCurrency = 'INR', connections = [], isLoading, onManage, isReadOnly, importProps, cashBalances = [], loadDailyPositions, snapshotDaily, addHolding, updateHolding, sellHolding, deleteHolding, bulkDelete, setCash, deleteCash, syncProps, portfolioMode, bulkTag, mode = 'main', priceHistory = [], contributions = [], withdrawals = [], bookedBaselines = [], renameConnection }: Props) {
   const [section, setSectionState] = useState<Section>(() => { try { return (localStorage.getItem('hv_pp_section') as Section) || 'overview'; } catch { return 'overview'; } });
   const setSection = (k: Section) => { setSectionState(k); try { localStorage.setItem('hv_pp_section', k); } catch { /* */ } };
@@ -174,6 +196,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const [prevLoad, setPrevLoad] = useState<number | null>(null);
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
+  const [splitSelect, setSplitSelect] = useState(false);
   const [alertOpen, setAlertOpen] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<string>('All');
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -344,6 +367,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
 
   const lotCounts = useMemo(() => { const m = new Map<string, number>(); (lots || []).forEach((l: any) => m.set(String(l.holding_id), (m.get(String(l.holding_id)) || 0) + 1)); return m; }, [lots]);
   // Value of each portfolio (in the selected currency) for the compact mobile picker.
+  const allTags = useMemo(() => Array.from(new Set(rows.map((r) => r.tag).filter((t) => t && t !== '—'))).sort(), [rows]);
   const bookValues = useMemo(() => {
     const m = new Map<string, number>();
     holdings.filter((h) => (h.status || 'active') === 'active').forEach((h) => {
@@ -1074,9 +1098,23 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
             <div className="px-3 pt-3 flex flex-wrap gap-1.5">{typeChips.map((t) => <button key={t} onClick={() => setTypeFilter(t)} className={`text-[11px] font-black px-2.5 py-1 rounded-full ${typeFilter === t ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{t}{t !== 'All' ? <span className="ml-1 opacity-60">{typeCounts.get(t)}</span> : <span className="ml-1 opacity-60">{topRows.length}</span>}</button>)}</div>
             <div className="p-3 border-b border-slate-100 dark:border-slate-800"><div className="relative"><Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${list.length} ${typeFilter === 'All' ? 'holdings' : typeFilter.toLowerCase()}`} className="w-full pl-8 pr-2 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 outline-none" /></div></div>
+            {!isReadOnly && bulkTag && (
+              <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-2">
+                <button onClick={() => { setSplitSelect(!splitSelect); setChecked([]); }} className={`text-[11px] font-black px-2.5 py-1 rounded-full ${splitSelect ? 'bg-amber-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{splitSelect ? 'Cancel' : 'Select & tag'}</button>
+                {splitSelect && <button onClick={() => setChecked(checked.length === list.length ? [] : list.map((x) => x.id))} className="text-[11px] font-bold text-indigo-600">{checked.length === list.length ? 'None' : 'All'}</button>}
+                {splitSelect && checked.length > 0 && (
+                  <span className="flex items-center gap-1.5 w-full">
+                    <input list="pp-tag-opts" value={tagInput} onChange={(e) => setTagInput(e.target.value)} placeholder="Tag as e.g. Rajavel Stock SME" className="flex-1 min-w-0 text-xs px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none" />
+                    <button disabled={busy || !tagInput.trim()} onClick={() => run(() => bulkTag(checked, tagInput.trim()), () => { setChecked([]); setTagInput(''); setSplitSelect(false); })} className="text-xs font-black px-3 py-1.5 rounded-xl bg-amber-500 text-white disabled:opacity-40 shrink-0">Tag {checked.length}</button>
+                  </span>
+                )}
+                <datalist id="pp-tag-opts">{allTags.map((o) => <option key={o} value={o} />)}</datalist>
+              </div>
+            )}
             <div className="max-h-[70vh] overflow-auto">
               {list.map((r, i) => (
-                <button key={r.id} onClick={() => { setFocusId(r.id); setTimeout(() => document.getElementById('pp-split-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60); }} className={`w-full flex items-center gap-3 px-3 py-2.5 border-t border-slate-100 dark:border-slate-800 text-left ${f?.id === r.id ? 'bg-indigo-50 dark:bg-indigo-950/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
+                <button key={r.id} onClick={() => { if (splitSelect) { setChecked((c) => c.includes(r.id) ? c.filter((x) => x !== r.id) : [...c, r.id]); return; } setFocusId(r.id); setTimeout(() => document.getElementById('pp-split-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60); }} className={`w-full flex items-center gap-3 px-3 py-2.5 border-t border-slate-100 dark:border-slate-800 text-left ${f?.id === r.id ? 'bg-indigo-50 dark:bg-indigo-950/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
+                  {splitSelect && <input type="checkbox" readOnly checked={checked.includes(r.id)} className="w-4 h-4 accent-amber-500 shrink-0" />}
                   <Avatar t={r.symbol} i={i} />
                   <div className="flex-1 min-w-0"><div className="text-sm font-black truncate flex items-center gap-1.5">{r.symbol}{(lotCounts.get(r.id) || 0) > 1 && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-300 font-black">{lotCounts.get(r.id)} orders</span>}</div><div className="text-[11px] text-slate-400 truncate">{r.broker}</div></div>
                   <div className="text-right"><div className="text-xs font-black tabular-nums">{money(r.value, ccy, true)}</div><div className={`text-[11px] font-bold ${tone(r.pnl)}`}>{pct(r.pnlPct)}</div></div>
@@ -1087,6 +1125,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           {f ? (
             <div id="pp-split-detail" className="scroll-mt-[calc(env(safe-area-inset-top)+5rem)] md:scroll-mt-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 space-y-5 lg:sticky lg:top-2 min-w-0">
               <div className="flex items-start justify-between gap-3"><div><div className="text-2xl sm:text-3xl font-black break-words">{f.symbol}</div><div className="text-xs text-slate-500">{f.name !== f.symbol ? f.name + ' · ' : ''}{f.broker} · {f.portfolio} · {f.category}{f.tag !== '—' ? ` · ${f.tag}` : ''}</div></div><Pill v={f.pnlPct} /></div>
+              {!isReadOnly && updateHolding && <TagEditor id={f.id} current={f.tag} options={allTags} onSave={(t) => updateHolding(f.id, { source: t })} />}
               <div className="text-2xl sm:text-4xl font-black tabular-nums break-words">{money(f.value, ccy)}</div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                 {[['P&L', money(f.pnl, ccy, true)], ['Invested', money(f.cost, ccy, true)], ['Quantity', px(f.qty)], ['Avg cost', `${px(f.buy)} ${f.native}`], ['Last price', `${px(f.price)} ${f.native}`], ['Today', f.day ? money(f.day, ccy, true) : '—'], ['Weight', `${totals.value > 0 ? ((f.value / totals.value) * 100).toFixed(2) : 0}%`], ['Held', f.heldDays != null ? `${f.heldDays} days` : '—'], ['Target', f.target ? px(f.target) : '—'], ['Stop loss', f.stop ? px(f.stop) : '—'], ['Bought', f.buyDate || '—'], ['Price updated', f.updated ? new Date(f.updated).toLocaleDateString() : '—']].map(([k, v]) => <div key={k} className="rounded-xl bg-slate-50 dark:bg-slate-800 p-3"><div className="text-[10px] uppercase font-black text-slate-400">{k}</div><div className="font-bold mt-0.5">{v}</div></div>)}
