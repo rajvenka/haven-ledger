@@ -442,7 +442,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       const qty = Number(h.quantity || 0);
       const cost = Number(h.buy_price || 0) * qty;
       const proceeds = Number(h.sold_price || 0) * qty;
-      return { id: String(h.id), symbol: String(h.ticker || h.symbol || '—'), broker: String(h.broker || ''), type: typeOf(h), tag: normalizeSourceTag(h.source, h), qty, native,
+      return { id: String(h.id), pfId: (h.portfolio_id ?? null) as string | null, symbol: String(h.ticker || h.symbol || '—'), broker: String(h.broker || ''), type: typeOf(h), tag: normalizeSourceTag(h.source, h), qty, native,
         buy: Number(h.buy_price || 0), sell: Number(h.sold_price || 0), buyDate: h.buy_date || '', soldDate: h.sold_date || '',
         cost: fx(cost, native, ccy), proceeds: fx(proceeds, native, ccy), pnl: fx(proceeds - cost, native, ccy), pnlPct: cost > 0 ? ((proceeds - cost) / cost) * 100 : 0 };
     })
@@ -1291,11 +1291,16 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     let hv = 0, hc = 0, unreal = 0, day = 0;
     rows.forEach((r) => { const a = adj(r); hv += a.value; hc += a.cost; unreal += r.pnl; day += r.day; });
     const pid = book === 'All' || !book ? null : book;
-    const base = bookedBaselines.find((b: any) => (b.portfolio_id ?? null) === pid);
-    const baseAmt = base ? fx(Number(base.baseline_amount || 0), String(portfolios.find((p: any) => p.id === pid)?.currency || baseCurrency).toUpperCase(), ccy) : 0;
-    const cutoff = base ? String(base.baseline_date || '1900-01-01').slice(0, 10) : '1900-01-01';
-    const bookedSales = soldRows.filter((r) => String(r.soldDate) > cutoff).reduce((a, r) => a + r.pnl, 0);
-    const booked = baseAmt + bookedSales;
+    // Booked P/L = each portfolio's confirmed baseline + realized sales after that baseline's date.
+    // On the "All" view add this up per portfolio (baselines live on a specific portfolio once the workspace is multi-portfolio).
+    const scope: (string | null)[] = pid ? [pid] : (portfolioMode === 'multiple' && portfolios.length ? portfolios.map((p: any) => p.id) : [null]);
+    let booked = 0;
+    scope.forEach((sp) => {
+      const base = bookedBaselines.find((b: any) => (b.portfolio_id ?? null) === sp);
+      const baseAmt = base ? fx(Number(base.baseline_amount || 0), String(portfolios.find((p: any) => p.id === sp)?.currency || baseCurrency).toUpperCase(), ccy) : 0;
+      const cutoff = base ? String(base.baseline_date || '1900-01-01').slice(0, 10) : '1900-01-01';
+      booked += baseAmt + soldRows.filter((r) => (sp === null || r.pfId === sp) && String(r.soldDate) > cutoff).reduce((a, r) => a + r.pnl, 0);
+    });
     const cc = (c: any) => String(c.currency || portfolios.find((p: any) => p.id === (c.portfolio_id ?? null))?.currency || baseCurrency).toUpperCase();
     const inBook = (c: any) => !pid || c.portfolio_id === pid;
     const contrib = contributions.filter(inBook).reduce((a, c) => a + fx(Number(c.amount || 0), cc(c), ccy), 0);
