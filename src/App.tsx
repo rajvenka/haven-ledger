@@ -331,6 +331,7 @@ export default function App() {
   const [reportSection, setReportSection] = useState<string | null>(null);
   const [reportBooks, setReportBooks] = useState<Set<string>>(new Set());
   const [planSection, setPlanSection] = useState<string | null>(null);
+  const [adminSection, setAdminSection] = useState<string | null>(null);
   const [planBooks, setPlanBooks] = useState<Set<string>>(new Set());
   const [isAgentOpen, setIsAgentOpen] = useState(false);
   // Carefully narrowed portfolio summary for the Agent - explicit field allowlist, built only
@@ -2574,7 +2575,19 @@ export default function App() {
               </NewDesignSwitch>
 ) : activeTab === 'admin_users' && userProfile?.isSuperAdmin ? (
 <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
-<PagePane>
+<SplitPage
+  title="App & License"
+  subtitle="Admin only"
+  selected={adminSection}
+  onSelect={setAdminSection}
+  items={[
+    { id: 'users', label: 'Users', sub: 'Everyone using the app, plans, admin', icon: <span className="text-[13px] font-black">Us</span> },
+    { id: 'requests', label: 'Upgrade requests', sub: 'Pending plan requests', icon: <span className="text-[13px] font-black">Rq</span> },
+    { id: 'invite', label: 'Invite & onboard', sub: 'Add a user with a plan', icon: <span className="text-[13px] font-black">In</span> },
+    { id: 'plans', label: 'Access plans', sub: 'Create and edit license plans', icon: <span className="text-[13px] font-black">Pl</span> },
+  ]}
+>
+
 <AdminUsersView
                 fetchAllUsersForAdmin={fetchAllUsersForAdmin}
                 inviteNewUser={inviteNewUser}
@@ -2589,8 +2602,10 @@ export default function App() {
                 onSetSuperAdmin={setSuperAdminStatus}
                 currentUserId={user?.id}
                 pulseMode={uiPulse || tryNewUi}
+                section={adminSection || 'users'}
               />
-</PagePane>
+
+</SplitPage>
 </NewDesignSwitch>
 ) : activeTab === 'history' && hasFeature('core') ? (
               <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>

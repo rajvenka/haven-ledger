@@ -45,12 +45,14 @@ interface AdminUsersViewProps {
   onSetSuperAdmin?: (userId: string, isAdmin: boolean) => Promise<void>;
   currentUserId?: string;
   pulseMode?: boolean;
+  section?: string;
 }
 
 const ALL_PLAN_FEATURES = ['income', 'rewards', 'ai', 'team', 'chat', 'agent', 'whatsapp', 'portfolio', 'multi_portfolio'];
 const PLAN_FEATURE_LABELS: Record<string, string> = { income: 'Income', rewards: 'Membership Hub', ai: 'AI Insights', team: 'Team', chat: 'Chat', agent: 'AI Agent', whatsapp: 'WhatsApp', portfolio: 'Investment / Portfolio', multi_portfolio: 'Multiple Portfolio' };
 
-export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, onOnboardUserWithPlan, accessPlans = [], onCreatePlan, onUpdatePlan, onDeletePlan, fetchPendingUpgradeRequests, onResolveUpgradeRequest, onSetUserPlan, onSetSuperAdmin, currentUserId, pulseMode = false }: AdminUsersViewProps) {
+export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, onOnboardUserWithPlan, accessPlans = [], onCreatePlan, onUpdatePlan, onDeletePlan, fetchPendingUpgradeRequests, onResolveUpgradeRequest, onSetUserPlan, onSetSuperAdmin, currentUserId, pulseMode = false, section }: AdminUsersViewProps) {
+  const show = (k: string) => !section || section === k;
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -194,6 +196,7 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, o
 
   return (
     <div className={pulseMode ? 'flex-1 flex flex-col overflow-y-auto px-4 sm:px-5 pt-3 pb-24 md:pb-4 space-y-4 text-left bg-slate-50 dark:bg-slate-950 animate-in fade-in-50 duration-300' : 'flex-1 flex flex-col overflow-y-auto px-5 pt-4 pb-24 md:pb-4 space-y-5 text-left bg-slate-50 dark:bg-slate-900 animate-in fade-in-50 duration-300'}>
+      {!section && (
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
@@ -212,7 +215,9 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, o
           <RefreshCw className={`w-4 h-4 text-slate-500 ${loading ? 'animate-spin' : ''}`} />
         </button>
       </div>
+      )}
 
+      {show('invite') && (
       <div className="apple-card p-4 space-y-2.5">
         <div className="flex items-center gap-1.5 mb-1">
           <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black ${onboardStep === 1 ? 'bg-indigo-600 text-white' : 'bg-emerald-500 text-white'}`}>{onboardStep === 1 ? '1' : <Check className="w-3 h-3" />}</span>
@@ -313,12 +318,13 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, o
           </p>
         )}
       </div>
+      )}
 
       {error && (
         <div className="apple-card p-4 text-rose-500 text-xs font-semibold">{error}</div>
       )}
 
-      {pendingRequests.length > 0 && (
+      {show('requests') && pendingRequests.length > 0 && (
         <div className="apple-card p-4 space-y-2.5">
           <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Pending Upgrade Requests ({pendingRequests.length})</span>
           {pendingRequests.map(req => (
@@ -348,7 +354,7 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, o
         </div>
       )}
 
-      {loading ? (
+      {show('users') && (loading ? (
         <div className="apple-card p-10 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
         </div>
@@ -412,9 +418,10 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, o
             ))}
           </div>
         </div>
-      )}
+      ))}
 
       {/* Manage Access Plans */}
+      {show('plans') && (
       <div className="apple-card p-4 space-y-2.5">
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
@@ -528,6 +535,7 @@ export default function AdminUsersView({ fetchAllUsersForAdmin, inviteNewUser, o
           </form>
         )}
       </div>
+      )}
 
     </div>
   );
