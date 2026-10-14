@@ -14,6 +14,9 @@ interface InvestmentPlanViewProps {
   section?: string;
   hideTabs?: boolean;
   hideHeader?: boolean;
+  hideBookBar?: boolean;
+  bookSelection?: Set<string>;
+  onBookSelectionChange?: (next: Set<string>) => void;
   workspaceName?: string;
   workspaceMembers: WorkspaceMemberLite[];
   isReadOnly?: boolean;
@@ -91,6 +94,9 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
     section,
     hideTabs = false,
     hideHeader = false,
+    hideBookBar = false,
+    bookSelection,
+    onBookSelectionChange,
     workspaceName, workspaceMembers, isReadOnly, currentUserId, dismissedReminderKey, onDismissContributionReminder,
     portfolios: allPortfolios = [], portfolioMode = 'single', workspaceCurrencyRates = [], baseCurrency = 'INR',
     portfolioSplits, addPortfolioSplit, deletePortfolioSplit,
@@ -103,7 +109,12 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
     portfolioRecurringPlanSkips = [], skipRecurringPeriod, unskipRecurringPeriod,
   } = props;
 
-  const [selectedPlanPortfolios, setSelectedPlanPortfolios] = useState<Set<string>>(new Set());
+  const [localPlanBooks, setLocalPlanBooks] = useState<Set<string>>(new Set());
+  const selectedPlanPortfolios: Set<string> = bookSelection ?? localPlanBooks;
+  const setSelectedPlanPortfolios = (u: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+    const next = typeof u === 'function' ? u(selectedPlanPortfolios) : u;
+    if (onBookSelectionChange) onBookSelectionChange(next); else setLocalPlanBooks(next);
+  };
   const planPortfolioNames = useMemo(() => {
     if (portfolioMode !== 'multiple') return [];
     const names = new Set<string>();
@@ -427,7 +438,7 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
         </div>
       )}
 
-      {portfolioMode === 'multiple' && planPortfolioNames.length > 1 && (
+      {!hideBookBar && portfolioMode === 'multiple' && planPortfolioNames.length > 1 && (
         pulseMode ? (
           <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
             <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-indigo-500/80 dark:text-indigo-400/80 w-10">Book</span>
@@ -544,6 +555,41 @@ export default function InvestmentPlanView(props: InvestmentPlanViewProps) {
               </div>
             </div>
           );
+        })()}
+
+        {portfolioMode === 'multiple' && (() => {
+          const ids = Array.from(new Set([...portfolioContributions, ...portfolioWithdrawals].map((x: any) => x.portfolio_id || '')));
+          if (ids.length === 0) return null;
+          return ids.map((pid) => {
+            const pf = allPortfolios.find((p: any) => p.id === pid);
+            const ccy = pf?.currency || baseCurrency;
+            const events = [
+              ...portfolioContributions.filter((c: any) => (c.portfolio_id || '') === pid).map((c: any) => ({ date: c.contribution_date, delta: Number(c.amount) })),
+              ...portfolioWithdrawals.filter((w: any) => (w.portfolio_id || '') === pid).map((w: any) => ({ date: w.withdrawal_date, delta: -Number(w.amount) })),
+            ].sort((a, b) => a.date.localeCompare(b.date));
+            let running = 0;
+            const data = events.map((e) => { running += e.delta; return { date: e.date, total: running }; });
+            if (data.length === 0) return null;
+            return (
+              <div key={pid || 'none'} className="apple-card p-4 space-y-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{pf?.name || 'Unassigned'} · Contribution growth ({ccy})</span>
+                  <span className="text-sm font-black tabular-nums">{fmtCur(running, ccy)}</span>
+                </div>
+                <div className="h-40">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={data} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.3} vertical={false} />
+                      <XAxis dataKey="date" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v) => (Math.abs(v) >= 100000 ? `${(v / 100000).toFixed(1)}L` : `${Math.round(v / 1000)}k`)} />
+                      <Tooltip formatter={(v: number) => [fmtCur(v, ccy), 'Total contributed']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                      <Line type="monotone" dataKey="total" stroke="#6366f1" strokeWidth={2} dot={{ r: 2 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            );
+          });
         })()}
 
         {workspaceMembers.length > 0 && (() => {

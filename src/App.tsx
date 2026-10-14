@@ -331,6 +331,7 @@ export default function App() {
   const [reportSection, setReportSection] = useState<string | null>(null);
   const [reportBooks, setReportBooks] = useState<Set<string>>(new Set());
   const [planSection, setPlanSection] = useState<string | null>(null);
+  const [planBooks, setPlanBooks] = useState<Set<string>>(new Set());
   const [isAgentOpen, setIsAgentOpen] = useState(false);
   // Carefully narrowed portfolio summary for the Agent - explicit field allowlist, built only
   // from portfolio_holdings (a table with no credential fields at all - verified directly
@@ -2338,12 +2339,26 @@ export default function App() {
     { id: 'contributions', label: 'Contribution log', sub: 'Contributions, withdrawals, recurring', icon: <span className="text-[13px] font-black">Lg</span> },
     { id: 'overview', label: 'Chart', sub: 'Contribution trend', icon: <span className="text-[13px] font-black">Ch</span> },
   ]}
+  railTop={activeWorkspace?.portfolioMode === 'multiple' && portfolios.length > 1 ? (
+    <div className="mt-2">
+      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Book</p>
+      <div className="flex flex-wrap gap-1.5">
+        <button type="button" onClick={() => setPlanBooks(new Set())} className={`px-2.5 py-1.5 rounded-full text-[10px] font-bold ${planBooks.size === 0 ? 'bg-violet-600 text-white' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'}`}>All</button>
+        {portfolios.map((pf: any) => (
+          <button key={pf.id} type="button" onClick={() => setPlanBooks((prev) => { const n = new Set(prev); if (n.has(pf.name)) n.delete(pf.name); else n.add(pf.name); return n; })} className={`px-2.5 py-1.5 rounded-full text-[10px] font-bold ${planBooks.has(pf.name) ? 'bg-violet-600 text-white' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'}`}>{pf.name}</button>
+        ))}
+      </div>
+    </div>
+  ) : null}
 >
 
 <InvestmentPlanView
                 pulseMode={uiPulse || tryNewUi}
                 section={planSection || 'contributions'}
                 hideTabs
+                hideBookBar
+                bookSelection={planBooks}
+                onBookSelectionChange={setPlanBooks}
 
                 workspaceName={activeWorkspace?.name}
                 workspaceMembers={contributorMembers}
