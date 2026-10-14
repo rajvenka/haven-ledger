@@ -23,7 +23,7 @@ export default function SplitPage({
   onSelect: (id: string | null) => void; railTop?: React.ReactNode; children: React.ReactNode;
 }) {
   const isDesktop = useIsDesktop();
-  const current = items.find((i) => i.id === selected) || (isDesktop ? items[0] : undefined);
+  const current = items.find((i) => i.id === selected) || items[0];
   const showDetail = !!current && (isDesktop || !!selected);
 
   const rail = (
@@ -54,6 +54,40 @@ export default function SplitPage({
       </ul>
     </div>
   );
+
+  // Phones: sections are tabs (chips on top) and the content shows straight away - no list-then-detail hop.
+  if (!isDesktop && current) {
+    return (
+      <div className="relative flex-1 min-h-0 w-full max-w-full bg-slate-50 dark:bg-slate-950 text-left overflow-hidden">
+        <div className="absolute inset-0 flex flex-col overflow-hidden">
+          <div className="shrink-0 px-3 pt-2 pb-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 space-y-2">
+            <div className="flex items-baseline justify-between gap-2">
+              <h1 className="text-base font-black text-slate-900 dark:text-white tracking-tight">{title}</h1>
+              {subtitle && <span className="text-[10px] text-slate-400 font-bold truncate">{subtitle}</span>}
+            </div>
+            <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+              {items.map((it, idx) => {
+                const on = current.id === it.id;
+                return (
+                  <button key={it.id} type="button" onClick={() => onSelect(it.id)}
+                    className={`shrink-0 inline-flex items-center gap-1.5 pl-1.5 pr-3 py-1.5 rounded-full text-[12px] font-bold border transition-all ${on ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 border-transparent shadow' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800'}`}>
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] text-white ${PALETTE[idx % PALETTE.length]}`}>{it.icon}</span>
+                    {it.label}
+                  </button>
+                );
+              })}
+            </div>
+            {railTop}
+          </div>
+          <div className="relative flex-1 min-h-0">
+            {noScroll
+              ? <div className="absolute inset-0 flex flex-col overflow-hidden">{children}</div>
+              : <div className="absolute inset-0 overflow-y-auto overscroll-contain pb-24" style={{ WebkitOverflowScrolling: 'touch' }}>{children}</div>}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex-1 min-h-0 w-full max-w-full bg-slate-50 dark:bg-slate-950 text-left overflow-hidden">
