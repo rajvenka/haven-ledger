@@ -1089,9 +1089,15 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
                 const fl = (lots || []).filter((l: any) => String(l.holding_id) === f.id).sort((a: any, b: any) => String(b.open_date || '').localeCompare(String(a.open_date || '')));
                 if (fl.length === 0) return null;
                 const short = String(f.h.source || '').toLowerCase().includes('short');
+                // Positions keep eToro's own quote units (e.g. JPN225 index points) while the holding row may be USD-converted.
+                // k = holding buy price / average position open price -> 1 for USD instruments, ~USD-per-point otherwise.
+                const lotQ = fl.reduce((a: number, l: any) => a + Number(l.quantity || 0), 0);
+                const lotAvg = lotQ > 0 ? fl.reduce((a: number, l: any) => a + Number(l.quantity || 0) * Number(l.buy_price || 0), 0) / lotQ : 0;
+                const kRaw = lotAvg > 0 && f.buy > 0 ? f.buy / lotAvg : 1;
+                const k = Math.abs(kRaw - 1) < 0.02 ? 1 : kRaw;
                 const rowsL = fl.map((l: any) => {
                   const q = Number(l.quantity || 0), open = Number(l.buy_price || 0);
-                  const pnlL = (f.price - open) * q * (short ? -1 : 1);
+                  const pnlL = (f.price - open * k) * q * (short ? -1 : 1);
                   const basis = Number(l.etoro_net_value_amount) > 0 ? Number(l.etoro_net_value_amount) : open * q;
                   return { l, q, open, pnlL, pct: basis > 0 ? (pnlL / basis) * 100 : null as number | null, basis };
                 });

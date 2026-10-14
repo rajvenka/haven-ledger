@@ -403,11 +403,13 @@ export async function etoroHandler(req: any, res: any) {
         externalPositionId: String(pos.positionID ?? ''),
         broker: "eToro",
         quantity: Number(pos.units) || 0,
-        buyPrice: (Number(pos.openRate) || 0) * usdFactorOf(pos),
-        currentPrice: (rateMap.get(Number(pos.instrumentID)) ?? (Number(pos.openRate) || 0)) * usdFactorOf(pos),
+        // Per-position rows stay in eToro's own quote units (e.g. JPN225 index points) so they match eToro's screen;
+        // the parent holding above is the USD-converted one.
+        buyPrice: Number(pos.openRate) || 0,
+        currentPrice: rateMap.get(Number(pos.instrumentID)) ?? (Number(pos.openRate) || 0),
         leverage: Number(pos.leverage) || 1,
-        stopLossRate: pos.stopLossRate != null ? Number(pos.stopLossRate) * usdFactorOf(pos) : undefined,
-        takeProfitRate: pos.takeProfitRate != null ? Number(pos.takeProfitRate) * usdFactorOf(pos) : undefined,
+        stopLossRate: pos.stopLossRate != null ? Number(pos.stopLossRate) : undefined,
+        takeProfitRate: pos.takeProfitRate != null ? Number(pos.takeProfitRate) : undefined,
         etoroNetValueAmount: Number(pos.amount) || 0,
         totalFees: Number(pos.totalFees) || 0,
         totalExternalFees: Number(pos.totalExternalFees) || 0,
