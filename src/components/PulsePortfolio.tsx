@@ -1035,7 +1035,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
             </div>
           </div>
           {f ? (
-            <div id="pp-split-detail" className="scroll-mt-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 space-y-5 lg:sticky lg:top-2 min-w-0">
+            <div id="pp-split-detail" className="scroll-mt-[calc(env(safe-area-inset-top)+5rem)] md:scroll-mt-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 space-y-5 lg:sticky lg:top-2 min-w-0">
               <div className="flex items-start justify-between gap-3"><div><div className="text-2xl sm:text-3xl font-black break-words">{f.symbol}</div><div className="text-xs text-slate-500">{f.name !== f.symbol ? f.name + ' · ' : ''}{f.broker} · {f.portfolio} · {f.category}{f.tag !== '—' ? ` · ${f.tag}` : ''}</div></div><Pill v={f.pnlPct} /></div>
               <div className="text-2xl sm:text-4xl font-black tabular-nums break-words">{money(f.value, ccy)}</div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
