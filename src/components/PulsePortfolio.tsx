@@ -1220,10 +1220,10 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   );
 
   const DESIGN_NAMES = ['Command', 'Brokerage', 'Heatmap', 'Terminal', 'Accounts', 'Cards', 'Split view + Health', 'Bento', 'Kanban', 'Statement', 'Drill-down', 'Health check'];
-  const tabStyle = (active: boolean) => design === 3 ? `px-4 py-1.5 rounded-full text-xs font-black ${active ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}` : design === 4 ? `px-3 py-1 text-[11px] font-mono font-bold uppercase ${active ? 'bg-slate-900 text-emerald-400' : 'text-slate-500 hover:text-slate-800'}` : `px-4 py-2 text-sm font-black -mb-px border-b-2 ${active ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`;
+  const tabStyle = (active: boolean) => design === 3 ? `px-4 py-1.5 rounded-full text-xs font-black ${active ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}` : design === 4 ? `px-3 py-1 text-[11px] font-mono font-bold uppercase ${active ? 'bg-slate-900 text-emerald-400' : 'text-slate-500 hover:text-slate-800'}` : `px-4 py-2 text-sm font-black rounded-xl transition-all ${active ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25' : 'text-slate-500 dark:text-slate-400 hover:bg-white/70 dark:hover:bg-slate-800'}`;
   const topTabs = (
-    <div className={`flex gap-1 overflow-x-auto mb-4 ${design === 3 ? '' : design === 4 ? 'bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 w-fit' : 'border-b border-slate-200 dark:border-slate-800'}`}>
-      {NAV.map((n) => <button key={n.k} onClick={() => setSection(n.k)} className={`shrink-0 ${tabStyle(section === n.k)}`}>{n.label}{NAV_BADGE[n.k] ? <span className="ml-1.5 text-[10px] opacity-60">{NAV_BADGE[n.k]}</span> : null}</button>)}
+    <div className={`flex gap-1 overflow-x-auto mb-4 ${design === 3 ? '' : design === 4 ? 'bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 w-fit' : 'bg-slate-100 dark:bg-slate-800/70 rounded-2xl p-1.5 gap-1 w-full sm:w-fit'}`}>
+      {NAV.map((n) => <button key={n.k} onClick={() => setSection(n.k)} className={`shrink-0 ${tabStyle(section === n.k)}`}>{n.label}{NAV_BADGE[n.k] ? <span className={`ml-1.5 text-[10px] font-black px-1.5 py-0.5 rounded-full ${section === n.k ? 'bg-white/25 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-300'}`}>{NAV_BADGE[n.k]}</span> : null}</button>)}
     </div>
   );
 
