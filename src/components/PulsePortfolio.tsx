@@ -1084,6 +1084,42 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                 {[['P&L', money(f.pnl, ccy, true)], ['Invested', money(f.cost, ccy, true)], ['Quantity', px(f.qty)], ['Avg cost', `${px(f.buy)} ${f.native}`], ['Last price', `${px(f.price)} ${f.native}`], ['Today', f.day ? money(f.day, ccy, true) : '—'], ['Weight', `${totals.value > 0 ? ((f.value / totals.value) * 100).toFixed(2) : 0}%`], ['Held', f.heldDays != null ? `${f.heldDays} days` : '—'], ['Target', f.target ? px(f.target) : '—'], ['Stop loss', f.stop ? px(f.stop) : '—'], ['Bought', f.buyDate || '—'], ['Price updated', f.updated ? new Date(f.updated).toLocaleDateString() : '—']].map(([k, v]) => <div key={k} className="rounded-xl bg-slate-50 dark:bg-slate-800 p-3"><div className="text-[10px] uppercase font-black text-slate-400">{k}</div><div className="font-bold mt-0.5">{v}</div></div>)}
               </div>
+              {(() => {
+                const fl = (lots || []).filter((l: any) => String(l.holding_id) === f.id).sort((a: any, b: any) => String(b.open_date || '').localeCompare(String(a.open_date || '')));
+                if (fl.length === 0) return null;
+                const short = String(f.h.source || '').toLowerCase().includes('short');
+                const rowsL = fl.map((l: any) => {
+                  const q = Number(l.quantity || 0), open = Number(l.buy_price || 0);
+                  const pnlL = (f.price - open) * q * (short ? -1 : 1);
+                  const basis = Number(l.etoro_net_value_amount) > 0 ? Number(l.etoro_net_value_amount) : open * q;
+                  return { l, q, open, pnlL, pct: basis > 0 ? (pnlL / basis) * 100 : null as number | null, basis };
+                });
+                const tot = rowsL.reduce((a, r) => a + r.pnlL, 0);
+                return (
+                  <div>
+                    <div className="flex items-baseline justify-between mb-2"><div className="text-sm font-black">Positions ({rowsL.length})</div><div className={`text-xs font-black tabular-nums ${tone(tot)}`}>{money(tot, f.native, true)} total</div></div>
+                    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                      <table className="w-full text-xs min-w-[560px]">
+                        <thead className="bg-slate-50 dark:bg-slate-800/60 text-[10px] uppercase tracking-wider text-slate-400"><tr><th className="text-left p-2">Opened</th><th className="text-right p-2">Units</th><th className="text-right p-2">Open</th><th className="text-right p-2">SL</th><th className="text-right p-2">TP</th><th className="text-right p-2">Invested</th><th className="text-right p-2">P&amp;L</th><th className="text-right p-2">P&amp;L %</th></tr></thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {rowsL.map(({ l, q, open, pnlL, pct: pc, basis }) => (
+                            <tr key={l.id}>
+                              <td className="p-2 whitespace-nowrap"><span className="font-black">{short ? 'Sell' : 'Buy'}</span> <span className="text-[9px] px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-black">{String(l.source || f.h.source || '').slice(0, 6)}</span><div className="text-[10px] text-slate-400">{l.open_date ? new Date(l.open_date).toLocaleString(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</div></td>
+                              <td className="p-2 text-right tabular-nums">{px(q)}</td>
+                              <td className="p-2 text-right tabular-nums">{px(open)}</td>
+                              <td className="p-2 text-right tabular-nums">{Number(l.stop_loss_rate) > 0 ? px(Number(l.stop_loss_rate)) : '—'}</td>
+                              <td className="p-2 text-right tabular-nums">{Number(l.take_profit_rate) > 0 ? px(Number(l.take_profit_rate)) : '—'}</td>
+                              <td className="p-2 text-right tabular-nums">{money(basis, f.native, true)}</td>
+                              <td className={`p-2 text-right tabular-nums font-black ${tone(pnlL)}`}>{money(pnlL, f.native, true)}</td>
+                              <td className={`p-2 text-right tabular-nums font-black ${pc == null ? '' : tone(pc)}`}>{pc == null ? '—' : pct(pc)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
               {!isReadOnly && <div className="flex gap-2"><button onClick={() => { setErr(null); openEdit(f.h); }} className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-black">Edit</button><button onClick={() => { setErr(null); setSellFor({ id: f.id, symbol: f.symbol, max: f.qty, qty: String(f.qty), price: String(f.price), date: new Date().toISOString().slice(0, 10) }); }} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-black">Sell</button></div>}
               <React.Fragment key={f.id}><StockGains
                 history={priceHistory.filter((h: any) => String(h.holding_id) === f.id).map((h: any) => ({ date: String(h.recorded_date).slice(0, 10), price: Number(h.price) }))}
