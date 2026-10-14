@@ -300,6 +300,21 @@ export async function etoroHandler(req: any, res: any) {
     // investment) is eToro's own direct source for "Net Value" - confirmed to vary with
     // stop-loss changes, so it's summed across consolidated lots rather than derived
     // client-side, which is strictly more reliable than a formula.
+    // eToro quotes some instruments in a non-USD currency (e.g. JPN225 in yen index points) while
+    // every money field (amount, initialAmountInDollars) is USD. Derive USD-per-quote-unit from the
+    // position itself: leveraged exposure in USD at open / (units x openRate). ~1 for USD-quoted ones.
+    const usdFactorOf = (pos: any): number => {
+      const units = Number(pos.units) || 0;
+      const openRate = Number(pos.openRate) || 0;
+      const lev = Number(pos.leverage) || 1;
+      const init = Number(pos.initialAmountInDollars) || 0;
+      if (!(units > 0 && openRate > 0 && init > 0)) return 1;
+      const f = (init * lev) / (units * openRate);
+      if (!Number.isFinite(f) || f <= 0 || f > 10) return 1;
+      return Math.abs(f - 1) < 0.05 ? 1 : f; // snap rounding noise on USD instruments
+    };
+    const fUnitsByKey = new Map<string, number>(); // sum(units * factor)
+    const costUsdByKey = new Map<string, number>(); // sum(units * openRate * factor)
     const consolidated = new Map<string, { symbol: string; name: string; exchange: string; source: string; instrumentId: number; totalUnits: number; totalCost: number; leverageWeighted: number; stopLossRate: number | null; takeProfitRate: number | null; totalNetValueAmount: number }>();
     for (const pos of realAssetPositions) {
       const id = Number(pos.instrumentID);
@@ -320,7 +335,10 @@ export async function etoroHandler(req: any, res: any) {
       // added to by an open gain). units already represents full leveraged exposure, so P/L
       // is (currentPrice - openRate) x units directly, no separate leverage multiplication.
       const livePrice = rateMap.get(id) ?? openRate;
-      const posPnl = (livePrice - openRate) * units * (isBuy ? 1 : -1);
+      const fx = usdFactorOf(pos);
+      fUnitsByKey.set(mapKey, (fUnitsByKey.get(mapKey) || 0) + units * fx);
+      costUsdByKey.set(mapKey, (costUsdByKey.get(mapKey) || 0) + units * openRate * fx);
+      const posPnl = (livePrice - openRate) * units * (isBuy ? 1 : -1) * fx;
       const posNetValueAmount = (Number(pos.amount) || 0) + posPnl;
       const existing = consolidated.get(mapKey);
       if (existing) {
@@ -357,17 +375,17 @@ export async function etoroHandler(req: any, res: any) {
         holdingType: "stock" as const,
         exchange: h.exchange,
         quantity: h.totalUnits,
-        buyPrice: h.totalCost / h.totalUnits,
+        buyPrice: (costUsdByKey.get(mapKey) ?? h.totalCost) / h.totalUnits,
         // Real live price from the dedicated rates endpoint, not derived from position
         // data - falls back to average entry price only if the rate genuinely couldn't be
         // fetched, so the field is never left at zero/undefined.
-        currentPrice: rateMap.get(h.instrumentId) ?? (h.totalCost / h.totalUnits),
+        currentPrice: (rateMap.get(h.instrumentId) ?? (h.totalCost / h.totalUnits)) * ((fUnitsByKey.get(mapKey) ?? h.totalUnits) / h.totalUnits),
         currency: "USD",
         source: h.source,
         etoroNetValueAmount: h.totalNetValueAmount,
         leverage: h.leverageWeighted / h.totalUnits,
-        stopLossRate: h.stopLossRate ?? undefined,
-        takeProfitRate: h.takeProfitRate ?? undefined,
+        stopLossRate: h.stopLossRate != null ? h.stopLossRate * ((fUnitsByKey.get(mapKey) ?? h.totalUnits) / h.totalUnits) : undefined,
+        takeProfitRate: h.takeProfitRate != null ? h.takeProfitRate * ((fUnitsByKey.get(mapKey) ?? h.totalUnits) / h.totalUnits) : undefined,
         matchKey: mapKey,
       }));
 
@@ -385,11 +403,11 @@ export async function etoroHandler(req: any, res: any) {
         externalPositionId: String(pos.positionID ?? ''),
         broker: "eToro",
         quantity: Number(pos.units) || 0,
-        buyPrice: Number(pos.openRate) || 0,
-        currentPrice: rateMap.get(Number(pos.instrumentID)) ?? (Number(pos.openRate) || 0),
+        buyPrice: (Number(pos.openRate) || 0) * usdFactorOf(pos),
+        currentPrice: (rateMap.get(Number(pos.instrumentID)) ?? (Number(pos.openRate) || 0)) * usdFactorOf(pos),
         leverage: Number(pos.leverage) || 1,
-        stopLossRate: pos.stopLossRate != null ? Number(pos.stopLossRate) : undefined,
-        takeProfitRate: pos.takeProfitRate != null ? Number(pos.takeProfitRate) : undefined,
+        stopLossRate: pos.stopLossRate != null ? Number(pos.stopLossRate) * usdFactorOf(pos) : undefined,
+        takeProfitRate: pos.takeProfitRate != null ? Number(pos.takeProfitRate) * usdFactorOf(pos) : undefined,
         etoroNetValueAmount: Number(pos.amount) || 0,
         totalFees: Number(pos.totalFees) || 0,
         totalExternalFees: Number(pos.totalExternalFees) || 0,
