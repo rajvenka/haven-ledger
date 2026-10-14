@@ -58,8 +58,8 @@ export default function SplitPage({
   // Phones: sections are tabs (chips on top) and the content shows straight away - no list-then-detail hop.
   if (!isDesktop && current) {
     return (
-      <div className="relative flex-1 min-h-0 w-full max-w-full bg-slate-50 dark:bg-slate-950 text-left overflow-hidden">
-        <div className="absolute inset-0 flex flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 flex flex-col w-full max-w-full bg-slate-50 dark:bg-slate-950 text-left overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           <div className="shrink-0 px-3 pt-2 pb-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 space-y-2">
             <div className="flex items-baseline justify-between gap-2">
               <h1 className="text-base font-black text-slate-900 dark:text-white tracking-tight">{title}</h1>
@@ -79,19 +79,17 @@ export default function SplitPage({
             </div>
             {railTop}
           </div>
-          <div className="relative flex-1 min-h-0">
-            {noScroll
-              ? <div className="absolute inset-0 flex flex-col overflow-hidden">{children}</div>
-              : <div className="absolute inset-0 overflow-y-auto overscroll-contain pb-24" style={{ WebkitOverflowScrolling: 'touch' }}>{children}</div>}
-          </div>
+          {noScroll
+            ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden">{children}</div>
+            : <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-24" style={{ WebkitOverflowScrolling: 'touch' }}>{children}</div>}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="relative flex-1 min-h-0 w-full max-w-full bg-slate-50 dark:bg-slate-950 text-left overflow-hidden">
-     <div className="absolute inset-0 flex overflow-hidden">
+    <div className="flex-1 min-h-0 w-full max-w-full bg-slate-50 dark:bg-slate-950 text-left overflow-hidden flex">
+     <div className="flex-1 min-h-0 min-w-0 flex overflow-hidden">
       {(isDesktop || !showDetail) && rail}
       {showDetail && (
         <div className="flex-1 min-w-0 min-h-0 flex flex-col">
@@ -103,11 +101,9 @@ export default function SplitPage({
             )}
             <h2 className="text-base font-black text-slate-900 dark:text-white">{current!.label}</h2>
           </div>
-          <div className="relative flex-1 min-h-0">
-            {noScroll
-              ? <div className="absolute inset-0 flex flex-col overflow-hidden">{children}</div>
-              : <div className="absolute inset-0 overflow-y-auto overscroll-contain pb-24 md:pb-6" style={{ WebkitOverflowScrolling: 'touch' }}>{children}</div>}
-          </div>
+          {noScroll
+            ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden">{children}</div>
+            : <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-24 md:pb-6" style={{ WebkitOverflowScrolling: 'touch' }}>{children}</div>}
         </div>
       )}
      </div>
