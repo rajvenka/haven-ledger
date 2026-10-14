@@ -631,6 +631,14 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     </div>
   );
 
+  const BestWorst = () => (
+    <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
+      <div className="text-[10px] font-black tracking-wider text-slate-400">best / worst</div>
+      {best ? <div className="mt-1 tabular-nums break-words"><div className="text-xs sm:text-sm font-black text-emerald-600">{best.symbol} {money(best.pnl, ccy, true)} <span className="font-bold">({pct(best.pnlPct)})</span></div></div> : <div className="text-base font-black mt-1">—</div>}
+      {worst && <div className="text-xs sm:text-sm font-black text-rose-600 mt-1 tabular-nums break-words">{worst.symbol} {money(worst.pnl, ccy, true)} <span className="font-bold">({pct(worst.pnlPct)})</span></div>}
+    </div>
+  );
+
   const stopLines: any[] = (() => {
     const out: any[] = [];
     rows.forEach((r) => {
@@ -935,7 +943,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       <Kpi label="Total value" value={money(totals.value, ccy, true)} sub={`Invested ${money(totals.cost, ccy, true)}`} />
       <Kpi label="Total P&L" value={money(totals.pnl, ccy, true)} sub={pct(totals.pnlPct)} subTone={tone(totals.pnl)} />
       <Kpi label="Today" value={money(totals.day, ccy, true)} sub={pct(totals.dayPct)} subTone={tone(totals.day)} />
-      <Kpi label="Best / worst" value={best ? `${best.symbol} ${money(best.pnl, ccy, true)}` : '—'} sub={worst ? `Worst: ${worst.symbol} ${money(worst.pnl, ccy, true)}` : ''} subTone="text-slate-500" />
+      <BestWorst />
     </div>
   );
   const alertsBlock = (
@@ -1449,7 +1457,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         <Kpi label="Total value" value={money(totals.value, ccy, true)} sub={`Invested ${money(totals.cost, ccy, true)}`} />
         <Kpi label="Total P&L" value={money(totals.pnl, ccy, true)} sub={pct(totals.pnlPct)} subTone={tone(totals.pnl)} />
         <Kpi label="Today" value={money(totals.day, ccy, true)} sub={pct(totals.dayPct)} subTone={tone(totals.day)} />
-        <Kpi label="Best / worst" value={best ? `${best.symbol} ${money(best.pnl, ccy, true)}` : '—'} sub={worst ? `Worst: ${worst.symbol} ${money(worst.pnl, ccy, true)}` : ''} subTone="text-slate-500" />
+        <BestWorst />
       </div>
 
 
