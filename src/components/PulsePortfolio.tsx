@@ -168,19 +168,15 @@ function TagEditor({ id, current, options, onSave, disabled }: { id: string; cur
   const [msg, setMsg] = React.useState<string | null>(null);
   React.useEffect(() => { setVal(current === '—' ? '' : current); setMsg(null); }, [id, current]);
   const dirty = val.trim() !== (current === '—' ? '' : current);
-  const save = async (v: string) => { setSaving(true); setMsg(null); try { await onSave(v.trim()); setMsg('Saved'); } catch (e: any) { setMsg(e?.message || 'Failed'); } finally { setSaving(false); } };
+  const save = async (v: string) => { setSaving(true); setMsg(null); try { await onSave(v.trim()); } catch (e: any) { setMsg(e?.message || 'Failed'); } finally { setSaving(false); } };
   return (
-    <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-2">
-      <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Tag</div>
-      <div className="flex flex-wrap gap-2 items-center">
-        <input list={`tag-opts-${id}`} value={val} onChange={(e) => { setVal(e.target.value); setMsg(null); }} disabled={disabled} placeholder="e.g. Rajavel Stock SME" className="flex-1 min-w-[10rem] text-xs px-2.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none" />
-        <datalist id={`tag-opts-${id}`}>{options.map((o) => <option key={o} value={o} />)}</datalist>
-        <button disabled={disabled || saving || !dirty || !val.trim()} onClick={() => save(val)} className="text-xs font-black px-3 py-2 rounded-xl bg-amber-500 text-white disabled:opacity-40">{saving ? 'Saving…' : 'Save tag'}</button>
-        {current !== '—' && <button disabled={disabled || saving} onClick={() => { setVal(''); save(''); }} className="text-xs font-black px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 disabled:opacity-40">Clear</button>}
-      </div>
-      {options.length > 0 && <div className="flex flex-wrap gap-1">{options.slice(0, 8).map((o) => <button key={o} disabled={disabled} onClick={() => setVal(o)} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">{o}</button>)}</div>}
-      {msg && <div className={`text-[11px] font-bold ${msg === 'Saved' ? 'text-emerald-600' : 'text-rose-500'}`}>{msg}</div>}
-    </div>
+    <span className="inline-flex items-center gap-1.5 min-w-0">
+      <input list={`tag-opts-${id}`} value={val} onChange={(e) => { setVal(e.target.value); setMsg(null); }} disabled={disabled} placeholder="Tag" className="w-28 sm:w-36 text-xs px-2.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none" />
+      <datalist id={`tag-opts-${id}`}>{options.map((o) => <option key={o} value={o} />)}</datalist>
+      {dirty && val.trim() && <button disabled={disabled || saving} onClick={() => save(val)} className="px-3 py-2 rounded-xl bg-amber-500 text-white text-sm font-black disabled:opacity-40">{saving ? '…' : 'Add tag'}</button>}
+      {!dirty && current !== '—' && <button disabled={disabled || saving} onClick={() => { setVal(''); save(''); }} title="Remove tag" className="px-2.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 text-sm font-black disabled:opacity-40">✕</button>}
+      {msg && <span className="text-[11px] font-bold text-rose-500">{msg}</span>}
+    </span>
   );
 }
 
@@ -1179,8 +1175,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
                   </div>
                 );
               })()}
-              {!isReadOnly && updateHolding && <TagEditor id={f.id} current={f.tag} options={allTags} onSave={(t) => updateHolding(f.id, { source: t })} />}
-              {!isReadOnly && <div className="flex gap-2"><button onClick={() => { setErr(null); openEdit(f.h); }} className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-black">Edit</button><button onClick={() => { setErr(null); setSellFor({ id: f.id, symbol: f.symbol, max: f.qty, qty: String(f.qty), price: String(f.price), date: new Date().toISOString().slice(0, 10) }); }} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-black">Sell</button></div>}
+              {!isReadOnly && <div className="flex flex-wrap items-center gap-2"><button onClick={() => { setErr(null); openEdit(f.h); }} className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-black">Edit</button><button onClick={() => { setErr(null); setSellFor({ id: f.id, symbol: f.symbol, max: f.qty, qty: String(f.qty), price: String(f.price), date: new Date().toISOString().slice(0, 10) }); }} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-black">Sell</button>{updateHolding && <TagEditor id={f.id} current={f.tag} options={allTags} onSave={(t) => updateHolding(f.id, { source: t })} />}</div>}
               <React.Fragment key={f.id}><StockGains
                 history={priceHistory.filter((h: any) => String(h.holding_id) === f.id).map((h: any) => ({ date: String(h.recorded_date).slice(0, 10), price: Number(h.price) }))}
                 livePrice={f.price}
