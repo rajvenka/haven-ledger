@@ -56,7 +56,8 @@ export default function SplitPage({
   );
 
   return (
-    <div className="flex-1 min-h-0 flex bg-slate-50 dark:bg-slate-950 text-left w-full max-w-full overflow-hidden">
+    <div className="relative flex-1 min-h-0 w-full max-w-full bg-slate-50 dark:bg-slate-950 text-left overflow-hidden">
+     <div className="absolute inset-0 flex overflow-hidden">
       {(isDesktop || !showDetail) && rail}
       {showDetail && (
         <div className="flex-1 min-w-0 min-h-0 flex flex-col">
@@ -68,11 +69,14 @@ export default function SplitPage({
             )}
             <h2 className="text-base font-black text-slate-900 dark:text-white">{current!.label}</h2>
           </div>
-          {noScroll
-            ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden">{children}</div>
-            : <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-24 md:pb-6" style={{ WebkitOverflowScrolling: 'touch' }}>{children}</div>}
+          <div className="relative flex-1 min-h-0">
+            {noScroll
+              ? <div className="absolute inset-0 flex flex-col overflow-hidden">{children}</div>
+              : <div className="absolute inset-0 overflow-y-auto overscroll-contain pb-24 md:pb-6" style={{ WebkitOverflowScrolling: 'touch' }}>{children}</div>}
+          </div>
         </div>
       )}
+     </div>
     </div>
   );
 }

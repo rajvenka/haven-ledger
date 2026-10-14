@@ -274,21 +274,6 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'configure' | 'account' | 'history' | 'ai' | 'income' | 'rewards' | 'portfolio' | 'portfolio_alt' | 'portfolio_v1' | 'investment_plan' | 'quote_connections' | 'reports' | 'admin_users'>('summary');
   const [mainNavCollapsed, setMainNavCollapsed] = useState<boolean>(() => { try { return localStorage.getItem('hv_main_nav_collapsed') === '1'; } catch { return false; } });
   const toggleMainNav = () => setMainNavCollapsed((v) => { try { localStorage.setItem('hv_main_nav_collapsed', v ? '0' : '1'); } catch { /* ignore */ } return !v; });
-  // New (Pulse) design vs Classic - user choice, persisted. Default: new.
-  const [tryNewUi, setTryNewUiState] = useState<boolean>(() => {
-    try {
-      if (localStorage.getItem('hv_new_ui_default_v2') !== '1') {
-        localStorage.setItem('hv_new_ui_default_v2', '1');
-        localStorage.setItem('hv_try_new_ui', 'true');
-        return true;
-      }
-      return localStorage.getItem('hv_try_new_ui') !== 'false';
-    } catch { return true; }
-  });
-  const setTryNewUi = (v: boolean) => {
-    setTryNewUiState(v);
-    try { localStorage.setItem('hv_try_new_ui', String(v)); } catch { /* ignore */ }
-  };
   const [portfolioClassic, setPortfolioClassic] = useState(false);
   useEffect(() => { if (activeTab !== 'portfolio') setPortfolioClassic(false); }, [activeTab]);
   // Opening Settings from the sidebar (Preferences / Security / Team) must open that section directly (on phones the list would otherwise show instead of the page).
@@ -327,6 +312,9 @@ export default function App() {
       return next;
     });
   };
+  // One switch (the sparkle "NEW" button in the menu): Pulse on = new design pages, off = Classic pages.
+  const tryNewUi = uiPulse;
+  const setTryNewUi = (v: boolean) => { if (v !== uiPulse) togglePulse(); };
   const lastLandingWorkspaceId = React.useRef<string | null>(null);
   const [settingsSubTab, setSettingsSubTab] = useState<'preferences' | 'team'>('preferences');
   const [settingsPicked, setSettingsPicked] = useState<string | null>(null);
@@ -1801,15 +1789,6 @@ export default function App() {
                 )}
               </button>
 
-              <button
-                type="button"
-                onClick={() => setTryNewUi(!tryNewUi)}
-                title={tryNewUi ? 'New design is on - tap for Classic' : 'Classic design - tap for New'}
-                className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-black tracking-wide cursor-pointer transition-all ${tryNewUi ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-md shadow-violet-600/30' : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full ${tryNewUi ? 'bg-white' : 'bg-slate-400'}`} />
-                {tryNewUi ? 'New' : 'Classic'}
-              </button>
               {/* Header Action: Agent/Chat - same toggles as the floating capsule, kept here
                   too since that capsule can end up covered by or covering page content when
                   scrolled down on longer pages, making it unreliable as the only entry point. */}
