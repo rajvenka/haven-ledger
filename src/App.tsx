@@ -280,7 +280,6 @@ export default function App() {
   const setTryNewUi = (_v: boolean) => { /* design is fixed */ };
   useEffect(() => { if (activeTab !== 'portfolio') setPortfolioClassic(false); }, [activeTab]);
   // Opening Settings from the sidebar (Preferences / Security / Team) must open that section directly (on phones the list would otherwise show instead of the page).
-  useEffect(() => { if (activeTab === 'account') setSettingsPicked(settingsSubTab as string); }, [activeTab, settingsSubTab]);
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
   const [billsAccount, setBillsAccount] = useState<string | null>(null);
   const [historyAccount, setHistoryAccount] = useState<string | null>(null);
@@ -319,6 +318,7 @@ export default function App() {
   const lastLandingWorkspaceId = React.useRef<string | null>(null);
   const [settingsSubTab, setSettingsSubTab] = useState<'preferences' | 'team'>('preferences');
   const [settingsPicked, setSettingsPicked] = useState<string | null>(null);
+  useEffect(() => { if (activeTab === 'account') setSettingsPicked(settingsSubTab as string); }, [activeTab, settingsSubTab]);
   const [reportSection, setReportSection] = useState<string | null>(null);
   const [reportBooks, setReportBooks] = useState<Set<string>>(new Set());
   const [planSection, setPlanSection] = useState<string | null>(null);
