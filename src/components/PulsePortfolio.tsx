@@ -1125,7 +1125,6 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           {f ? (
             <div id="pp-split-detail" className="scroll-mt-[calc(env(safe-area-inset-top)+5rem)] md:scroll-mt-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 space-y-5 lg:sticky lg:top-2 min-w-0">
               <div className="flex items-start justify-between gap-3"><div><div className="text-2xl sm:text-3xl font-black break-words">{f.symbol}</div><div className="text-xs text-slate-500">{f.name !== f.symbol ? f.name + ' · ' : ''}{f.broker} · {f.portfolio} · {f.category}{f.tag !== '—' ? ` · ${f.tag}` : ''}</div></div><Pill v={f.pnlPct} /></div>
-              {!isReadOnly && updateHolding && <TagEditor id={f.id} current={f.tag} options={allTags} onSave={(t) => updateHolding(f.id, { source: t })} />}
               <div className="text-2xl sm:text-4xl font-black tabular-nums break-words">{money(f.value, ccy)}</div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                 {[['P&L', money(f.pnl, ccy, true)], ['Invested', money(f.cost, ccy, true)], ['Quantity', px(f.qty)], ['Avg cost', `${px(f.buy)} ${f.native}`], ['Last price', `${px(f.price)} ${f.native}`], ['Today', f.day ? money(f.day, ccy, true) : '—'], ['Weight', `${totals.value > 0 ? ((f.value / totals.value) * 100).toFixed(2) : 0}%`], ['Held', f.heldDays != null ? `${f.heldDays} days` : '—'], ['Target', f.target ? px(f.target) : '—'], ['Stop loss', f.stop ? px(f.stop) : '—'], ['Bought', f.buyDate || '—'], ['Price updated', f.updated ? new Date(f.updated).toLocaleDateString() : '—']].map(([k, v]) => <div key={k} className="rounded-xl bg-slate-50 dark:bg-slate-800 p-3"><div className="text-[10px] uppercase font-black text-slate-400">{k}</div><div className="font-bold mt-0.5">{v}</div></div>)}
@@ -1172,6 +1171,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
                   </div>
                 );
               })()}
+              {!isReadOnly && updateHolding && <TagEditor id={f.id} current={f.tag} options={allTags} onSave={(t) => updateHolding(f.id, { source: t })} />}
               {!isReadOnly && <div className="flex gap-2"><button onClick={() => { setErr(null); openEdit(f.h); }} className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-black">Edit</button><button onClick={() => { setErr(null); setSellFor({ id: f.id, symbol: f.symbol, max: f.qty, qty: String(f.qty), price: String(f.price), date: new Date().toISOString().slice(0, 10) }); }} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-black">Sell</button></div>}
               <React.Fragment key={f.id}><StockGains
                 history={priceHistory.filter((h: any) => String(h.holding_id) === f.id).map((h: any) => ({ date: String(h.recorded_date).slice(0, 10), price: Number(h.price) }))}
