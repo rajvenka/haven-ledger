@@ -279,6 +279,8 @@ export default function App() {
   const [portfolioClassic, setPortfolioClassic] = useState(false);
   const setTryNewUi = (_v: boolean) => { /* design is fixed */ };
   useEffect(() => { if (activeTab !== 'portfolio') setPortfolioClassic(false); }, [activeTab]);
+  // Opening Settings from the sidebar (Preferences / Security / Team) must open that section directly (on phones the list would otherwise show instead of the page).
+  useEffect(() => { if (activeTab === 'account') setSettingsPicked(settingsSubTab as string); }, [activeTab, settingsSubTab]);
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
   const [billsAccount, setBillsAccount] = useState<string | null>(null);
   const [historyAccount, setHistoryAccount] = useState<string | null>(null);
