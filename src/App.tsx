@@ -322,6 +322,7 @@ export default function App() {
   const [reportSection, setReportSection] = useState<string | null>(null);
   const [reportBooks, setReportBooks] = useState<Set<string>>(new Set());
   const [planSection, setPlanSection] = useState<string | null>(null);
+  const [membershipSection, setMembershipSection] = useState<string | null>(null);
   const [adminSection, setAdminSection] = useState<string | null>(null);
   const [planBooks, setPlanBooks] = useState<Set<string>>(new Set());
   const [isAgentOpen, setIsAgentOpen] = useState(false);
@@ -2085,10 +2086,21 @@ export default function App() {
                 summaryCurrency={summaryCurrency}
               />
             ) : activeTab === 'rewards' ? (
-                <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
-                {tryNewUi ? (
-                  <PulseMembership
-                  rewardsPerks={rewardsPerks}
+                <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={false}>
+<SplitPage
+  noScroll
+  title="Membership"
+  subtitle="Perks, cards & gift cards"
+  selected={membershipSection}
+  onSelect={setMembershipSection}
+  items={[
+    { id: 'memberships', label: 'Memberships', sub: 'Credit cards, perks, bonuses', icon: <span className="text-[13px] font-black">Mb</span> },
+    { id: 'giftcards', label: 'Gift cards', sub: 'Balances and expiry', icon: <span className="text-[13px] font-black">Gc</span> },
+  ]}
+>
+<PulseMembership
+  section={membershipSection || 'memberships'}
+  rewardsPerks={rewardsPerks}
                   onAddReward={addReward}
                   onUpdateReward={updateReward}
                   onDeleteReward={deleteReward}
@@ -2098,23 +2110,9 @@ export default function App() {
                   onRedeemGiftCard={redeemGiftCard}
                   onDeleteGiftCard={deleteGiftCard}
                   isReadOnly={isReadOnly}
-                  />
-                ) : (
-                <RewardsTracker
-                  pulseMode={uiPulse}
-                  rewardsPerks={rewardsPerks}
-                  onAddReward={addReward}
-                  onUpdateReward={updateReward}
-                  onDeleteReward={deleteReward}
-                  giftCards={giftCards}
-                  onAddGiftCard={addGiftCard}
-                  onUpdateGiftCard={updateGiftCard}
-                  onRedeemGiftCard={redeemGiftCard}
-                  onDeleteGiftCard={deleteGiftCard}
-                  isReadOnly={isReadOnly}
-                />
-                )}
-              </NewDesignSwitch>
+/>
+</SplitPage>
+</NewDesignSwitch>
 ) : activeTab === 'portfolio_alt' && userProfile?.isSuperAdmin ? (
               <div className="flex-1 min-h-0 overflow-auto">
                 <PulsePortfolio

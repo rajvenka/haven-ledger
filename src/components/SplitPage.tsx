@@ -16,8 +16,9 @@ function useIsDesktop() {
 
 /** Master/detail page (same look as Accounts): left rail of sections, right detail. Mobile: list -> detail with back. */
 export default function SplitPage({
-  title, subtitle, items, selected, onSelect, railTop, children,
+  title, subtitle, items, selected, onSelect, railTop, children, noScroll = false,
 }: {
+  noScroll?: boolean;
   title: string; subtitle?: string; items: SplitItem[]; selected: string | null;
   onSelect: (id: string | null) => void; railTop?: React.ReactNode; children: React.ReactNode;
 }) {
@@ -67,7 +68,9 @@ export default function SplitPage({
             )}
             <h2 className="text-base font-black text-slate-900 dark:text-white">{current!.label}</h2>
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-24 md:pb-6" style={{ WebkitOverflowScrolling: 'touch' }}>{children}</div>
+          {noScroll
+            ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden">{children}</div>
+            : <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-24 md:pb-6" style={{ WebkitOverflowScrolling: 'touch' }}>{children}</div>}
         </div>
       )}
     </div>

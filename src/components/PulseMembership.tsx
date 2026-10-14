@@ -30,6 +30,7 @@ interface Props {
   onRedeemGiftCard: (id: string, amountUsed: number) => Promise<void>;
   onDeleteGiftCard: (id: string) => Promise<void>;
   isReadOnly?: boolean;
+  section?: string;
 }
 
 type Tab = 'memberships' | 'giftcards';
@@ -95,8 +96,10 @@ export default function PulseMembership({
   onRedeemGiftCard,
   onDeleteGiftCard,
   isReadOnly = false,
+  section,
 }: Props) {
-  const [tab, setTab] = useState<Tab>('memberships');
+  const [tab, setTab] = useState<Tab>((section as Tab) || 'memberships');
+  React.useEffect(() => { if (section) setTab(section as Tab); }, [section]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
@@ -355,7 +358,7 @@ export default function PulseMembership({
           </div>
         </div>
 
-        {/* Main section tabs — like Portfolio View chips */}
+        {!section && (
         <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-violet-500/80 dark:text-violet-400/80 w-10">
             View
@@ -387,6 +390,7 @@ export default function PulseMembership({
             </button>
           </div>
         </div>
+        )}
       </div>
 
       {/* Sticky filters */}
