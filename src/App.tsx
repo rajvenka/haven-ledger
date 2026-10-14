@@ -48,6 +48,7 @@ import PulseBills from './components/PulseBills';
 import PulseHome from './components/PulseHome';
 import { clearZerodhaPending, readZerodhaCallback, readZerodhaPending, stripZerodhaCallbackFromUrl, ZERODHA_AUTOSYNC_KEY } from './utils/zerodhaAuth';
 import PulseAccounts from './components/PulseAccounts';
+import PageErrorBoundary from './components/PageErrorBoundary';
 import SplitPage from './components/SplitPage';
 import PagePane from './components/PagePane';
 import NewDesignSwitch from './components/NewDesignSwitch';
@@ -1844,6 +1845,7 @@ export default function App() {
               ? 'overflow-hidden'
               : 'overflow-y-auto'
           }`}>
+            <PageErrorBoundary key={`${activeTab}-${uiPulse ? 'p' : 'c'}`}>
             {activeTab === 'summary' && hasFeature('core') ? (
               (uiPulse || tryNewUi) ? (
                 <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi}>
@@ -2830,6 +2832,7 @@ export default function App() {
                 <p className="text-sm text-slate-400">This page isn't available on your current plan.</p>
               </div>
             )}
+            </PageErrorBoundary>
           </main>
 
           {/* Mobile floating dock — horizontal scroll for more destinations */}
