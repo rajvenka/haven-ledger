@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { avatarClass } from '../utils/accounts';
 
 export interface SplitItem { id: string; label: string; sub?: string; icon?: React.ReactNode; badge?: string }
 
@@ -38,7 +39,7 @@ export default function SplitPage({
             <li key={it.id}>
               <button type="button" onClick={() => onSelect(it.id)}
                 className={`w-full flex items-center gap-3 px-3 py-3 text-left transition-colors ${active ? 'bg-violet-50 dark:bg-violet-950/30' : 'hover:bg-slate-50 dark:hover:bg-slate-900/60'}`}>
-                {it.icon && <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${active ? 'bg-violet-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{it.icon}</div>}
+                {it.icon && <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-white ${avatarClass(it.label)} ${active ? 'ring-2 ring-offset-2 ring-violet-400 dark:ring-offset-slate-950' : ''}`}>{it.icon}</div>}
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-bold text-slate-900 dark:text-white truncate">{it.label}</p>
                   {it.sub && <p className="text-[10px] text-slate-500 truncate">{it.sub}</p>}
