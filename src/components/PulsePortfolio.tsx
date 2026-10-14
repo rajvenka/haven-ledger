@@ -563,7 +563,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           { t: 'Sync / import wizard', d: 'Step by step: pick source, review, apply', onClick: () => setWizard({}), primary: true },
           { t: 'Quick price refresh', d: lastPrice ? `Last ${ago(new Date(lastPrice).toISOString())}` : 'No prices yet', onClick: () => b?.refreshAllPrices?.(), busy: b?.refreshingPrices },
           { t: 'Quick sync (prices only)', d: `${connections.length} linked broker${connections.length === 1 ? '' : 's'}`, onClick: syncAll, busy: syncAllBusy, off: connections.length === 0 },
-          { t: 'Connect broker', d: 'Zerodha, Groww, eToro, Webull…', onClick: () => b?.openConnect?.() },
+          { t: 'Connect broker', d: 'Zerodha, Groww, eToro, Webull…', onClick: () => (syncProps ? setWizard({}) : b?.openConnect?.()) },
         ].map((a) => (
           <button key={a.t} disabled={isReadOnly || a.off || a.busy} onClick={a.onClick} className={`text-left rounded-2xl p-4 border transition-all disabled:opacity-50 ${a.primary ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-600/20' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-indigo-400'}`}>
             <div className="text-sm font-black">{a.busy ? 'Working…' : a.t}</div>
