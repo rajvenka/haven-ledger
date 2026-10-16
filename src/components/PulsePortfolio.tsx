@@ -150,6 +150,9 @@ interface Props {
   contributions?: any[];
   withdrawals?: any[];
   bookedBaselines?: any[];
+  /** Ask the page to switch to this portfolio (from the top strip). */
+  requestBook?: { id: string; n: number } | null;
+  onRequestBookDone?: () => void;
 }
 
 type Section = 'overview' | 'holdings' | 'sold' | 'calendar' | 'cash' | 'sync';
@@ -185,7 +188,7 @@ function TagEditor({ id, current, options, onSave, disabled }: { id: string; cur
   );
 }
 
-export default function PulsePortfolio({ holdings, lots = [], portfolios = [], rates = [], baseCurrency = 'INR', connections = [], isLoading, onManage, isReadOnly, importProps, cashBalances = [], loadDailyPositions, snapshotDaily, addHolding, updateHolding, sellHolding, deleteHolding, bulkDelete, setCash, deleteCash, syncProps, portfolioMode, bulkTag, mode = 'main', priceHistory = [], contributions = [], withdrawals = [], bookedBaselines = [], renameConnection }: Props) {
+export default function PulsePortfolio({ holdings, lots = [], portfolios = [], rates = [], baseCurrency = 'INR', connections = [], isLoading, onManage, isReadOnly, importProps, cashBalances = [], loadDailyPositions, snapshotDaily, addHolding, updateHolding, sellHolding, deleteHolding, bulkDelete, setCash, deleteCash, syncProps, portfolioMode, bulkTag, mode = 'main', priceHistory = [], contributions = [], withdrawals = [], bookedBaselines = [], renameConnection, requestBook, onRequestBookDone }: Props) {
   const [section, setSectionState] = useState<Section>(() => { try { return (localStorage.getItem('hv_pp_section') as Section) || 'overview'; } catch { return 'overview'; } });
   const setSection = (k: Section) => { setSectionState(k); try { localStorage.setItem('hv_pp_section', k); } catch { /* */ } };
   const [designState, setDesignState] = useState<number>(() => { try { return Number(localStorage.getItem('hv_pp_design')) || 1; } catch { return 1; } });
@@ -263,6 +266,14 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     chooseBook(pick.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolios, book]);
+  React.useEffect(() => {
+    if (!requestBook) return;
+    if (requestBook.id === 'all') { setBook('All'); setFilter('All'); setChecked([]); }
+    else if (portfolios.some((p: any) => p.id === requestBook.id)) chooseBook(requestBook.id);
+    setSectionState('overview');
+    onRequestBookDone?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestBook?.n]);
   const makeDefault = (id: string) => { setDefaultBook(id); try { localStorage.setItem('hv_pp_default_book', id); } catch { /* */ } };
   const [groupBy, setGroupBy] = useState<GroupBy>('category');
   const [q, setQ] = useState('');

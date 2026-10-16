@@ -280,6 +280,7 @@ export default function App() {
   const [mainNavCollapsed, setMainNavCollapsed] = useState<boolean>(() => { try { return localStorage.getItem('hv_main_nav_collapsed') === '1'; } catch { return false; } });
   const toggleMainNav = () => setMainNavCollapsed((v) => { try { localStorage.setItem('hv_main_nav_collapsed', v ? '0' : '1'); } catch { /* ignore */ } return !v; });
   const [portfolioClassic, setPortfolioClassic] = useState(false);
+  const [tickerBook, setTickerBook] = useState<{ id: string; n: number } | null>(null);
   useEffect(() => { if (activeTab !== 'portfolio') setPortfolioClassic(false); }, [activeTab]);
   // Opening Settings from the sidebar (Preferences / Security / Team) must open that section directly (on phones the list would otherwise show instead of the page).
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
@@ -1862,7 +1863,7 @@ export default function App() {
               : 'overflow-y-auto'
           }`}>
             {(activeTab === 'summary' || activeTab === 'portfolio') && hasFeature('portfolio') && portfolioHoldings.length > 0 && (
-              <PortfolioTicker holdings={portfolioHoldings} portfolios={portfolios} rates={workspaceCurrencyRates} baseCurrency={activeWorkspace?.baseCurrency} multiple={activeWorkspace?.portfolioMode === 'multiple'} />
+              <PortfolioTicker holdings={portfolioHoldings} portfolios={portfolios} rates={workspaceCurrencyRates} baseCurrency={activeWorkspace?.baseCurrency} multiple={activeWorkspace?.portfolioMode === 'multiple'} onSelect={(id) => { setTickerBook({ id, n: Date.now() }); if (activeTab !== 'portfolio') setActiveTab('portfolio'); }} />
             )}
             <PageErrorBoundary key={`${activeTab}-${uiPulse ? 'p' : 'c'}`}>
             {activeTab === 'summary' && hasFeature('core') ? (
@@ -2274,6 +2275,8 @@ export default function App() {
               <NewDesignSwitch isNew={tryNewUi} onChange={setTryNewUi} plain={!tryNewUi && !uiPulse}>
                 <PulsePortfolio
                   mode="main"
+                  requestBook={tickerBook}
+                  onRequestBookDone={() => setTickerBook(null)}
                   holdings={portfolioHoldings}
                   lots={portfolioHoldingLots}
                   portfolios={portfolios}

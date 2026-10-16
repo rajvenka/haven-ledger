@@ -53,7 +53,7 @@ export function buildCards(holdings: any[], portfolios: any[], rates: any[], bas
 }
 
 /** Auto-scrolling strip of portfolio summaries. Click/tap pauses it so it can be dragged or swiped; click again to resume. */
-export default function PortfolioTicker({ holdings, portfolios = [], rates = [], baseCurrency = 'INR', multiple }: { holdings: any[]; portfolios?: any[]; rates?: any[]; baseCurrency?: string; multiple: boolean }) {
+export default function PortfolioTicker({ holdings, portfolios = [], rates = [], baseCurrency = 'INR', multiple, onSelect }: { holdings: any[]; portfolios?: any[]; rates?: any[]; baseCurrency?: string; multiple: boolean; onSelect?: (id: string) => void }) {
   const cards = React.useMemo(() => buildCards(holdings, portfolios, rates, baseCurrency, multiple), [holdings, portfolios, rates, baseCurrency, multiple]);
   const ref = React.useRef<HTMLDivElement>(null);
   const [paused, setPaused] = React.useState(false);
@@ -98,10 +98,10 @@ export default function PortfolioTicker({ holdings, portfolios = [], rates = [],
         onWheel={() => setPaused(true)}
         className="flex gap-2 overflow-x-auto no-scrollbar px-3 py-2 cursor-pointer select-none"
         style={{ scrollbarWidth: 'none' }}
-        title={overflow ? (paused ? 'Click to resume scrolling' : 'Click to pause, then drag or swipe') : undefined}
+        title={overflow ? (paused ? 'Click empty space to resume scrolling' : 'Click a card to open that portfolio (scrolling stops)') : undefined}
       >
         {list.map((c, i) => (
-          <div key={`${c.id}-${i}`} className="shrink-0 min-w-[210px] rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-3 py-2">
+          <div key={`${c.id}-${i}`} onClick={(e) => { if (onSelect) { e.stopPropagation(); setPaused(true); onSelect(c.id); } }} className="shrink-0 min-w-[210px] rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-3 py-2">
             <div className="flex items-center justify-between gap-2">
               <span className="text-[11px] font-black text-slate-500 truncate">{c.name}</span>
               <span className="text-sm font-black tabular-nums">{money(c.value, c.ccy)}</span>
