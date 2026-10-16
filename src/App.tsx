@@ -75,6 +75,7 @@ import RewardsTracker from './components/RewardsTracker';
 import PortfolioView from './components/PortfolioView';
 import PortfolioV1View from './components/PortfolioV1View';
 import PulsePortfolio from './components/PulsePortfolio';
+import PortfolioTicker from './components/PortfolioTicker';
 import InvestmentPlanView from './components/InvestmentPlanView';
 import ReportsView from './components/ReportsView';
 import IncomeView from './components/IncomeView';
@@ -1860,6 +1861,9 @@ export default function App() {
               ? 'overflow-hidden'
               : 'overflow-y-auto'
           }`}>
+            {(activeTab === 'summary' || activeTab === 'portfolio') && hasFeature('portfolio') && portfolioHoldings.length > 0 && (
+              <PortfolioTicker holdings={portfolioHoldings} portfolios={portfolios} rates={workspaceCurrencyRates} baseCurrency={activeWorkspace?.baseCurrency} multiple={activeWorkspace?.portfolioMode === 'multiple'} />
+            )}
             <PageErrorBoundary key={`${activeTab}-${uiPulse ? 'p' : 'c'}`}>
             {activeTab === 'summary' && hasFeature('core') ? (
               (uiPulse || tryNewUi) ? (
