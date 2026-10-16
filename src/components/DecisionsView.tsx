@@ -1,6 +1,7 @@
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { Search, ArrowUp, ArrowDown } from 'lucide-react';
+import BuyOverview from './BuyOverview';
 
 type Props = {
   holdings: any[];
@@ -15,6 +16,8 @@ type Props = {
 };
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
+const today = iso(new Date());
+const ago = (days: number) => iso(new Date(Date.now() - days * 86400000));
 const pct = (n: number) => (Number.isFinite(n) ? `${n > 0 ? '+' : ''}${n.toFixed(1)}%` : '—');
 const tone = (n: number) => (n > 0 ? 'text-emerald-600 dark:text-emerald-400' : n < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500');
 const keyOf = (h: any) => `${String(h.ticker ?? h.symbol).toUpperCase()}|${String(h.exchange || '').toUpperCase()}|${String(h.currency || '').toUpperCase()}`;
@@ -30,11 +33,7 @@ function valueAt(h: any, price: number) {
   return price * qty;
 }
 
-export default function DecisionsView({ holdings, book, ccy, baseCurrency, fx, contributions, withdrawals, cashTotal, money }: Props) {
-  const today = iso(new Date());
-  const ago = (days: number) => iso(new Date(Date.now() - days * 86400000));
-  const [date, setDate] = React.useState<string>(() => { try { return localStorage.getItem('hv_decisions_date') || ago(90); } catch { return ago(90); } });
-  const setD = (d: string) => { setDate(d); try { localStorage.setItem('hv_decisions_date', d); } catch { /* */ } };
+function SellOverview({ holdings, book, ccy, baseCurrency, fx, money, date, setD }: Props & { date: string; setD: (d: string) => void }) {
   const [fetched, setFetched] = React.useState<Record<string, number>>({});
   const [loading, setLoading] = React.useState(false);
   const [fetchErr, setFetchErr] = React.useState<string | null>(null);
@@ -77,8 +76,8 @@ export default function DecisionsView({ holdings, book, ccy, baseCurrency, fx, c
   }, [needSig]);
 
   const calc = React.useMemo(() => {
-    const activeByKey = new Map<string, number>();
-    scoped.filter(isActive).forEach((h) => { const p = Number(h.live_price ?? h.current_price ?? h.buy_price); if (p > 0) activeByKey.set(keyOf(h), p); });
+    const activeByKey = new Map<string, number>(); const activeTs = new Map<string, number>();
+    scoped.filter(isActive).forEach((h) => { const k = keyOf(h), p = Number(h.live_price ?? h.current_price ?? h.buy_price), t = Date.parse(h.live_price_updated_at || '') || 0; if (p > 0 && (!activeTs.has(k) || t >= activeTs.get(k)!)) { activeByKey.set(k, p); activeTs.set(k, t); } });
     const rows: any[] = [];
     scoped.filter((h) => !isActive(h) && soldDate(h) >= date).forEach((h) => {
       const k = keyOf(h), qty = Number(h.quantity || 0), soldPrice = Number(h.sold_price || 0);
@@ -235,6 +234,26 @@ export default function DecisionsView({ holdings, book, ccy, baseCurrency, fx, c
       </div>
       </div>
       <p className="text-[11px] text-slate-400">"If held today" = (current price − sold price) × quantity. Price up after you sold = bad decision (red ▲); price down after you sold = good decision (green ▼). Dividends and fees are not included.</p>
+    </div>
+  );
+}
+
+export default function DecisionsView(props: Props & { lots?: any[] }) {
+  const [tab, setTab] = React.useState<'buy' | 'sell'>(() => { try { return (localStorage.getItem('hv_decisions_tab') as any) === 'sell' ? 'sell' : 'buy'; } catch { return 'buy'; } });
+  const pick = (t: 'buy' | 'sell') => { setTab(t); try { localStorage.setItem('hv_decisions_tab', t); } catch { /* */ } };
+  const [date, setDate] = React.useState<string>(() => { try { return localStorage.getItem('hv_decisions_date') || ago(90); } catch { return ago(90); } });
+  const setD = (d: string) => { setDate(d); try { localStorage.setItem('hv_decisions_date', d); } catch { /* */ } };
+  const presets: [string, string][] = [['Yesterday', ago(1)], ['1W', ago(7)], ['1M', ago(30)], ['3M', ago(90)], ['6M', ago(182)], ['1Y', ago(365)], ['YTD', `${new Date().getFullYear()}-01-01`]];
+  return (
+    <div className="space-y-4">
+      <div className="inline-flex rounded-2xl bg-slate-100 dark:bg-slate-800/70 p-1.5 gap-1">
+        {([['buy', 'Buy Overview'], ['sell', 'Sell Overview']] as const).map(([k, l]) => (
+          <button key={k} onClick={() => pick(k)} className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${tab === k ? 'bg-white dark:bg-slate-900 text-indigo-600 shadow-sm' : 'text-slate-500'}`}>{l}</button>
+        ))}
+      </div>
+      {tab === 'buy'
+        ? <BuyOverview holdings={props.holdings} lots={props.lots || []} book={props.book} ccy={props.ccy} baseCurrency={props.baseCurrency} fx={props.fx} money={props.money} date={date} setD={setD} presets={presets} today={today} />
+        : <SellOverview {...props} date={date} setD={setD} />}
     </div>
   );
 }

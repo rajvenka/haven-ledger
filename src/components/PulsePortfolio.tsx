@@ -1559,7 +1559,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           {section === 'calendar' && calendarView}
           {section === 'cash' && cashView}
           {section === 'sync' && syncHub}
-          {section === 'decisions' && <DecisionsView holdings={holdings} book={book} ccy={ccy} baseCurrency={baseCurrency} fx={fx} contributions={contributions} withdrawals={withdrawals} cashTotal={cashTotal} money={(n, c) => money(n, c)} />}
+          {section === 'decisions' && <DecisionsView holdings={holdings} lots={lots} book={book} ccy={ccy} baseCurrency={baseCurrency} fx={fx} contributions={contributions} withdrawals={withdrawals} cashTotal={cashTotal} money={(n, c) => money(n, c)} />}
           {importProps && <PortfolioV1View {...importProps} headless skipAutoSync={!!syncProps} bridgeRef={bridge} onBridge={() => bump((n) => n + 1)} />}
         </div>
       </div>
