@@ -100,11 +100,14 @@ export default function PortfolioTicker({ holdings, portfolios = [], rates = [],
     const el = ref.current; if (!el || !overflow) return;
     let raf = 0, last = performance.now(), pos = el.scrollLeft;
     const tick = (t: number) => {
-      const dt = t - last; last = t;
+      const dt = Math.min(t - last, 100); last = t;
+      // Mobile browsers round scrollLeft to whole pixels, so keep the fractional position ourselves
+      // (re-reading scrollLeft each frame would swallow the sub-pixel step and the strip would never move).
+      if (Math.abs(el.scrollLeft - Math.round(pos)) > 2) pos = el.scrollLeft; // user dragged it
       if (!pausedRef.current) {
-        pos = el.scrollLeft + dt * 0.03; // ~30px/s
+        pos += dt * 0.04; // ~40px/s
         const half = el.scrollWidth / 2;
-        if (pos >= half) pos -= half;
+        if (half > 0 && pos >= half) pos -= half;
         el.scrollLeft = pos;
       }
       raf = requestAnimationFrame(tick);
