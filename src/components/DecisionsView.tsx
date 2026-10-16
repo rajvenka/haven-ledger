@@ -148,7 +148,7 @@ export default function DecisionsView({ holdings, book, ccy, baseCurrency, fx, c
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="border-t border-slate-100 dark:border-slate-800">
-                  <td className="p-2.5 font-black whitespace-nowrap">{r.symbol}</td>
+                  <td className="p-2.5 font-black"><div className="w-[15ch] overflow-x-auto whitespace-nowrap pb-0.5" style={{ scrollbarWidth: 'thin' }} title={r.symbol}>{r.symbol}</div></td>
                   <td className="p-2.5 text-right tabular-nums">{n(r.qty)}</td>
                   <td className="p-2.5 whitespace-nowrap text-slate-500">{r.soldDate}</td>
                   <td className="p-2.5 text-right tabular-nums">{n(r.soldPrice)}</td>
