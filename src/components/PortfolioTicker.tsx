@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pause, Play } from 'lucide-react';
 
-type Card = { id: string; name: string; ccy: string; value: number; pnl: number; pnlPct: number; day: number; dayPct: number };
+type Card = { id: string; name: string; ccy: string; value: number; pnl: number; pnlPct: number; day: number; dayPct: number; kind?: 'portfolio' | 'mf' | 'tag'; bookId?: string };
 
 function rateOf(rates: any[], base: string, c: string): number | null {
   if (c === base) return 1;
@@ -43,12 +43,38 @@ export function buildCards(holdings: any[], portfolios: any[], rates: any[], bas
     const pnl = value - cost;
     return { value, pnl, pnlPct: cost > 0 ? (pnl / cost) * 100 : 0, day, dayPct: value - day > 0 ? (day / (value - day)) * 100 : 0 };
   };
-  if (!multiple || portfolios.length === 0) return active.length ? [{ id: 'all', name: 'Portfolio', ccy: base, ...calc(active, base) }] : [];
-  const cards: Card[] = portfolios.map((p: any) => {
-    const ccy = String(p.currency || base).toUpperCase();
-    return { id: String(p.id), name: String(p.name), ccy, ...calc(active.filter((h) => h.portfolio_id === p.id), ccy) };
-  }).filter((c) => c.value !== 0 || c.pnl !== 0);
-  if (cards.length > 1) cards.unshift({ id: 'all', name: 'All portfolios', ccy: base, ...calc(active, base) });
+  const few = !multiple || portfolios.length <= 3;
+  let cards: Card[] = [];
+  if (!multiple || portfolios.length === 0) {
+    if (active.length) cards.push({ id: 'all', name: 'Portfolio', ccy: base, kind: 'portfolio', ...calc(active, base) });
+  } else {
+    cards = portfolios.map((p: any) => {
+      const ccy = String(p.currency || base).toUpperCase();
+      return { id: String(p.id), name: String(p.name), ccy, kind: 'portfolio' as const, ...calc(active.filter((h) => h.portfolio_id === p.id), ccy) };
+    }).filter((c) => c.value !== 0 || c.pnl !== 0);
+    if (cards.length > 1) cards.unshift({ id: 'all', name: 'All portfolios', ccy: base, kind: 'portfolio', ...calc(active, base) });
+  }
+  if (few && active.length) {
+    // Breakdown cards: mutual funds per portfolio, then one card per tag (own stock, SME, ...).
+    const isMf = (h: any) => String(h.holding_type || '').toLowerCase().startsWith('mutual');
+    const brokerNames = new Set<string>(['', '—', 'groww', 'zerodha', 'cfd', 'webull', 'etoro', 'stake']);
+    portfolios.forEach((p: any) => brokerNames.add(String(p.name).toLowerCase()));
+    const extra: Card[] = [];
+    const pfs = multiple && portfolios.length ? portfolios : [null];
+    pfs.forEach((p: any) => {
+      const list = active.filter((h) => isMf(h) && (!p || h.portfolio_id === p.id));
+      if (list.length) { const ccy = String(p?.currency || base).toUpperCase(); extra.push({ id: `mf:${p?.id || 'all'}`, name: p ? `${p.name} MF` : 'Mutual funds', ccy, kind: 'mf', bookId: p?.id || 'all', ...calc(list, ccy) }); }
+    });
+    const byTag = new Map<string, any[]>();
+    active.filter((h) => !isMf(h)).forEach((h) => {
+      const t = String(h.source || '').replace(/\s*·\s*[A-Z0-9]{4,}$/i, '').trim();
+      const tl = t.toLowerCase();
+      if (!t || brokerNames.has(tl) || Array.from(brokerNames).some((b) => b.length > 2 && tl.includes(b))) return;
+      byTag.set(t, [...(byTag.get(t) || []), h]);
+    });
+    const tagCards: Card[] = Array.from(byTag.entries()).map(([t, list]) => ({ id: `tag:${t}`, name: t, ccy: base, kind: 'tag' as const, bookId: 'all', ...calc(list, base) })).sort((a, b) => b.value - a.value).slice(0, 10);
+    cards = [...cards, ...extra, ...tagCards];
+  }
   return cards;
 }
 
@@ -101,9 +127,9 @@ export default function PortfolioTicker({ holdings, portfolios = [], rates = [],
         title={overflow ? (paused ? 'Click empty space to resume scrolling' : 'Click a card to open that portfolio (scrolling stops)') : undefined}
       >
         {list.map((c, i) => (
-          <div key={`${c.id}-${i}`} onClick={(e) => { if (onSelect) { e.stopPropagation(); setPaused(true); onSelect(c.id); } }} className="shrink-0 min-w-[210px] rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-3 py-2">
+          <div key={`${c.id}-${i}`} onClick={(e) => { if (onSelect) { e.stopPropagation(); setPaused(true); onSelect(c.bookId || c.id); } }} className="shrink-0 min-w-[210px] rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-3 py-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-black text-slate-500 truncate">{c.name}</span>
+              <span className="text-[11px] font-black text-slate-500 truncate">{c.kind === 'tag' && <span className="mr-1 text-[9px] px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300">TAG</span>}{c.kind === 'mf' && <span className="mr-1 text-[9px] px-1 py-0.5 rounded bg-violet-100 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300">MF</span>}{c.name}</span>
               <span className="text-sm font-black tabular-nums">{money(c.value, c.ccy)}</span>
             </div>
             <div className="flex items-center justify-between gap-3 mt-1 text-[11px] font-bold tabular-nums">
