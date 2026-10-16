@@ -96,14 +96,16 @@ export default function DecisionsView({ holdings, book, ccy, baseCurrency, fx, c
 
   const [q, setQ] = React.useState('');
   const [verdict, setVerdict] = React.useState<'all' | 'good' | 'bad'>('all');
-  const [sort, setSort] = React.useState<'date' | 'diff' | 'pct' | 'name'>('date');
+  type SK = 'symbol' | 'qty' | 'soldDate' | 'soldPrice' | 'nowPrice' | 'decision' | 'diff';
+  const [sort, setSort] = React.useState<SK>('soldDate');
+  const [dir, setDir] = React.useState<1 | -1>(-1);
+  const clickSort = (k: SK) => { if (sort === k) setDir((d) => (d === 1 ? -1 : 1)); else { setSort(k); setDir(k === 'symbol' ? 1 : -1); } };
   const rows = React.useMemo(() => {
     let l = calc.rows.filter((r) => (!q.trim() || r.symbol.toLowerCase().includes(q.trim().toLowerCase())) && (verdict === 'all' || (verdict === 'good' ? r.diff <= 0 : r.diff > 0)));
-    if (sort === 'diff') l = [...l].sort((a, b) => a.diff - b.diff);
-    else if (sort === 'pct') l = [...l].sort((a, b) => a.pct - b.pct);
-    else if (sort === 'name') l = [...l].sort((a, b) => a.symbol.localeCompare(b.symbol));
+    const val = (r: any) => (sort === 'decision' ? r.pct : r[sort]);
+    l = [...l].sort((x, y) => { const a = val(x), b = val(y); return (typeof a === 'string' ? a.localeCompare(b) : a - b) * dir; });
     return l;
-  }, [calc.rows, q, verdict, sort]);
+  }, [calc.rows, q, verdict, sort, dir]);
   const sum = React.useMemo(() => {
     const soldValue = rows.reduce((a, r) => a + r.proceeds, 0), heldValue = rows.reduce((a, r) => a + r.heldValue, 0);
     const goodN = rows.filter((r) => r.diff <= 0).length, badN = rows.length - goodN;
@@ -136,14 +138,11 @@ export default function DecisionsView({ holdings, book, ccy, baseCurrency, fx, c
         <div className="p-3 flex flex-wrap items-center gap-2 border-b border-slate-100 dark:border-slate-800">
           <div className="relative flex-1 min-w-[10rem]"><Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search stock" className="w-full pl-8 pr-2 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none" /></div>
           {([['all', 'All'], ['good', 'Good sale'], ['bad', 'Bad sale']] as const).map(([k, l]) => <button key={k} onClick={() => setVerdict(k)} className={`text-[11px] font-black px-3 py-2 rounded-full ${verdict === k ? (k === 'good' ? 'bg-emerald-600 text-white' : k === 'bad' ? 'bg-rose-600 text-white' : 'bg-indigo-600 text-white') : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{l}</button>)}
-          <select value={sort} onChange={(e) => setSort(e.target.value as any)} className="text-[11px] font-bold px-2 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none">
-            <option value="date">Latest sold</option><option value="diff">Best sale first</option><option value="pct">Best sale % first</option><option value="name">Name</option>
-          </select>
         </div>
         <div className="overflow-auto">
           <table className="w-full text-xs min-w-[640px]">
             <thead className="bg-slate-50 dark:bg-slate-800 text-[10px] uppercase text-slate-400">
-              <tr>{['Stock', 'Qty', 'Sold on', 'Sold price', 'Current price', 'Decision', 'If held today'].map((h, i) => <th key={h} className={`p-2.5 font-black ${i === 0 || i === 2 ? 'text-left' : i === 5 ? 'text-center' : 'text-right'}`}>{h}</th>)}</tr>
+              <tr>{([['Stock', 'symbol'], ['Qty', 'qty'], ['Sold on', 'soldDate'], ['Sold price', 'soldPrice'], ['Current price', 'nowPrice'], ['Decision', 'decision'], ['If held today', 'diff']] as [string, SK][]).map(([h, k], i) => <th key={h} onClick={() => clickSort(k)} className={`p-2.5 font-black cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200 whitespace-nowrap ${i === 0 || i === 2 ? 'text-left' : i === 5 ? 'text-center' : 'text-right'}`}>{h}{sort === k ? (dir === 1 ? ' ▲' : ' ▼') : ''}</th>)}</tr>
             </thead>
             <tbody>
               {rows.map((r) => (
