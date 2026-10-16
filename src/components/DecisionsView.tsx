@@ -1,6 +1,6 @@
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { Search } from 'lucide-react';
+import { Search, ArrowUp, ArrowDown } from 'lucide-react';
 
 type Props = {
   holdings: any[];
@@ -141,9 +141,9 @@ export default function DecisionsView({ holdings, book, ccy, baseCurrency, fx, c
           </select>
         </div>
         <div className="overflow-auto">
-          <table className="w-full text-xs min-w-[560px]">
+          <table className="w-full text-xs min-w-[640px]">
             <thead className="bg-slate-50 dark:bg-slate-800 text-[10px] uppercase text-slate-400">
-              <tr>{['Stock', 'Qty', 'Sold on', 'Sold price', 'Current price', 'If held today'].map((h, i) => <th key={h} className={`p-2.5 font-black ${i === 0 || i === 2 ? 'text-left' : 'text-right'}`}>{h}</th>)}</tr>
+              <tr>{['Stock', 'Qty', 'Sold on', 'Sold price', 'Current price', 'Decision', 'If held today'].map((h, i) => <th key={h} className={`p-2.5 font-black ${i === 0 || i === 2 ? 'text-left' : i === 5 ? 'text-center' : 'text-right'}`}>{h}</th>)}</tr>
             </thead>
             <tbody>
               {rows.map((r) => (
@@ -152,14 +152,24 @@ export default function DecisionsView({ holdings, book, ccy, baseCurrency, fx, c
                   <td className="p-2.5 text-right tabular-nums">{n(r.qty)}</td>
                   <td className="p-2.5 whitespace-nowrap text-slate-500">{r.soldDate}</td>
                   <td className="p-2.5 text-right tabular-nums">{n(r.soldPrice)}</td>
-                  <td className="p-2.5 text-right tabular-nums">{n(r.nowPrice)}{r.est ? <span className="text-amber-600" title="Older price"> *</span> : null}</td>
+                  <td className="p-2.5 text-right tabular-nums">
+                    <span className="inline-flex items-center justify-end gap-1">
+                      {r.nowPrice > r.soldPrice ? <ArrowUp className="w-3 h-3 text-rose-500" /> : r.nowPrice < r.soldPrice ? <ArrowDown className="w-3 h-3 text-emerald-500" /> : null}
+                      {n(r.nowPrice)}{r.est ? <span className="text-amber-600" title="Older price"> *</span> : null}
+                    </span>
+                  </td>
+                  <td className="p-2.5 text-center whitespace-nowrap">
+                    {r.diff > 0 ? <span className="inline-flex items-center gap-0.5 text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300" title="Price went up after you sold">Bad <ArrowUp className="w-3 h-3" /></span>
+                      : r.diff < 0 ? <span className="inline-flex items-center gap-0.5 text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300" title="Price fell after you sold">Good <ArrowDown className="w-3 h-3" /></span>
+                      : <span className="text-[10px] font-black text-slate-400">Same</span>}
+                  </td>
                   <td className={`p-2.5 text-right tabular-nums font-black ${tone(r.diff)}`}>{r.diff > 0 ? '+' : ''}{money(r.diff, ccy)}<div className="text-[10px] font-bold">{pct(r.pct)}</div></td>
                 </tr>
               ))}
-              {rows.length === 0 && <tr><td colSpan={6} className="p-8 text-center text-slate-400">No stocks sold since this date.</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-slate-400">No stocks sold since this date.</td></tr>}
             </tbody>
             {rows.length > 0 && (
-              <tfoot><tr className="border-t-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60"><td colSpan={5} className="p-2.5 font-black">Total ({rows.length} sold)</td><td className={`p-2.5 text-right font-black tabular-nums ${tone(sum.total)}`}>{sum.total > 0 ? '+' : ''}{money(sum.total, ccy)}</td></tr></tfoot>
+              <tfoot><tr className="border-t-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60"><td colSpan={6} className="p-2.5 font-black">Total ({rows.length} sold)</td><td className={`p-2.5 text-right font-black tabular-nums ${tone(sum.total)}`}>{sum.total > 0 ? '+' : ''}{money(sum.total, ccy)}</td></tr></tfoot>
             )}
           </table>
         </div>
@@ -225,7 +235,7 @@ export default function DecisionsView({ holdings, book, ccy, baseCurrency, fx, c
         )}
       </div>
       </div>
-      <p className="text-[11px] text-slate-400">"If held today" = (current price − sold price) × quantity. Green means you would be in profit by holding; red means selling was the better call. Dividends and fees are not included.</p>
+      <p className="text-[11px] text-slate-400">"If held today" = (current price − sold price) × quantity. Price up after you sold = bad decision (red ▲); price down after you sold = good decision (green ▼). Dividends and fees are not included.</p>
     </div>
   );
 }
