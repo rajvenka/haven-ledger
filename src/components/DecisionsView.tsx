@@ -1,4 +1,6 @@
 import React from 'react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { Search } from 'lucide-react';
 
 type Props = {
   holdings: any[];
@@ -86,11 +88,29 @@ export default function DecisionsView({ holdings, book, ccy, baseCurrency, fx, c
       else { const stale = Number(h.live_price ?? 0); p = stale > 0 ? stale : soldPrice; est = true; }
       const native = String(h.currency || baseCurrency).toUpperCase();
       // Profit/loss if you still held it today = (current - sold) x qty
-      rows.push({ id: h.id, symbol: String(h.ticker || h.symbol), qty, soldDate: soldDate(h), soldPrice, nowPrice: p, est, native, diff: fx((p - soldPrice) * qty, native, ccy), pct: soldPrice > 0 ? ((p - soldPrice) / soldPrice) * 100 : 0 });
+      rows.push({ id: h.id, symbol: String(h.ticker || h.symbol), qty, soldDate: soldDate(h), soldPrice, nowPrice: p, est, native, proceeds: fx(soldPrice * qty, native, ccy), heldValue: fx(p * qty, native, ccy), diff: fx((p - soldPrice) * qty, native, ccy), pct: soldPrice > 0 ? ((p - soldPrice) / soldPrice) * 100 : 0 });
     });
     rows.sort((a, b) => b.soldDate.localeCompare(a.soldDate) || a.symbol.localeCompare(b.symbol));
-    return { rows, total: rows.reduce((a, r) => a + r.diff, 0), estimated: rows.filter((r) => r.est).length };
+    return { rows, estimated: rows.filter((r) => r.est).length };
   }, [scoped, date, fetched, fx, ccy, baseCurrency]);
+
+  const [q, setQ] = React.useState('');
+  const [verdict, setVerdict] = React.useState<'all' | 'good' | 'bad'>('all');
+  const [sort, setSort] = React.useState<'date' | 'diff' | 'pct' | 'name'>('date');
+  const rows = React.useMemo(() => {
+    let l = calc.rows.filter((r) => (!q.trim() || r.symbol.toLowerCase().includes(q.trim().toLowerCase())) && (verdict === 'all' || (verdict === 'good' ? r.diff <= 0 : r.diff > 0)));
+    if (sort === 'diff') l = [...l].sort((a, b) => a.diff - b.diff);
+    else if (sort === 'pct') l = [...l].sort((a, b) => a.pct - b.pct);
+    else if (sort === 'name') l = [...l].sort((a, b) => a.symbol.localeCompare(b.symbol));
+    return l;
+  }, [calc.rows, q, verdict, sort]);
+  const sum = React.useMemo(() => {
+    const soldValue = rows.reduce((a, r) => a + r.proceeds, 0), heldValue = rows.reduce((a, r) => a + r.heldValue, 0);
+    const goodN = rows.filter((r) => r.diff <= 0).length, badN = rows.length - goodN;
+    const saved = rows.filter((r) => r.diff < 0).reduce((a, r) => a + r.diff, 0), missed = rows.filter((r) => r.diff > 0).reduce((a, r) => a + r.diff, 0);
+    const byDiff = [...rows].sort((a, b) => a.diff - b.diff);
+    return { soldValue, heldValue, total: heldValue - soldValue, goodN, badN, saved, missed, bestSells: byDiff.filter((r) => r.diff < 0).slice(0, 3), worstSells: byDiff.filter((r) => r.diff > 0).reverse().slice(0, 3) };
+  }, [rows]);
 
   const presets: [string, string][] = [['Yesterday', ago(1)], ['1W', ago(7)], ['1M', ago(30)], ['3M', ago(90)], ['6M', ago(182)], ['1Y', ago(365)], ['YTD', `${new Date().getFullYear()}-01-01`]];
   const n = (v: number) => v.toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -111,14 +131,22 @@ export default function DecisionsView({ holdings, book, ccy, baseCurrency, fx, c
         {!loading && calc.estimated > 0 && <div className="text-[11px] text-amber-600 font-bold">{calc.estimated} stock(s) use an older price because no current quote was found.</div>}
       </div>
 
+      <div className="grid lg:grid-cols-[minmax(0,7fr)_minmax(0,3fr)] gap-4 items-start">
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
+        <div className="p-3 flex flex-wrap items-center gap-2 border-b border-slate-100 dark:border-slate-800">
+          <div className="relative flex-1 min-w-[10rem]"><Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search stock" className="w-full pl-8 pr-2 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none" /></div>
+          {([['all', 'All'], ['good', 'Good sale'], ['bad', 'Bad sale']] as const).map(([k, l]) => <button key={k} onClick={() => setVerdict(k)} className={`text-[11px] font-black px-3 py-2 rounded-full ${verdict === k ? (k === 'good' ? 'bg-emerald-600 text-white' : k === 'bad' ? 'bg-rose-600 text-white' : 'bg-indigo-600 text-white') : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{l}</button>)}
+          <select value={sort} onChange={(e) => setSort(e.target.value as any)} className="text-[11px] font-bold px-2 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none">
+            <option value="date">Latest sold</option><option value="diff">Best sale first</option><option value="pct">Best sale % first</option><option value="name">Name</option>
+          </select>
+        </div>
         <div className="overflow-auto">
           <table className="w-full text-xs min-w-[560px]">
             <thead className="bg-slate-50 dark:bg-slate-800 text-[10px] uppercase text-slate-400">
               <tr>{['Stock', 'Qty', 'Sold on', 'Sold price', 'Current price', 'If held today'].map((h, i) => <th key={h} className={`p-2.5 font-black ${i === 0 || i === 2 ? 'text-left' : 'text-right'}`}>{h}</th>)}</tr>
             </thead>
             <tbody>
-              {calc.rows.map((r) => (
+              {rows.map((r) => (
                 <tr key={r.id} className="border-t border-slate-100 dark:border-slate-800">
                   <td className="p-2.5 font-black whitespace-nowrap">{r.symbol}</td>
                   <td className="p-2.5 text-right tabular-nums">{n(r.qty)}</td>
@@ -128,13 +156,74 @@ export default function DecisionsView({ holdings, book, ccy, baseCurrency, fx, c
                   <td className={`p-2.5 text-right tabular-nums font-black ${tone(r.diff)}`}>{r.diff > 0 ? '+' : ''}{money(r.diff, ccy)}<div className="text-[10px] font-bold">{pct(r.pct)}</div></td>
                 </tr>
               ))}
-              {calc.rows.length === 0 && <tr><td colSpan={6} className="p-8 text-center text-slate-400">No stocks sold since this date.</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={6} className="p-8 text-center text-slate-400">No stocks sold since this date.</td></tr>}
             </tbody>
-            {calc.rows.length > 0 && (
-              <tfoot><tr className="border-t-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60"><td colSpan={5} className="p-2.5 font-black">Total ({calc.rows.length} sold)</td><td className={`p-2.5 text-right font-black tabular-nums ${tone(calc.total)}`}>{calc.total > 0 ? '+' : ''}{money(calc.total, ccy)}</td></tr></tfoot>
+            {rows.length > 0 && (
+              <tfoot><tr className="border-t-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60"><td colSpan={5} className="p-2.5 font-black">Total ({rows.length} sold)</td><td className={`p-2.5 text-right font-black tabular-nums ${tone(sum.total)}`}>{sum.total > 0 ? '+' : ''}{money(sum.total, ccy)}</td></tr></tfoot>
             )}
           </table>
         </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
+          <div className="text-sm font-black mb-3">Sold summary</div>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              ['Stocks sold', String(rows.length), undefined],
+              ['Total sold value', money(sum.soldValue, ccy), undefined],
+              ['Value if held', money(sum.heldValue, ccy), undefined],
+              ['If held: P/L', `${sum.total > 0 ? '+' : ''}${money(sum.total, ccy)}`, sum.total],
+            ].map(([l, v, t]: any) => (
+              <div key={l} className="rounded-xl bg-slate-50 dark:bg-slate-800/60 px-3 py-2">
+                <div className="text-[9px] font-black uppercase tracking-wider text-slate-400 leading-tight">{l}</div>
+                <div className={`text-sm font-black tabular-nums mt-0.5 break-words ${t != null ? tone(t) : ''}`}>{v}</div>
+              </div>
+            ))}
+          </div>
+          <div className={`mt-3 text-xs font-bold ${sum.total <= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{rows.length === 0 ? '' : sum.total <= 0 ? 'Overall, selling beat holding.' : 'Overall, holding would have been better.'}</div>
+        </div>
+
+        {rows.length > 0 && (
+          <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
+            <div className="text-sm font-black">Good vs bad sales</div>
+            <div className="h-36 relative">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={[{ name: 'Good', value: sum.goodN }, { name: 'Bad', value: sum.badN }]} dataKey="value" innerRadius={38} outerRadius={58} paddingAngle={2} stroke="none">
+                    <Cell fill="#10b981" /><Cell fill="#f43f5e" />
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><span className="text-lg font-black">{Math.round((sum.goodN / rows.length) * 100)}%</span></div>
+            </div>
+            <div className="flex justify-between text-[11px] font-bold">
+              <span className="text-emerald-600">{sum.goodN} good · saved {money(Math.abs(sum.saved), ccy)}</span>
+              <span className="text-rose-600">{sum.badN} bad · missed {money(sum.missed, ccy)}</span>
+            </div>
+          </div>
+        )}
+
+        {(sum.bestSells.length > 0 || sum.worstSells.length > 0) && (
+          <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+            {[['Best sales', sum.bestSells, 'bg-emerald-500'], ['Worst sales', sum.worstSells, 'bg-rose-500']].map(([title, list, bar]: any) => list.length > 0 && (
+              <div key={title}>
+                <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">{title}</div>
+                {list.map((r: any) => {
+                  const mx = Math.max(...list.map((x: any) => Math.abs(x.diff))) || 1;
+                  return (
+                    <div key={r.id} className="mb-1.5">
+                      <div className="flex justify-between text-xs font-bold"><span className="truncate pr-2">{r.symbol}</span><span className={`tabular-nums ${tone(r.diff)}`}>{r.diff > 0 ? '+' : ''}{money(r.diff, ccy)}</span></div>
+                      <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 mt-0.5"><div className={`h-full rounded-full ${bar}`} style={{ width: `${(Math.abs(r.diff) / mx) * 100}%` }} /></div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       </div>
       <p className="text-[11px] text-slate-400">"If held today" = (current price − sold price) × quantity. Green means you would be in profit by holding; red means selling was the better call. Dividends and fees are not included.</p>
     </div>
