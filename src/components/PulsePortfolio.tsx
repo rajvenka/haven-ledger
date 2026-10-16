@@ -561,6 +561,29 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     const h = (Date.now() - new Date(c.last_synced_at).getTime()) / 3600000;
     return h < 24 ? { label: 'Up to date', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' } : { label: 'Stale', cls: 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' };
   };
+  const [refreshOpen, setRefreshOpen] = useState(false);
+  const [pricesBusy, setPricesBusy] = useState(false);
+  const [brokersBusy, setBrokersBusy] = useState(false);
+  const [brokerMsg, setBrokerMsg] = useState<{ ok: number; fail: number; failed: string[] } | null>(null);
+  const refreshPrices = async () => {
+    setRefreshOpen(false);
+    if (!bridge.current?.refreshAllPrices) return;
+    setPricesBusy(true);
+    try { await bridge.current.refreshAllPrices(); } finally { setPricesBusy(false); }
+  };
+  const refreshBrokers = async () => {
+    setRefreshOpen(false);
+    if (!bridge.current?.syncConnection || connections.length === 0) return;
+    setBrokersBusy(true); setBrokerMsg(null);
+    let ok = 0; const failed: string[] = [];
+    try {
+      for (const c of connections) {
+        const name = String(c.connection_label || c.broker_type || 'broker');
+        if (bridge.current.needsReauth?.(c)) { failed.push(`${name} (login needed)`); continue; }
+        try { (await bridge.current.syncConnection(c)) ? ok++ : failed.push(name); } catch { failed.push(name); }
+      }
+    } finally { setBrokersBusy(false); setBrokerMsg({ ok, fail: failed.length, failed }); }
+  };
   const syncAll = async () => {
     if (!b) return;
     setSyncAllBusy(true);
@@ -1416,8 +1439,34 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       {headerBlock}
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 dark:text-white">Portfolio</h1>
+          <div className="flex items-center gap-2 relative">
+            <h1 className="text-2xl font-black text-slate-900 dark:text-white">Portfolio</h1>
+            {!isReadOnly && (
+              <>
+                <button onClick={() => setRefreshOpen((o) => !o)} disabled={pricesBusy || brokersBusy} title="Refresh" className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-60">
+                  <RefreshCw className={`w-4 h-4 ${pricesBusy || brokersBusy ? 'animate-spin' : ''}`} />
+                </button>
+                {refreshOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setRefreshOpen(false)} />
+                    <div className="absolute left-0 top-full mt-1 z-40 w-60 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden">
+                      <button onClick={refreshPrices} className="w-full text-left px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800"><div className="text-xs font-black">Refresh live prices</div><div className="text-[10px] text-slate-500">Latest market price for every stock and fund</div></button>
+                      <button onClick={refreshBrokers} disabled={connections.length === 0} className="w-full text-left px-3 py-2.5 border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"><div className="text-xs font-black">Refresh from brokers</div><div className="text-[10px] text-slate-500">{connections.length} connected broker{connections.length === 1 ? '' : 's'}</div></button>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
           <p className="text-xs text-slate-500">{rows.length} positions · {connections.length} broker connection{connections.length === 1 ? '' : 's'}</p>
+          {(pricesBusy || brokersBusy || b?.priceRefreshSummary || brokerMsg) && (
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] font-bold">
+              {pricesBusy && <span className="text-slate-400">Refreshing prices…</span>}
+              {brokersBusy && <span className="text-slate-400">Syncing brokers…</span>}
+              {!pricesBusy && b?.priceRefreshSummary && <span className={/missed|not available|no holdings/i.test(b.priceRefreshSummary) ? 'text-amber-600' : 'text-emerald-600'}>Prices: {b.priceRefreshSummary}</span>}
+              {!brokersBusy && brokerMsg && <span className={brokerMsg.fail > 0 ? 'text-rose-600' : 'text-emerald-600'}>Brokers: {brokerMsg.ok} synced{brokerMsg.fail > 0 ? `, ${brokerMsg.fail} failed (${brokerMsg.failed.join(', ')})` : ''}</span>}
+            </div>
+          )}
         </div>
       </div>
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 space-y-2.5 mb-4">

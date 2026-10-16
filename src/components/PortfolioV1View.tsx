@@ -1888,8 +1888,8 @@ export default function PortfolioV1View({
   };
 
   /** Pull live prices from broker API and stamp matching holdings. Full position add/remove still via classic import. */
-  const syncConnection = async (connection: any) => {
-    if (!connection || isReadOnly) return;
+  const syncConnection = async (connection: any): Promise<boolean> => {
+    if (!connection || isReadOnly) return false;
     setSyncingId(connection.id);
     setConnectError(null);
     setConnectOk(null);
@@ -2052,8 +2052,10 @@ export default function PortfolioV1View({
           ? `Synced ${updated} live price${updated === 1 ? '' : 's'} from ${connection.connection_label || type}.`
           : `Sync OK — no matching symbols to update. Full position import still uses classic Portfolio.`
       );
+      return true;
     } catch (e: any) {
       setConnectError(e?.message || 'Sync failed');
+      return false;
     } finally {
       setSyncingId(null);
     }
