@@ -1,6 +1,7 @@
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, ReferenceLine } from 'recharts';
 import { Search, ArrowUp, ArrowDown, X } from 'lucide-react';
+import { quoteFactors } from './decisionsUtil';
 
 type Props = {
   holdings: any[]; lots: any[]; book: string; ccy: string; baseCurrency: string;
@@ -28,6 +29,7 @@ export default function BuyOverview({ holdings, lots, book, ccy, baseCurrency, f
   const clickSort = (k: SK) => { if (sort === k) setDir((d) => (d === 1 ? -1 : 1)); else { setSort(k); setDir(k === 'symbol' ? 1 : -1); } };
 
   const scoped = React.useMemo(() => holdings.filter((h) => book === 'All' || !book || h.portfolio_id === book), [holdings, book]);
+  const qf = React.useMemo(() => quoteFactors(holdings, lots, keyOf), [holdings, lots]);
   const isActive = (h: any) => (h.status || 'active') === 'active';
   const bd = (h: any) => String(h.buy_date || '').slice(0, 10);
 
@@ -97,7 +99,7 @@ export default function BuyOverview({ holdings, lots, book, ccy, baseCurrency, f
     base.forEach((o) => {
       // Leveraged (CFD) orders: cash committed = notional / leverage, plus the price move on the full notional.
       const cost = fx((o.price * o.qty) / o.lev, o.native, ccy), value = fx((o.price * o.qty) / o.lev + (o.now - o.price) * o.qty * o.short, o.native, ccy);
-      const g = m.get(o.key) || { key: o.key, symbol: o.symbol, native: o.native, orders: [] as any[], qty: 0, cost: 0, value: 0, nativeCost: 0, est: false, nowPrice: o.now, sold: false };
+      const g = m.get(o.key) || { f: qf.get(o.key) || 1, key: o.key, symbol: o.symbol, native: o.native, orders: [] as any[], qty: 0, cost: 0, value: 0, nativeCost: 0, est: false, nowPrice: o.now, sold: false };
       const diff = value - cost;
       g.orders.push({ ...o, cost, value, diff, pct: cost > 0 ? (diff / cost) * 100 : 0 });
       g.qty += o.qty; g.cost += cost; g.value += value; g.nativeCost += o.price * o.qty; g.est = g.est || o.est; g.sold = g.sold || o.sold;
@@ -107,7 +109,7 @@ export default function BuyOverview({ holdings, lots, book, ccy, baseCurrency, f
       const diff = g.value - g.cost, prices = g.orders.map((o: any) => o.price);
       return { ...g, diff, pct: g.cost > 0 ? (diff / g.cost) * 100 : 0, avg: g.qty > 0 ? g.nativeCost / g.qty : 0, low: Math.min(...prices), high: Math.max(...prices), orders: [...g.orders].sort((a: any, b: any) => b.date.localeCompare(a.date)) };
     });
-  }, [base, fx, ccy]);
+  }, [base, fx, ccy, qf]);
 
   const rows = React.useMemo(() => {
     const l = stocks.filter((r) => (!q.trim() || r.symbol.toLowerCase().includes(q.trim().toLowerCase())) && (verdict === 'all' || (verdict === 'good' ? r.diff >= 0 : r.diff < 0)));
@@ -160,8 +162,8 @@ export default function BuyOverview({ holdings, lots, book, ccy, baseCurrency, f
                     <td className="p-2.5 font-black"><div className="w-[15ch] overflow-x-auto whitespace-nowrap pb-0.5" style={{ scrollbarWidth: 'thin' }} title={r.symbol}>{r.symbol}</div></td>
                     <td className="p-2.5 text-right tabular-nums">{r.orders.length}</td>
                     <td className="p-2.5 text-right tabular-nums">{n2(r.qty)}</td>
-                    <td className="p-2.5 text-right tabular-nums">{n2(r.avg)}{r.orders.length > 1 && <div className="text-[10px] text-slate-400">{n2(r.low)} – {n2(r.high)}</div>}</td>
-                    <td className="p-2.5 text-right tabular-nums"><span className="inline-flex items-center gap-1">{r.nowPrice > r.avg ? <ArrowUp className="w-3 h-3 text-emerald-500" /> : r.nowPrice < r.avg ? <ArrowDown className="w-3 h-3 text-rose-500" /> : null}{n2(r.nowPrice)}{r.est ? <span className="text-amber-600" title="Older price"> *</span> : null}</span></td>
+                    <td className="p-2.5 text-right tabular-nums">{n2(r.avg / r.f)}{r.orders.length > 1 && <div className="text-[10px] text-slate-400">{n2(r.low / r.f)} – {n2(r.high / r.f)}</div>}</td>
+                    <td className="p-2.5 text-right tabular-nums"><span className="inline-flex items-center gap-1">{r.nowPrice > r.avg ? <ArrowUp className="w-3 h-3 text-emerald-500" /> : r.nowPrice < r.avg ? <ArrowDown className="w-3 h-3 text-rose-500" /> : null}{n2(r.nowPrice / r.f)}{r.est ? <span className="text-amber-600" title="Older price"> *</span> : null}</span></td>
                     <td className="p-2.5 text-center whitespace-nowrap">
                       {r.diff >= 0 ? <span className="inline-flex items-center gap-0.5 text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">Good <ArrowUp className="w-3 h-3" /></span>
                         : <span className="inline-flex items-center gap-0.5 text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">Bad <ArrowDown className="w-3 h-3" /></span>}
@@ -228,7 +230,7 @@ export default function BuyOverview({ holdings, lots, book, ccy, baseCurrency, f
             </div>
             <div className="p-5 space-y-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {[['You paid', money(open.cost, ccy), undefined], ['Worth at today\'s price', money(open.value, ccy), undefined], [open.diff >= 0 ? 'Profit' : 'Saving if bought now', money(Math.abs(open.diff), ccy), open.diff], ['Avg buy / now', `${n2(open.avg)} / ${n2(open.nowPrice)}`, undefined]].map(([l, v, t]: any) => (
+                {[['You paid', money(open.cost, ccy), undefined], ['Worth at today\'s price', money(open.value, ccy), undefined], [open.diff >= 0 ? 'Profit' : 'Saving if bought now', money(Math.abs(open.diff), ccy), open.diff], ['Avg buy / now', `${n2(open.avg / open.f)} / ${n2(open.nowPrice / open.f)}`, undefined]].map(([l, v, t]: any) => (
                   <div key={l} className="rounded-xl bg-slate-50 dark:bg-slate-800/60 px-3 py-2"><div className="text-[9px] font-black uppercase tracking-wider text-slate-400 leading-tight">{l}</div><div className={`text-sm font-black tabular-nums mt-0.5 break-words ${t != null ? tone(t) : ''}`}>{v}</div></div>
                 ))}
               </div>
@@ -236,13 +238,13 @@ export default function BuyOverview({ holdings, lots, book, ccy, baseCurrency, f
                 {open.diff >= 0
                   ? `Buying all ${n2(open.qty)} shares today would cost ${money(open.diff, ccy)} more than you paid. Your orders beat today's price.`
                   : `Buying all ${n2(open.qty)} shares today would cost ${money(Math.abs(open.diff), ccy)} less than you paid.`}
-                {open.orders.length > 1 && <span className="block mt-1 font-semibold opacity-90">Cheapest order {n2(open.low)}, highest {n2(open.high)} (avg {n2(open.avg)}).</span>}
+                {open.orders.length > 1 && <span className="block mt-1 font-semibold opacity-90">Cheapest order {n2(open.low / open.f)}, highest {n2(open.high / open.f)} (avg {n2(open.avg / open.f)}).</span>}
               </div>
               <div className="h-44">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={[...open.orders].reverse().map((o: any) => ({ d: `${o.date.slice(5)}`, price: Number(o.price.toFixed(2)), good: o.diff >= 0 }))} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <BarChart data={[...open.orders].reverse().map((o: any) => ({ d: `${o.date.slice(5)}`, price: Number((o.price / open.f).toFixed(2)), good: o.diff >= 0 }))} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                     <XAxis dataKey="d" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} width={44} domain={[0, 'auto']} /><Tooltip />
-                    <ReferenceLine y={open.nowPrice} stroke="#6366f1" strokeDasharray="4 3" label={{ value: `now ${n2(open.nowPrice)}`, fontSize: 10, fill: '#6366f1', position: 'insideTopRight' }} />
+                    <ReferenceLine y={open.nowPrice / open.f} stroke="#6366f1" strokeDasharray="4 3" label={{ value: `now ${n2(open.nowPrice / open.f)}`, fontSize: 10, fill: '#6366f1', position: 'insideTopRight' }} />
                     <Bar dataKey="price" radius={[4, 4, 0, 0]}>{[...open.orders].reverse().map((o: any, i: number) => <Cell key={i} fill={o.diff >= 0 ? '#10b981' : '#f43f5e'} />)}</Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -255,8 +257,8 @@ export default function BuyOverview({ holdings, lots, book, ccy, baseCurrency, f
                       <tr key={i} className="border-t border-slate-100 dark:border-slate-800">
                         <td className="p-2 whitespace-nowrap text-slate-500">{o.date}{o.sold ? <span className="ml-1 text-[9px] px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-black">sold</span> : null}</td>
                         <td className="p-2 text-right tabular-nums">{n2(o.qty)}</td>
-                        <td className="p-2 text-right tabular-nums">{n2(o.price)}</td>
-                        <td className="p-2 text-right tabular-nums">{n2(o.now)}</td>
+                        <td className="p-2 text-right tabular-nums">{n2(o.price / open.f)}</td>
+                        <td className="p-2 text-right tabular-nums">{n2(o.now / open.f)}</td>
                         <td className="p-2 text-center">{o.diff >= 0 ? <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">Good</span> : <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">Bad</span>}</td>
                         <td className={`p-2 text-right tabular-nums font-black ${tone(o.diff)}`}>{money(Math.abs(o.diff), ccy)}<div className="text-[10px] font-bold">{o.diff >= 0 ? 'profit' : 'saving'} · {pct(o.pct)}</div></td>
                       </tr>

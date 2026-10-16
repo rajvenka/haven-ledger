@@ -2,6 +2,7 @@ import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { Search, ArrowUp, ArrowDown } from 'lucide-react';
 import BuyOverview from './BuyOverview';
+import { quoteFactors } from './decisionsUtil';
 
 type Props = {
   holdings: any[];
@@ -33,7 +34,8 @@ function valueAt(h: any, price: number) {
   return price * qty;
 }
 
-function SellOverview({ holdings, book, ccy, baseCurrency, fx, money, date, setD }: Props & { date: string; setD: (d: string) => void }) {
+function SellOverview({ holdings, lots = [], book, ccy, baseCurrency, fx, money, date, setD }: Props & { lots?: any[]; date: string; setD: (d: string) => void }) {
+  const qf = React.useMemo(() => quoteFactors(holdings, lots, keyOf), [holdings, lots]);
   const [fetched, setFetched] = React.useState<Record<string, number>>({});
   const [loading, setLoading] = React.useState(false);
   const [fetchErr, setFetchErr] = React.useState<string | null>(null);
@@ -87,11 +89,11 @@ function SellOverview({ holdings, book, ccy, baseCurrency, fx, money, date, setD
       else { const stale = Number(h.live_price ?? 0); p = stale > 0 ? stale : soldPrice; est = true; }
       const native = String(h.currency || baseCurrency).toUpperCase();
       // Profit/loss if you still held it today = (current - sold) x qty
-      rows.push({ id: h.id, symbol: String(h.ticker || h.symbol), qty, soldDate: soldDate(h), soldPrice, nowPrice: p, est, native, proceeds: fx(soldPrice * qty, native, ccy), heldValue: fx(p * qty, native, ccy), diff: fx((p - soldPrice) * qty, native, ccy), pct: soldPrice > 0 ? ((p - soldPrice) / soldPrice) * 100 : 0 });
+      rows.push({ id: h.id, f: qf.get(k) || 1, symbol: String(h.ticker || h.symbol), qty, soldDate: soldDate(h), soldPrice, nowPrice: p, est, native, proceeds: fx(soldPrice * qty, native, ccy), heldValue: fx(p * qty, native, ccy), diff: fx((p - soldPrice) * qty, native, ccy), pct: soldPrice > 0 ? ((p - soldPrice) / soldPrice) * 100 : 0 });
     });
     rows.sort((a, b) => b.soldDate.localeCompare(a.soldDate) || a.symbol.localeCompare(b.symbol));
     return { rows, estimated: rows.filter((r) => r.est).length };
-  }, [scoped, date, fetched, fx, ccy, baseCurrency]);
+  }, [scoped, date, fetched, fx, ccy, baseCurrency, qf]);
 
   const [q, setQ] = React.useState('');
   const [verdict, setVerdict] = React.useState<'all' | 'good' | 'bad'>('all');
@@ -149,11 +151,11 @@ function SellOverview({ holdings, book, ccy, baseCurrency, fx, money, date, setD
                   <td className="p-2.5 font-black"><div className="w-[15ch] overflow-x-auto whitespace-nowrap pb-0.5" style={{ scrollbarWidth: 'thin' }} title={r.symbol}>{r.symbol}</div></td>
                   <td className="p-2.5 text-right tabular-nums">{n(r.qty)}</td>
                   <td className="p-2.5 whitespace-nowrap text-slate-500">{r.soldDate}</td>
-                  <td className="p-2.5 text-right tabular-nums">{n(r.soldPrice)}</td>
+                  <td className="p-2.5 text-right tabular-nums">{n(r.soldPrice / r.f)}</td>
                   <td className="p-2.5 text-right tabular-nums">
                     <span className="inline-flex items-center justify-end gap-1">
                       {r.nowPrice > r.soldPrice ? <ArrowUp className="w-3 h-3 text-rose-500" /> : r.nowPrice < r.soldPrice ? <ArrowDown className="w-3 h-3 text-emerald-500" /> : null}
-                      {n(r.nowPrice)}{r.est ? <span className="text-amber-600" title="Older price"> *</span> : null}
+                      {n(r.nowPrice / r.f)}{r.est ? <span className="text-amber-600" title="Older price"> *</span> : null}
                     </span>
                   </td>
                   <td className="p-2.5 text-center whitespace-nowrap">
@@ -253,7 +255,7 @@ export default function DecisionsView(props: Props & { lots?: any[] }) {
       </div>
       {tab === 'buy'
         ? <BuyOverview holdings={props.holdings} lots={props.lots || []} book={props.book} ccy={props.ccy} baseCurrency={props.baseCurrency} fx={props.fx} money={props.money} date={date} setD={setD} presets={presets} today={today} />
-        : <SellOverview {...props} date={date} setD={setD} />}
+        : <SellOverview {...props} lots={props.lots || []} date={date} setD={setD} />}
     </div>
   );
 }
