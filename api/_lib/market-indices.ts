@@ -5,9 +5,10 @@ import { createClient } from "@supabase/supabase-js";
 export const MARKETS = [
   { id: "IN", name: "India", indices: [["^NSEI", "NIFTY 50"], ["^BSESN", "SENSEX"], ["^NSEBANK", "BANK NIFTY"]] },
   { id: "US", name: "United States", indices: [["^GSPC", "S&P 500"], ["^IXIC", "NASDAQ"], ["^DJI", "DOW JONES"]] },
-  { id: "AU", name: "Australia", indices: [["^AXJO", "ASX 200"]] },
   { id: "EU", name: "Europe", indices: [["^GDAXI", "DAX"], ["^FTSE", "FTSE 100"], ["^STOXX50E", "EURO STOXX 50"]] },
+  { id: "AU", name: "Australia", indices: [["^AXJO", "ASX 200"]] },
   { id: "JP", name: "Japan", indices: [["^N225", "NIKKEI 225"]] },
+  { id: "HK", name: "Hong Kong", indices: [["^HSI", "HANG SENG"]] },
 ] as const;
 
 export type IndexQuote = {

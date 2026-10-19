@@ -15,8 +15,10 @@ const MKT: Record<string, { name: string; tz: string; open: [number, number]; cl
   AU: { name: 'Australia', tz: 'Australia/Sydney', open: [10, 0], close: [16, 0], zone: 'AEST' },
   EU: { name: 'Europe', tz: 'Europe/Berlin', open: [9, 0], close: [17, 30], zone: 'CET' },
   JP: { name: 'Japan', tz: 'Asia/Tokyo', open: [9, 0], close: [15, 30], lunch: [[11, 30], [12, 30]], zone: 'JST' },
+  HK: { name: 'Hong Kong', tz: 'Asia/Hong_Kong', open: [9, 30], close: [16, 0], lunch: [[12, 0], [13, 0]], zone: 'HKT' },
 };
-const ORDER = ['IN', 'US', 'AU', 'EU', 'JP'];
+// Row 1: the three-index markets (India, US, Europe). Row 2: Australia, Japan, Hong Kong.
+const ORDER = ['IN', 'US', 'EU', 'AU', 'JP', 'HK'];
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function parts(now: Date, tz: string) {
@@ -101,7 +103,7 @@ export default function MarketActivity() {
       </div>
       {err && <div className="text-xs font-bold text-amber-600">{err}. {quotes.length ? 'Showing the last data received.' : ''}</div>}
 
-      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
         {ORDER.map((id) => {
           const m = MKT[id], st = statuses.find((s) => s.id === id)!.st, list = byMarket.get(id) || [];
           const localTime = new Intl.DateTimeFormat([], { timeZone: m.tz, hour: '2-digit', minute: '2-digit', weekday: 'short' }).format(now);
