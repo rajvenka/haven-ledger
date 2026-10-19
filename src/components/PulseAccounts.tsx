@@ -15,6 +15,7 @@ import {
   loadTypeOverrides, monthCompare, monthlyEquivalent, saveTypeOverride, toCcy, cumulativeCompare,
 } from '../utils/accounts';
 import { CompareBars, CompareHeadline, CumulativeLines } from './MonthCompareCharts';
+import PulseDueAll from './PulseDueAll';
 
 interface Props {
   payments: RecurringPayment[];
@@ -68,6 +69,11 @@ export default function PulseAccounts({
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [tab, setTab] = useState<Tab>(historyMode ? 'history' : manageMode ? 'bills' : 'overview');
+  // Expenses page: land on a combined "all dues" view; picking an account opens that account, the All card brings it back.
+  const plainMode = !manageMode && !historyMode;
+  const [showAll, setShowAll] = useState(plainMode && !selectedAccount);
+  const [mobileAll, setMobileAll] = useState(false);
+  useEffect(() => { if (selectedAccount) { setShowAll(false); setMobileAll(false); } }, [selectedAccount]);
 
   const now = useMemo(() => new Date(), []);
   const money = (n: number, ccy: string = summaryCurrency) => formatCurrencyValue(n, ccy, countries);
@@ -100,8 +106,9 @@ export default function PulseAccounts({
   }, [accounts, search, typeFilter, history]);
 
   const selectedKey = selectedAccount ? selectedAccount.toLowerCase() : null;
-  const current = accounts.find((a) => a.name.toLowerCase() === selectedKey) || (isDesktop ? list[0]?.a : undefined) || null;
-  const showDetail = !!current && (isDesktop || !!selectedAccount);
+  const allActive = plainMode && showAll;
+  const current = allActive ? null : (accounts.find((a) => a.name.toLowerCase() === selectedKey) || (isDesktop ? list[0]?.a : undefined) || null);
+  const showDetail = allActive ? (isDesktop || mobileAll) : (!!current && (isDesktop || !!selectedAccount));
 
   const typeCounts = useMemo(() => ({
     all: accounts.length,
@@ -142,10 +149,25 @@ export default function PulseAccounts({
             ))}
         </div>
       </div>
+      {plainMode && (() => {
+        let open = 0, od = 0, n = 0;
+        accounts.forEach((a) => a.bills.forEach((b) => { if (!b.active) return; const st = billState(b, history, now); if (st.dueThisMonth) { open += conv(b.amount, b.currency); n++; if (st.overdueDays > 0) od++; } }));
+        return (
+          <button type="button" onClick={() => { setShowAll(true); setMobileAll(true); onSelectAccount(null); }}
+            className={`mx-3 mt-3 flex items-center gap-3 rounded-2xl px-3 py-3 text-left border transition-colors ${allActive && (isDesktop || mobileAll) ? 'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-900' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'}`}>
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white flex items-center justify-center shrink-0"><Clock className="w-5 h-5" /></div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-black text-slate-900 dark:text-white">All dues this month</p>
+              <p className="text-[10px] text-slate-500">{n} to pay{od > 0 ? ` · ${od} overdue` : ''} · every account</p>
+            </div>
+            <p className="text-[12px] font-black tabular-nums text-slate-900 dark:text-white shrink-0">{money(open)}</p>
+          </button>
+        );
+      })()}
       <ul className="flex-1 min-h-0 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/80 pb-24 md:pb-4">
         {list.length === 0 && <li className="p-6 text-center text-[12px] text-slate-400">No accounts match</li>}
         {list.map(({ a, s }) => {
-          const active = current?.name === a.name && (isDesktop || selectedAccount === a.name);
+          const active = !allActive && current?.name === a.name && (isDesktop || selectedAccount === a.name);
           return (
             <li key={a.name}>
               <button type="button" onClick={() => { onSelectAccount(a.name); setTab(historyMode ? 'history' : manageMode ? 'bills' : 'overview'); }}
@@ -398,13 +420,19 @@ export default function PulseAccounts({
     </div>
   ) : null;
 
+  const allDetail = allActive ? (
+    <PulseDueAll accounts={accounts} history={history} countries={countries} summaryCurrency={summaryCurrency} isReadOnly={isReadOnly}
+      onRecordPayment={onRecordPayment} onEditBill={onEditBill} onBack={isDesktop ? undefined : () => setMobileAll(false)}
+      onOpenAccount={(name) => { setShowAll(false); setMobileAll(false); onSelectAccount(name); setTab('overview'); }} />
+  ) : null;
+  const body = allActive ? allDetail : detail;
   if (!isDesktop) {
-    return <div className="flex-1 min-h-0 flex flex-col bg-slate-50 dark:bg-slate-950 text-left">{showDetail ? detail : rail}{renameDialog}</div>;
+    return <div className="flex-1 min-h-0 flex flex-col bg-slate-50 dark:bg-slate-950 text-left">{showDetail ? body : rail}{renameDialog}</div>;
   }
   return (
     <div className="flex-1 min-h-0 flex bg-slate-50 dark:bg-slate-950 text-left">
       {rail}
-      {detail || <div className="flex-1 flex items-center justify-center text-[13px] text-slate-400">No accounts yet - add a bill to get started.</div>}
+      {body || <div className="flex-1 flex items-center justify-center text-[13px] text-slate-400">No accounts yet - add a bill to get started.</div>}
       {renameDialog}
     </div>
   );
