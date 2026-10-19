@@ -11,7 +11,7 @@ type Props = {
   onBack?: () => void;
 };
 type Row = { b: RecurringPayment; account: string; st: ReturnType<typeof billState>; amt: number; group: 'overdue' | 'week' | 'later' | 'paid' };
-type Chip = 'all' | 'overdue' | 'week' | 'later' | 'paid';
+type Chip = 'all' | 'open' | 'overdue' | 'week' | 'later' | 'paid';
 
 export default function PulseDueAll({ accounts, history, countries, summaryCurrency, isReadOnly, onRecordPayment, onEditBill, onOpenAccount, onBack }: Props) {
   const now = useMemo(() => new Date(), []);
@@ -43,7 +43,7 @@ export default function PulseDueAll({ accounts, history, countries, summaryCurre
 
   const visible = useMemo(() => {
     const t = q.trim().toLowerCase();
-    return rows.filter((r) => (chip === 'all' ? true : r.group === chip) && (acct === 'all' || r.account === acct)
+    return rows.filter((r) => (chip === 'all' ? true : chip === 'open' ? r.group !== 'paid' : r.group === chip) && (acct === 'all' || r.account === acct)
       && (!t || r.b.name.toLowerCase().includes(t) || r.account.toLowerCase().includes(t) || String(r.b.category || '').toLowerCase().includes(t)))
       .sort((x, y) => x.st.next.getTime() - y.st.next.getTime());
   }, [rows, chip, q, acct]);
@@ -112,9 +112,10 @@ export default function PulseDueAll({ accounts, history, countries, summaryCurre
     );
   };
 
+  const pick = (c: Chip) => { const next = chip === c ? 'all' : c; setChip(next); if (next === 'paid') setClosed((x) => ({ ...x, paid: false })); };
   const accountNames = useMemo(() => (Array.from(new Set(rows.map((r) => r.account))) as string[]).sort(), [rows]);
   const monthLabel = now.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-  const chips: [Chip, string, number][] = [['all', 'All', rows.length], ['overdue', 'Overdue', cnt('overdue')], ['week', 'This week', cnt('week')], ['later', 'Later', cnt('later')], ['paid', 'Paid', cnt('paid')]];
+  const chips: [Chip, string, number][] = [['all', 'All', rows.length], ['open', 'To pay', rows.length - cnt('paid')], ['overdue', 'Overdue', cnt('overdue')], ['week', 'This week', cnt('week')], ['later', 'Later', cnt('later')], ['paid', 'Paid', cnt('paid')]];
 
   return (
     <div className="flex-1 min-w-0 min-h-0 flex flex-col">
@@ -126,16 +127,17 @@ export default function PulseDueAll({ accounts, history, countries, summaryCurre
       <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-3 pb-28 md:pb-6">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
           {[
-            ['Still to pay', money(open), `${rows.length - cnt('paid')} bills`, undefined],
-            ['Overdue', money(sum('overdue')), `${cnt('overdue')} bill${cnt('overdue') === 1 ? '' : 's'}`, cnt('overdue') ? 'text-rose-600' : undefined],
-            ['Due in 7 days', money(sum('week')), `${cnt('week')} bill${cnt('week') === 1 ? '' : 's'}`, cnt('week') ? 'text-amber-600' : undefined],
-            ['Paid so far', money(paid), `${cnt('paid')} bill${cnt('paid') === 1 ? '' : 's'}`, 'text-emerald-600'],
-          ].map(([l, v, s, t]: any) => (
-            <div key={l} className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-3 py-2.5 min-w-0">
+            ['open', 'Still to pay', money(open), `${rows.length - cnt('paid')} bills`, undefined],
+            ['overdue', 'Overdue', money(sum('overdue')), `${cnt('overdue')} bill${cnt('overdue') === 1 ? '' : 's'}`, cnt('overdue') ? 'text-rose-600' : undefined],
+            ['week', 'Due in 7 days', money(sum('week')), `${cnt('week')} bill${cnt('week') === 1 ? '' : 's'}`, cnt('week') ? 'text-amber-600' : undefined],
+            ['paid', 'Paid so far', money(paid), `${cnt('paid')} bill${cnt('paid') === 1 ? '' : 's'}`, 'text-emerald-600'],
+          ].map(([id, l, v, s, t]: any) => (
+            <button key={l} type="button" onClick={() => pick(id as Chip)} aria-pressed={chip === id}
+              className={`text-left rounded-2xl bg-white dark:bg-slate-900 border px-3 py-2.5 min-w-0 transition-all hover:shadow-sm ${chip === id ? 'border-violet-500 ring-2 ring-violet-500/30' : 'border-slate-200 dark:border-slate-800'}`}>
               <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">{l}</p>
               <p className={`text-[15px] font-black tabular-nums truncate ${t || 'text-slate-900 dark:text-white'}`}>{v}</p>
               <p className="text-[9px] text-slate-400 truncate">{s}</p>
-            </div>
+            </button>
           ))}
         </div>
         <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-3 py-2.5">
@@ -160,7 +162,7 @@ export default function PulseDueAll({ accounts, history, countries, summaryCurre
           </div>
           <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
             {chips.map(([id, label, n]) => (
-              <button key={id} type="button" onClick={() => setChip(id)} className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold ${chip === id ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'}`}>{label} <span className="opacity-60">{n}</span></button>
+              <button key={id} type="button" onClick={() => { setChip(id); if (id === 'paid') setClosed((x) => ({ ...x, paid: false })); }} className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold ${chip === id ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'}`}>{label} <span className="opacity-60">{n}</span></button>
             ))}
           </div>
         </div>
