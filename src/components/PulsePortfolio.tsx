@@ -258,8 +258,9 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     return Array.from(s);
   }, [holdings, baseCurrency]);
   const [ccy, setCcy] = useState(baseCurrency.toUpperCase());
-  const chooseBook = (id: string) => {
+  const chooseBook = (id: string, keepSection = false) => {
     setBook(id); setFilter('All'); setChecked([]);
+    if (!keepSection) setSection('overview');
     const pc = id !== 'All' ? String(portfolios.find((p: any) => p.id === id)?.currency || '').toUpperCase() : '';
     if (pc) setCcy(pc);
   };
@@ -268,7 +269,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     if (book) return;
     if (portfolios.length === 0) { if (!isLoading) setBook('All'); return; }
     const pick = portfolios.find((p: any) => p.id === defaultBook) || portfolios[0];
-    chooseBook(pick.id);
+    chooseBook(pick.id, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolios, book]);
   React.useEffect(() => {
@@ -1035,7 +1036,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       if (insights.length === 0 && stopLines.length === 0 && targetLines.length === 0) insights.push({ t: 'All clear', d: 'No concentration, stop-loss or stale-price issues found.', tone: 'emerald' });
       return (
         <div className="space-y-4">
-          {kpiRow}
+          {design === 7 ? null : kpiRow}
           <div className="grid md:grid-cols-2 gap-3">
             {insights.map((n) => <div key={n.t} className={`rounded-2xl p-4 border ${n.tone === 'emerald' ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900' : n.tone === 'rose' ? 'bg-rose-50 border-rose-200 dark:bg-rose-950/20 dark:border-rose-900' : 'bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-900'}`}><div className="text-sm font-black">{n.t}</div><div className="text-xs text-slate-600 dark:text-slate-300 mt-1">{n.d}</div></div>)}
           </div>
@@ -1510,6 +1511,13 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         </div>
       </div>
 
+      {design === 7 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
+          <Kpi label="Total value" value={money(totals.value, ccy, true)} sub={`${pct(totals.pnlPct)} all-time · invested ${money(totals.cost, ccy, true)}`} subTone={tone(totals.pnl)} />
+          <Kpi label="Today" value={money(totals.day, ccy, true)} sub={pct(totals.dayPct)} subTone={tone(totals.day)} />
+          <div className="col-span-2 sm:col-span-1"><BestWorst /></div>
+        </div>
+      )}
       <div className="md:flex md:gap-6">
         {design === 1 && (
         <nav className={`hidden md:block shrink-0 transition-all ${navCollapsed ? 'w-14' : 'w-48'}`}>
