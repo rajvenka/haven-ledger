@@ -215,16 +215,15 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const [navCollapsed, setNavCollapsed] = useState<boolean>(() => { try { return localStorage.getItem('hv_pp_nav_collapsed') === '1'; } catch { return false; } });
   const [closed, setClosed] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('hv_pp_closed') || '[]'); } catch { return []; } });
   const toggleNav = () => setNavCollapsed((v) => { try { localStorage.setItem('hv_pp_nav_collapsed', v ? '0' : '1'); } catch { /* */ } return !v; });
-  // Header panel: shows ONE of Portfolio summary / Markets (or nothing when collapsed).
-  const [hdrView, setHdrViewState] = useState<'summary' | 'markets' | 'none'>(() => {
-    try {
-      const v = localStorage.getItem('hv_pp_hdr');
-      if (v === 'summary' || v === 'markets' || v === 'none') return v;
-      if (localStorage.getItem('hv_pp_markets') === '1') return 'markets';
-      return (JSON.parse(localStorage.getItem('hv_pp_closed') || '[]') as string[]).includes('hdr') ? 'none' : 'summary';
-    } catch { return 'summary'; }
+  // Header panel: shows ONE of Portfolio summary / Markets; the title arrow collapses/expands it.
+  const [hdrView, setHdrViewState] = useState<'summary' | 'markets'>(() => {
+    try { const v = localStorage.getItem('hv_pp_hdr'); if (v === 'summary' || v === 'markets') return v; return localStorage.getItem('hv_pp_markets') === '1' ? 'markets' : 'summary'; } catch { return 'summary'; }
   });
-  const setHdrView = (v: 'summary' | 'markets' | 'none') => { setHdrViewState(v); try { localStorage.setItem('hv_pp_hdr', v); } catch { /* */ } };
+  const [hdrOpen, setHdrOpenState] = useState<boolean>(() => {
+    try { const v = localStorage.getItem('hv_pp_hdr_open'); if (v === '0' || v === '1') return v === '1'; return !(JSON.parse(localStorage.getItem('hv_pp_closed') || '[]') as string[]).includes('hdr'); } catch { return true; }
+  });
+  const setHdrView = (v: 'summary' | 'markets') => { setHdrViewState(v); setHdrOpenState(true); try { localStorage.setItem('hv_pp_hdr', v); localStorage.setItem('hv_pp_hdr_open', '1'); } catch { /* */ } };
+  const toggleHdrOpen = () => setHdrOpenState((o) => { try { localStorage.setItem('hv_pp_hdr_open', o ? '0' : '1'); } catch { /* */ } return !o; });
   const toggleBlock = (k: string) => setClosed((c) => { const n = c.includes(k) ? c.filter((x) => x !== k) : [...c, k]; try { localStorage.setItem('hv_pp_closed', JSON.stringify(n)); } catch { /* */ } return n; });
   const isOpen = (k: string) => !closed.includes(k);
   const chev = (k: string) => (isOpen(k) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />);
@@ -1384,8 +1383,8 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     <div className="mb-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <button onClick={() => setHdrView(hdrView === 'none' ? 'summary' : hdrView === 'summary' ? 'none' : 'markets')} className="flex items-center gap-1 text-sm font-black" title={hdrView === 'none' ? 'Expand' : 'Collapse'}>
-            {hdrView === 'none' ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          <button onClick={toggleHdrOpen} className="flex items-center gap-1 text-sm font-black" title={hdrOpen ? 'Collapse' : 'Expand'}>
+            {hdrOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
             {hdrView === 'markets' ? 'Markets' : 'Portfolio summary'}
             <span className="text-[11px] font-bold text-slate-400">· {hdrView === 'markets' ? 'world indices' : `${rows.length} positions`}</span>
           </button>
@@ -1400,8 +1399,8 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           {hasLev && ([[false, 'CFD exposure'], [true, 'CFD cash at risk']] as const).map(([k, l]) => <button key={l} onClick={() => setCfdReal(k)} title="Leveraged positions: full exposure vs cash actually committed" className={`text-[10px] font-black px-2.5 py-1 rounded-full ${cfdReal === k ? 'bg-teal-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{l}</button>)}
         </div>
       </div>
-      {hdrView === 'markets' && <div className="mt-3"><MarketActivity /></div>}
-      {hdrView === 'summary' && (
+      {hdrOpen && hdrView === 'markets' && <div className="mt-3"><MarketActivity /></div>}
+      {hdrOpen && hdrView === 'summary' && (
         <div className="mt-3 space-y-3">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
             <Stat label="Total investment" value={hs.hasNetInv ? money(hs.netInv, ccy, true) : '—'} sub={hs.hasNetInv ? 'contributions − withdrawals' : 'no contributions recorded'} hint="Net money put into the portfolio" />
@@ -1526,10 +1525,11 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       </div>
 
       {design === 7 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
-          <Kpi label="Total value" value={money(totals.value, ccy, true)} sub={`${pct(totals.pnlPct)} all-time · invested ${money(totals.cost, ccy, true)}`} subTone={tone(totals.pnl)} />
-          <Kpi label="Today" value={money(totals.day, ccy, true)} sub={pct(totals.dayPct)} subTone={tone(totals.day)} />
-          <div className="col-span-2 sm:col-span-1"><BestWorst /></div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
+          <Kpi label="Invested" value={money(totals.cost, ccy, true)} sub={`${rows.length} positions`} />
+          <Kpi label="Total P/L" value={money(totals.pnl, ccy, true)} sub={pct(totals.pnlPct)} subTone={tone(totals.pnl)} />
+          <Kpi label="Today P/L" value={money(totals.day, ccy, true)} sub={pct(totals.dayPct)} subTone={tone(totals.day)} />
+          <BestWorst />
         </div>
       )}
       <div className="md:flex md:gap-6">
