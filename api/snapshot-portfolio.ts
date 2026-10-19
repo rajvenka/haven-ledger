@@ -20,6 +20,15 @@ function admin() {
   return createClient(url, key);
 }
 
+const COMMODITY_RE = /\b(gold|silver|oil|brent|natgas|copper|platinum|palladium)\b/i;
+const COMMODITY_SYMBOLS = new Set(["XAU", "XAG", "XAUUSD", "XAGUSD", "WTI", "GC=F", "SI=F", "CL=F"]);
+function isEtoroCommodity(h: any): boolean {
+  const fromEtoro = /etoro/i.test(String(h.broker || "")) || /etoro/i.test(String(h.source || ""));
+  if (!fromEtoro) return false;
+  const sym = String(h.ticker || h.symbol || "").trim().toUpperCase();
+  return COMMODITY_SYMBOLS.has(sym.replace(/[^A-Z0-9=]/g, "")) || COMMODITY_RE.test(sym);
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== "GET" && req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -55,7 +64,7 @@ export default async function handler(req: any, res: any) {
     // established elsewhere this session, since Yahoo has no reliable way to price them.
     let holdingsQuery = sb
       .from("portfolio_holdings")
-      .select("id, symbol, ticker, exchange, currency, holding_type")
+      .select("id, symbol, ticker, exchange, currency, holding_type, broker, source")
       .eq("status", "active")
       .not("holding_type", "in", "(mutual_fund,options)");
     if (currencies.length > 0) holdingsQuery = holdingsQuery.in("currency", currencies);
@@ -72,6 +81,10 @@ export default async function handler(req: any, res: any) {
         skippedNoTicker++;
         return;
       }
+      // eToro commodities (SILVER, GOLD, OIL...) keep the spot-style rate written at sync
+      // time. Yahoo maps these names to unrelated equities (e.g. SILVER -> ~$208), and
+      // writing that as previous_close produced a bogus -72% day change on Pulse.
+      if (isEtoroCommodity(h)) return;
       const { primary, fallbacks } = resolveYahooSymbolCandidates(symbol, h.exchange, h.currency);
       const tried = [primary, ...fallbacks];
       let result = await fetchYahooPrice(primary);
