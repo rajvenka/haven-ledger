@@ -9,8 +9,21 @@
 // "Symbol Not Found" even though the tickers were valid.
 
 import { resolveYahooSymbolCandidates, mapPool, fetchYahooPrice } from "./_lib/yahoo-symbols.js";
+import { fetchMarkets, persistMarkets } from "./_lib/market-indices.js";
 
 export default async function handler(req: any, res: any) {
+  // Index snapshot for Portfolio > Markets (GET or POST ?action=markets). Also used by a daily cron to store history.
+  if (String(req.query?.action || "") === "markets") {
+    try {
+      const { at, quotes } = await fetchMarkets();
+      await persistMarkets(quotes, String(req.query?.persist || "") === "1");
+      res.setHeader("Cache-Control", "s-maxage=30, stale-while-revalidate=60");
+      res.status(200).json({ at, quotes });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || "Could not load markets" });
+    }
+    return;
+  }
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
