@@ -215,8 +215,16 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const [navCollapsed, setNavCollapsed] = useState<boolean>(() => { try { return localStorage.getItem('hv_pp_nav_collapsed') === '1'; } catch { return false; } });
   const [closed, setClosed] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('hv_pp_closed') || '[]'); } catch { return []; } });
   const toggleNav = () => setNavCollapsed((v) => { try { localStorage.setItem('hv_pp_nav_collapsed', v ? '0' : '1'); } catch { /* */ } return !v; });
-  const [marketsOn, setMarketsOn] = useState(() => { try { return localStorage.getItem('hv_pp_markets') === '1'; } catch { return false; } });
-  const toggleMarkets = () => setMarketsOn((v) => { try { localStorage.setItem('hv_pp_markets', v ? '0' : '1'); } catch { /* */ } return !v; });
+  // Header panel: shows ONE of Portfolio summary / Markets (or nothing when collapsed).
+  const [hdrView, setHdrViewState] = useState<'summary' | 'markets' | 'none'>(() => {
+    try {
+      const v = localStorage.getItem('hv_pp_hdr');
+      if (v === 'summary' || v === 'markets' || v === 'none') return v;
+      if (localStorage.getItem('hv_pp_markets') === '1') return 'markets';
+      return (JSON.parse(localStorage.getItem('hv_pp_closed') || '[]') as string[]).includes('hdr') ? 'none' : 'summary';
+    } catch { return 'summary'; }
+  });
+  const setHdrView = (v: 'summary' | 'markets' | 'none') => { setHdrViewState(v); try { localStorage.setItem('hv_pp_hdr', v); } catch { /* */ } };
   const toggleBlock = (k: string) => setClosed((c) => { const n = c.includes(k) ? c.filter((x) => x !== k) : [...c, k]; try { localStorage.setItem('hv_pp_closed', JSON.stringify(n)); } catch { /* */ } return n; });
   const isOpen = (k: string) => !closed.includes(k);
   const chev = (k: string) => (isOpen(k) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />);
@@ -1376,18 +1384,24 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     <div className="mb-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <button onClick={() => toggleBlock('hdr')} className="flex items-center gap-1 text-sm font-black">{chev('hdr')} Portfolio summary <span className="text-[11px] font-bold text-slate-400">· {rows.length} positions</span></button>
-          <button onClick={toggleMarkets} aria-pressed={marketsOn} title="Show world markets (applies to every portfolio)" className={`inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-full text-[11px] font-black border transition-colors ${marketsOn ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>
-            <Globe className="w-3.5 h-3.5" /> Markets
-            <span className={`relative inline-block w-6 h-3.5 rounded-full ${marketsOn ? 'bg-white/40' : 'bg-slate-200 dark:bg-slate-700'}`}><span className={`absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white shadow transition-all ${marketsOn ? 'left-3' : 'left-0.5'}`} /></span>
+          <button onClick={() => setHdrView(hdrView === 'none' ? 'summary' : hdrView === 'summary' ? 'none' : 'markets')} className="flex items-center gap-1 text-sm font-black" title={hdrView === 'none' ? 'Expand' : 'Collapse'}>
+            {hdrView === 'none' ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            {hdrView === 'markets' ? 'Markets' : 'Portfolio summary'}
+            <span className="text-[11px] font-bold text-slate-400">· {hdrView === 'markets' ? 'world indices' : `${rows.length} positions`}</span>
+          </button>
+          {/* The switch always names the view that is NOT showing */}
+          <button onClick={() => setHdrView(hdrView === 'markets' ? 'summary' : 'markets')} title={hdrView === 'markets' ? 'Show portfolio summary' : 'Show world markets (same for every portfolio)'}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:border-indigo-400 hover:text-indigo-600">
+            {hdrView === 'markets' ? <LayoutDashboard className="w-3.5 h-3.5" /> : <Globe className="w-3.5 h-3.5" />}
+            {hdrView === 'markets' ? 'Portfolio summary' : 'Markets'}
           </button>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           {hasLev && ([[false, 'CFD exposure'], [true, 'CFD cash at risk']] as const).map(([k, l]) => <button key={l} onClick={() => setCfdReal(k)} title="Leveraged positions: full exposure vs cash actually committed" className={`text-[10px] font-black px-2.5 py-1 rounded-full ${cfdReal === k ? 'bg-teal-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{l}</button>)}
         </div>
       </div>
-      {marketsOn && <div className="mt-3"><MarketActivity /></div>}
-      {isOpen('hdr') && (
+      {hdrView === 'markets' && <div className="mt-3"><MarketActivity /></div>}
+      {hdrView === 'summary' && (
         <div className="mt-3 space-y-3">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
             <Stat label="Total investment" value={hs.hasNetInv ? money(hs.netInv, ccy, true) : '—'} sub={hs.hasNetInv ? 'contributions − withdrawals' : 'no contributions recorded'} hint="Net money put into the portfolio" />
