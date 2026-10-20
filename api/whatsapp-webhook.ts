@@ -12,6 +12,7 @@
  *   SUPABASE_SERVICE_ROLE_KEY
  */
 import { createClient } from "@supabase/supabase-js";
+import { portfolioReply, marketsReply } from "./_lib/whatsapp-portfolio.js";
 
 function admin() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
@@ -106,8 +107,21 @@ async function handleCommand(from: string, text: string) {
   if (t === "help" || t === "hi" || t === "hello") {
     await sendWhatsAppText(
       phone,
-      "Haven Ledger WhatsApp\n• help — this message\n• due — bills due soon\n• Daily digests: Account → Daily digests"
+      "Haven Ledger WhatsApp\n• portfolio — value, P/L, today per portfolio\n• today — today's movers\n• markets — index levels and change\n• due — bills due soon\n• help — this message\n• Daily digests: Account → Daily digests"
     );
+    return;
+  }
+
+  if (["portfolio", "portfolios", "p", "summary", "pnl", "p&l"].includes(t)) {
+    await sendWhatsAppText(phone, await portfolioReply(sb, profile.id, "portfolio"));
+    return;
+  }
+  if (["today", "t", "movers"].includes(t)) {
+    await sendWhatsAppText(phone, await portfolioReply(sb, profile.id, "today"));
+    return;
+  }
+  if (["markets", "market", "indices", "m"].includes(t)) {
+    await sendWhatsAppText(phone, await marketsReply());
     return;
   }
 
@@ -143,7 +157,7 @@ async function handleCommand(from: string, text: string) {
     return;
   }
 
-  await sendWhatsAppText(phone, `Got it. Try "due" or "help".`);
+  await sendWhatsAppText(phone, `Got it. Try "portfolio", "today", "markets", "due" or "help".`);
 }
 
 export default async function handler(req: any, res: any) {

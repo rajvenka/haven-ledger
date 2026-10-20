@@ -5,6 +5,7 @@
  * Cron: 30 8 * * 5  (Friday 08:30 UTC = Friday 2:00 PM India time)
  */
 import { createClient } from "@supabase/supabase-js";
+import { sendWhatsApp } from "./_lib/whatsapp-portfolio.js";
 
 function admin() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
@@ -48,7 +49,7 @@ export default async function handler(req: any, res: any) {
       brokersByUser.set(m.user_id, set);
     });
     const userIds = Array.from(brokersByUser.keys());
-    const { data: profiles } = await sb.from("profiles").select("id, app_notifications_enabled").in("id", userIds);
+    const { data: profiles } = await sb.from("profiles").select("id, app_notifications_enabled, whatsapp_phone, digest_whatsapp").in("id", userIds);
     const off = new Set((profiles || []).filter((p: any) => p.app_notifications_enabled === false).map((p: any) => p.id));
 
     const dayStart = new Date(); dayStart.setUTCHours(0, 0, 0, 0);
@@ -70,7 +71,15 @@ export default async function handler(req: any, res: any) {
       const { error: iErr } = await sb.from("app_notifications").insert(rows);
       if (iErr) throw iErr;
     }
-    res.status(200).json({ ok: true, notified: rows.length });
+    // Also WhatsApp for people who linked a number and turned WhatsApp digests on.
+    let whatsapp = 0;
+    for (const p of profiles || []) {
+      if (!p.whatsapp_phone || !p.digest_whatsapp) continue;
+      const names = Array.from(brokersByUser.get(p.id) || []).sort().join(" / ");
+      const r: any = await sendWhatsApp(String(p.whatsapp_phone), `Weekly broker sync: time to sync ${names}. Open Haven > Portfolio > refresh button > "Refresh from brokers" (Zerodha needs a fresh login first). Reply "portfolio" for your latest numbers.`);
+      if (!r?.skipped && !r?.error) whatsapp++;
+    }
+    res.status(200).json({ ok: true, notified: rows.length, whatsapp });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "failed" });
   }
