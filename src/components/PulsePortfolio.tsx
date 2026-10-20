@@ -11,7 +11,7 @@ import MarketActivity from './MarketActivity';
 import { Search, TrendingUp, TrendingDown, X, SlidersHorizontal, Plus, Pencil, Trash2, LayoutDashboard, List, CheckCircle2, CalendarDays, Wallet, RefreshCw, AlertTriangle, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, Star, Target, Scale, Globe } from 'lucide-react';
 
 type GroupBy = 'category' | 'broker' | 'currency' | 'portfolio' | 'tag';
-type SortKey = 'type' | 'tag' | 'symbol' | 'broker' | 'category' | 'portfolio' | 'qty' | 'buy' | 'price' | 'dayPct' | 'day' | 'cost' | 'value' | 'pnl' | 'pnlPct' | 'weight' | 'buyDate' | 'heldDays' | 'leverage' | 'stop' | 'target' | 'updated';
+type SortKey = 'type' | 'tag' | 'symbol' | 'broker' | 'category' | 'portfolio' | 'qty' | 'buy' | 'price' | 'dayPct' | 'day' | 'cost' | 'value' | 'pnl' | 'pnlPct' | 'weight' | 'buyDate' | 'heldDays' | 'leverage' | 'stop' | 'target' | 'updated' | 'extPct';
 
 const PALETTE = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#0ea5e9', '#8b5cf6', '#14b8a6', '#f97316', '#64748b', '#84cc16'];
 
@@ -106,6 +106,7 @@ const COLS: Col[] = [
   { k: 'price', label: 'Last price', cell: (r) => <>{px(r.price)} <span className="text-[10px] text-slate-400">{r.native}</span></>, csv: (r) => r.price },
   { k: 'dayPct', label: 'Day %', tone: (r) => r.dayPct ?? 0, cell: (r) => (r.dayPct == null ? '—' : pct(r.dayPct)), csv: (r) => r.dayPct },
   { k: 'day', label: 'Day P&L', tone: (r) => r.day, cell: (r, _t, c) => (r.day ? money(r.day, c, true) : '—'), csv: (r) => r.day },
+  { k: 'extPct', label: 'Pre/Post chg', tone: (r) => r.extPct ?? 0, cell: (r, _t, c) => (r.extPct == null ? '—' : <span className="font-bold">{pct(r.extPct)}<span className="block text-[10px] font-semibold opacity-80">{r.extValue > 0 ? '+' : r.extValue < 0 ? '-' : ''}{money(Math.abs(r.extValue), c, true)} · {r.extSession === 'pre' ? 'Pre' : 'Post'}</span></span>), csv: (r) => r.extPct },
   { k: 'cost', label: 'Invested', cell: (r, _t, c) => money(r.cost, c, true), csv: (r) => r.cost },
   { k: 'value', label: 'Value', cell: (r, _t, c) => <span className="font-bold">{money(r.value, c, true)}</span>, csv: (r) => r.value },
   { k: 'pnl', label: 'P&L', tone: (r) => r.pnl, cell: (r, _t, c) => <span className="font-bold">{money(r.pnl, c, true)}</span>, csv: (r) => r.pnl },
@@ -339,6 +340,31 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   }, [missingCcys, baseCurrency]);
   const fx = useMemo(() => fxFactory([...rates, ...autoRates], baseCurrency), [rates, autoRates, baseCurrency]);
 
+  // Pre / post-market moves for US stocks & ETFs (USD, unleveraged). Not stored: fetched live and refreshed every 5 min.
+  const [ext, setExt] = useState<Record<string, { session: 'pre' | 'post'; change: number; pct: number; price: number }>>({});
+  const usHoldings = useMemo(() => holdings.filter((h) => (h.status || 'active') === 'active' && String(h.currency || '').toUpperCase() === 'USD' && !(Number(h.leverage || 0) > 1) && ['Stocks', 'ETFs'].includes(typeOf(h)) && (h.ticker || h.symbol)), [holdings]);
+  const usSig = usHoldings.map((h) => h.id).sort().join(',');
+  React.useEffect(() => {
+    if (!usHoldings.length) { setExt({}); return; }
+    let alive = true;
+    const run = async () => {
+      if (document.visibilityState === 'hidden') return;
+      try {
+        const symbols = usHoldings.map((h) => ({ symbol: h.ticker ?? h.symbol, exchange: h.exchange, currency: h.currency }));
+        const resp = await fetch('/api/portfolio-prices?action=ext', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ symbols }) });
+        if (!resp.ok) return;
+        const { results } = await resp.json();
+        const next: Record<string, any> = {};
+        (results || []).forEach((r: any, i: number) => { const h = usHoldings[i]; if (h && r?.session && r.extChange != null) next[String(h.id)] = { session: r.session, change: r.extChange, pct: r.extPct, price: r.extPrice }; });
+        if (alive) setExt(next);
+      } catch { /* optional data */ }
+    };
+    run();
+    const t = setInterval(run, 5 * 60_000);
+    return () => { alive = false; clearInterval(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usSig]);
+
   const rows = useMemo(() => {
     return holdings
       .filter((h) => (h.status || 'active') === 'active' && (book === 'All' || !book || h.portfolio_id === book))
@@ -386,9 +412,11 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           updated: h.live_price_updated_at || h.current_price_updated_at || '',
           isin: String(h.isin || ''), exchange: String(h.exchange || ''),
           type: typeOf(h), tag: normalizeSourceTag(h.source, h),
+          extPct: (ext[String(h.id)]?.pct ?? null) as number | null, extSession: ext[String(h.id)]?.session ?? null,
+          extValue: ext[String(h.id)] ? fx(ext[String(h.id)].change * qty, native, ccy) : 0,
         };
       });
-  }, [holdings, portfolios, fx, ccy, baseCurrency, book]);
+  }, [holdings, portfolios, fx, ccy, baseCurrency, book, ext]);
 
   const lotCounts = useMemo(() => { const m = new Map<string, number>(); (lots || []).forEach((l: any) => m.set(String(l.holding_id), (m.get(String(l.holding_id)) || 0) + 1)); return m; }, [lots]);
   // Value of each portfolio (in the selected currency) for the compact mobile picker.
@@ -409,6 +437,13 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     return m;
   }, [holdings, fx, ccy, baseCurrency]);
 
+  const hasExt = rows.some((r) => r.extPct != null);
+  const extTotal = useMemo(() => {
+    const v = rows.filter((r) => r.extPct != null);
+    const sum = v.reduce((a, r) => a + r.extValue, 0), base = v.reduce((a, r) => a + r.value, 0);
+    const sessions = new Set(v.map((r) => r.extSession));
+    return { sum, pct: base - sum > 0 ? (sum / (base - sum)) * 100 : 0, label: sessions.size === 1 ? (sessions.has('pre') ? 'Pre-market' : 'Post-market') : 'Pre/Post', n: v.length };
+  }, [rows]);
   const totals = useMemo(() => {
     const value = rows.reduce((a, r) => a + r.value, 0);
     const cost = rows.reduce((a, r) => a + r.cost, 0);
@@ -457,7 +492,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     return Array.from(m.entries()).map(([name, items]) => ({ name, items }));
   }, [visible, groupBy]);
   const exportCsv = () => {
-    const cols = COLS.filter((c) => !hidden.includes(c.k));
+    const cols = COLS.filter((c) => !hidden.includes(c.k) && (c.k !== 'extPct' || hasExt));
     const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const lines = [cols.map((c) => esc(c.label)).join(',')].concat(visible.map((r) => cols.map((c) => esc(c.csv ? c.csv(r, totals.value) : '')).join(',')));
     const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
@@ -913,7 +948,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
               <button onClick={() => setColsOpen((o) => !o)} className="text-[11px] font-black px-2.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 inline-flex items-center gap-1"><SlidersHorizontal className="w-3 h-3" /> Columns</button>
               {colsOpen && (
                 <div className="absolute right-0 mt-1 z-20 w-48 max-h-72 overflow-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl p-2">
-                  {COLS.filter((c) => !c.left).map((c) => (
+                  {COLS.filter((c) => !c.left && (c.k !== 'extPct' || hasExt)).map((c) => (
                     <label key={c.k} className="flex items-center gap-2 text-xs py-1 px-1 cursor-pointer">
                       <input type="checkbox" checked={!hidden.includes(c.k)} onChange={() => toggleCol(c.k)} /> {c.label}
                     </label>
@@ -929,7 +964,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
               <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800 text-[10px] uppercase text-slate-400">
                 <tr>
                   <th className="p-2.5 w-8 sticky left-0 bg-slate-50 dark:bg-slate-800"><input type="checkbox" checked={visible.length > 0 && checked.length === visible.length} onChange={(e) => setChecked(e.target.checked ? visible.map((r) => r.id) : [])} /></th>
-                  {COLS.filter((c) => !hidden.includes(c.k)).map((c) => (
+                  {COLS.filter((c) => !hidden.includes(c.k) && (c.k !== 'extPct' || hasExt)).map((c) => (
                     <th key={c.k} onClick={() => clickSort(c.k as SortKey)} className={`p-2.5 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200 ${c.left ? 'text-left sticky left-0 bg-slate-50 dark:bg-slate-800' : 'text-right'}`}>
                       {c.label}{sort === c.k ? (dir === 1 ? ' ▲' : ' ▼') : ''}
                     </th>
@@ -949,7 +984,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
                     {g.items.map((r: any) => (
                       <tr key={r.id} onClick={() => setSelected(r.id)} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer">
                         <td className="p-2.5 w-8" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={checked.includes(r.id)} onChange={(e) => setChecked((cs) => (e.target.checked ? [...cs, r.id] : cs.filter((x) => x !== r.id)))} /></td>
-                        {COLS.filter((c) => !hidden.includes(c.k)).map((c) => (
+                        {COLS.filter((c) => !hidden.includes(c.k) && (c.k !== 'extPct' || hasExt)).map((c) => (
                           <td key={c.k} className={`p-2.5 ${c.left ? 'text-left sticky left-0 bg-white dark:bg-slate-900' : 'text-right tabular-nums'} ${c.tone ? tone(c.tone(r)) : ''}`}>{c.cell(r, totals.value, ccy)}</td>
                         ))}
                       </tr>
@@ -962,7 +997,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
                 <tfoot className="sticky bottom-0 bg-slate-50 dark:bg-slate-800 font-black">
                   <tr>
                     <td />
-                    {COLS.filter((c) => !hidden.includes(c.k)).map((c, i) => {
+                    {COLS.filter((c) => !hidden.includes(c.k) && (c.k !== 'extPct' || hasExt)).map((c, i) => {
                       const sum = (f: string) => visible.reduce((a, r: any) => a + (r[f] || 0), 0);
                       let t: React.ReactNode = '';
                       if (i === 0) t = `Total · ${visible.length}`;
@@ -1525,10 +1560,11 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       </div>
 
       {design === 7 && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
+        <div className={`grid grid-cols-2 ${hasExt ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-2 mb-4`}>
           <Kpi label="Invested" value={money(totals.cost, ccy, true)} sub={`${rows.length} positions`} />
           <Kpi label="Total P/L" value={money(totals.pnl, ccy, true)} sub={pct(totals.pnlPct)} subTone={tone(totals.pnl)} />
           <Kpi label="Today P/L" value={money(totals.day, ccy, true)} sub={pct(totals.dayPct)} subTone={tone(totals.day)} />
+          {hasExt && <Kpi label={`${extTotal.label} change`} value={`${extTotal.sum > 0 ? '+' : extTotal.sum < 0 ? '-' : ''}${money(Math.abs(extTotal.sum), ccy, true)}`} sub={`${pct(extTotal.pct)} · ${extTotal.n} US stock${extTotal.n === 1 ? '' : 's'}`} subTone={tone(extTotal.sum)} />}
           <BestWorst />
         </div>
       )}

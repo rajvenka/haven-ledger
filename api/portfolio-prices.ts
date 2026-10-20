@@ -10,6 +10,7 @@
 
 import { resolveYahooSymbolCandidates, mapPool, fetchYahooPrice } from "./_lib/yahoo-symbols.js";
 import { fetchMarkets, persistMarkets } from "./_lib/market-indices.js";
+import { fetchExt } from "./_lib/ext-hours.js";
 
 export default async function handler(req: any, res: any) {
   // Index snapshot for Portfolio > Markets (GET or POST ?action=markets). Also used by a daily cron to store history.
@@ -21,6 +22,18 @@ export default async function handler(req: any, res: any) {
       res.status(200).json({ at, quotes });
     } catch (e: any) {
       res.status(500).json({ error: e?.message || "Could not load markets" });
+    }
+    return;
+  }
+  // Pre/post-market moves for US symbols: POST ?action=ext { symbols: [{ symbol, exchange, currency }] }
+  if (String(req.query?.action || "") === "ext" && req.method === "POST") {
+    try {
+      const list = (Array.isArray(req.body?.symbols) ? req.body.symbols : []).slice(0, 150);
+      const results = await mapPool(list, 6, async ({ symbol, exchange, currency }: any) => fetchExt(String(symbol || ""), exchange, currency));
+      res.setHeader("Cache-Control", "no-store");
+      res.status(200).json({ results });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message || "Could not load extended-hours prices" });
     }
     return;
   }
