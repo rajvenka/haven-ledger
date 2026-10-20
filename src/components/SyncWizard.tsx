@@ -181,6 +181,17 @@ export default function SyncWizard(p: SyncWizardProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parsed, p.holdings, conn, bookId]);
 
+  // Live broker sync returns the full portfolio, so anything active here but absent there is almost
+  // certainly sold: pre-tick it and open the list so every refresh reconciles. (Not for file uploads,
+  // which may be partial.)
+  const planMissingKey = plan ? plan.missing.map((h: any) => h.id).join(',') : '';
+  useEffect(() => {
+    if (!plan || !conn) return;
+    setMissingSel(new Set(plan.missing.map((h: any) => h.id)));
+    if (plan.missing.length) setOpen('missing');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planMissingKey, !!conn]);
+
   const changeCount = plan ? (inc.fresh ? plan.fresh.length : 0) + (inc.qty ? plan.qty.length : 0) + (inc.price ? plan.price.length : 0) + (inc.live ? plan.live.length : 0) + missingSel.size : 0;
 
   const [copied, setCopied] = useState(false);
