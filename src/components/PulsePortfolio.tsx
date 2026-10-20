@@ -6,9 +6,10 @@ import DesignVoting from './DesignVoting';
 import StockGains from './StockGains';
 import HighLowPanel from './HighLowPanel';
 import SyncWizard from './SyncWizard';
+import StopLossPlanner from './StopLossPlanner';
 import DecisionsView from './DecisionsView';
 import MarketActivity from './MarketActivity';
-import { Search, TrendingUp, TrendingDown, X, SlidersHorizontal, Plus, Pencil, Trash2, LayoutDashboard, List, CheckCircle2, CalendarDays, Wallet, RefreshCw, AlertTriangle, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, Star, Target, Scale, Globe } from 'lucide-react';
+import { Search, ShieldAlert, TrendingUp, TrendingDown, X, SlidersHorizontal, Plus, Pencil, Trash2, LayoutDashboard, List, CheckCircle2, CalendarDays, Wallet, RefreshCw, AlertTriangle, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, Star, Target, Scale, Globe } from 'lucide-react';
 
 type GroupBy = 'category' | 'broker' | 'currency' | 'portfolio' | 'tag';
 type SortKey = 'type' | 'tag' | 'symbol' | 'broker' | 'category' | 'portfolio' | 'qty' | 'buy' | 'price' | 'dayPct' | 'day' | 'cost' | 'value' | 'pnl' | 'pnlPct' | 'weight' | 'buyDate' | 'heldDays' | 'leverage' | 'stop' | 'target' | 'updated' | 'extPct' | 'extValue';
@@ -159,7 +160,7 @@ interface Props {
   onRequestBookDone?: () => void;
 }
 
-type Section = 'overview' | 'holdings' | 'sold' | 'calendar' | 'cash' | 'sync' | 'decisions';
+type Section = 'overview' | 'holdings' | 'sold' | 'calendar' | 'cash' | 'sync' | 'decisions' | 'stops';
 const NAV: { k: Section; label: string; icon: React.ReactNode }[] = [
   { k: 'overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
   { k: 'holdings', label: 'Holdings', icon: <List className="w-4 h-4" /> },
@@ -168,6 +169,7 @@ const NAV: { k: Section; label: string; icon: React.ReactNode }[] = [
   { k: 'cash', label: 'Cash', icon: <Wallet className="w-4 h-4" /> },
   { k: 'sync', label: 'Import & Sync', icon: <RefreshCw className="w-4 h-4" /> },
   { k: 'decisions', label: 'Decisions', icon: <Scale className="w-4 h-4" /> },
+  { k: 'stops', label: 'Stop-loss', icon: <ShieldAlert className="w-4 h-4" /> },
 ];
 
 function TagEditor({ id, current, options, onSave, disabled }: { id: string; current: string; options: string[]; onSave: (tag: string) => Promise<any>; disabled?: boolean }) {
@@ -1680,6 +1682,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           {section === 'calendar' && calendarView}
           {section === 'cash' && cashView}
           {section === 'sync' && syncHub}
+          {section === 'stops' && <StopLossPlanner rows={rows} ccy={ccy} fx={fx} money={(n, c) => money(n, c)} />}
           {section === 'decisions' && <DecisionsView holdings={holdings} lots={lots} book={book} ccy={ccy} baseCurrency={baseCurrency} fx={fx} contributions={contributions} withdrawals={withdrawals} cashTotal={cashTotal} money={(n, c) => money(n, c)} />}
           {importProps && <PortfolioV1View {...importProps} headless skipAutoSync={!!syncProps} bridgeRef={bridge} onBridge={() => bump((n) => n + 1)} />}
         </div>
