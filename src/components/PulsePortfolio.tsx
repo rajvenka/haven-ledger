@@ -403,7 +403,9 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
           value: fx(mvN, native, ccy), cost: fx(cost, native, ccy), pnl: fx(expMv - expCost, native, ccy), day: fx(dayN, native, ccy),
           category: categoryOf(h), broker: String(h.broker || 'Manual'), currency: native, portfolio,
           dayPct: prev > 0 && live > 0 && live / prev < 20 && live / prev > 0.05 ? ((live - prev) / prev) * 100 : null as number | null,
-          pnlPct: cost > 0 ? ((expMv - expCost) / cost) * 100 : 0,
+          // Positions worth under US$1 (e.g. delisted SBER.MOEX) have meaningless percentages.
+          tiny: fx(mvN, native, 'USD') < 1,
+          pnlPct: cost > 0 && !(fx(mvN, native, 'USD') < 1) ? ((expMv - expCost) / cost) * 100 : (cost > 0 ? NaN : 0),
           invNative: cost, valNative: mvN,
           buyDate: h.buy_date ? String(h.buy_date) : '',
           heldDays: h.buy_date ? Math.max(0, Math.floor((Date.now() - new Date(h.buy_date).getTime()) / 86400000)) : null as number | null,
@@ -590,8 +592,8 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     }, () => { setForm(null); setSelected(null); });
   };
 
-  const best = useMemo(() => [...rows].sort((a, b) => b.pnl - a.pnl)[0], [rows]);
-  const worst = useMemo(() => [...rows].sort((a, b) => a.pnl - b.pnl)[0], [rows]);
+  const best = useMemo(() => [...rows].filter((r: any) => !r.tiny).sort((a, b) => b.pnl - a.pnl)[0], [rows]);
+  const worst = useMemo(() => [...rows].filter((r: any) => !r.tiny).sort((a, b) => a.pnl - b.pnl)[0], [rows]);
   const sel = selected ? rows.find((r) => r.id === selected) : null;
   const selLots = sel ? lots.filter((l: any) => String(l.holding_id) === sel.id) : [];
 
