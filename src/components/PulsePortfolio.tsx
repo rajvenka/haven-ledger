@@ -11,7 +11,7 @@ import MarketActivity from './MarketActivity';
 import { Search, TrendingUp, TrendingDown, X, SlidersHorizontal, Plus, Pencil, Trash2, LayoutDashboard, List, CheckCircle2, CalendarDays, Wallet, RefreshCw, AlertTriangle, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, Star, Target, Scale, Globe } from 'lucide-react';
 
 type GroupBy = 'category' | 'broker' | 'currency' | 'portfolio' | 'tag';
-type SortKey = 'type' | 'tag' | 'symbol' | 'broker' | 'category' | 'portfolio' | 'qty' | 'buy' | 'price' | 'dayPct' | 'day' | 'cost' | 'value' | 'pnl' | 'pnlPct' | 'weight' | 'buyDate' | 'heldDays' | 'leverage' | 'stop' | 'target' | 'updated' | 'extPct';
+type SortKey = 'type' | 'tag' | 'symbol' | 'broker' | 'category' | 'portfolio' | 'qty' | 'buy' | 'price' | 'dayPct' | 'day' | 'cost' | 'value' | 'pnl' | 'pnlPct' | 'weight' | 'buyDate' | 'heldDays' | 'leverage' | 'stop' | 'target' | 'updated' | 'extPct' | 'extValue';
 
 const PALETTE = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#0ea5e9', '#8b5cf6', '#14b8a6', '#f97316', '#64748b', '#84cc16'];
 
@@ -106,7 +106,8 @@ const COLS: Col[] = [
   { k: 'price', label: 'Last price', cell: (r) => <>{px(r.price)} <span className="text-[10px] text-slate-400">{r.native}</span></>, csv: (r) => r.price },
   { k: 'dayPct', label: 'Day %', tone: (r) => r.dayPct ?? 0, cell: (r) => (r.dayPct == null ? '—' : pct(r.dayPct)), csv: (r) => r.dayPct },
   { k: 'day', label: 'Day P&L', tone: (r) => r.day, cell: (r, _t, c) => (r.day ? money(r.day, c, true) : '—'), csv: (r) => r.day },
-  { k: 'extPct', label: 'Pre/Post chg', tone: (r) => r.extPct ?? 0, cell: (r, _t, c) => (r.extPct == null ? '—' : <span className="font-bold">{pct(r.extPct)}<span className="block text-[10px] font-semibold opacity-80">{r.extValue > 0 ? '+' : r.extValue < 0 ? '-' : ''}{money(Math.abs(r.extValue), c, true)} · {r.extSession === 'pre' ? 'Pre' : 'Post'}</span></span>), csv: (r) => r.extPct },
+  { k: 'extValue', label: 'Pre/Post chg', tone: (r) => (r.extPct == null ? 0 : r.extValue), cell: (r, _t, c) => (r.extPct == null ? '—' : <span className="font-bold">{r.extValue > 0 ? '+' : r.extValue < 0 ? '-' : ''}{money(Math.abs(r.extValue), c, true)}<span className="block text-[10px] font-semibold opacity-80">{r.extSession === 'pre' ? 'Pre-market' : 'Post-market'}</span></span>), csv: (r) => (r.extPct == null ? '' : r.extValue) },
+  { k: 'extPct', label: 'Pre/Post chg %', tone: (r) => r.extPct ?? 0, cell: (r) => (r.extPct == null ? '—' : <span className="font-bold">{pct(r.extPct)}</span>), csv: (r) => r.extPct },
   { k: 'cost', label: 'Invested', cell: (r, _t, c) => money(r.cost, c, true), csv: (r) => r.cost },
   { k: 'value', label: 'Value', cell: (r, _t, c) => <span className="font-bold">{money(r.value, c, true)}</span>, csv: (r) => r.value },
   { k: 'pnl', label: 'P&L', tone: (r) => r.pnl, cell: (r, _t, c) => <span className="font-bold">{money(r.pnl, c, true)}</span>, csv: (r) => r.pnl },
@@ -492,7 +493,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     return Array.from(m.entries()).map(([name, items]) => ({ name, items }));
   }, [visible, groupBy]);
   const exportCsv = () => {
-    const cols = COLS.filter((c) => !hidden.includes(c.k) && (c.k !== 'extPct' || hasExt));
+    const cols = COLS.filter((c) => !hidden.includes(c.k) && (!['extPct', 'extValue'].includes(c.k) || hasExt));
     const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const lines = [cols.map((c) => esc(c.label)).join(',')].concat(visible.map((r) => cols.map((c) => esc(c.csv ? c.csv(r, totals.value) : '')).join(',')));
     const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
@@ -948,7 +949,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
               <button onClick={() => setColsOpen((o) => !o)} className="text-[11px] font-black px-2.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 inline-flex items-center gap-1"><SlidersHorizontal className="w-3 h-3" /> Columns</button>
               {colsOpen && (
                 <div className="absolute right-0 mt-1 z-20 w-48 max-h-72 overflow-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl p-2">
-                  {COLS.filter((c) => !c.left && (c.k !== 'extPct' || hasExt)).map((c) => (
+                  {COLS.filter((c) => !c.left && (!['extPct', 'extValue'].includes(c.k) || hasExt)).map((c) => (
                     <label key={c.k} className="flex items-center gap-2 text-xs py-1 px-1 cursor-pointer">
                       <input type="checkbox" checked={!hidden.includes(c.k)} onChange={() => toggleCol(c.k)} /> {c.label}
                     </label>
@@ -964,7 +965,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
               <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800 text-[10px] uppercase text-slate-400">
                 <tr>
                   <th className="p-2.5 w-8 sticky left-0 bg-slate-50 dark:bg-slate-800"><input type="checkbox" checked={visible.length > 0 && checked.length === visible.length} onChange={(e) => setChecked(e.target.checked ? visible.map((r) => r.id) : [])} /></th>
-                  {COLS.filter((c) => !hidden.includes(c.k) && (c.k !== 'extPct' || hasExt)).map((c) => (
+                  {COLS.filter((c) => !hidden.includes(c.k) && (!['extPct', 'extValue'].includes(c.k) || hasExt)).map((c) => (
                     <th key={c.k} onClick={() => clickSort(c.k as SortKey)} className={`p-2.5 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200 ${c.left ? 'text-left sticky left-0 bg-slate-50 dark:bg-slate-800' : 'text-right'}`}>
                       {c.label}{sort === c.k ? (dir === 1 ? ' ▲' : ' ▼') : ''}
                     </th>
@@ -984,7 +985,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
                     {g.items.map((r: any) => (
                       <tr key={r.id} onClick={() => setSelected(r.id)} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer">
                         <td className="p-2.5 w-8" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={checked.includes(r.id)} onChange={(e) => setChecked((cs) => (e.target.checked ? [...cs, r.id] : cs.filter((x) => x !== r.id)))} /></td>
-                        {COLS.filter((c) => !hidden.includes(c.k) && (c.k !== 'extPct' || hasExt)).map((c) => (
+                        {COLS.filter((c) => !hidden.includes(c.k) && (!['extPct', 'extValue'].includes(c.k) || hasExt)).map((c) => (
                           <td key={c.k} className={`p-2.5 ${c.left ? 'text-left sticky left-0 bg-white dark:bg-slate-900' : 'text-right tabular-nums'} ${c.tone ? tone(c.tone(r)) : ''}`}>{c.cell(r, totals.value, ccy)}</td>
                         ))}
                       </tr>
@@ -997,7 +998,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
                 <tfoot className="sticky bottom-0 bg-slate-50 dark:bg-slate-800 font-black">
                   <tr>
                     <td />
-                    {COLS.filter((c) => !hidden.includes(c.k) && (c.k !== 'extPct' || hasExt)).map((c, i) => {
+                    {COLS.filter((c) => !hidden.includes(c.k) && (!['extPct', 'extValue'].includes(c.k) || hasExt)).map((c, i) => {
                       const sum = (f: string) => visible.reduce((a, r: any) => a + (r[f] || 0), 0);
                       let t: React.ReactNode = '';
                       if (i === 0) t = `Total · ${visible.length}`;
