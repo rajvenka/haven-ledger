@@ -592,8 +592,8 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
     }, () => { setForm(null); setSelected(null); });
   };
 
-  const best = useMemo(() => [...rows].filter((r: any) => !r.tiny).sort((a, b) => b.pnl - a.pnl)[0], [rows]);
-  const worst = useMemo(() => [...rows].filter((r: any) => !r.tiny).sort((a, b) => a.pnl - b.pnl)[0], [rows]);
+  const best = useMemo(() => [...rows].filter((r: any) => !r.tiny && r.pnl > 0).sort((a, b) => b.pnl - a.pnl)[0], [rows]);
+  const worst = useMemo(() => [...rows].filter((r: any) => !r.tiny && r.pnl < 0).sort((a, b) => a.pnl - b.pnl)[0], [rows]);
   const sel = selected ? rows.find((r) => r.id === selected) : null;
   const selLots = sel ? lots.filter((l: any) => String(l.holding_id) === sel.id) : [];
 
