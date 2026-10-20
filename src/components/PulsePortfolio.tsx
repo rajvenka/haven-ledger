@@ -1561,8 +1561,9 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
       </div>
 
       {design === 7 && (
-        <div className={`grid grid-cols-2 ${hasExt ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-2 mb-4`}>
+        <div className={`grid grid-cols-2 ${hasExt ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-2 mb-4`}>
           <Kpi label="Invested" value={money(totals.cost, ccy, true)} sub={`${rows.length} positions`} />
+          <Kpi label="Current value" value={money(totals.value, ccy, true)} sub={`${totals.pnl >= 0 ? '+' : '-'}${money(Math.abs(totals.pnl), ccy, true)} vs invested`} subTone={tone(totals.pnl)} />
           <Kpi label="Total P/L" value={money(totals.pnl, ccy, true)} sub={pct(totals.pnlPct)} subTone={tone(totals.pnl)} />
           <Kpi label="Today P/L" value={money(totals.day, ccy, true)} sub={pct(totals.dayPct)} subTone={tone(totals.day)} />
           {hasExt && <Kpi label={`${extTotal.label} change`} value={`${extTotal.sum > 0 ? '+' : extTotal.sum < 0 ? '-' : ''}${money(Math.abs(extTotal.sum), ccy, true)}`} sub={`${pct(extTotal.pct)} · ${extTotal.n} US stock${extTotal.n === 1 ? '' : 's'}`} subTone={tone(extTotal.sum)} />}
