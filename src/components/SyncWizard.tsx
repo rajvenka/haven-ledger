@@ -180,6 +180,33 @@ export default function SyncWizard(p: SyncWizardProps) {
 
   const changeCount = plan ? (inc.fresh ? plan.fresh.length : 0) + (inc.qty ? plan.qty.length : 0) + (inc.price ? plan.price.length : 0) + (inc.live ? plan.live.length : 0) + missingSel.size : 0;
 
+  const [copied, setCopied] = useState(false);
+  const buildLog = () => {
+    if (!parsed || !plan) return '';
+    const pid = targetPid();
+    const f = (n: any, d = 4) => (n == null || n === '' || isNaN(Number(n)) ? '-' : String(Math.round(Number(n) * 10 ** d) / 10 ** d));
+    const out: string[] = [`SYNC COMPARISON ${new Date().toISOString()} | ${conn?.connection_label || conn?.broker_type || 'file'} | positions from broker: ${parsed.length} | raw lots: ${rawLots.length}`, ''];
+    out.push('== POSITIONS (broker vs app) ==');
+    [...parsed].sort((a, b) => a.symbol.localeCompare(b.symbol)).forEach((r) => {
+      const c: any = classify(r, pid);
+      const ex = c.existing;
+      const lots = rawLots.filter((l) => l.matchKey && l.matchKey === (r as any).matchKey);
+      const lq = lots.reduce((t, l) => t + Number(l.quantity || 0), 0);
+      const la = lq ? lots.reduce((t, l) => t + Number(l.quantity || 0) * Number(l.buyPrice || 0), 0) / lq : 0;
+      out.push(`${r.symbol} [${r.source || '-'}] broker: qty ${f(r.quantity)} @ ${f(r.buyPrice)} | app: ${ex ? `qty ${f(ex.quantity)} @ ${f(ex.buy_price)} [${ex.source || '-'}]` : 'NOT FOUND'} | ${String(c.status).toUpperCase()}${c.dir ? ' ' + c.dir : ''} | lots: ${lots.length} (qty ${f(lq)}, avg ${f(la)})${lots.length && Math.abs(lq - Number(r.quantity)) > 1e-6 ? ' !LOT QTY MISMATCH' : ''}`);
+      lots.forEach((l) => out.push(`    lot ${l.externalPositionId} ${l.source || ''} qty ${f(l.quantity)} @ ${f(l.buyPrice)} lev ${f(l.leverage, 1)} opened ${l.openDate || '-'}`));
+    });
+    out.push('', '== IN APP BUT NOT IN BROKER DATA ==');
+    if (!plan.missing.length) out.push('(none)');
+    plan.missing.forEach((h: any) => out.push(`${h.symbol} [${h.source || '-'}] qty ${f(h.quantity)} @ ${f(h.buy_price)}`));
+    return out.join('\n');
+  };
+  const copyLog = async () => {
+    const t = buildLog();
+    try { await navigator.clipboard.writeText(t); } catch { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); }
+    setCopied(true); setTimeout(() => setCopied(false), 2000);
+  };
+
   // ---- apply ----
   const apply = async () => {
     if (!plan || !parsed) return;
@@ -336,7 +363,7 @@ export default function SyncWizard(p: SyncWizardProps) {
 
           {step === 3 && plan && (
             <>
-              <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 px-3 py-2 text-xs text-slate-600 dark:text-slate-300">Found <b>{parsed?.length}</b> positions{conn ? ` from ${conn.connection_label || conn.broker_type}` : ' in your file'}{multi && targetPid() ? ` → ${bookName(targetPid())}` : ''}. Tick what you want to apply.</div>
+              <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 px-3 py-2 text-xs text-slate-600 dark:text-slate-300">Found <b>{parsed?.length}</b> positions{conn ? ` from ${conn.connection_label || conn.broker_type}` : ' in your file'}{multi && targetPid() ? ` → ${bookName(targetPid())}` : ''}. Tick what you want to apply. <button onClick={copyLog} className="ml-2 font-black text-indigo-600 underline">{copied ? 'Copied ✓' : 'Copy comparison log'}</button></div>
               <div className="space-y-2">
                 <Row k="fresh" label="New holdings" n={plan.fresh.length} tone="bg-emerald-100 text-emerald-700" check={<input type="checkbox" checked={inc.fresh} onChange={(e) => setInc({ ...inc, fresh: e.target.checked })} />}>{plan.fresh.map((h, i) => <div key={i} className="flex justify-between px-3 py-1.5 border-t first:border-t-0 border-slate-100 dark:border-slate-800"><b>{h.symbol}</b><span>{h.quantity} @ {h.buyPrice} {h.currency}</span></div>)}</Row>
                 <Row k="qty" label="Quantity changed" n={plan.qty.length} tone="bg-indigo-100 text-indigo-700" check={<input type="checkbox" checked={inc.qty} onChange={(e) => setInc({ ...inc, qty: e.target.checked })} />}>{plan.qty.map((x, i) => <div key={i} className="flex justify-between px-3 py-1.5 border-t first:border-t-0 border-slate-100 dark:border-slate-800"><b>{x.row.symbol}</b><span>{Number(x.existing.quantity)} → {x.row.quantity} <i className={x.dir === 'reduced' ? 'text-rose-500' : 'text-emerald-600'}>({x.dir})</i></span></div>)}</Row>
