@@ -171,7 +171,10 @@ export default function SyncWizard(p: SyncWizardProps) {
       return !parsed.some((r) => {
         if (r.isin && h.isin) return h.isin === r.isin;
         if (r.folioNumber && h.folio_number) return h.folio_number === r.folioNumber && h.symbol === r.symbol.toUpperCase();
-        return h.symbol === r.symbol.toUpperCase() && h.holding_type === r.holdingType && !h.folio_number && !r.folioNumber;
+        if (!(h.symbol === r.symbol.toUpperCase() && h.holding_type === r.holdingType && !h.folio_number && !r.folioNumber)) return false;
+        // CFD and Real Asset are separate holdings: a same-symbol row of the other type doesn't keep this one alive.
+        if (r.source && h.source) return h.source === r.source || normalizeSourceTag(h.source, h) === normalizeSourceTag(r.source, { holding_type: r.holdingType, source: r.source });
+        return true;
       });
     });
     return { fresh, qty, price, live, same, missing };

@@ -303,7 +303,7 @@ export async function etoroHandler(req: any, res: any) {
     // eToro quotes some instruments in a non-USD currency (e.g. JPN225 in yen index points) while
     // every money field (amount, initialAmountInDollars) is USD. Derive USD-per-quote-unit from the
     // position itself: leveraged exposure in USD at open / (units x openRate). ~1 for USD-quoted ones.
-    const usdFactorOf = (pos: any): number => {
+    const usdFactorOf = (pos: any, symbol = ''): number => {
       const units = Number(pos.units) || 0;
       const openRate = Number(pos.openRate) || 0;
       const lev = Number(pos.leverage) || 1;
@@ -311,7 +311,12 @@ export async function etoroHandler(req: any, res: any) {
       if (!(units > 0 && openRate > 0 && init > 0)) return 1;
       const f = (init * lev) / (units * openRate);
       if (!Number.isFinite(f) || f <= 0 || f > 10) return 1;
-      return Math.abs(f - 1) < 0.05 ? 1 : f; // snap rounding noise on USD instruments
+      if (Math.abs(f - 1) < 0.05) return 1; // snap rounding noise on USD instruments
+      // f > 1 on a US-listed (no exchange suffix) instrument is not a currency effect: initialAmountInDollars
+      // stays at the ORIGINAL investment after a partial close, inflating f (e.g. 2.0 after closing half).
+      // Real conversions >1 (EUR/GBP listings) only occur on suffixed symbols like CAP.PA / RHM.DE.
+      if (f > 1 && !/\./.test(symbol)) return 1;
+      return f;
     };
     const fUnitsByKey = new Map<string, number>(); // sum(units * factor)
     const costUsdByKey = new Map<string, number>(); // sum(units * openRate * factor)
@@ -335,7 +340,7 @@ export async function etoroHandler(req: any, res: any) {
       // added to by an open gain). units already represents full leveraged exposure, so P/L
       // is (currentPrice - openRate) x units directly, no separate leverage multiplication.
       const livePrice = rateMap.get(id) ?? openRate;
-      const fx = usdFactorOf(pos);
+      const fx = usdFactorOf(pos, info.symbol);
       fUnitsByKey.set(mapKey, (fUnitsByKey.get(mapKey) || 0) + units * fx);
       costUsdByKey.set(mapKey, (costUsdByKey.get(mapKey) || 0) + units * openRate * fx);
       const posPnl = (livePrice - openRate) * units * (isBuy ? 1 : -1) * fx;
