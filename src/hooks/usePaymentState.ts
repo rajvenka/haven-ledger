@@ -2305,11 +2305,15 @@ export function usePaymentState() {
       // so use the first lot's source to pick the correct master row when more than one
       // candidate shares this symbol.
       const candidates = masterRows.filter((r: any) => r.symbol === symbol.toUpperCase());
-      const lots = rawLotsBySymbol.get(symbol);
-      const lotSource = lots?.[0]?.source;
-      const master = candidates.length > 1 && lotSource ? candidates.find((r: any) => r.source === lotSource) ?? candidates[0] : candidates[0];
-      if (master && lots) {
-        await upsertPortfolioHoldingLots(master.id, lots);
+      const allLots = rawLotsBySymbol.get(symbol) ?? [];
+      const norm = (x?: string) => { const v = (x ?? '').toLowerCase(); return v.includes('cfd') || v.includes('leverag') ? 'cfd' : v.includes('real') ? 'real' : v.includes('crypto') ? 'crypto' : v.includes('futures') ? 'fut' : v; };
+      // Split lots by settlement type so CFD and Real Asset lots never land on the same holding.
+      const groups = new Map<string, any[]>();
+      for (const l of allLots) groups.set(norm(l?.source), [...(groups.get(norm(l?.source)) ?? []), l]);
+      for (const [g, lots] of Array.from(groups.entries())) {
+        const same = candidates.filter((r: any) => norm(r.source) === g);
+        const master = same[0] ?? (candidates.length === 1 && groups.size === 1 ? candidates[0] : undefined);
+        if (master) await upsertPortfolioHoldingLots(master.id, lots);
       }
     }
     // upsertPortfolioHoldingLots writes directly to Supabase but was never refreshing
