@@ -66,6 +66,9 @@ export default function MarketActivity() {
   const [loading, setLoading] = React.useState(true);
   const [err, setErr] = React.useState<string | null>(null);
   const [now, setNow] = React.useState(() => new Date());
+  type MF = 'all' | 'open' | 'pre' | 'closed';
+  const [mf, setMfState] = React.useState<MF>(() => { try { const v = localStorage.getItem('hv_mkt_filter'); return v === 'open' || v === 'pre' || v === 'closed' ? v : 'all'; } catch { return 'all'; } });
+  const setMf = (v: MF) => { setMfState(v); try { localStorage.setItem('hv_mkt_filter', v); } catch { /* */ } };
 
   const load = React.useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -88,7 +91,10 @@ export default function MarketActivity() {
     const m = new Map<string, Q[]>(); quotes.forEach((q) => m.set(q.market, [...(m.get(q.market) || []), q])); return m;
   }, [quotes]);
   const statuses = ORDER.map((id) => ({ id, st: statusOf(id, now, byMarket.get(id)?.[0]?.lastTime ?? null) }));
-  const openN = statuses.filter((s) => s.st.state === 'open').length;
+  const group = (st: Status): MF => (st.state === 'open' || st.state === 'lunch' ? 'open' : st.state === 'pre' ? 'pre' : 'closed');
+  const openN = statuses.filter((s) => group(s.st) === 'open').length;
+  const cnts: Record<MF, number> = { all: ORDER.length, open: openN, pre: statuses.filter((s) => group(s.st) === 'pre').length, closed: statuses.filter((s) => group(s.st) === 'closed').length };
+  const shown = ORDER.filter((id) => mf === 'all' || group(statuses.find((s) => s.id === id)!.st) === mf);
   const mv = quotes.map((q) => ({ q, p: q.hasToday ? q.changePct : (q.bars.length > 1 ? ((q.bars[q.bars.length - 1].c - q.bars[q.bars.length - 2].c) / q.bars[q.bars.length - 2].c) * 100 : null) })).filter((x) => x.p != null) as { q: Q; p: number }[];
   const best = mv.length ? [...mv].sort((a, b) => b.p - a.p)[0] : null, worst = mv.length ? [...mv].sort((a, b) => a.p - b.p)[0] : null;
   const pill = (s: Status) => s.state === 'open' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : s.state === 'lunch' || s.state === 'pre' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
@@ -101,15 +107,25 @@ export default function MarketActivity() {
         {worst && worst.q.symbol !== best?.q.symbol && <div className="text-xs"><span className="text-slate-400 font-bold">Weakest </span><span className="font-black">{worst.q.name}</span> <span className={`font-black ${tone(worst.p)}`}>{sgn(worst.p)}%</span></div>}
         <button onClick={() => load()} disabled={loading} className="ml-auto p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-60" title="Refresh"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></button>
       </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {([['all', 'All'], ['open', 'Open'], ['pre', 'Pre-market'], ['closed', 'Closed']] as [MF, string][]).map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setMf(k)} aria-pressed={mf === k}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black border transition-colors ${mf === k ? (k === 'open' ? 'bg-emerald-600 border-emerald-600 text-white' : k === 'pre' ? 'bg-amber-500 border-amber-500 text-white' : k === 'closed' ? 'bg-slate-700 border-slate-700 text-white' : 'bg-indigo-600 border-indigo-600 text-white') : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>
+            {k === 'open' && <span className={`w-1.5 h-1.5 rounded-full ${mf === k ? 'bg-white' : 'bg-emerald-500'} ${cnts.open ? 'animate-pulse' : ''}`} />}
+            {l}<span className="opacity-70">{cnts[k]}</span>
+          </button>
+        ))}
+      </div>
       {err && <div className="text-xs font-bold text-amber-600">{err}. {quotes.length ? 'Showing the last data received.' : ''}</div>}
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
-        {ORDER.map((id) => {
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
+        {shown.length === 0 && <div className="md:col-span-2 lg:col-span-3 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 p-8 text-center text-xs text-slate-400">No {mf === 'pre' ? 'pre-market' : mf} markets right now.</div>}
+        {shown.map((id) => {
           const m = MKT[id], st = statuses.find((s) => s.id === id)!.st, list = byMarket.get(id) || [];
           const localTime = new Intl.DateTimeFormat([], { timeZone: m.tz, hour: '2-digit', minute: '2-digit', weekday: 'short' }).format(now);
           const hasLunch = m.lunch ? ` (lunch ${hhmm(m.lunch[0])}–${hhmm(m.lunch[1])})` : '';
           return (
-            <div key={id} className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div key={id} className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
               <div className="p-4 flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800">
                 <div className="min-w-0">
                   <div className="text-base font-black">{m.name}</div>
