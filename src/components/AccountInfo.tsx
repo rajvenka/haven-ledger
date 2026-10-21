@@ -1,3 +1,4 @@
+import { getHideTicker, setHideTicker } from '../utils/tickerPref';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { 
@@ -271,6 +272,8 @@ export default function AccountInfo({
   const [displayNameSaved, setDisplayNameSaved] = useState(false);
   const [landingTabSaving, setLandingTabSaving] = useState(false);
   const [landingTabSaved, setLandingTabSaved] = useState(false);
+  const [hideTickerOn, setHideTickerOn] = useState(() => getHideTicker(activeWorkspace?.id));
+  useEffect(() => { setHideTickerOn(getHideTicker(activeWorkspace?.id)); }, [activeWorkspace?.id]);
   const [respondingInvId, setRespondingInvId] = useState<string | null>(null);
   const [isRenamingWorkspace, setIsRenamingWorkspace] = useState(false);
   const [workspaceRenameValue, setWorkspaceRenameValue] = useState('');
@@ -1654,6 +1657,10 @@ export default function AccountInfo({
               </select>
             </div>
             {landingTabSaved && <p className="text-[10px] text-emerald-500 font-semibold">Saved.</p>}
+            <label className="flex items-start gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800 cursor-pointer">
+              <input type="checkbox" checked={hideTickerOn} onChange={(e) => { setHideTickerOn(e.target.checked); setHideTicker(activeWorkspace?.id, e.target.checked); }} className="mt-0.5" />
+              <span className="text-xs"><b className="font-black">Hide the scrolling portfolio strip</b><br /><span className="text-[10px] text-slate-400">Removes the rolling portfolio values bar at the top of Dashboard and Portfolio for {activeWorkspace?.name || 'this workspace'}. Saved on this device.</span></span>
+            </label>
           </div>
 
           {/* My Plan */}

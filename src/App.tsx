@@ -76,6 +76,7 @@ import PortfolioView from './components/PortfolioView';
 import PortfolioV1View from './components/PortfolioV1View';
 import PulsePortfolio from './components/PulsePortfolio';
 import PortfolioTicker from './components/PortfolioTicker';
+import { getHideTicker } from './utils/tickerPref';
 import InvestmentPlanView from './components/InvestmentPlanView';
 import ReportsView from './components/ReportsView';
 import IncomeView from './components/IncomeView';
@@ -281,6 +282,8 @@ export default function App() {
   const toggleMainNav = () => setMainNavCollapsed((v) => { try { localStorage.setItem('hv_main_nav_collapsed', v ? '0' : '1'); } catch { /* ignore */ } return !v; });
   const [portfolioClassic, setPortfolioClassic] = useState(false);
   const [tickerBook, setTickerBook] = useState<{ id: string; n: number } | null>(null);
+  const [hideTicker, setHideTickerState] = useState(() => getHideTicker(activeWorkspaceId));
+  useEffect(() => { const f = () => setHideTickerState(getHideTicker(activeWorkspaceId)); f(); window.addEventListener('hv-ticker-pref', f); return () => window.removeEventListener('hv-ticker-pref', f); }, [activeWorkspaceId]);
   useEffect(() => { if (activeTab !== 'portfolio') setPortfolioClassic(false); }, [activeTab]);
   // Opening Settings from the sidebar (Preferences / Security / Team) must open that section directly (on phones the list would otherwise show instead of the page).
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
@@ -1862,7 +1865,7 @@ export default function App() {
               ? 'overflow-hidden'
               : 'overflow-y-auto'
           }`}>
-            {(activeTab === 'summary' || activeTab === 'portfolio') && hasFeature('portfolio') && portfolioHoldings.length > 0 && (
+            {(activeTab === 'summary' || activeTab === 'portfolio') && !hideTicker && hasFeature('portfolio') && portfolioHoldings.length > 0 && (
               <PortfolioTicker holdings={portfolioHoldings} portfolios={portfolios} rates={workspaceCurrencyRates} baseCurrency={activeWorkspace?.baseCurrency} multiple={activeWorkspace?.portfolioMode === 'multiple'} onSelect={(id) => { setTickerBook({ id, n: Date.now() }); if (activeTab !== 'portfolio') setActiveTab('portfolio'); }} />
             )}
             <PageErrorBoundary key={`${activeTab}-${uiPulse ? 'p' : 'c'}`}>

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis, Treemap } from 'recharts';
 import PortfolioPnLCalendar from './PortfolioPnLCalendar';
+import EarningsCalendar from './EarningsCalendar';
 import PortfolioV1View from './PortfolioV1View';
 import DesignVoting from './DesignVoting';
 import StockGains from './StockGains';
@@ -244,6 +245,8 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
   const [calLoading, setCalLoading] = useState(false);
   const [calCcy, setCalCcy] = useState(baseCurrency.toUpperCase());
   const [calBook, setCalBook] = useState('all');
+  const [calKind, setCalKindState] = useState<'pnl' | 'earnings'>(() => { try { return localStorage.getItem('hv_pp_calkind') === 'earnings' ? 'earnings' : 'pnl'; } catch { return 'pnl'; } });
+  const setCalKind = (k: 'pnl' | 'earnings') => { setCalKindState(k); try { localStorage.setItem('hv_pp_calkind', k); } catch { /* */ } };
   const [cashForm, setCashForm] = useState<{ location: string; amount: string; portfolioId: string }>({ location: 'Bank', amount: '', portfolioId: '' });
   const bridge = React.useRef<any>(null);
   // After the Zerodha one-click login returns, open the wizard on that connection (full reconcile, not just prices).
@@ -877,6 +880,12 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
 
   const calendarView = (
     <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 sm:p-4">
+      <div className="inline-flex p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 mb-3">
+        {([['pnl', 'Profit / Loss'], ['earnings', 'Earnings']] as const).map(([k, l]) => (
+          <button key={k} onClick={() => setCalKind(k)} className={`text-xs font-black px-3.5 py-1.5 rounded-md transition-all ${calKind === k ? 'bg-white dark:bg-slate-950 text-indigo-600 dark:text-indigo-300 shadow' : 'text-slate-500'}`}>{l}</button>
+        ))}
+      </div>
+      {calKind === 'earnings' ? <EarningsCalendar rows={rows} ccy={ccy} money={(n, c) => money(n, c)} /> : (
       <PortfolioPnLCalendar
         rows={calRows}
         loading={calLoading}
@@ -891,6 +900,7 @@ export default function PulsePortfolio({ holdings, lots = [], portfolios = [], r
         onRefreshSnapshot={snapshotDaily}
         onReload={reloadCal}
       />
+      )}
     </div>
   );
 
